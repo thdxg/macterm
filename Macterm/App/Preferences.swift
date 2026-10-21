@@ -213,8 +213,16 @@ enum TabSwitcherPosition: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .leading: String(localized: "Left", comment: "Tab switcher position")
-        case .trailing: String(localized: "Right", comment: "Tab switcher position")
+        case .leading: String(
+                localized: "tabSwitcher.position.left",
+                defaultValue: "Left",
+                comment: "Tab switcher position: at the left of the toolbar"
+            )
+        case .trailing: String(
+                localized: "tabSwitcher.position.right",
+                defaultValue: "Right",
+                comment: "Tab switcher position: at the right of the toolbar"
+            )
         }
     }
 }
@@ -464,6 +472,23 @@ final class Preferences {
     /// the pane (or the project's focused pane), or a tab of its own.
     var textFilePlacement: TextFilePlacement {
         didSet { Keys.textFilePlacement.write(textFilePlacement, to: defaults) }
+    }
+
+    /// The language of Macterm (Settings → General → Language), as one of
+    /// `AppLanguage.available`. nil follows the language of macOS.
+    ///
+    /// It is `AppleLanguages` in Macterm's own domain: the key that
+    /// **System Settings → General → Language & Region → Applications**
+    /// writes, so both places show one choice. Foundation reads it when the
+    /// app starts, so a change applies at the next start.
+    var appLanguage: String? {
+        didSet {
+            if let appLanguage {
+                defaults.set([appLanguage], forKey: Keys.appleLanguages)
+            } else {
+                defaults.removeObject(forKey: Keys.appleLanguages)
+            }
+        }
     }
 
     /// The password manager (Settings → Password Manager): offering to save a
@@ -892,9 +917,15 @@ final class Preferences {
     /// indirectly, e.g. `AppState.activeProjectID`'s write-through) would
     /// corrupt the app they use day to day. Under a test run, back the app's
     /// defaults with a wiped side suite instead so writes never leave the run.
+    /// The persistent domain that `defaults` writes: the app's own, or the
+    /// side suite under test.
+    nonisolated private static var domainName: String {
+        isTestRun ? appBundleID + ".tests" : appBundleID
+    }
+
     nonisolated private static func resolveDefaults() -> UserDefaults {
         guard isTestRun else { return .standard }
-        let suiteName = appBundleID + ".tests"
+        let suiteName = domainName
         guard let suite = UserDefaults(suiteName: suiteName) else { return .standard }
         // Wipe residue from previous runs so every test run starts clean.
         suite.removePersistentDomain(forName: suiteName)
@@ -972,6 +1003,10 @@ final class Preferences {
         backgroundSSHConnections = Keys.backgroundSSHConnections.read(defaults)
         reconnectRemotePanes = Keys.reconnectRemotePanes.read(defaults)
         textFilePlacement = Keys.textFilePlacement.read(defaults)
+        // The domain of the app only: `defaults` also answers from the
+        // global domain, where `AppleLanguages` is the list of macOS.
+        let storedLanguages = defaults.persistentDomain(forName: Self.domainName)?[Keys.appleLanguages] as? [String]
+        appLanguage = AppLanguage.match(storedLanguages?.first, in: AppLanguage.available)
         passwordManagerEnabled = Keys.passwordManagerEnabled.read(defaults)
         passwordAutofillAuthentication = Keys.passwordAutofillAuthentication.read(defaults)
         peekSidebarWhenHidden = Keys.peekSidebarWhenHidden.read(defaults)
@@ -1093,6 +1128,8 @@ final class Preferences {
     /// plain strings at the bottom are keys nothing observes — read-through
     /// state and one-time migration flags — and stay raw.
     enum Keys {
+        /// Foundation's key, not Macterm's: see `appLanguage`.
+        static let appleLanguages = "AppleLanguages"
         static let autoTiling = PreferenceStorageKey("macterm.autoTiling.enabled", default: false)
         static let smoothScrolling = PreferenceStorageKey("macterm.terminal.smoothScrolling", default: true)
         static let snapScrollToRow = PreferenceStorageKey("macterm.terminal.snapScrollToRow", default: false)

@@ -16,21 +16,13 @@ struct CommandSource: PaletteSource {
             // A command also matches by its English title, so `split` finds
             // its row under any language. The shown title stays the first
             // field: it ranks first and takes the highlights.
-            var fields = [item.title]
-            if let english = Self.englishTitles[item.title], english != item.title { fields.append(english) }
-            guard let match = Search.match(query, fields: fields) else { return nil }
+            guard let match = Search.match(query, fields: [item.title] + item.searchAliases) else { return nil }
             // Carry every field forward (notably `isEnabled`) so a disabled
             // hint row stays muted/unselectable when it matches a search — a
             // hand-copied initializer would silently reset it to the default.
             return item.with(match)
         }
     }
-
-    /// The English title of each command, by the title the palette shows.
-    private static let englishTitles = Dictionary(
-        AppCommand.allCases.map { ($0.title, $0.englishTitle) },
-        uniquingKeysWith: { first, _ in first }
-    )
 
     func emptyItems(context: PaletteContext) -> [PaletteItem]? {
         allItems(context)
@@ -108,6 +100,7 @@ struct CommandSource: PaletteSource {
                 score: 0,
                 isEnabled: false,
                 icon: command.paletteScope?.pill.icon,
+                searchAliases: command.searchAliases,
                 action: {}
             )
         }
@@ -135,6 +128,7 @@ struct CommandSource: PaletteSource {
             // A command that is a palette screen opens it in place rather
             // than closing the palette to reopen it.
             opensScope: command.paletteScope,
+            searchAliases: command.searchAliases,
             action: action
         )
     }

@@ -82,7 +82,11 @@ final class ToolbarMenu: NSObject, NSMenuDelegate {
         let switcher = NSMenu(title: String(localized: "Tab Switcher"))
         switcher.autoenablesItems = false
         switcher.addItem(.sectionHeader(
-            title: String(localized: "Show", comment: "Heading of the tab switcher visibility options in the toolbar menu")
+            title: String(
+                localized: "toolbar.tabSwitcher.show",
+                defaultValue: "Show",
+                comment: "Heading of the tab switcher visibility options in the toolbar menu: Always, When multiple tabs, Hidden"
+            )
         ))
         addOptions(
             TabSwitcherVisibility.allCases,

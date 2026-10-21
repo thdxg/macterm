@@ -560,7 +560,7 @@
       }
     },
     "Add" : {
-      "comment" : "Command palette, Password Manager: the section of rows that add a password\nSettings → General: the button of the open panel that adds Ghostty config files",
+      "comment" : "Settings → General: the button of the open panel that adds Ghostty config files",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -712,7 +712,7 @@
       }
     },
     "Allow" : {
-      "comment" : "A value of the macos-shortcuts setting\nButton of the Shortcuts permission alert\nButton of the clipboard write alert",
+      "comment" : "Button of a permission alert",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -1034,16 +1034,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "취소"
-          }
-        }
-      }
-    },
-    "Cannot %@ layout" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "레이아웃 작업(%@)을 수행할 수 없음"
           }
         }
       }
@@ -1682,7 +1672,7 @@
       }
     },
     "Deny" : {
-      "comment" : "A value of the macos-shortcuts setting\nButton of the clipboard write alert",
+      "comment" : "Button of a permission alert",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -1755,7 +1745,7 @@
       }
     },
     "Done" : {
-      "comment" : "Button on a desktop widget that ends editing\nTooltip of a tab whose command finished",
+      "comment" : "Button on a desktop widget that ends editing",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -2556,6 +2546,16 @@
         }
       }
     },
+    "Language" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "언어"
+          }
+        }
+      }
+    },
     "Large" : {
       "comment" : "Sidebar icon size",
       "localizations" : {
@@ -2648,7 +2648,7 @@
       }
     },
     "Left" : {
-      "comment" : "Settings → Quick Terminal: the left end of the X position slider\nTab switcher position",
+      "comment" : "Settings → Quick Terminal: the left end of the X position slider",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -4718,7 +4718,7 @@
       }
     },
     "Right" : {
-      "comment" : "Settings → Quick Terminal: the right end of the X position slider\nTab switcher position",
+      "comment" : "Settings → Quick Terminal: the right end of the X position slider",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -5160,7 +5160,7 @@
       }
     },
     "Show" : {
-      "comment" : "Heading of the tab switcher visibility options in the toolbar menu\nNotification action that shows the pane",
+      "comment" : "Notification action that shows the pane",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -5488,6 +5488,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "원격 프로젝트로 전환: %@"
+          }
+        }
+      }
+    },
+    "System" : {
+      "comment" : "Settings → General → Language: follow the language of macOS",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템"
           }
         }
       }
@@ -6524,6 +6535,24 @@
         }
       }
     },
+    "extensions.filter.show" : {
+      "comment" : "Settings → Extensions: the label of the filter menu (All, Installed, Not Installed)",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시"
+          }
+        }
+      }
+    },
     "find it in PATH" : {
       "localizations" : {
         "ko" : {
@@ -6540,6 +6569,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "터미널 명령이 문서, 다운로드 또는 기타 보호된 위치를 읽을 때 macOS가 폴더마다 묻습니다. 전체 디스크 접근 권한을 한 번 허용하면 모든 위치에 적용됩니다."
+          }
+        }
+      }
+    },
+    "palette.passwords.addSection" : {
+      "comment" : "Command palette, Password Manager: the heading of the section of rows that add a password",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Add"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추가"
           }
         }
       }
@@ -6564,6 +6611,42 @@
         }
       }
     },
+    "shortcutsAccess.allow" : {
+      "comment" : "A value of the macos-shortcuts setting: always allow Shortcuts",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Allow"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "허용"
+          }
+        }
+      }
+    },
+    "shortcutsAccess.deny" : {
+      "comment" : "A value of the macos-shortcuts setting: always deny Shortcuts",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Deny"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "거부"
+          }
+        }
+      }
+    },
     "show the password for “%@”" : {
       "comment" : "Touch ID reason. It completes the system sentence “Macterm is trying to …”.",
       "localizations" : {
@@ -6571,6 +6654,78 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@”의 암호를 표시"
+          }
+        }
+      }
+    },
+    "tab.status.done" : {
+      "comment" : "Tooltip of a tab whose command finished. A state, not a button",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Done"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "완료됨"
+          }
+        }
+      }
+    },
+    "tabSwitcher.position.left" : {
+      "comment" : "Tab switcher position: at the left of the toolbar",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Left"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "왼쪽"
+          }
+        }
+      }
+    },
+    "tabSwitcher.position.right" : {
+      "comment" : "Tab switcher position: at the right of the toolbar",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Right"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오른쪽"
+          }
+        }
+      }
+    },
+    "toolbar.tabSwitcher.show" : {
+      "comment" : "Heading of the tab switcher visibility options in the toolbar menu: Always, When multiple tabs, Hidden",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시"
           }
         }
       }

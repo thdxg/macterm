@@ -206,10 +206,10 @@ final class CustomPaletteStore {
             let file = try CustomPaletteFile.parse(yaml: text)
             return try Entry(id: id, fileURL: url, result: .success(CustomPalette(file: file, id: id)), header: header)
         } catch let error as CustomPaletteError {
-            logger.error("palette \(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            logger.error("palette \(id, privacy: .public): \(EnglishErrorText.describe(error), privacy: .public)")
             return Entry(id: id, fileURL: url, result: .failure(error), header: header)
         } catch {
-            logger.error("palette \(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            logger.error("palette \(id, privacy: .public): \(EnglishErrorText.describe(error), privacy: .public)")
             return Entry(id: id, fileURL: url, result: .failure(.parse(underlying: error)), header: header)
         }
     }

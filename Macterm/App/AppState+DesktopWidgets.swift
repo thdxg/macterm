@@ -567,14 +567,14 @@ extension AppState {
         syncDesktopWidgetPresenter()
     }
 
-    private func suspendWidgetLayoutWrites(reason: String) {
+    private func suspendWidgetLayoutWrites(reason: BilingualMessage) {
         guard !widgetLayoutSuspended else { return }
         widgetLayoutSuspended = true
-        logger.error("widgets.yaml auto-save suspended: \(reason, privacy: .public)")
+        logger.error("widgets.yaml auto-save suspended: \(reason.english, privacy: .public)")
         presentLayoutError(
-            verb: "save",
+            verb: .save,
             message: String(localized: """
-            \(reason)
+            \(reason.localized)
 
             Widget auto-save is paused so your edits are not overwritten. \
             Fix the file, or delete it, to start auto-save again.

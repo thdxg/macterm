@@ -23,7 +23,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: String(localized: "General", comment: "Settings pane")
-        case .projects: String(localized: "Projects", comment: "Settings pane")
+        case .projects: String(localized: "Projects")
         case .appearance: String(localized: "Appearance", comment: "Settings pane")
         case .animations: String(localized: "Animations", comment: "Settings pane")
         case .quickTerminal: String(localized: "Quick Terminal", comment: "Settings pane")
@@ -528,8 +528,9 @@ private struct HostWindowReader: NSViewRepresentable {
 private func anchorName(_ value: Double, zero: String, one: String) -> String {
     if abs(value) < 0.001 { return zero }
     if abs(value - 1) < 0.001 { return one }
-    if abs(value - 0.5) <
-        0.001 { return String(localized: "Center", comment: "Settings → Quick Terminal: the middle of a position slider") }
+    if abs(value - 0.5) < 0.001 {
+        return String(localized: "Center", comment: "Settings → Quick Terminal: the middle of a position slider")
+    }
     return "\(Int((value * 100).rounded()))%"
 }
 
@@ -544,6 +545,7 @@ private struct GeneralSettings: View {
     @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
     @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
     @State private var textFilePlacement: TextFilePlacement = Preferences.shared.textFilePlacement
+    @State private var appLanguage: String? = Preferences.shared.appLanguage
 
     /// Why session persistence is inactive, when it is. Missing binary is a
     /// dev-build state; an over-budget socket path is an environment problem
@@ -700,6 +702,21 @@ private struct GeneralSettings: View {
                     }
                     .font(.system(size: 11))
                     .foregroundStyle(MactermTheme.warning)
+                }
+            }
+
+            Section("Language") {
+                Picker("Language", selection: $appLanguage) {
+                    Text("System", comment: "Settings → General → Language: follow the language of macOS")
+                        .tag(String?.none)
+                    // Each language in its own name, so a user who cannot
+                    // read the current language still finds their own.
+                    ForEach(AppLanguage.available, id: \.self) { code in
+                        Text(verbatim: AppLanguage.nativeName(of: code)).tag(String?.some(code))
+                    }
+                }
+                .onChange(of: appLanguage) { _, v in
+                    Preferences.shared.appLanguage = v
                 }
             }
         }

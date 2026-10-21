@@ -1,0 +1,42 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "New Macterm Debug Project Here" : {
+      "comment" : "Finder → Services: the item that makes a project from the selected folder. The name is the display name of the build.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Macterm Debug Project Here"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "여기에서 새로운 Macterm Debug 프로젝트"
+          }
+        }
+      }
+    },
+    "New Macterm Project Here" : {
+      "comment" : "Finder → Services: the item that makes a project from the selected folder. The name is the display name of the build.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Macterm Project Here"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "여기에서 새로운 Macterm 프로젝트"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

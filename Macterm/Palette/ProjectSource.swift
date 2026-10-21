@@ -15,7 +15,7 @@ struct ProjectSource: PaletteSource {
             guard let match = Search.match(query, fields: [project.name, project.path]) else { return nil }
             return makeItem(
                 project: project,
-                category: String(localized: "Project", comment: "Command palette: the section of a project row"),
+                category: String(localized: "Project"),
                 score: 0,
                 context: context
             ).with(match, boost: projectBoost)

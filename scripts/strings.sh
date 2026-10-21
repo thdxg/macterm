@@ -41,13 +41,34 @@ if [[ "$build" == "true" ]]; then
 fi
 
 # One architecture is enough: every architecture extracts the same strings.
-arch_dir=$(find "$STRINGSDATA_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)
-if [[ -z "$arch_dir" ]]; then
-  echo "strings.sh: no .stringsdata in $STRINGSDATA_DIR. Build Debug first." >&2
+# arm64 is the architecture of the Debug build on every Mac that builds
+# Macterm, and of CI.
+arch_dir="$STRINGSDATA_DIR/arm64"
+if [[ ! -d "$arch_dir" ]]; then
+  echo "strings.sh: no .stringsdata in $arch_dir. Build Debug first." >&2
   exit 1
 fi
+
+# xcodebuild does not delete the .stringsdata of a Swift file that was
+# removed or renamed, and CI restores DerivedData from an older build. Each
+# .stringsdata names its source file, so a file whose source is gone is not
+# used: its strings would stay in the catalog.
 args=()
-for file in "$arch_dir"/*.stringsdata; do args+=(--stringsdata "$file"); done
+while IFS= read -r file; do
+  args+=(--stringsdata "$file")
+done < <(python3 -I - "$arch_dir" <<'EOF'
+import glob, json, os, sys
+for path in sorted(glob.glob(os.path.join(sys.argv[1], "*.stringsdata"))):
+    with open(path, encoding="utf-8") as f:
+        source = json.load(f).get("source", "")
+    if os.path.exists(source):
+        print(path)
+EOF
+)
+if [[ ${#args[@]} -eq 0 ]]; then
+  echo "strings.sh: no .stringsdata in $arch_dir names a source file that exists." >&2
+  exit 1
+fi
 
 # The table name comes from the file name, so the copy keeps it.
 work=$(mktemp -d)

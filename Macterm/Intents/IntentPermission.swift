@@ -42,8 +42,16 @@ enum ShortcutsAccess: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .ask: String(localized: "Ask", comment: "A value of the macos-shortcuts setting")
-        case .allow: String(localized: "Allow", comment: "A value of the macos-shortcuts setting")
-        case .deny: String(localized: "Deny", comment: "A value of the macos-shortcuts setting")
+        case .allow: String(
+                localized: "shortcutsAccess.allow",
+                defaultValue: "Allow",
+                comment: "A value of the macos-shortcuts setting: always allow Shortcuts"
+            )
+        case .deny: String(
+                localized: "shortcutsAccess.deny",
+                defaultValue: "Deny",
+                comment: "A value of the macos-shortcuts setting: always deny Shortcuts"
+            )
         }
     }
 }
@@ -153,7 +161,7 @@ final class IntentPermissionGate {
         It can create projects and tabs. It can also type into your terminals.
         """)
         alert.alertStyle = .warning
-        alert.addButton(withTitle: String(localized: "Allow", comment: "Button of the Shortcuts permission alert"))
+        alert.addButton(withTitle: String(localized: "Allow", comment: "Button of a permission alert"))
         alert.addButton(withTitle: String(localized: "Don't Allow", comment: "Button of the Shortcuts permission alert"))
         return alert.runModal() == .alertFirstButtonReturn
     }

@@ -186,7 +186,7 @@ final class PasswordVault {
             lastError = nil
         } catch {
             lastError = error.localizedDescription
-            logger.error("list failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("list failed: \(EnglishErrorText.describe(error), privacy: .public)")
         }
     }
 
@@ -199,7 +199,7 @@ final class PasswordVault {
             return try store.password(for: id)
         } catch {
             lastError = error.localizedDescription
-            logger.error("read failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("read failed: \(EnglishErrorText.describe(error), privacy: .public)")
             return nil
         }
     }
@@ -213,7 +213,7 @@ final class PasswordVault {
             return true
         } catch {
             lastError = error.localizedDescription
-            logger.error("save failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("save failed: \(EnglishErrorText.describe(error), privacy: .public)")
             return false
         }
     }
@@ -231,7 +231,7 @@ final class PasswordVault {
             return true
         } catch {
             lastError = error.localizedDescription
-            logger.error("update failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("update failed: \(EnglishErrorText.describe(error), privacy: .public)")
             return false
         }
     }
@@ -242,7 +242,7 @@ final class PasswordVault {
             try store.delete(id)
         } catch {
             lastError = error.localizedDescription
-            logger.error("delete failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("delete failed: \(EnglishErrorText.describe(error), privacy: .public)")
         }
     }
 

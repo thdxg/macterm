@@ -294,7 +294,7 @@ final class PaletteRegistry {
                 self.entries = entries
                 state = .loaded(Date())
             case let .failure(error):
-                logger.error("extension registry: \(error.localizedDescription, privacy: .public)")
+                logger.error("extension registry: \(EnglishErrorText.describe(error), privacy: .public)")
                 state = .failed(error.localizedDescription)
             }
         }
@@ -362,7 +362,7 @@ final class PaletteRegistry {
                 try ExtensionSource(repository: Self.repository, ref: ref, files: entry.shas).write(in: installed.folder)
                 adopted = true
             } catch {
-                logger.error("source record for \(installed.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                logger.error("source record for \(installed.id, privacy: .public): \(EnglishErrorText.describe(error), privacy: .public)")
             }
         }
         if adopted { store.reload() }

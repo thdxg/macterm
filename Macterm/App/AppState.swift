@@ -3680,7 +3680,7 @@ final class AppState {
     /// caller is user-invoked, so a clean apply gets a success toast.
     func applyLayoutPresentingError(_ project: Project, host: DialogHost = .mainWindow) {
         if let error = applyLayout(project: project, host: host) {
-            presentLayoutError(verb: "apply", message: LayoutFileError.displayMessage(for: error), host: host)
+            presentLayoutError(verb: .apply, message: error.localizedDescription, host: host)
             return
         }
         // A destructive plan is staged, not applied — its confirmation dialog is
@@ -3792,7 +3792,7 @@ final class AppState {
         guard !strays.isEmpty else { return false }
         let names = strays.map { "“\($0.url.lastPathComponent)”" }.joined(separator: ", ")
         presentLayoutError(
-            verb: "save",
+            verb: .save,
             message: String(localized: """
             Macterm saved the layout to “\(target.lastPathComponent)”. These other files also \
             declare the path of this project, and Macterm ignores them: \(names). \
@@ -3826,7 +3826,7 @@ final class AppState {
         guard !colliding.isEmpty else { return }
         let names = colliding.map { "“\($0.name)”" }.joined(separator: ", ")
         presentLayoutError(
-            verb: "save",
+            verb: .save,
             message: String(localized: """
             \(names) share this folder and the layout file “\(target.lastPathComponent)” with this project. \
             Your save replaced their layout. Each save replaces the one before. \
@@ -3844,7 +3844,7 @@ final class AppState {
         host: DialogHost = .mainWindow
     ) {
         if let error = saveLayout(project: project, siblingProjects: siblingProjects, host: host) {
-            presentLayoutError(verb: "save", message: LayoutFileError.displayMessage(for: error), host: host)
+            presentLayoutError(verb: .save, message: error.localizedDescription, host: host)
         }
     }
 

@@ -187,13 +187,22 @@ struct CustomPaletteHeader: Codable, Equatable {
     var description: String?
 }
 
-enum CustomPaletteError: Error, LocalizedError, Equatable {
+enum CustomPaletteError: Error, LocalizedError, EnglishDescribedError, Equatable {
     case parse(underlying: Error)
     case invalid(String)
 
     var errorDescription: String? {
         switch self {
         case let .parse(underlying): underlying.localizedDescription
+        case let .invalid(message): message
+        }
+    }
+
+    /// The text that `macterm palette list` prints. The validator messages
+    /// are English already; a parse error is described in English too.
+    var englishDescription: String {
+        switch self {
+        case let .parse(underlying): EnglishErrorText.describe(underlying)
         case let .invalid(message): message
         }
     }

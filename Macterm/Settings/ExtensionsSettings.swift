@@ -37,7 +37,7 @@ struct ExtensionsSettings: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 10) {
                     SettingsSearchField(text: $query, prompt: "Search extensions")
-                    Picker("Show", selection: $filter) {
+                    Picker(Self.filterLabel, selection: $filter) {
                         ForEach(ExtensionGalleryItem.Filter.allCases) { Text(Self.title(of: $0)).tag($0) }
                     }
                     .pickerStyle(.menu)
@@ -125,6 +125,13 @@ struct ExtensionsSettings: View {
 
     /// The label of a filter in the Show menu. The raw value is an
     /// identifier, not a label.
+    /// The label of the filter menu. The menu hides it, but VoiceOver reads it.
+    private static let filterLabel = String(
+        localized: "extensions.filter.show",
+        defaultValue: "Show",
+        comment: "Settings → Extensions: the label of the filter menu (All, Installed, Not Installed)"
+    )
+
     private static func title(of filter: ExtensionGalleryItem.Filter) -> String {
         switch filter {
         case .all: String(localized: "All", comment: "Settings → Extensions: the filter that shows every extension")

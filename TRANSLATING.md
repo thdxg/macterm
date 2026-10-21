@@ -4,12 +4,15 @@ Thank you for your help with the translation of Macterm. This guide tells you wh
 
 ## Where the text is
 
-All the text of the app is in two String Catalogs:
+All the text of the app is in three String Catalogs:
 
 - `Macterm/Localizable.xcstrings` has the text of the app: menus, the command palette, Settings, the sidebar, alerts and notifications.
 - `Macterm/InfoPlist.xcstrings` has the text of the permission prompts that macOS shows when a program in a pane asks for a permission.
+- `Macterm/ServicesMenu.xcstrings` has the item of Macterm in **Finder → Services**. It has one entry for the release app and one for the Debug app.
 
 A String Catalog is a JSON file. Each entry is one English string. The entry holds one translation for each language. You can edit the file in Xcode, which shows a table, or in a text editor.
+
+Most entries use the English text as their key. Some entries have a key such as `tab.status.done` and an English value ("Done"). These entries are words with more than one meaning in English. Translate the English value, and read the comment to know which meaning it is.
 
 These items are always in English. Do not translate them:
 
@@ -20,15 +23,17 @@ These items are always in English. Do not translate them:
 
 ## Choose the language of Macterm
 
-Macterm uses the language of macOS. To use a different language for Macterm only, open **System Settings → General → Language & Region**. Under **Applications**, click **+**, select Macterm and select the language. Then quit Macterm and start it again.
+Macterm uses the language of macOS. To use a different language for Macterm only, select it in **Settings → General → Language**. Then quit Macterm and start it again. **System** uses the language of macOS again.
+
+**System Settings → General → Language & Region → Applications** sets the same choice.
 
 ## Add a language
 
 1. Open `Macterm/Localizable.xcstrings` in Xcode. Click **+** at the bottom of the language list and select the language.
 2. Translate each entry. Xcode marks an entry that you translated as done.
-3. Do the same in `Macterm/InfoPlist.xcstrings`.
+3. Do the same in `Macterm/InfoPlist.xcstrings` and `Macterm/ServicesMenu.xcstrings`.
 4. Add a word table for the language to this file (see [Korean](#korean)).
-5. Build and run the app in the language (see above) and look at each screen.
+5. Build and run the app in the language (see above) and look at each screen. The new language shows in **Settings → General → Language** automatically.
 
 Without Xcode, add a `"<language>" : { "stringUnit" : { "state" : "translated", "value" : "…" } }` object under `"localizations"` of each entry. Use the language codes of Apple, such as `ko`, `ja`, `zh-Hans` and `de`.
 

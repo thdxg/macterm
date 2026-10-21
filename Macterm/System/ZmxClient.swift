@@ -365,7 +365,7 @@ extension ZmxClient {
         do {
             try process.run()
         } catch {
-            logger.warning("\(commandDesc, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            logger.warning("\(commandDesc, privacy: .public) failed: \(EnglishErrorText.describe(error), privacy: .public)")
             return nil
         }
 

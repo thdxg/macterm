@@ -896,7 +896,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let project = projectsByID[ws.projectID]
             let projectName = ws.projectID == PinnedTabs.projectID
                 ? PinnedTabs.displayName
-                : (project?.name ?? String(localized: "Project", comment: "Quit dialog: a project with no name"))
+                : (project?.name ?? String(localized: "Project"))
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() where pane.needsConfirmClose {
                     // The adaptive poll may be slow or fully paused here (e.g.

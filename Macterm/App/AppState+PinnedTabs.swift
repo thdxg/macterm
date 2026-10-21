@@ -673,14 +673,14 @@ extension AppState {
         alignPinnedWorkspaceOrder()
     }
 
-    private func suspendPinnedLayoutWrites(reason: String) {
+    private func suspendPinnedLayoutWrites(reason: BilingualMessage) {
         guard !pinnedLayoutSuspended else { return }
         pinnedLayoutSuspended = true
-        logger.error("pinned.yaml auto-save suspended: \(reason, privacy: .public)")
+        logger.error("pinned.yaml auto-save suspended: \(reason.english, privacy: .public)")
         presentLayoutError(
-            verb: "save",
+            verb: .save,
             message: String(localized: """
-            \(reason)
+            \(reason.localized)
 
             Pinned-tab auto-save is paused so your edits are not overwritten. \
             Fix the file, or delete it, to start auto-save again.

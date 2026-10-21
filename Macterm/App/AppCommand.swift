@@ -84,11 +84,19 @@ enum AppCommand: String, CaseIterable, Identifiable {
     /// The title in English, the language the source is written in. The
     /// palette also matches a query against it, so a command can be found
     /// by its English name under any language.
-    var englishTitle: String {
-        var resource = titleResource
-        resource.locale = Locale(identifier: "en")
-        return String(localized: resource)
+    var englishTitle: String { Self.englishTitles[self] ?? rawValue }
+
+    /// What a search matches besides `title`: the English title, when the
+    /// shown title is a translation.
+    var searchAliases: [String] {
+        englishTitle == title ? [] : [englishTitle]
     }
+
+    /// Resolved one time: the English text never changes while the app runs,
+    /// and the palette and Keymaps read it on each keystroke.
+    private static let englishTitles = Dictionary(
+        uniqueKeysWithValues: allCases.map { ($0, String(english: $0.titleResource)) }
+    )
 
     private var titleResource: LocalizedStringResource {
         switch self {
@@ -312,7 +320,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
             case .palettes: String(localized: "Palettes", comment: "Command category")
             case .tabs: String(localized: "Tabs", comment: "Command category")
             case .panes: String(localized: "Panes", comment: "Command category")
-            case .projects: String(localized: "Projects", comment: "Command category")
+            case .projects: String(localized: "Projects")
             case .window: String(localized: "Window", comment: "Command category")
             case .other: String(localized: "Other", comment: "Command category")
             }

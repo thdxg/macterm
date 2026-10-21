@@ -813,8 +813,8 @@ final class GhosttyCallbacks: @unchecked Sendable {
 
                 \(Self.clipboardPreview(string))
                 """)
-                alert.addButton(withTitle: String(localized: "Allow", comment: "Button of the clipboard write alert"))
-                alert.addButton(withTitle: String(localized: "Deny", comment: "Button of the clipboard write alert"))
+                alert.addButton(withTitle: String(localized: "Allow", comment: "Button of a permission alert"))
+                alert.addButton(withTitle: String(localized: "Deny", comment: "Button of a permission alert"))
                 if alert.runModal() == .alertFirstButtonReturn {
                     Self.setPasteboardString(string)
                 }

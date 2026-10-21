@@ -43,7 +43,11 @@ final class PasswordPaletteScope: PaletteScope {
             sections.append(PaletteSection(header: String(localized: "Saved Passwords"), items: matches))
         }
         sections.append(PaletteSection(
-            header: String(localized: "Add", comment: "Command palette, Password Manager: the section of rows that add a password"),
+            header: String(
+                localized: "palette.passwords.addSection",
+                defaultValue: "Add",
+                comment: "Command palette, Password Manager: the heading of the section of rows that add a password"
+            ),
             items: [
                 addItem(
                     id: "password-add-command",

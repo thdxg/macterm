@@ -43,6 +43,9 @@ struct PaletteItem: Identifiable {
     let warning: String?
     /// The row's ⌥ action, if it has one.
     let alt: PaletteAltAction?
+    /// More text that a query matches, after the title: a command's English
+    /// title, so that a command is found by its English name in any language.
+    let searchAliases: [String]
     /// Scalar offsets in `title` the query matched, drawn emphasized.
     let highlights: [Int]
     let action: () -> Void
@@ -60,6 +63,7 @@ struct PaletteItem: Identifiable {
         icon: PaletteIcon? = nil,
         warning: String? = nil,
         alt: PaletteAltAction? = nil,
+        searchAliases: [String] = [],
         highlights: [Int] = [],
         action: @escaping () -> Void
     ) {
@@ -75,6 +79,7 @@ struct PaletteItem: Identifiable {
         self.icon = icon ?? opensScope?.pill.icon
         self.warning = warning
         self.alt = alt
+        self.searchAliases = searchAliases
         self.highlights = highlights
         self.action = action
     }
@@ -97,6 +102,7 @@ struct PaletteItem: Identifiable {
             icon: icon,
             warning: warning,
             alt: alt,
+            searchAliases: searchAliases,
             highlights: highlights ?? self.highlights,
             action: action
         )

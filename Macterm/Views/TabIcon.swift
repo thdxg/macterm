@@ -158,7 +158,11 @@ struct TabStatusGlyph: View {
                 }
                 .help(failed
                     ? String(localized: "Failed", comment: "Tooltip of a tab whose command failed")
-                    : String(localized: "Done", comment: "Tooltip of a tab whose command finished"))
+                    : String(
+                        localized: "tab.status.done",
+                        defaultValue: "Done",
+                        comment: "Tooltip of a tab whose command finished. A state, not a button"
+                    ))
         case .idle:
             TabRowIcon(symbol: symbol, index: index, agent: agent, agentTint: tint)
                 .foregroundStyle(iconStyle)

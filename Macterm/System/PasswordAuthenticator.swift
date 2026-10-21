@@ -59,7 +59,7 @@ final class PasswordAuthenticator {
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            logger.warning("authentication unavailable: \(error?.localizedDescription ?? "unknown", privacy: .public)")
+            logger.warning("authentication unavailable: \(error.map(EnglishErrorText.describe) ?? "unknown", privacy: .public)")
             return false
         }
         do {
@@ -67,7 +67,7 @@ final class PasswordAuthenticator {
             unlocked = ok && Preferences.shared.passwordAutofillAuthentication == .untilLocked
             return ok
         } catch {
-            logger.info("authentication declined: \(error.localizedDescription, privacy: .public)")
+            logger.info("authentication declined: \(EnglishErrorText.describe(error), privacy: .public)")
             return false
         }
     }

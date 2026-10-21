@@ -1692,7 +1692,7 @@ struct AppStateTests {
 
         state.applyLayoutPresentingError(project)
 
-        #expect(state.pendingDialog?.kind == .layoutError(verb: "apply"))
+        #expect(state.pendingDialog?.kind == .layoutError(verb: .apply))
     }
 
     @Test
@@ -1712,7 +1712,7 @@ struct AppStateTests {
 
         state.applyLayoutPresentingError(project)
 
-        #expect(state.pendingDialog?.kind == .layoutError(verb: "apply"))
+        #expect(state.pendingDialog?.kind == .layoutError(verb: .apply))
         #expect(files.find(forProjectPath: dir.path) == nil)
         // The live workspace is untouched by a failed apply.
         #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
@@ -1769,7 +1769,7 @@ struct AppStateTests {
 
         state.saveLayoutPresentingError(project)
 
-        #expect(state.pendingDialog?.kind == .layoutError(verb: "save"))
+        #expect(state.pendingDialog?.kind == .layoutError(verb: .save))
         #expect(state.activeToast == nil)
     }
 
@@ -1833,7 +1833,7 @@ struct AppStateTests {
         let (project, _) = seedProjectWithDir(state)
 
         state.applyLayoutPresentingError(project)
-        #expect(state.pendingDialog?.kind == .layoutError(verb: "apply"))
+        #expect(state.pendingDialog?.kind == .layoutError(verb: .apply))
         #expect(state.pendingDialog?.host == .mainWindow)
 
         state.dismissPendingDialog()
@@ -1851,7 +1851,7 @@ struct AppStateTests {
 
         state.applyLayoutPresentingError(project)
 
-        #expect(state.pendingDialog?.kind == .layoutError(verb: "apply"))
+        #expect(state.pendingDialog?.kind == .layoutError(verb: .apply))
         #expect(state.activeToast == nil)
     }
 

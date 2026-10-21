@@ -63,7 +63,7 @@ enum PaletteScreenshot {
                 subtitle: String(localized: "If it is on, remove Macterm from the list. Then try again.")
             )
         } catch {
-            logger.error("palette screenshot: \(error.localizedDescription, privacy: .public)")
+            logger.error("palette screenshot: \(EnglishErrorText.describe(error), privacy: .public)")
             appState.presentToast(String(localized: "Cannot capture the palette"), subtitle: error.localizedDescription)
         }
     }

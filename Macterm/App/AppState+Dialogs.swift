@@ -35,7 +35,7 @@ extension AppState {
             case removeSelection
             case applyLayout(projectID: UUID)
             /// A notice, not a question: the layout verb that failed.
-            case layoutError(verb: String)
+            case layoutError(verb: LayoutVerb)
             /// A notice: a rename refused because the pinned workspace
             /// reserves the name (`PinnedTabs.reservesName`).
             case reservedProjectName
@@ -92,15 +92,19 @@ extension AppState {
         return false
     }
 
-    /// Raise a layout notice: `title` defaults to "Cannot <verb> layout".
-    /// `verb` is an identifier (`apply`, `save`); the title is a whole
-    /// sentence for each one, so that a translation does not put an English
-    /// verb into it.
-    func presentLayoutError(verb: String, message: String, title: String? = nil, host: DialogHost = .mainWindow) {
+    /// The layout action that a layout notice is about.
+    enum LayoutVerb: Equatable {
+        case apply
+        case save
+    }
+
+    /// Raise a layout notice: `title` defaults to "Cannot apply layout" or
+    /// "Cannot save layout", a whole sentence for each verb, so that a
+    /// translation does not put an English verb into it.
+    func presentLayoutError(verb: LayoutVerb, message: String, title: String? = nil, host: DialogHost = .mainWindow) {
         let defaultTitle = switch verb {
-        case "apply": String(localized: "Cannot apply layout")
-        case "save": String(localized: "Cannot save layout")
-        default: String(localized: "Cannot \(verb) layout")
+        case .apply: String(localized: "Cannot apply layout")
+        case .save: String(localized: "Cannot save layout")
         }
         present(.notice(
             .layoutError(verb: verb),

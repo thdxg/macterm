@@ -187,7 +187,7 @@ struct LayoutBranch: Equatable {
 
 // MARK: - Parsing
 
-enum LayoutFileError: Error, LocalizedError {
+enum LayoutFileError: Error, LocalizedError, EnglishDescribedError {
     case parse(underlying: Error)
     /// No central project file declares this project's path.
     case noProjectFile(projectPath: String)
@@ -198,33 +198,30 @@ enum LayoutFileError: Error, LocalizedError {
     /// against a stale URL ever reaching `removeItem`.
     case outsideProjectsDirectory(filename: String)
 
-    var errorDescription: String? {
+    /// Each message, one time. `detail` is the text of the underlying error,
+    /// in the language that the message resolves to.
+    private func message(detail: String) -> LocalizedStringResource {
         switch self {
-        case let .parse(underlying): "The layout file is invalid and was not applied.\n\n\(underlying.localizedDescription)"
+        case .parse: "The layout file is invalid and was not applied.\n\n\(detail)"
         case let .noProjectFile(projectPath): "No layout file declares \(projectPath). Use “Save Layout” to create one."
         case .noTabs: "The layout file declares no tabs, so there is no layout to apply."
         case let .outsideProjectsDirectory(filename): "“\(filename)” is not in the projects directory."
         }
     }
 
-    /// The message of the alert in the GUI, in the user's language.
-    /// `errorDescription` stays English, because `layout apply` and
-    /// `layout save` return it to the CLI.
-    var displayMessage: String {
-        switch self {
-        case let .parse(underlying):
-            String(localized: "The layout file is invalid and was not applied.\n\n\(underlying.localizedDescription)")
-        case let .noProjectFile(projectPath):
-            String(localized: "No layout file declares \(projectPath). Use “Save Layout” to create one.")
-        case .noTabs:
-            String(localized: "The layout file declares no tabs, so there is no layout to apply.")
-        case let .outsideProjectsDirectory(filename):
-            String(localized: "“\(filename)” is not in the projects directory.")
-        }
+    private var underlying: Error? {
+        if case let .parse(underlying) = self { return underlying }
+        return nil
     }
 
-    /// The message of the alert for any error that a layout action returns.
-    static func displayMessage(for error: Error) -> String {
-        (error as? LayoutFileError)?.displayMessage ?? error.localizedDescription
+    /// The message of the alert in the GUI, in the user's language.
+    var errorDescription: String? {
+        String(localized: message(detail: underlying?.localizedDescription ?? ""))
+    }
+
+    /// The message in English, which `layout apply` and `layout save` return
+    /// to the CLI.
+    var englishDescription: String {
+        String(english: message(detail: underlying.map(EnglishErrorText.describe) ?? ""))
     }
 }

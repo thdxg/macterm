@@ -71,9 +71,6 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     /// Settings don't drift apart.
     var title: String { appCommand.title }
 
-    /// What Settings → Keymaps' search looks in (`Search`): the title, its
-    /// English form, the section it sits in, and the chord both as shown
-    /// (`⌘D`, `None` when unbound) and as written (`cmd+d`).
     /// Every bindable action in the order the command palette lists its
     /// commands (`AppCommand.allCases`), so Settings → Keymaps sections run
     /// in the palette's order — Palettes first — rather than in this enum's.
@@ -81,11 +78,13 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         AppCommand.allCases.compactMap(\.hotkeyAction)
     }
 
+    /// What Settings → Keymaps' search looks in (`Search`), in this order:
+    /// the title, the section it sits in, the chord as shown (`⌘D`, `None`
+    /// when unbound), the English title when the title is a translation, and
+    /// the chord as written (`cmd+d`) when there is one.
     func searchFields(shortcut: String) -> [String] {
         let shown = HotkeyRegistry.displayString(for: shortcut)
-        var fields = [title, appCommand.category.title, shown]
-        // The English title too, so a search finds the row under any language.
-        if appCommand.englishTitle != title { fields.append(appCommand.englishTitle) }
+        var fields = [title, appCommand.category.title, shown] + appCommand.searchAliases
         if !HotkeyRegistry.displaySymbols(for: shortcut).isEmpty { fields.append(shortcut) }
         return fields
     }

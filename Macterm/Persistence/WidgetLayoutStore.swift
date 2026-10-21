@@ -138,7 +138,7 @@ struct WidgetLayoutStore {
         case file(widgets: [WidgetDeclaration], text: String)
         /// Present but unparseable. Callers suspend auto-writes so a mid-edit
         /// typo isn't clobbered.
-        case invalid(String)
+        case invalid(BilingualMessage)
     }
 
     func read() -> ReadResult {
@@ -147,13 +147,13 @@ struct WidgetLayoutStore {
         do {
             text = try String(contentsOf: fileURL, encoding: .utf8)
         } catch {
-            return .invalid(String(localized: "could not read \(Self.filename): \(error.localizedDescription)"))
+            return .invalid(BilingualMessage({ "could not read \(Self.filename): \($0)" }, error: error))
         }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .absent }
         do {
             return try .file(widgets: WidgetLayoutFile.parse(yaml: text).widgets ?? [], text: text)
         } catch {
-            return .invalid(String(localized: "\(Self.filename) is not valid: \(error.localizedDescription)"))
+            return .invalid(BilingualMessage({ "\(Self.filename) is not valid: \($0)" }, error: error))
         }
     }
 

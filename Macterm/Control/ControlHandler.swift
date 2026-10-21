@@ -31,7 +31,7 @@ final class ControlHandler {
         } catch {
             return ControlProtocol.encode(.failure(
                 id: "",
-                error: ControlError(code: .badRequest, message: "undecodable request: \(error.localizedDescription)")
+                error: ControlError(code: .badRequest, message: "undecodable request: \(EnglishErrorText.describe(error))")
             ))
         }
         let response = await handle(request)
@@ -59,7 +59,7 @@ final class ControlHandler {
         } catch {
             return .failure(
                 id: request.id,
-                error: ControlError(code: .internalError, message: error.localizedDescription)
+                error: ControlError(code: .internalError, message: EnglishErrorText.describe(error))
             )
         }
     }
@@ -179,7 +179,7 @@ final class ControlHandler {
                 name: entry.palette?.name,
                 description: entry.palette?.description,
                 keybind: HotkeyRegistry.parseShortcut(chord) == nil ? nil : chord,
-                error: entry.failure?.localizedDescription
+                error: entry.failure.map(EnglishErrorText.describe)
             )
         }
         return ControlData(palettes: infos)
@@ -1285,7 +1285,7 @@ final class ControlHandler {
         let project = try resolveProject(args.project)
         try rejectPinned(project, verb: "layout apply")
         if let error = appState.applyLayout(project: project) {
-            throw ControlError(code: .notFound, message: error.localizedDescription)
+            throw ControlError(code: .notFound, message: EnglishErrorText.describe(error))
         }
         // A destructive reconcile is staged for UI confirmation; headless
         // callers either force it through or get a typed `busy` — the staged
@@ -1316,7 +1316,7 @@ final class ControlHandler {
         let project = try resolveProject(args.project)
         try rejectPinned(project, verb: "layout save")
         if let error = appState.saveLayout(project: project, siblingProjects: projectStore.projects) {
-            throw ControlError(code: .internalError, message: error.localizedDescription)
+            throw ControlError(code: .internalError, message: EnglishErrorText.describe(error))
         }
         return ControlData()
     }

@@ -37,6 +37,13 @@ struct LocalizationTests {
         var translatable: [String: [String: Any]] {
             strings.filter { $0.value["shouldTranslate"] as? Bool != false }
         }
+
+        /// The English text of an entry: its source-language value, which a
+        /// semantic key (`String(localized: "tab.status.done", defaultValue:)`)
+        /// has, or else the key, which is the English text.
+        func english(_ key: String) -> String {
+            LocalizationTests.values(strings[key] ?? [:], language: sourceLanguage)?.first ?? key
+        }
     }
 
     /// The translated values of one entry in one language: the plain value,
@@ -63,7 +70,7 @@ struct LocalizationTests {
 
     @Test
     func every_string_has_a_translation_in_every_language() throws {
-        for name in ["Localizable", "InfoPlist"] {
+        for name in ["Localizable", "InfoPlist", "ServicesMenu"] {
             let catalog = try Catalog(name)
             #expect(catalog.languages.contains("ko"), "\(name).xcstrings has no Korean")
             for language in catalog.languages {
@@ -82,7 +89,7 @@ struct LocalizationTests {
             for (key, entry) in catalog.translatable {
                 for value in Self.values(entry, language: language) ?? [] {
                     #expect(
-                        Self.placeholders(value) == Self.placeholders(key),
+                        Self.placeholders(value) == Self.placeholders(catalog.english(key)),
                         "\(language) for \"\(key)\" is \"\(value)\""
                     )
                 }
@@ -90,19 +97,39 @@ struct LocalizationTests {
         }
     }
 
-    /// The English values of the permission prompts are the text of
-    /// `Info.plist`, so the catalog cannot show other English text, and each
-    /// prompt has an entry.
+    private static func infoPlist() throws -> [String: Any] {
+        let url = root.appendingPathComponent("Macterm/Info.plist")
+        return try #require(NSDictionary(contentsOf: url) as? [String: Any])
+    }
+
+    /// Each permission prompt has an entry, and the English value of each
+    /// entry is the text of `Info.plist`, so the catalog cannot show other
+    /// English text. Other `Info.plist` keys can join the catalog.
     @Test
     func the_info_plist_catalog_matches_info_plist() throws {
-        let url = Self.root.appendingPathComponent("Macterm/Info.plist")
-        let plist = try #require(NSDictionary(contentsOf: url) as? [String: Any])
+        let plist = try Self.infoPlist()
         let catalog = try Catalog("InfoPlist")
         let prompts = plist.keys.filter { $0.hasSuffix("UsageDescription") }
-        #expect(Set(prompts) == Set(catalog.strings.keys))
-        for key in prompts {
+        #expect(Set(prompts).isSubset(of: catalog.strings.keys), "a permission prompt has no entry")
+        for key in catalog.strings.keys {
             let english = Self.values(catalog.strings[key] ?? [:], language: "en")
             #expect(english == [plist[key] as? String].compactMap(\.self), "\(key)")
+        }
+    }
+
+    /// Finder → Services reads the title of the item from
+    /// `ServicesMenu.strings`, keyed by the title in `Info.plist` after the
+    /// build puts the display name in. Each build has its own display name.
+    @Test
+    func the_services_catalog_has_the_finder_item_of_each_build() throws {
+        let plist = try Self.infoPlist()
+        let services = try #require(plist["NSServices"] as? [[String: Any]])
+        let item = try #require(services.first?["NSMenuItem"] as? [String: String])
+        let title = try #require(item["default"])
+        let catalog = try Catalog("ServicesMenu")
+        for displayName in ["Macterm", "Macterm Debug"] {
+            let key = title.replacingOccurrences(of: "$(PRODUCT_DISPLAY_NAME)", with: displayName)
+            #expect(catalog.strings[key] != nil, "no entry for \"\(key)\"")
         }
     }
 
@@ -114,6 +141,8 @@ struct LocalizationTests {
         let path = try #require(Bundle.main.path(forResource: "ko", ofType: "lproj"))
         let korean = try #require(Bundle(path: path))
         #expect(korean.localizedString(forKey: "New Tab", value: nil, table: nil) != "New Tab")
+        let services = "New Macterm Debug Project Here"
+        #expect(korean.localizedString(forKey: services, value: nil, table: "ServicesMenu") != services)
     }
 
     /// `AppCommand.englishTitle` sets the locale of a `LocalizedStringResource`

@@ -45,7 +45,7 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
             // Ghostty logs this error; swallowing it (as this did) makes a
             // failed request indistinguishable from a refused one.
             if let error {
-                logger.error("Notification authorization request failed: \(error.localizedDescription, privacy: .public)")
+                logger.error("Notification authorization request failed: \(EnglishErrorText.describe(error), privacy: .public)")
             }
             Self.logNotificationSettings()
         }

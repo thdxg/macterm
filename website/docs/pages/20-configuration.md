@@ -73,6 +73,12 @@ Macterm draws the window chrome itself. It ignores or forces these keys:
 
 **Macterm → Settings** has the settings for window opacity, blur, sidebar behavior, quick terminal geometry, keymaps and animations.
 
+## Language
+
+Macterm is in English and Korean. By default, it uses the language of macOS. To use another language for Macterm only, select it in **Settings → General → Language**, then quit Macterm and start it again. **System** uses the language of macOS. **System Settings → General → Language & Region → Applications** sets the same choice.
+
+The CLI, its error messages and the logs are always in English.
+
 ## Keybinds
 
 Go to **Settings → Keymaps**. Click the keybind of a row. Press the keys that you want. To clear the keybind, click it and press <kbd>Delete</kbd>. If rows have the same keys, each row says so.

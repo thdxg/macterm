@@ -89,7 +89,7 @@ final class ExtensionAutoUpdater {
                 updated.append(entry.name)
                 logger.info("updated extension \(entry.id, privacy: .public)")
             } catch {
-                logger.error("cannot update extension \(entry.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                logger.error("cannot update extension \(entry.id, privacy: .public): \(EnglishErrorText.describe(error), privacy: .public)")
             }
         }
         if !updated.isEmpty { announce(updated) }
