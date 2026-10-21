@@ -1,19 +1,19 @@
 import Foundation
 
-/// The keymap a pane's copy mode reads its keys with: Helix or Vim
-/// (Settings → Keymaps → Copy Mode). Both drive the same selection
+/// The keymap a pane's copy mode reads its keys with: Vim (the default)
+/// or Helix (Settings → Keymaps → Copy Mode). Both drive the same selection
 /// primitives of the fork: the terminal's selection is the cursor, its end
 /// the head and its start the anchor.
 enum CopyModeKeymap: String, CaseIterable, Identifiable, PreferenceValue {
-    case helix
     case vim
+    case helix
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .helix: "Helix"
         case .vim: "Vim"
+        case .helix: "Helix"
         }
     }
 
@@ -114,6 +114,19 @@ enum CopyModeMotion: String {
              .wordPrev,
              .nextWordStart: true
         default: false
+        }
+    }
+
+    /// The `select_word` action of the Helix word motions (fork patch
+    /// 0017): the selection becomes what the motion moves over, as `w`,
+    /// `e` and `b` do in the normal mode of Helix. Nil for the other
+    /// motions.
+    var helixSelectAction: String? {
+        switch self {
+        case .wordNext: "select_word:next"
+        case .wordEnd: "select_word:end"
+        case .wordPrev: "select_word:prev"
+        default: nil
         }
     }
 }
@@ -299,13 +312,15 @@ enum HelixKeymap {
         }
     }
 
-    /// The commands of one motion, repeated by the pending count.
+    /// The commands of one motion, repeated by the pending count. In
+    /// select mode every motion extends. In normal mode a word motion
+    /// selects what it moves over (`select_word`, which puts the anchor
+    /// where Helix puts it), and any other motion moves the cursor.
     private static func commands(for motion: Motion, state: inout CopyModeState) -> [CopyModeCommand] {
-        let extend: CopyModeCommand = .binding("extend_selection:\(motion.rawValue)")
         let once: [CopyModeCommand] = if state.selectMode {
-            [extend]
-        } else if motion.isWord {
-            [.binding("collapse_selection"), extend]
+            [.binding("extend_selection:\(motion.rawValue)")]
+        } else if let select = motion.helixSelectAction {
+            [.binding(select)]
         } else {
             [.binding("move_selection:\(motion.rawValue)")]
         }

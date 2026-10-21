@@ -1,5 +1,6 @@
-"""Copy mode: the Helix keys move the terminal's selection, driven end to end
-through the pane's real surface.
+"""Copy mode: the Helix keys and the Vim keys move the terminal's selection,
+driven end to end through the pane's real surface. Each test names its keymap
+on enter, so the setting (Vim by default) does not decide what a test reads.
 
 The debug-only `pane copy-mode` verb turns the mode on and reads its state
 and the selection text back, so no test reads the clipboard. The keys go
@@ -18,10 +19,12 @@ import uuid
 from _harness import wait_for
 
 
-def _state(app, pane_id, action=None):
+def _state(app, pane_id, action=None, keymap=None):
     args = ["pane", "copy-mode"]
     if action:
         args.append(action)
+    if keymap:
+        args += ["--keymap", keymap]
     state = app.cli_json(*args, "--pane", pane_id)["copyMode"]
     state.setdefault("selection", None)
     return state
@@ -51,7 +54,7 @@ def test_copy_mode_selects_lines_with_helix_keys(app, live_pane):
     cursor_row = max(i for i, row in enumerate(rows) if row.strip())
     assert cursor_row > bravo_row
 
-    state = _state(app, pane_id, "enter")
+    state = _state(app, pane_id, "enter", keymap="helix")
     assert state["active"] and not state["selectMode"]
 
     # Up to the bravo line, then the whole line.
@@ -93,7 +96,7 @@ def test_a_repeated_w_moves_word_by_word(app, live_pane):
     line_row = next(i for i, row in enumerate(rows) if row.startswith(line))
     cursor_row = max(i for i, row in enumerate(rows) if row.strip())
 
-    _state(app, pane_id, "enter")
+    _state(app, pane_id, "enter", keymap="helix")
     for _ in range(cursor_row - line_row):
         _key(app, pane_id, "k")
     _key(app, pane_id, "g")
@@ -106,14 +109,29 @@ def test_a_repeated_w_moves_word_by_word(app, live_pane):
     # The second `w` moves on to the next word. It stopped on the blank
     # before fork thdxg/ghostty#30.
     _key(app, pane_id, "w")
-    assert _state(app, pane_id)["selection"].strip() == two
+    assert _state(app, pane_id)["selection"] == f"{two} "
+
+    # The third `w` selects the last word of the row and nothing after
+    # it: the next word is on the next row, so the head stops on the last
+    # character, as the cursor of Helix stops before a newline (fork
+    # thdxg/ghostty#33).
+    _key(app, pane_id, "w")
+    assert _state(app, pane_id)["selection"] == three
+
+    # `b` from the end of a word selects back to its start. From the
+    # start of a word it selects the blank and the word before it: the
+    # cell the cursor stood on is not kept.
+    _key(app, pane_id, "b")
+    assert _state(app, pane_id)["selection"] == three
+    _key(app, pane_id, "b")
+    assert _state(app, pane_id)["selection"] == f"{two} "
 
     _state(app, pane_id, "exit")
 
 
 def test_escape_leaves_select_mode_before_copy_mode(app, live_pane):
     pane_id = live_pane["id"]
-    state = _state(app, pane_id, "enter")
+    state = _state(app, pane_id, "enter", keymap="helix")
     assert state["active"]
 
     _key(app, pane_id, "v")
@@ -130,7 +148,7 @@ def test_escape_leaves_select_mode_before_copy_mode(app, live_pane):
 def test_a_key_in_copy_mode_does_not_reach_the_shell(app, live_pane):
     pane_id = live_pane["id"]
     nonce = uuid.uuid4().hex[:8]
-    _state(app, pane_id, "enter")
+    _state(app, pane_id, "enter", keymap="helix")
     # `z` is not a copy-mode key; it must be swallowed, not typed.
     for ch in "zz":
         _key(app, pane_id, ch)

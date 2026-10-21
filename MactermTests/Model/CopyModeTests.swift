@@ -60,15 +60,9 @@ struct CopyModeTests {
     @Test
     func word_motions_select_the_range_in_normal_mode_and_only_extend_in_select_mode() {
         var state = CopyModeState()
-        #expect(HelixKeymap.resolve(Self.letter("w"), state: &state) == [
-            .binding("collapse_selection"), .binding("extend_selection:word_next"),
-        ])
-        #expect(HelixKeymap.resolve(Self.letter("e"), state: &state) == [
-            .binding("collapse_selection"), .binding("extend_selection:word_end"),
-        ])
-        #expect(HelixKeymap.resolve(Self.letter("b"), state: &state) == [
-            .binding("collapse_selection"), .binding("extend_selection:word_prev"),
-        ])
+        #expect(HelixKeymap.resolve(Self.letter("w"), state: &state) == [.binding("select_word:next")])
+        #expect(HelixKeymap.resolve(Self.letter("e"), state: &state) == [.binding("select_word:end")])
+        #expect(HelixKeymap.resolve(Self.letter("b"), state: &state) == [.binding("select_word:prev")])
 
         state.selectMode = true
         #expect(HelixKeymap.resolve(Self.letter("w"), state: &state) == [.binding("extend_selection:word_next")])
@@ -165,8 +159,7 @@ struct CopyModeTests {
     func a_count_repeats_word_motions_and_x_too() {
         var state = CopyModeState()
         #expect(Self.resolve([Self.letter("2"), Self.letter("w")], state: &state) == [
-            .binding("collapse_selection"), .binding("extend_selection:word_next"),
-            .binding("collapse_selection"), .binding("extend_selection:word_next"),
+            .binding("select_word:next"), .binding("select_word:next"),
         ])
         #expect(Self.resolve([Self.letter("2"), Self.letter("x")], state: &state) == [
             .binding("select_line"), .binding("select_line"),
