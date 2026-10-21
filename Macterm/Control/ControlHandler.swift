@@ -100,6 +100,7 @@ final class ControlHandler {
         case "pane.password": return try panePassword(args)
         case "pane.copy-mode": return try paneCopyMode(args)
         case "pane.read-only": return try paneReadOnly(args)
+        case "pane.explain": return try paneExplain(args)
         case "tab.merge": return try tabMerge(args)
         #endif
         case "grid": return try grid(args)
@@ -1157,6 +1158,35 @@ final class ControlHandler {
         }
         view.sendBindingAction("toggle_readonly")
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+    }
+
+    /// DEBUG-ONLY: Explain Output as a verb. `start` explains the pane's
+    /// selection or last command as the command does; `close` closes the
+    /// popover. The reply streams in after the verb returns: poll it.
+    private func paneExplain(_ args: ControlArgs) throws -> ControlData {
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        guard let view = target.pane.nsView, view.surface != nil else {
+            throw ControlError(code: .noSurface, message: "that pane has no surface")
+        }
+        switch args.explain {
+        case nil: break
+        case "start":
+            guard OnDeviceModel.availability == .available else {
+                throw ControlError(code: .badRequest, message: "Apple Intelligence is not available on this Mac")
+            }
+            view.explainOutput()
+        case "close": view.explainPopover.close()
+        default: throw ControlError(code: .badRequest, message: "explain takes start or close")
+        }
+        let model = view.explainPopover.model
+        return ControlData(explain: ControlExplainState(
+            shown: view.explainPopover.isShown,
+            phase: model.phase.rawValue,
+            source: model.source.rawValue,
+            selection: view.selectedText(),
+            text: model.text
+        ))
     }
 
     /// DEBUG-ONLY (#227): drive `TerminalTab.movePane(to:)` — the grab-handle

@@ -63,6 +63,7 @@ enum MactermKeybind: String, AppEnum {
     case capturePane = "capture_pane"
     case copyMode = "copy_mode"
     case readOnlyMode = "read_only_mode"
+    case explainOutput = "explain_output"
     case applyLayout = "apply_layout"
     case saveLayout = "save_layout"
     case separateAllPanes = "separate_all_panes"
@@ -126,6 +127,7 @@ enum MactermKeybind: String, AppEnum {
         .capturePane: "Capture Pane",
         .copyMode: "Copy Mode",
         .readOnlyMode: "Read-Only Mode",
+        .explainOutput: "Explain Output",
         .applyLayout: "Apply Layout",
         .saveLayout: "Save Layout",
         .separateAllPanes: "Separate All Panes",

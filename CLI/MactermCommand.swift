@@ -522,6 +522,7 @@ struct PaneCommand: ParsableCommand {
         subs.append(Password.self)
         subs.append(CopyMode.self)
         subs.append(ReadOnly.self)
+        subs.append(Explain.self)
         #endif
         return subs
     }
@@ -948,6 +949,26 @@ struct PaneCommand: ParsableCommand {
 
         func run() throws {
             try runControlCommand(command: "pane.read-only", args: target.controlArgs(), options: options)
+        }
+    }
+
+    /// DEBUG-only: Explain Output as a verb, so a test can start it and read
+    /// the popover's text with no keyboard or mouse.
+    struct Explain: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "[debug] Read a pane's Explain Output popover, or start or close it."
+        )
+
+        @Argument(help: "start or close. Omit it to read the state.")
+        var action: String?
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = target.controlArgs()
+            args.explain = action
+            try runControlCommand(command: "pane.explain", args: args, options: options)
         }
     }
 

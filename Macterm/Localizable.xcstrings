@@ -1268,6 +1268,38 @@
         }
       }
     },
+    "Apple Intelligence did not explain this text." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence가 이 텍스트를 설명하지 않았습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple 智能未解释此文本。"
+          }
+        }
+      }
+    },
+    "Apple Intelligence is not available. Turn it on in System Settings." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence를 사용할 수 없습니다. 시스템 설정에서 켜십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple 智能不可用。请在系统设置中打开它。"
+          }
+        }
+      }
+    },
     "Apply" : {
       "localizations" : {
         "ko" : {
@@ -2922,6 +2954,54 @@
         }
       }
     },
+    "Explain Output" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "출력 설명"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解释输出"
+          }
+        }
+      }
+    },
+    "Explain Selection" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택 항목 설명"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解释所选内容"
+          }
+        }
+      }
+    },
+    "Explaining…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설명하는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在解释…"
+          }
+        }
+      }
+    },
     "Extension updated" : {
       "localizations" : {
         "ko" : {
@@ -4278,6 +4358,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 无法编码图像。"
+          }
+        }
+      }
+    },
+    "Macterm could not explain this text. Try again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 이 텍스트를 설명할 수 없습니다. 다시 시도하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 无法解释此文本。请重试。"
           }
         }
       }
@@ -9151,6 +9247,22 @@
         }
       }
     },
+    "The text is too long to explain. Select a shorter part, then try again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "텍스트가 너무 길어 설명할 수 없습니다. 더 짧은 부분을 선택한 다음 다시 시도하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本太长，无法解释。请选择较短的部分，然后重试。"
+          }
+        }
+      }
+    },
     "The web target does not contain a valid host." : {
       "localizations" : {
         "ko" : {
@@ -9179,6 +9291,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 处没有文件夹。"
+          }
+        }
+      }
+    },
+    "There is no output to explain." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설명할 출력이 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可解释的输出。"
           }
         }
       }
@@ -9444,6 +9572,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭只读"
+          }
+        }
+      }
+    },
+    "Turn on Apple Intelligence in System Settings to explain output" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "출력을 설명하려면 시스템 설정에서 Apple Intelligence를 켜십시오"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要解释输出，请在系统设置中打开 Apple 智能"
           }
         }
       }

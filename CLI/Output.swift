@@ -26,6 +26,7 @@ enum Output {
         if let tutorial = data.tutorial { print(tutorial.text) }
         if let password = data.password { renderPassword(password) }
         if let copyMode = data.copyMode { renderCopyMode(copyMode) }
+        if let explain = data.explain { renderExplain(explain) }
         if let widgets = data.widgets { renderWidgets(widgets) }
         if let palettes = data.palettes { renderPalettes(palettes) }
     }
@@ -41,6 +42,12 @@ enum Output {
         var line = "active=\(state.active) select=\(state.selectMode)"
         if let selection = state.selection { line += " selection=\(selection)" }
         print(line)
+    }
+
+    private static func renderExplain(_ state: ControlExplainState) {
+        print("shown=\(state.shown) phase=\(state.phase) source=\(state.source)")
+        if let selection = state.selection { print("selection:\n\(selection)") }
+        if !state.text.isEmpty { print(state.text) }
     }
 
     private static func renderWidgets(_ widgets: [ControlWidgetInfo]) {

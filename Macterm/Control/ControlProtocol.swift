@@ -128,6 +128,9 @@ struct ControlArgs: Codable, Equatable {
     /// The keymap for `enter` (debug-only `pane.copy-mode`): `helix` or
     /// `vim`. Nil uses the setting.
     var keymap: String?
+    /// Start Explain Output in the pane (debug-only `pane.explain`): `start`
+    /// or `close`. Nil just reads the state.
+    var explain: String?
     /// Destination pane selector for `pane.move` (same tab); nil = the
     /// workspace edge (a root-level move).
     var dest: String?
@@ -289,6 +292,8 @@ struct ControlData: Codable {
     var password: ControlPasswordState?
     /// The pane's copy-mode state (debug-only `pane.copy-mode`).
     var copyMode: ControlCopyModeState?
+    /// The pane's Explain Output popover (debug-only `pane.explain`).
+    var explain: ControlExplainState?
     /// Desktop widgets (`widget.*`).
     var widgets: [ControlWidgetInfo]?
     /// The palettes of the installed extensions (`palette.list`).
@@ -306,6 +311,7 @@ struct ControlData: Codable {
         tutorial: ControlTutorial? = nil,
         password: ControlPasswordState? = nil,
         copyMode: ControlCopyModeState? = nil,
+        explain: ControlExplainState? = nil,
         widgets: [ControlWidgetInfo]? = nil,
         palettes: [ControlPaletteInfo]? = nil
     ) {
@@ -320,6 +326,7 @@ struct ControlData: Codable {
         self.tutorial = tutorial
         self.password = password
         self.copyMode = copyMode
+        self.explain = explain
         self.palettes = palettes
         self.widgets = widgets
     }
@@ -335,6 +342,20 @@ struct ControlCopyModeState: Codable, Equatable {
     var active: Bool
     var selectMode: Bool
     var selection: String?
+}
+
+/// A pane's Explain Output popover (debug-only `pane.explain`): whether it is
+/// up, its phase (`waiting`, `streaming`, `done` or `failed`), what it
+/// explains, the pane's selection, and the text so far.
+struct ControlExplainState: Codable, Equatable {
+    var shown: Bool
+    var phase: String
+    /// `selection` or `output`.
+    var source: String
+    /// The pane's selection now: with no selection of the user's, the output
+    /// that Explain selected.
+    var selection: String?
+    var text: String
 }
 
 struct ControlPasswordState: Codable, Equatable {

@@ -216,6 +216,14 @@ extension AppCommand {
                   let view = pane.nsView, view.surface != nil
             else { return nil }
             return { view.sendBindingAction("toggle_readonly") }
+        case .explainOutput:
+            // The selection, or the output of the last command, of the
+            // focused pane. Only where Apple's on-device model can run.
+            guard OnDeviceModel.availability == .available,
+                  let projectID, let pane = ctx.appState.focusedPane(for: projectID),
+                  let view = pane.nsView, view.surface != nil
+            else { return nil }
+            return { view.explainOutput() }
         case .openProject:
             return { _ = ctx.appState.openProject(store: ctx.projectStore) }
         case .newRemoteProject:
@@ -351,7 +359,7 @@ extension AppCommand {
         if self == .passwordManager {
             return Preferences.shared.passwordManagerEnabled ? nil : String(localized: "Turned off in Settings → Password Manager")
         }
-        if self == .files { return unavailableNotice(in: ctx) }
+        if self == .files || self == .explainOutput { return unavailableNotice(in: ctx) }
         guard self == .applyLayout,
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
@@ -373,6 +381,13 @@ extension AppCommand {
     /// other inapplicable binding does.
     @MainActor
     func unavailableNotice(in ctx: AppCommandContext) -> String? {
+        // A Mac that cannot run the model gets no notice: the command is
+        // simply not there. One where Apple Intelligence is off is told how.
+        if self == .explainOutput {
+            return OnDeviceModel.availability == .notReady
+                ? String(localized: "Turn on Apple Intelligence in System Settings to explain output")
+                : nil
+        }
         guard self == .files,
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })

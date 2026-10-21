@@ -214,6 +214,31 @@ Copy mode is a keyboard cursor over the scrollback, with the keys of Vim by defa
 - **The Helix word motions are fork patch 0017** (`0017-selection-helix-words.patch`): `select_word:next|end|prev` is the `range_to_target` of Helix (`helix-core/src/movement.rs`) over cells, and the word motions of `move_selection` and `extend_selection` take their head from the same walk. `HelixKeymap` sends it for `w`, `e` and `b` in normal mode (`CopyModeMotion.helixSelectAction`); select mode still extends. Before it, the keymap sent `collapse_selection` then `extend_selection`, which kept the old head cell in the new selection: a `b` from the start of a word took one cell too many, and a `w` on the last word of a row ran to the end of the row. The cells after the last text of a row that does not wrap are a line end (`CellClass.eol`), the newline of Helix: a motion skips them and leaves them out, and a cursor that a click put there walks on from the next row. Zed's Helix mode (`crates/vim/src/helix.rs`) agrees with every case in the tests. The e2e `test_a_repeated_w_moves_word_by_word` replays `w w w b b`.
 - Not yet: prompt motions.
 
+### Explain Output (Apple Intelligence)
+
+**Explain Output** explains the selection of a pane or, with none, the output of the last command, in a popover. Apple's on-device model writes it (FoundationModels). Nothing leaves the Mac. The grammar for users is in `website/docs/pages/43-explain-output.md`.
+
+- **`OnDeviceModel` is the only file that imports FoundationModels.** The model needs macOS 26, a Mac that supports Apple Intelligence, and Apple Intelligence turned on. `availability` is `.unsupported` (the command, the palette row and the menu item are not there), `.notReady` (the palette mutes the row and a keybind shows a toast, through `unavailableNotice`) or `.available`.
+  - Each request has a new `LanguageModelSession`. A session keeps its transcript, and a transcript that grows fills the context window for good.
+  - `stream` yields the whole reply so far. A consumer whose task is cancelled sees the loop end with no error, so it must check `Task.isCancelled` before it treats the end as "done".
+- **The input** (`OutputExplanation`, pure, with tests).
+  - The context window is 4,096 tokens for the instructions, the prompt and the reply together. The text is cut to `textTokenBudget`: its start (`headShare`) and its end, with a line that counts the lines not shown. The estimate counts each non-ASCII scalar as one token, so it never counts low for CJK text.
+  - The terminal text is untrusted. The instructions say that it is data. The worst result is a wrong explanation in a popover that the user asked for.
+  - The reply is in the app language (`OnDeviceModel.replyLanguage`). The instructions stay English.
+- **With no selection, Explain selects the output first** (`GhosttyTerminalNSView+Explain.swift`). The user sees what it explains, and the popover does not repeat the command.
+  - The selection is ghostty's own gesture: a ⌘-triple-click on a line of output selects that command's whole output from the OSC 133 marks (`Screen.selectOutput`). On macOS it is ⌘, not ⌃ (`Mods.ctrlOrSuper`). The C API has no call that sets a selection.
+  - **A ⌘-click also opens a link.** libghostty decides "over a link" only on a pointer move, with that move's modifiers. The move before the presses carries no modifiers, only the presses carry ⌘, and a last move with no modifiers resets them.
+  - The click goes to the last line of output, which `OutputExplanation.lastCommand(in:)` finds from the prompt text (`linesBelowOutput`). nushell marks its prompt rows as output, so a click on a prompt row selects that row. With no guess, the rows above the cursor are tried.
+  - The IME point (`ghostty_surface_ime_point`) and `ghostty_text_s.tl_px_y` are both the **bottom** edge of the cell, from the top of the view.
+  - Without shell integration a triple-click selects one line, and Explain falls back to the text guess with no selection. The guess finds the last two prompt lines by their prompt mark, and drops the first line of a two-line prompt when it is the same above both marks.
+  - The popover's close clears the selection, if it is still the one that Explain made.
+- **The popover** (`ExplainPopover`) is an `NSPopover` with `.transient` behavior that takes key, so Escape closes it and ⌘C copies its text. Its close gives key back to the terminal only when the popover held it.
+  - **A new popover waits for the old one to close** (`pending`). When the old window gave key back after the new one took it, AppKit closed the new transient popover at once.
+  - Explain Output goes below the prompt, so it does not cover the output. A selection's popover asks for the space above its first row.
+  - It has no disclaimer line.
+- The command is `AppCommand.explainOutput` (Panes, no default chord) with a `MactermKeybind` case. The right-click menu shows **Explain Output** or **Explain Selection**, only while the model is available.
+- **`pane explain [start|close]` is DEBUG only.** It returns the phase, the source, the pane's selection and the text so far. The reply streams after the verb returns, so poll it.
+
 ### Read-only panes
 
 Read-only is a mode of libghostty. The control is the **Read-Only Mode** `AppCommand` (`HotkeyAction.readOnlyMode`, no default chord). It only sends `toggle_readonly` to the focused pane, so the state stays in libghostty. Every pane mode (Zoom Pane, Copy Mode, Read-Only Mode) is a Macterm command, so it is in the palette and in Keymaps.
@@ -742,9 +767,9 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
   - `PaneScreenshot`. This is Capture Pane. It copies the focused pane to the clipboard as a PNG. It uses the rendered frame of the pane (`PanePreviewCapture`, the same frame as the tab switcher), not a screen capture. It fills the transparent cells with the background of the pane, so the image is opaque. Window opacity, blur and glass do not show, and nothing behind the window shows through. It needs no Screen Recording. The cursor stays as the frame drew it.
   - `ToolbarMenu`: the right-click menu of the toolbar. It is a local mouse monitor, because AppKit consumes a right-click in the titlebar before `NSView.menu`.
   - `WindowAppearance`: opacity, blur, liquid glass, the private titlebar tree and the CGS blur SPI.
-  - `Terminal/`: `GhosttyTerminalNSView` (surface, keyboard, mouse, IME), `SurfaceScrollView` (overlay scrollbar) with `ScrollAccumulator`, `PanePreview`, `SearchTickOverlay`, `TerminalCommandSubmission` and `CopyModeController`.
+  - `Terminal/`: `GhosttyTerminalNSView` (surface, keyboard, mouse, IME), `SurfaceScrollView` (overlay scrollbar) with `ScrollAccumulator`, `PanePreview`, `SearchTickOverlay`, `TerminalCommandSubmission`, `CopyModeController`, and `ExplainPopover` with `GhosttyTerminalNSView+Explain`.
 - `Macterm/Ghostty/`: `GhosttyApp` (init, config, tick), `GhosttyCallbacks`, `GhosttyResources`, `ThemeResolver` (`light:X,dark:Y` splits, #38), `Theme` (all UI colors), `AdaptiveTerminalBackground` and `AdaptiveTerminalChrome`.
-- `Macterm/Model/`: `SplitNode` and `Pane`, `Workspace` and `TerminalTab`, `Project`, `ProjectPath`, `ProjectColor`, `PinnedTabs`, `DesktopWidget`, `ForegroundSample`, `TerminalExecutionTracker`, `TerminalSearchState`, `CopyMode` (the Helix keymap of copy mode) and `AgentIcon`. It also has `PasswordPrompt` (entry identity, line capture, submission judge). It also has `FileLink` with `TextFileEditor` (links `path:line` that the user clicked, and the typed editor line).
+- `Macterm/Model/`: `SplitNode` and `Pane`, `Workspace` and `TerminalTab`, `Project`, `ProjectPath`, `ProjectColor`, `PinnedTabs`, `DesktopWidget`, `ForegroundSample`, `TerminalExecutionTracker`, `TerminalSearchState`, `CopyMode` (the Helix keymap of copy mode) and `AgentIcon`. It also has `OutputExplanation` (the text and the prompt of Explain Output). It also has `PasswordPrompt` (entry identity, line capture, submission judge). It also has `FileLink` with `TextFileEditor` (links `path:line` that the user clicked, and the typed editor line).
 - `Macterm/Persistence/`: `WorkspacePersistence` (snapshots, `WorkspaceStore`), `ProjectStore`, `FileStorage`, `ProjectFile` and `ProjectFileStore` (`~/.config/macterm/projects/`), `LayoutBuilder`, `LayoutSerializer` and `LayoutReconciler`, `LayoutFile` (only in memory), `PinnedLayoutStore`, `WidgetLayoutStore`, and `PasswordStore` (Keychain and `PasswordVault`).
 - `Macterm/System/`
   - `ProcessInspector` (foreground pid → `runningCommand`, `runningShell` and `runningProcessName`).
@@ -754,6 +779,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
   - `ProcessLocale`, `FullDiskAccess`, `SecureInput`.
   - `NativeDesktopWidgets`: the frames of the system desktop widgets, from the window list.
   - `PasswordAuthenticator`.
+  - `OnDeviceModel`: Apple's on-device model (FoundationModels), for Explain Output.
   - `ObjCExceptionCatcher`: a trampoline with `@try` and `@catch`. AppKit raises ObjC exceptions that Swift cannot catch.
   - `GitWorktrees`: the Worktrees menu of the sidebar. It reads the worktrees of a project from the metadata files of git. It never runs git. A Mac without the Command Line Tools shows an install dialog for `/usr/bin/git`.
 - `Macterm/Config/`: `MactermConfig` (with `Animations`), `MactermConfigFile` (`~/.config/macterm/config.ghostty`), `GhosttyConfigSource`, `GhosttyConfigText`, `ShellIntegrationFeatures`, `GhosttyColorSpace`, `MouseScrollMultiplier` and `MacosHidden`.
