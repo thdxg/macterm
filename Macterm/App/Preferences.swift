@@ -306,7 +306,7 @@ final class Preferences {
 
     /// Smooth scrolling by whole rows: scrolling moves the viewport a row at
     /// a time and each move slides into place, so it never rests between
-    /// rows. Off by default and meaningful only under `smoothScrolling`. The
+    /// rows. On by default and meaningful only under `smoothScrolling`. The
     /// fork's `smooth-scroll-rows` key, written through the overrides file
     /// (`MactermConfig.Animations`).
     var snapScrollToRow: Bool {
@@ -1132,7 +1132,7 @@ final class Preferences {
         static let appleLanguages = "AppleLanguages"
         static let autoTiling = PreferenceStorageKey("macterm.autoTiling.enabled", default: false)
         static let smoothScrolling = PreferenceStorageKey("macterm.terminal.smoothScrolling", default: true)
-        static let snapScrollToRow = PreferenceStorageKey("macterm.terminal.snapScrollToRow", default: false)
+        static let snapScrollToRow = PreferenceStorageKey("macterm.terminal.snapScrollToRow", default: true)
         static let smoothCursor = PreferenceStorageKey("macterm.terminal.smoothCursor", default: false)
         static let cursorTrail = PreferenceStorageKey("macterm.terminal.cursorTrail", default: false)
         static let animatedSplits = PreferenceStorageKey("macterm.terminal.animatedSplits", default: true)

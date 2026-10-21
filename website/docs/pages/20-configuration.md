@@ -122,12 +122,12 @@ Set a color from the sidebar context menu of a project (**Color**) or in **Setti
 
 ## Animations
 
-Go to **Settings → Animations**. Smooth scrolling and split animations are on. The cursor effects are off.
+Go to **Settings → Animations**. Smooth scrolling, snap to whole row and split animations are on. The cursor effects are off.
 
 | Toggle | Effect |
 | --- | --- |
 | **Smooth scrolling** | Trackpad scrolling and divider drags move by pixels, not by whole rows. Full-screen programs that scroll a region of the screen slide too (`less`, for example). Programs that redraw every row still move by rows. |
-| **Snap to whole row** | Works with smooth scrolling. Scrolling moves one whole row at a time, and each row slides into place, as `less` scrolls. It never stops between rows. Off by default. |
+| **Snap to whole row** | Works with smooth scrolling. Scrolling moves one whole row at a time, and each row slides into place, as `less` scrolls. It never stops between rows. On by default. |
 | **Animate splits** | Panes slide in and out of the split layout. It turns off by itself when Reduce Motion is on. |
 | **Smooth cursor** | The cursor glides between positions. The text that the cursor passes over has the cursor color, only as far as the cursor covers it. Programs that draw their own cursor (a second cursor in Helix, for example) still move it by cells. |
 | **Cursor trail** | A fading streak follows the cursor on larger moves. It is under the text. If you use a community trail shader, turn it off. Otherwise you see two trails. |

@@ -81,8 +81,9 @@ final class MactermConfig {
 
     /// The Settings → Animations toggles that are ghostty-side switches the
     /// overrides file flips, each a fork key the renderer reads. Smooth
-    /// scrolling ships on; the two cursor effects are opt-in, so a user who
-    /// never opens the pane gets the user-config cursor behavior.
+    /// scrolling and its snap to whole row ship on; the two cursor effects are
+    /// opt-in, so a user who never opens the pane gets the user-config cursor
+    /// behavior.
     ///
     /// - Smooth scrolling is `smooth-scroll`: libghostty already accumulates
     ///   precise trackpad deltas in pixels, and with the key on it renders
