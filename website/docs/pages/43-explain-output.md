@@ -23,16 +23,16 @@ On a Mac that cannot run Apple Intelligence, Explain Output does not show. If Ap
 ## Explain the output of a command
 
 1. Run a command in a pane.
-2. Right-click in the pane, then click **Explain Output**. You can also open the command palette and run **Explain Output**.
+2. Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>E</kbd>, or right-click in the pane, then click **Explain Output**. You can also open the command palette and run **Explain Output**.
 
-Macterm selects the output of the last command, so you can see what it explains. The explanation streams into the popover. The selection goes when you close the popover.
+Macterm selects the last command and its output, so you can see what it explains. The explanation streams into the popover. The selection goes when you close the popover.
 
 Macterm finds the output from the marks of the shell integration (OSC 133). Without shell integration, Macterm uses the text between the last two prompts, and selects nothing.
 
 ## Explain selected text
 
 1. Select text in a pane, with the mouse or in [copy mode](/docs/copy-mode).
-2. Right-click the selection, then click **Explain Selection**. You can also run **Explain Output** from the command palette.
+2. Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>E</kbd>, or right-click the selection, then click **Explain Selection**. You can also run **Explain Output** from the command palette.
 
 ## The popover
 
@@ -42,9 +42,9 @@ Macterm finds the output from the marks of the shell integration (OSC 133). With
 
 The explanation is in the language of Macterm (**Settings → General → Language**).
 
-## Add a keybind
+## Change the keybind
 
-Explain Output has no keybind. To add one, go to **Settings → Keymaps**, find **Explain Output** in the Panes group, and record a chord.
+The keybind is <kbd>⌘</kbd><kbd>⇧</kbd><kbd>E</kbd>. To change it, go to **Settings → Keymaps**, find **Explain Output** in the Panes group, and record a chord. <kbd>⌘</kbd><kbd>E</kbd> stays the Ghostty keybind that searches for the selected text.
 
 ## Long output
 

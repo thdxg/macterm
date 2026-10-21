@@ -173,9 +173,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         // Unbound, as ghostty's `toggle_readonly` is: a stray chord would
         // make a pane drop the keys that follow it.
         case .readOnlyMode: "none"
-        // Unbound: the model is not on every Mac, and the right-click menu
-        // and the palette reach it.
-        case .explainOutput: "none"
+        // Not ⌘E: ghostty binds it to `search_selection`, and a chord whose
+        // command cannot run is swallowed, so ⌘E would do nothing on a Mac
+        // without Apple Intelligence.
+        case .explainOutput: "cmd+shift+e"
         // Unbound by default: both rewrite or replace the live pane tree, so a
         // stray keystroke on a stock binding would be destructive.
         case .applyLayout: "none"
