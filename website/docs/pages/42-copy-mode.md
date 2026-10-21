@@ -87,4 +87,4 @@ The keys inside copy mode are the Vim keys or the Helix keys (**Settings → Key
 
 - Copy mode moves through the scrollback of the pane. A full-screen program on the alternate screen (`less`, `btop`, an editor) has no scrollback. There, copy mode moves only on the visible screen.
 - Copy mode starts at the terminal cursor, which is at the prompt. Press <kbd>k</kbd> or <kbd>⌃</kbd><kbd>u</kbd> to go up into the scrollback.
-- The cursor of copy mode is the cursor of the pane, drawn on the head of the selection. The shell's own cursor does not move, and comes back when you leave the mode. With **Smooth cursor** on (Settings → Animations), the cursor glides between motions.
+- The cursor of copy mode is the cursor of the pane, drawn on the head of the selection. The shell's own cursor does not move, and comes back when you leave the mode. With **Smooth cursor** on (Settings → Animations), the cursor glides between motions. With **Smooth scrolling** on, a motion that scrolls the pane (<kbd>⌃</kbd><kbd>d</kbd>, <kbd>⌃</kbd><kbd>u</kbd>, a page) slides the text into place, as Helix does.
