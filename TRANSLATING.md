@@ -82,6 +82,7 @@ Korean text follows the terms of macOS in Korean, so that the menus of Macterm a
 | keymap | 키맵 | |
 | sidebar | 사이드바 | |
 | settings | 설정 | |
+| Appearance (the Settings pane) | 스타일 | |
 | password manager | 암호 관리자 | As in the Passwords app of macOS (암호). |
 | password | 암호 | |
 | autofill | 자동 완성 | |
