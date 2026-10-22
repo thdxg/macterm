@@ -891,7 +891,7 @@ Conventions:
 
 ### Demo recordings
 
-`scripts/record-demos/record-demos.sh` records the eleven clips that the landing page plays. It drives the **installed** app with synthetic keystrokes. For demos 8 and 9, it also drives the pointer. Whatever runs it therefore needs Accessibility and Screen Recording. It also needs ffmpeg, and podman for demos 5 and 10 (it starts the podman machine itself).
+`scripts/record-demos/record-demos.sh` records the twelve clips that the landing page plays. It drives the **installed** app with synthetic keystrokes. For demos 8, 9 and 12, it also drives the pointer. Whatever runs it therefore needs Accessibility and Screen Recording. It also needs ffmpeg, and podman for demos 5 and 10 (it starts the podman machine itself).
 
 Masters land in `$MACTERM_DEMOS_OUT` (default `~/Desktop/macterm-demos`). Only `record-demos.sh web` writes into the repo. It encodes the finished clips again to 1400×792 with CRF 26, and a poster of the first frame, in `assets/demo/`. `website/public/assets` serves them as `/assets/demo/…`.
 
@@ -918,6 +918,12 @@ The script has these rules. We learned each one with the real app:
   - The take copies `extensions/git` to `macterm-demo-git`, with a marker in the first line of its `extension.yaml`. It refuses to touch a folder with that name that has no marker. It refuses to record next to another palette with the name Git Branches (when you type `git br`, the selection must land on its row). The EXIT trap removes the folder only when it carries the marker.
   - The take shows the real extension, so the video cannot drift from what users install. It searches two branches of the project (the two shortest names) and runs **Log** in a split. It never runs **Switch to it**, because that changes the branch of the project.
   - The palette has no CLI view, so its steps take beats. The script waits for the Log split through `pane dump`.
+- **Demo 12 scrolls copy mode up a long traceback, and explains its cause.**
+  - The server is `scripts/record-demos/orbit/`. It runs from `/tmp/orbit` (a mark file, removed by the EXIT trap), so no line wraps and no home folder is in the frame. Its `#!/usr/bin/python3` keeps the frames the same on every take. It starts again on a clean path, because `./server.py` puts `/./` in every frame.
+  - The real cause (`KeyError: 'ORBIT_DATABASE_URL'`) is the first of three chained tracebacks, more than a screen above the last line. When the model got the whole first traceback, it named the unset variable. With the error line alone, it blamed `os.py`. A JSON error was rejected: the model blamed unquoted keys for a trailing comma that it could not see.
+  - The counts come from the screen. Copy mode starts its head on the prompt row, and `⌃u` moves it `rows / 2` rows (`Selection.zig` of the fork). This holds only while no line wraps, so the take hides the sidebar and refuses a pane narrower than the longest line.
+  - The right-click goes on the last selected row. A right-click inside a selection keeps it (ghostty's `context-menu`), and the popover of a menu click opens below the click point, so it does not cover the selection. The menu item comes from Accessibility, with an offset from the pointer as the fallback.
+  - The take checks that the installed app has Explain Output (`strings`), that Apple Intelligence can run (`model.swift`), and that copy mode uses the Vim keys and ⌘⇧Space. The answer varies between takes, so read it before you keep one. The release build has no `pane explain`, so the take waits a fixed 9 s for the answer.
 - **Demo 10 is `ssh demo-box` from a local shell.**
   - The script types the password with `pane key`. `pane run` pastes, and ssh reads the markers for a bracketed paste as password.
   - The ssh-terminfo wrapper of Macterm would open a second password prompt, off screen. The recorder therefore installs the entry over the key, and it lists the host in `~/Library/Caches/macterm/ssh-terminfo` for the take.

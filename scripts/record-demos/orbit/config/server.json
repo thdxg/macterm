@@ -1,0 +1,14 @@
+{
+  "name": "orbit",
+  "port": 8080,
+  "workers": 4,
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "pool": 10
+  },
+  "cache": {
+    "ttl": 300
+  },
+  "plugins": ["auth", "metrics", "search"]
+}

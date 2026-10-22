@@ -34,7 +34,9 @@
 #        7 animations (Claude Code scrollback, a split, the cursor in Helix) ·
 #        8 a folder dropped on the Dock tile · 9 desktop widgets beside the
 #        system's · 10 saving and autofilling an ssh password (podman) ·
-#        11 the Git extension: its nested screens, a search and a run action
+#        11 the Git extension: its nested screens, a search and a run action ·
+#        12 copy mode scrolls up a long traceback to its cause, and Explain
+#        Output explains the selection
 set -euo pipefail
 
 # ---------------------------------------------------------------- constants --
@@ -85,6 +87,13 @@ PAL_MANIFEST="$PAL_EXT/extension.yaml"
 PAL_FILE="$PAL_EXT/palettes/branches.yaml"
 PAL_MARK="# written by record-demos.sh for demo 11; removed when the take ends"
 
+# Demo 12's server (orbit/) runs from a short path, so no line of its
+# traceback wraps and no home folder is in the frame. ORBIT_MARK is a file that
+# only this script writes. The EXIT trap removes the folder only when the mark
+# is in it.
+ORBIT_DIR=/tmp/orbit
+ORBIT_MARK="$ORBIT_DIR/.written-by-record-demos"
+
 MACTERM=/Applications/Macterm.app/Contents/Resources/bin/macterm
 # opencode offers its own update in a dialog over the TUI when one is out,
 # which is not what demos 2 and 6 are about (the prefix is nushell's syntax,
@@ -103,7 +112,7 @@ say() { printf '\033[1m==\033[0m %s\n' "$*"; }
 die() { printf '\033[31m!!\033[0m %s\n' "$*" >&2; exit 1; }
 trap 'printf "\033[31m!!\033[0m aborted at line %s\n" "$LINENO" >&2' ERR
 # however the run ends, a desktop demo 8 rearranged is put back
-trap '[ -f "$WORK/desktop-view.plist" ] && { desk_view restore; killall Finder 2>/dev/null; }; [ -f "$WORK/create-desktop.was" ] && desk_icons restore; [ "$(head -n 1 "$PAL_MANIFEST" 2>/dev/null)" = "$PAL_MARK" ] && rm -rf "$PAL_EXT"; true' EXIT
+trap '[ -f "$WORK/desktop-view.plist" ] && { desk_view restore; killall Finder 2>/dev/null; }; [ -f "$WORK/create-desktop.was" ] && desk_icons restore; [ "$(head -n 1 "$PAL_MANIFEST" 2>/dev/null)" = "$PAL_MARK" ] && rm -rf "$PAL_EXT"; [ -f "$ORBIT_MARK" ] && rm -rf "$ORBIT_DIR"; true' EXIT
 
 # ------------------------------------------------------------------ helpers --
 osa() { osascript -e "$1"; }
@@ -235,6 +244,7 @@ EOF
 CMD="command down"; SHIFT="shift down"; CTRL="control down"
 K_RET=36 K_ESC=53 K_D=2 K_T=17 K_P=35 K_W=13
 K_H=4 K_J=38 K_K=40 K_L=37 K_RBRACK=30 K_LBRACK=33 K_BSLASH=42 K_BACKTICK=50
+K_V=9 K_U=32 K_SPACE=49
 
 kc() {  # kc <keycode> [modifier list]
   if [ -n "${2:-}" ]; then
@@ -693,7 +703,8 @@ web_assets() {
     "08-open-folder:08-open-folder" \
     "09-widgets:09-desktop-widgets" \
     "10-passwords:10-passwords" \
-    "11-palettes:11-extensions"
+    "11-palettes:11-extensions" \
+    "12-copy-explain:12-copy-mode-explain"
   do
     name="${pair%%:*}"; src="$OUT/${pair#*:}.mp4"
     [ -f "$src" ] || { printf '\033[33m..\033[0m no %s, skipping\n' "$src"; continue; }
@@ -1524,6 +1535,151 @@ demo11() {  # the Git extension: nested screens, a search, a run action
   rm -rf "$PAL_EXT"
 }
 
+# ── copy mode and Explain Output ────────────────────────────────────────────
+# A server fails with a chained traceback. Its last line says nothing. The
+# real cause (an environment variable that is not set) is the first
+# traceback, scrolled off the top. Copy mode scrolls up to it (two half pages,
+# then rows), selects that traceback by lines, and a right-click in the
+# selection runs Explain Selection. The pointer is in frame for the
+# right-click, so the take records the cursor.
+#
+# Every count comes from the screen at run time. Copy mode starts its head on
+# the cursor's row (the prompt), and ⌃u moves it rows / 2 rows (Selection.zig
+# in the ghostty fork), so the rows left after the half pages are known. That
+# holds only while no line wraps: demo12 hides the sidebar and refuses a pane
+# narrower than the longest line of the traceback.
+#
+# The popover of a menu click opens below the click point. The right-click
+# therefore goes on the LAST selected row, so the popover lands under the
+# selection and does not cover it.
+ORBIT_CMD="./server.py"
+ORBIT_HALF=0
+
+model_status() {  # whether Apple's on-device model can run now (model.swift)
+  if [ ! -x "$WORK/model" ] || [ "$HERE/model.swift" -nt "$WORK/model" ]; then
+    swiftc -O -o "$WORK/model" "$HERE/model.swift" 2>/dev/null || { echo "could not compile model.swift"; return 0; }
+  fi
+  "$WORK/model"
+}
+
+orbit_up() {  # copy the server to its short path, marked as this script's
+  if [ -e "$ORBIT_DIR" ] && [ ! -f "$ORBIT_MARK" ]; then
+    die "$ORBIT_DIR exists and isn't this script's — move it aside first"
+  fi
+  rm -rf "$ORBIT_DIR"; mkdir -p "$ORBIT_DIR"; : > "$ORBIT_MARK"
+  cp -R "$HERE/orbit/." "$ORBIT_DIR/"
+  chmod +x "$ORBIT_DIR/server.py"
+}
+
+pane_metrics() {  # cols rows cellHeightPx heightPx widthPx contentScale, of the focused pane
+  "$MACTERM" pane inspect --json | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["inspect"]
+print(d["cols"], d["rows"], d["cellHeightPx"], d["heightPx"], d["widthPx"], d.get("contentScale") or 2)'
+}
+
+orbit_marks() {  # "<rows from the prompt up to the cause> <rows from the cause up to its Traceback line>"
+  "$MACTERM" pane dump --scrollback 2>/dev/null | awk '
+    /^Traceback \(most recent call last\):/ { tb = NR }
+    /^KeyError: / { key = NR; head = tb }
+    NF { last = NR }
+    END { if (key && head) print last - key, key - head; else print "0 0" }'
+}
+
+orbit_click_point() {  # the screen point on the selection's last row (the KeyError line)
+  local row cols rows cellpx hpx wpx scale wx wy ww wh
+  row="$("$MACTERM" pane dump 2>/dev/null | awk '/^KeyError: / { r = NR - 1 } END { print r + 0 }')"
+  read -r cols rows cellpx hpx wpx scale <<< "$(pane_metrics)"
+  read -r wx wy ww wh <<< "$(window_rect)"
+  python3 - "$row" "$rows" "$cellpx" "$hpx" "$wpx" "$scale" "$wx" "$wy" "$ww" "$wh" <<'PY'
+import sys
+row, rows, cellpx, hpx, wpx = map(int, sys.argv[1:6])
+scale, wx, wy, ww, wh = map(float, sys.argv[6:11])
+cell, height, width = cellpx / scale, hpx / scale, wpx / scale
+top = wy + wh - height                  # the pane fills the window to its bottom edge
+pad = (height - rows * cell) / 2        # the grid sits in the middle of its leftover
+print(round(wx + ww - width + width * 0.32), round(top + pad + (row + 0.5) * cell))
+PY
+}
+
+menu_item_point() {  # menu_item_point <title> <x> <y>: the middle of an item of the open context menu
+  local r ax ay aw ah
+  r="$(osa "tell application \"System Events\" to tell process \"Macterm\" to get {position, size} of menu item \"$1\" of menu 1" 2>/dev/null | tr -d '{}' || true)"
+  if [ -n "$r" ]; then
+    IFS=', ' read -r ax ay aw ah <<< "$r"
+    echo "$((ax + 70)) $((ay + ah / 2))"
+    return
+  fi
+  # a context menu opens with its top-left at the pointer; Explain Selection
+  # is its third item, after Copy and Paste
+  echo "$(($2 + 70)) $(($3 + 62))"
+}
+
+drive12() {
+  sleep 0.8
+  wait_prompt;                kline "$ORBIT_CMD" 0.06
+  wait_text 15 '^RuntimeError: server failed to start' || true
+  sleep 1.8                                        # the last line, which says nothing
+  local up grow; read -r up grow <<< "$(orbit_marks)"
+  kc $K_SPACE "$CMD, $SHIFT"; sleep 1.0            # copy mode
+  local halves=0 i
+  while [ $halves -lt 2 ] && [ "$up" -ge $((ORBIT_HALF + 3)) ]; do
+    kc $K_U "$CTRL"; sleep 0.9                     # half a page up
+    up=$((up - ORBIT_HALF)); halves=$((halves + 1))
+  done
+  for ((i = 0; i < up; i++)); do kc $K_K; sleep 0.12; done
+  sleep 0.8                                        # on the cause
+  kc $K_V "$SHIFT"; sleep 0.6                      # V: whole lines
+  for ((i = 0; i < grow; i++)); do kc $K_K; sleep 0.17; done
+  sleep 1.0                                        # its whole traceback
+  local px py mx my
+  read -r px py <<< "$(orbit_click_point)"
+  mouse move "$px" "$py" 0.8; sleep 0.3
+  mouse click "$px" "$py" right; sleep 0.8         # the pane's menu
+  read -r mx my <<< "$(menu_item_point "Explain Selection" "$px" "$py")"
+  mouse move "$mx" "$my" 0.4; sleep 0.3
+  mouse click "$mx" "$my"; sleep 9.0               # the answer streams in
+  kc $K_ESC; sleep 0.8                             # close the popover
+  kc $K_ESC; sleep 1.2                             # leave copy mode
+}
+
+demo12() {  # copy mode scrolls up a long traceback, and Explain Output explains its cause
+  say "demo 12 — copy mode and Explain Output"
+  [ "$(strings /Applications/Macterm.app/Contents/MacOS/Macterm 2>/dev/null | grep -c 'Explain Selection')" -gt 0 ] \
+    || die "installed Macterm ($(app_version)) has no Explain Output; demo 12 needs a build with thdxg/macterm#622"
+  local model; model="$(model_status)"
+  [ "$model" = available ] || die "Apple Intelligence cannot explain output on this Mac now ($model)"
+  local keymap chord
+  keymap="$(defaults read com.thdxg.macterm macterm.copyMode.keymap 2>/dev/null || echo vim)"
+  [ "$keymap" = vim ] || die "copy mode uses the $keymap keys; demo 12 types Vim keys (Settings → Keymaps → Copy Mode)"
+  chord="$(defaults read com.thdxg.macterm macterm.hotkey.copy_mode 2>/dev/null || echo cmd+shift+space)"
+  [ "$chord" = cmd+shift+space ] || die "Copy Mode is bound to $chord; demo 12 presses ⌘⇧Space"
+  orbit_up
+  local longest
+  # the server fails on purpose: its exit status must not stop the script
+  longest="$(cd "$ORBIT_DIR" && { env -u ORBIT_DATABASE_URL "$ORBIT_CMD" 2>&1 || true; } | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')"
+  reset_project
+  hide_sidebar_for_demo
+  wait_prompt; "$MACTERM" pane run -- "cd $ORBIT_DIR" >/dev/null; sleep 1.0
+  local cols rows rest
+  read -r cols rows rest <<< "$(pane_metrics)"
+  if [ "$cols" -lt "$longest" ]; then
+    restore_sidebar
+    die "the pane has $cols columns and the traceback needs $longest — use a smaller font or a wider window"
+  fi
+  ORBIT_HALF=$((rows / 2))
+  # the pointer waits in the bottom-right corner of the window, in frame
+  local wx wy ww wh; read -r wx wy ww wh <<< "$(window_rect)"
+  warp $((wx + ww - 180)) $((wy + wh - 120))
+  CAPTURE_CURSOR=1
+  record copy-explain drive12
+  CAPTURE_CURSOR=0
+  encode copy-explain 12-copy-mode-explain.mp4
+  reset_project
+  restore_sidebar
+  rm -rf "$ORBIT_DIR"
+}
+
 anim_prefs() {
   local k; for k in smoothScrolling smoothCursor cursorTrail animatedSplits; do
     anim_pref $k > "$WORK/anim.$k.was"
@@ -1589,7 +1745,7 @@ case "${1:-all}" in
     defaults write com.thdxg.macterm macterm.quickTerminal.fixedX -float 0.5
     defaults delete com.thdxg.macterm macterm.quickTerminal.fixedY 2>/dev/null || true
     say "restored — relaunch Macterm to pick it up"; exit 0 ;;
-  all) preflight; demo1; demo2; demo3; demo4; demo5; demo6; demo7; demo8; demo9; demo10; demo11 ;;
+  all) preflight; demo1; demo2; demo3; demo4; demo5; demo6; demo7; demo8; demo9; demo10; demo11; demo12 ;;
   *) preflight; for n in "$@"; do "demo$n"; done ;;
 esac
 say "done — $OUT"
