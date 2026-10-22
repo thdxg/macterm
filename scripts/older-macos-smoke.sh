@@ -163,7 +163,18 @@ roundtrip "$split" "split"
 
 # ── The adaptive icon ───────────────────────────────────────────────────────
 
-if [ "$MAJOR" -ge 26 ]; then
+# The system icon style decides too (AdaptiveIcon.appearance): Clear, Tinted
+# or an unknown style shows the bundled icon, so a runner image with such a
+# style is no evidence against the app.
+ICON_STYLE="$(defaults read -g AppleIconAppearanceTheme 2>/dev/null || true)"
+case "$ICON_STYLE" in
+  "" | Regular | RegularAutomatic | RegularLight | RegularDark) ADAPTS=true ;;
+  *) ADAPTS=false ;;
+esac
+
+if [ "$MAJOR" -ge 26 ] && ! $ADAPTS; then
+  say "icon style $ICON_STYLE shows the bundled icon; the adaptive icon is not checked"
+elif [ "$MAJOR" -ge 26 ]; then
   icon_painted() { [ -n "$(find "$ICONS" -name '*.png' 2>/dev/null | head -1 || true)" ]; }
   if ! wait_until 60 "the adaptive icon" icon_painted; then
     # Run the helper by hand, so its own error is in the log.
