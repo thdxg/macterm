@@ -1619,28 +1619,33 @@ drive12() {
   sleep 0.8
   wait_prompt;                kline "$ORBIT_CMD" 0.06
   wait_text 15 '^RuntimeError: server failed to start' || true
-  sleep 1.8                                        # the last line, which says nothing
+  sleep 1.2                                        # the last line, which says nothing
   local up grow; read -r up grow <<< "$(orbit_marks)"
-  kc $K_SPACE "$CMD, $SHIFT"; sleep 1.0            # copy mode
+  kc $K_SPACE "$CMD, $SHIFT"; sleep 0.7            # copy mode
   local halves=0 i
   while [ $halves -lt 2 ] && [ "$up" -ge $((ORBIT_HALF + 3)) ]; do
-    kc $K_U "$CTRL"; sleep 0.9                     # half a page up
+    kc $K_U "$CTRL"; sleep 0.5                     # half a page up
     up=$((up - ORBIT_HALF)); halves=$((halves + 1))
   done
-  for ((i = 0; i < up; i++)); do kc $K_K; sleep 0.12; done
-  sleep 0.8                                        # on the cause
-  kc $K_V "$SHIFT"; sleep 0.6                      # V: whole lines
-  for ((i = 0; i < grow; i++)); do kc $K_K; sleep 0.17; done
-  sleep 1.0                                        # its whole traceback
+  for ((i = 0; i < up; i++)); do kc $K_K; sleep 0.05; done
+  sleep 0.6                                        # on the cause
+  kc $K_V "$SHIFT"; sleep 0.4                      # V: whole lines
+  for ((i = 0; i < grow; i++)); do kc $K_K; sleep 0.08; done
+  sleep 0.8                                        # its whole traceback
   local px py mx my
   read -r px py <<< "$(orbit_click_point)"
-  mouse move "$px" "$py" 0.8; sleep 0.3
-  mouse click "$px" "$py" right; sleep 0.8         # the pane's menu
+  mouse move "$px" "$py" 0.7; sleep 0.25
+  mouse click "$px" "$py" right; sleep 0.7         # the pane's menu
   read -r mx my <<< "$(menu_item_point "Explain Selection" "$px" "$py")"
-  mouse move "$mx" "$my" 0.4; sleep 0.3
-  mouse click "$mx" "$my"; sleep 9.0               # the answer streams in
-  kc $K_ESC; sleep 0.8                             # close the popover
-  kc $K_ESC; sleep 1.2                             # leave copy mode
+  mouse move "$mx" "$my" 0.35; sleep 0.25
+  mouse click "$mx" "$my"; sleep 0.4
+  # off the popover, so the pointer does not sit on its text
+  local wx wy ww wh; read -r wx wy ww wh <<< "$(window_rect)"
+  mouse move $((wx + ww - 180)) $((wy + wh - 120)) 0.6
+  sleep 8.0                                        # the answer streams in
+  kc $K_ESC; sleep 0.7                             # close the popover
+  kc $K_ESC; sleep 0.5                             # leave Visual Line
+  kc $K_ESC; sleep 1.0                             # leave copy mode
 }
 
 demo12() {  # copy mode scrolls up a long traceback, and Explain Output explains its cause
