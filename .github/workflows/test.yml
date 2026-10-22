@@ -34,6 +34,11 @@ jobs:
               # The Xcode pin lives here; a bump must rebuild what it governs.
               - ".github/actions/select-xcode/**"
               - ".github/actions/build-release/**"
+              - ".github/actions/import-signing-cert/**"
+              # The adaptive icon's helper and its private interfaces, and the
+              # icon that AdaptiveIconTests reads.
+              - "IconRenderer/**"
+              - "Macterm/AppIcon.icon/**"
               - "Macterm/Info.plist"
               - "Macterm/Macterm.entitlements"
               - "Macterm/*.xcstrings"
@@ -270,7 +275,7 @@ jobs:
   # signed, has the Sparkle placeholder key and is never published. A release
   # always builds again from its own commit; this only proves that it can.
   release-build:
-    name: Release build
+    name: Release Build
     needs: changes
     if: needs.changes.outputs.swift == 'true'
     runs-on: xcode-27
@@ -296,7 +301,7 @@ jobs:
 
       # ditto keeps the bundle's symlinks and signature, which a plain zip of
       # the folder does not.
-      - name: Pack the app
+      - name: Pack the App
         run: ditto -c -k --keepParent build/export/Macterm.app build/macterm-release.zip
 
       - uses: actions/upload-artifact@v7
@@ -330,8 +335,8 @@ jobs:
         with:
           name: macterm-release-app
 
-      - name: Unpack the app
+      - name: Unpack the App
         run: ditto -x -k macterm-release.zip build
 
-      - name: Smoke test
+      - name: Smoke Test
         run: scripts/older-macos-smoke.sh build/Macterm.app

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Start a built Macterm on this Mac and check that it runs. CI builds the
-# Release app once with the pinned Xcode on the newest macOS ("Release build"),
+# Release app once with the pinned Xcode on the newest macOS ("Release Build"),
 # then runs this on older macOS runners (test.yml, "Smoke"), because no test
 # suite runs there:
 #
