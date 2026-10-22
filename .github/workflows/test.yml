@@ -315,17 +315,38 @@ jobs:
   # build on older runners (scripts/older-macos-smoke.sh): it must launch
   # there, and on macOS 26 it must paint its adaptive icon through the
   # private renderer.
-  smoke:
-    name: Smoke (${{ matrix.runner }})
+  #
+  # Two jobs, not a matrix: both checks are required, and a skipped matrix job
+  # reports the unexpanded name `Smoke (${{ matrix.runner }})`. A required
+  # `Smoke (macos-26)` would then never report on a pull request that changes
+  # no Swift, and that pull request could never merge.
+  #
+  # macos-26: the private renderer of the adaptive icon. macos-15: the launch
+  # of an app built with a newer SDK, below macOS 26. (macos-14 is being
+  # retired on GitHub; 15 is the oldest image to keep.)
+  smoke-macos-26:
+    name: Smoke (macos-26)
     needs: release-build
-    strategy:
-      fail-fast: false
-      matrix:
-        # macos-26: the private renderer of the adaptive icon. macos-15: the
-        # launch of an app built with a newer SDK, below macOS 26. (macos-14
-        # is being retired on GitHub; 15 is the oldest image to keep.)
-        runner: [macos-26, macos-15]
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: macterm-release-app
+
+      - name: Unpack the App
+        run: ditto -x -k macterm-release.zip build
+
+      - name: Smoke Test
+        run: scripts/older-macos-smoke.sh build/Macterm.app
+
+  smoke-macos-15:
+    name: Smoke (macos-15)
+    needs: release-build
+    runs-on: macos-15
     timeout-minutes: 10
     steps:
       - name: Checkout

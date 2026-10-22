@@ -919,6 +919,8 @@ Every other macOS job runs on `xcode-27` (macOS 27). `Test / Smoke` starts the R
 - On macOS 26, the app paints its adaptive icon by itself, so the private renderer still works there. This is the only test of it on macOS 26. If the icon is not there, the script runs the helper by hand so that the helper's own error is in the log.
 - Before macOS 26, the app does not try.
 
+`Release Build`, `Smoke (macos-26)` and `Smoke (macos-15)` are required checks on main, next to `Format`, `Lint`, `Unit` and `End-to-end`. **The Smoke checks are two jobs, not a matrix.** A matrix job that its `if:` skips reports its unexpanded name (`Smoke (${{ matrix.runner }})`). A required check with the expanded name then never reports, and a pull request that changes no Swift can never merge.
+
 The CLI takes `--socket` after the subcommand (`macterm status --socket <path>`).
 
 ### Benchmarks
