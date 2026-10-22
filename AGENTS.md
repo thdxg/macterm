@@ -921,6 +921,8 @@ Every other macOS job runs on `xcode-27` (macOS 27). `Test / Smoke` starts the R
 - Before macOS 26, the app does not try.
 - No crash report from the app, zmx or the icon helper appears during the run.
 
+`Release Build`, `Smoke (macos-26)` and `Smoke (macos-15)` are required checks on main, next to `Format`, `Lint`, `Unit` and `End-to-end`. **The Smoke checks are two jobs, not a matrix.** A matrix job that its `if:` skips reports its unexpanded name (`Smoke (${{ matrix.runner }})`). A required check with the expanded name then never reports, and a pull request that changes no Swift can never merge.
+
 The script stops only the process that it started, and it kills its own zmx sessions. On a developer Mac it still reads and writes the real defaults domain of the build, because cfprefsd ignores `HOME`. The CLI takes `--socket` after the subcommand (`macterm status --socket <path>`).
 
 ### Benchmarks
