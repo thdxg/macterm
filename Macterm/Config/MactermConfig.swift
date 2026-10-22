@@ -165,7 +165,7 @@ final class MactermConfig {
     /// already does the right thing. `MactermConfigTests` pins the departures.
     static let defaults: [Default] = [
         .init(
-            line: "theme = \"Rose Pine\"",
+            line: "theme = eyesclosed",
             note: "The color theme: the name of a theme that Ghostty bundles, or the path to a theme file."
         ),
         .init(

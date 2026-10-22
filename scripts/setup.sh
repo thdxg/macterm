@@ -341,7 +341,7 @@ fi
 warn_if_ghosttykit_stale || true
 
 if $need_resources; then
-  # Bundled ghostty resources so TERM=xterm-ghostty, named themes (Rose Pine,
+  # Bundled ghostty resources so TERM=xterm-ghostty, named themes (eyesclosed,
   # etc.), and shell integration all resolve without a separate Ghostty.app
   # install. The tarball mirrors a real Ghostty.app Resources layout:
   # ghostty/{themes,shell-integration} plus a SIBLING terminfo/. libghostty

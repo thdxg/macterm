@@ -73,12 +73,15 @@ struct BundledResourcesTests {
         }
     }
 
-    @Test
+    @Test @MainActor
     func themes_are_bundled() throws {
         try #require(resourcesPresent, "run `mise run setup` to populate Macterm/Resources")
-        // A well-known ghostty theme the default config references (the bundled
-        // themes are upstream's iTerm2-Color-Schemes names, spaces and all).
-        #expect(exists("ghostty/themes/Rose Pine"), "expected bundled ghostty theme missing")
+        // The theme that the defaults layer names must ship, or a fresh install
+        // starts with ghostty's built-in colors. The bundled themes are
+        // upstream's iTerm2-Color-Schemes names, spaces and all.
+        let line = try #require(MactermConfig.defaults.first { $0.line.hasPrefix("theme = ") }?.line)
+        let theme = line.dropFirst("theme = ".count).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        #expect(exists("ghostty/themes/\(theme)"), "default theme \(theme) is not bundled")
     }
 
     /// The zmx inside the built bundle must be signed as the app itself. Each
