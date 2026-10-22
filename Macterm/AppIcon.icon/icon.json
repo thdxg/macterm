@@ -1,30 +1,196 @@
 {
-  "fill-specializations" : [
+  "features" : [
+    "refractivity",
+    "specular-location"
+  ],
+  "fill" : {
+    "linear-gradient" : [
+      "display-p3:0.10196,0.10588,0.12941,1.00000",
+      "display-p3:0.06667,0.07059,0.07843,1.00000"
+    ],
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 1
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0
+      }
+    }
+  },
+  "groups" : [
     {
-      "value" : {
-        "solid" : "srgb:0.09804,0.09020,0.14118,1.00000"
+      "blur-material" : null,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "srgb:0.80392,0.81176,0.81961,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "frame.png",
+          "name" : "frame",
+          "position" : {
+            "scale" : 0.68,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "name" : "Frame",
+      "position" : {
+        "scale" : 0.75,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "refractivity" : {
+        "depth" : 0.046328125,
+        "enabled" : false,
+        "strength" : 0.344921875
+      },
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.56
       }
     },
     {
-      "appearance" : "dark",
-      "value" : {
-        "solid" : "srgb:0.09804,0.09020,0.14118,1.00000"
-      }
-    }
-  ],
-  "groups" : [
-    {
+      "blur-material" : null,
+      "hidden" : false,
       "layers" : [
         {
-          "glass" : false,
-          "image-name" : "glyph.png",
-          "name" : "glyph"
+          "fill" : {
+            "solid" : "srgb:0.80392,0.81176,0.81961,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "front-pane.png",
+          "name" : "front-pane",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -464.9999999999999,
+              -217.99999999999983
+            ]
+          }
         }
       ],
+      "lighting" : "individual",
+      "name" : "Front Pane",
+      "position" : {
+        "scale" : 0.58,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "refractivity" : {
+        "depth" : 0.046328125,
+        "enabled" : true,
+        "strength" : 0.344921875
+      },
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.5
+        "opacity" : 0.74
       },
+      "specular" : "inside",
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material" : null,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "srgb:0.60392,0.61569,0.68235,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "middle-pane.png",
+          "name" : "middle-pane",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -373.9999999999998,
+              -217.99999999999994
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "name" : "Middle Pane",
+      "position" : {
+        "scale" : 0.58,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "refractivity" : {
+        "depth" : 0.046328125,
+        "enabled" : true,
+        "strength" : 0.344921875
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.74
+      },
+      "specular" : "inside",
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material" : null,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "srgb:0.41176,0.42745,0.49020,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "back-pane.png",
+          "name" : "back-pane",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -299.9999999999999,
+              -217.99999999999983
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "name" : "Back Pane",
+      "position" : {
+        "scale" : 0.58,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "refractivity" : {
+        "depth" : 0.046328125,
+        "enabled" : true,
+        "strength" : 0.344921875
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.74
+      },
+      "specular" : "inside",
       "translucency" : {
         "enabled" : true,
         "value" : 0.5

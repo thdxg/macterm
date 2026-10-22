@@ -33,7 +33,7 @@ const OUT_DIR = join(here, "public", "img");
 const OG = { width: 1200, height: 630, background: "#111214" };
 
 // 180 is the apple-touch-icon size iOS actually asks for; 32 and 16 are the
-// classic favicon rungs. The 730x730 original has no business being either.
+// classic favicon rungs. The 508x508 original has no business being either.
 const ICON_SIZES = [180, 32, 16];
 
 // From the hero, the same image the repo README leads with.
@@ -56,7 +56,8 @@ async function buildOgCard() {
 // Built from the bare glyph, not the full app icon: the site's brand mark sits
 // on the header's own dark ground and a favicon sits on the browser's, so the
 // icon's background plate would read as a plate rather than as the mark. The
-// glyph is full-bleed in its canvas (729 of 730px), so it needs no re-cropping.
+// glyph is the three panes cropped to their bounds and padded to a square, so
+// it needs no re-cropping.
 async function buildIcons() {
   const input = join(SRC_DIR, "icons", "glyph.png");
   if (!existsSync(input)) {
