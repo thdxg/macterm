@@ -40,6 +40,72 @@ mise run logs
 
 This task streams live logs from the Debug app. Add `--release` to read the logs of the release app. Add `--last 30m` to read past logs instead of a live stream.
 
+## Keeping macOS permissions across Debug builds
+
+macOS keeps a permission (Screen Recording, Accessibility, Full Disk Access, Local Network) for the code signature of an app. By default, the Debug app has an ad-hoc signature. An ad-hoc signature changes at each build. Thus macOS refuses each new `Macterm Debug.app`, also when its switch in **System Settings → Privacy & Security** shows on. You must remove the old row and give the permission again. You see this problem most often with **Capture Palette**, which needs Screen Recording.
+
+To keep the permissions, sign the Debug app with a certificate of your own. You make the certificate one time. Then each Debug build has the same signature.
+
+Before you start, know these effects:
+
+- **Use a separate development certificate. Never use the release certificate of Macterm.** If the release key is in your keychain, a local build can sign as the release app.
+- Each Debug build that signs with the identity is the same app to macOS. A build from any branch or git worktree therefore gets your Screen Recording, Accessibility, Full Disk Access and Local Network permissions with no request.
+- `codesign` must read the private key at each build. A build with no person at the keyboard (an agent, an `ssh` session) cannot answer a keychain dialog. If the login keychain is locked, `codesign` fails with `errSecInternalComponent`. Unlock the keychain, or remove `Configs/Local.xcconfig` for that build.
+
+1. Make a self-signed code-signing certificate in your login keychain. Run these commands in an empty temporary folder:
+
+   ```bash
+   printf '%s\n' '[req]' 'distinguished_name = dn' 'prompt = no' 'x509_extensions = ext' '[dn]' 'CN = Macterm Development' '[ext]' 'keyUsage = critical, digitalSignature' 'extendedKeyUsage = critical, codeSigning' > macterm-dev.cnf
+   ```
+
+   ```bash
+   /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -config macterm-dev.cnf -keyout macterm-dev.key -out macterm-dev.crt
+   ```
+
+   ```bash
+   /usr/bin/openssl pkcs12 -export -inkey macterm-dev.key -in macterm-dev.crt -name "Macterm Development" -passout pass:macterm -out macterm-dev.p12
+   ```
+
+   ```bash
+   security import macterm-dev.p12 -k ~/Library/Keychains/login.keychain-db -P macterm -T /usr/bin/codesign
+   ```
+
+   ```bash
+   security add-trusted-cert -r trustRoot -p codeSign -k ~/Library/Keychains/login.keychain-db macterm-dev.crt
+   ```
+
+   Use `/usr/bin/openssl`, which is LibreSSL. The keychain cannot import the `.p12` file that OpenSSL 3 (Homebrew) writes. `security add-trusted-cert` asks for your password. It trusts the certificate for code signing only. Then remove the files: the keychain has the certificate and its private key.
+
+   You can also use Keychain Access. Select **Keychain Access → Certificate Assistant → Create a Certificate…**, set the name to `Macterm Development`, **Identity Type** to **Self-Signed Root** and **Certificate Type** to **Code Signing**. Then open the certificate and set **Trust → Code Signing** to **Always Trust**. Do not change the other trust settings.
+
+2. Make sure that the identity is valid. This command must show `Macterm Development`:
+
+   ```bash
+   security find-identity -v -p codesigning
+   ```
+
+3. Write the name of the identity in `Configs/Local.xcconfig`. Git ignores this file.
+
+   ```bash
+   echo 'CODE_SIGN_IDENTITY = Macterm Development' > Configs/Local.xcconfig
+   ```
+
+   Each Debug build signs with this identity: `mise run run`, `mise run test`, `mise run e2e` and a build in Xcode. The bundled `zmx` gets the same signature. Release builds do not change. Without the file, the Debug app has an ad-hoc signature, as before. Each checkout, git worktrees included, needs its own copy of the file. If the file names an identity that is not in the keychain, the build stops at the start with `No certificate matching '…' found`. It does not change to an ad-hoc signature, because that would remove your permissions with no warning. Remove the file to use an ad-hoc signature again.
+
+4. Build the app, and read its designated requirement:
+
+   ```bash
+   mise run run
+   ```
+
+   ```bash
+   codesign -d -r- "build/DerivedData/Build/Products/Debug/Macterm Debug.app"
+   ```
+
+   The requirement must name the certificate (`certificate root = H"…"`), not a `cdhash`. It must be the same after the next build.
+
+If macOS asks if `codesign` can use the key, click **Always Allow**. If you click **Allow**, the dialog comes back at each build. After the change, give each permission one more time. The old row in **Privacy & Security** is for the ad-hoc signature. Remove it first.
+
 ## Tasks
 
 Run each task with `mise run <name>`:

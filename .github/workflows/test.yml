@@ -28,6 +28,7 @@ jobs:
             swift:
               - "**/*.swift"
               - "project.yml"
+              - "Configs/**"
               - "mise.toml"
               - "scripts/**"
               - ".github/workflows/test.yml"

@@ -30,7 +30,8 @@ cp -cp "${zmx_source}" "${destination_dir}/zmx" 2>/dev/null || cp -p "${zmx_sour
 chmod +x "${destination_dir}/zmx"
 
 # Sign the copy as the APP: the same certificate Xcode signs the bundle with
-# (ad-hoc in a local build, the stable release certificate in CI) and, more
+# (ad-hoc in a local build, the identity that Configs/Local.xcconfig names in a
+# Debug build that has one, the stable release certificate in CI) and, more
 # importantly, the app's own bundle identifier. Each zmx session daemon
 # disclaims the app at spawn and becomes the *responsible process* for every
 # program in its session (see the fork's daemonize.zig and AGENTS.md), and

@@ -22,6 +22,13 @@ mise run install      # Copy the built app to /Applications
 
 `format`, `lint`, `test`, `e2e` and `bench` show a spinner. They print output only when they fail. **Always pass `--verbose`** (`mise run test --verbose`) to stream the raw output.
 
+**The Debug app signs ad-hoc, unless `Configs/Local.xcconfig` names an identity.** An ad-hoc designated requirement is the cdhash, and the cdhash changes at each build. TCC (Screen Recording, Accessibility, Full Disk Access, Local Network) therefore refuses each new `Macterm Debug.app`. Git ignores `Configs/Local.xcconfig`. A line `CODE_SIGN_IDENTITY = <name>` in it gives every Debug target a stable requirement. `Configs/Debug.xcconfig` includes it with `#include?`. `scripts/embed-zmx.sh` signs the bundled zmx with the same identity. The recipe for the self-signed certificate is in CONTRIBUTING.md ("Keeping macOS permissions across Debug builds").
+
+- Keep `CODE_SIGN_IDENTITY` out of `settings.base` in `project.yml`. Project settings override the project xcconfig, so a value there hides the local identity. Release sets it in `settings.configs.Release`.
+- A Release build takes its identity from `MACTERM_CODESIGN_IDENTITY` (`scripts/build.sh`, the release certificate in CI). The local file does not change it.
+- The local identity must be a separate development certificate, never the release certificate. With it, every Debug build from any branch or worktree is the same app to TCC and gets the grants with no request.
+- `codesign` reads the private key at each build. A headless build (an agent, `ssh`) cannot answer the keychain dialog, and a locked login keychain fails with `errSecInternalComponent`. A worktree with no `Configs/Local.xcconfig` signs ad-hoc. A file that names an identity that is not in the keychain stops the build at the start (`No certificate matching …`). It never falls back to ad-hoc, because a silent fallback removes the grants.
+
 Macterm needs macOS 14 or later and Swift 6.0 or later. Liquid glass and some chrome refinements are macOS 26 (Tahoe) features. They are behind `#available` and `WindowAppearance.glassSupported`.
 
 ### The terminal core
@@ -175,7 +182,7 @@ A pane that asks for a password gets a native `NSPopover` at the cursor (`Passwo
   - Macterm never offers prompts for one-time codes (`isOneTimeCode`).
 - **Storage is the login keychain** (`KeychainPasswordStore`, service `<bundle id>.passwords`, metadata as JSON in `kSecAttrGeneric`).
   - The data-protection keychain needs an entitlement for a provisioning profile. A self-signed app cannot have it. Touch ID is therefore the gate of the app (`PasswordAuthenticator`, `.deviceOwnerAuthentication`). The default is once for each app launch. A screen lock, sleep or a switch of user also ends it. Macterm never persists it, because a lock while Macterm is quit leaves no reliable trace. The other option is every time.
-  - A debug build with an ad-hoc signature gets a keychain dialog on a read.
+  - A debug build with an ad-hoc signature gets a keychain dialog on a read. A debug build with a stable identity (`Configs/Local.xcconfig`, see Build & Run) gets it one time, until you click Always Allow.
   - Tests, `MACTERM_BENCHMARK=1` and any launch with `MACTERM_BENCHMARK_DATA_DIR` use `InMemoryPasswordStore` (`PasswordVault.isHermetic`). A **debug** build under that condition skips Touch ID. The only passwords that such a run holds are passwords that it captured itself. The e2e suite autofills with nobody at the keyboard.
 - **Autofill types and never pastes** (`GhosttyTerminalNSView.sendSecret`: the text path without the evidence of a command submission, then Return). It checks the tty again after authentication. It clears a line that the user half typed with ⌃U first.
   - A refused autofill turns the next sighting into "Saved Password Did Not Work". A typed password that then works is offered as an update.

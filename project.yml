@@ -11,6 +11,11 @@ configs:
   Debug: debug
   Release: release
 
+# Debug takes its signing identity from here: ad-hoc, or the stable identity
+# that a git-ignored Configs/Local.xcconfig names (see that file).
+configFiles:
+  Debug: Configs/Debug.xcconfig
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -21,7 +26,6 @@ settings:
     DEAD_CODE_STRIPPING: YES
     ENABLE_HARDENED_RUNTIME: YES
     CODE_SIGN_STYLE: Manual
-    CODE_SIGN_IDENTITY: "-"
     DEVELOPMENT_TEAM: ""
     CLANG_CXX_LANGUAGE_STANDARD: "c++17"
     CLANG_CXX_LIBRARY: "libc++"
@@ -30,6 +34,10 @@ settings:
       ONLY_ACTIVE_ARCH: YES
     Release:
       ONLY_ACTIVE_ARCH: NO
+      # Ad-hoc. scripts/build.sh overrides it with MACTERM_CODESIGN_IDENTITY
+      # (the release certificate in CI). Debug sets it in Configs/Debug.xcconfig:
+      # a setting here would override the local identity there.
+      CODE_SIGN_IDENTITY: "-"
 
 packages:
   Sparkle:

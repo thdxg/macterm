@@ -1,0 +1,23 @@
+// Project-level base configuration of the Debug build (project.yml `configFiles`).
+//
+// Debug signs ad-hoc by default. An ad-hoc signature's designated requirement
+// is its cdhash, which changes at every build, so each new "Macterm Debug.app"
+// is a new app to TCC: Screen Recording, Accessibility, Full Disk Access and
+// Local Network refuse it until you remove the old row in Privacy & Security
+// and grant again.
+//
+// To keep the grants, sign with a stable identity from your login keychain.
+// Make Configs/Local.xcconfig (git ignores it) with one line:
+//
+//   CODE_SIGN_IDENTITY = Macterm Development
+//
+// CONTRIBUTING.md has the recipe for the self-signed certificate. Without the
+// file, nothing changes. scripts/embed-zmx.sh signs the bundled zmx with the
+// same identity (EXPANDED_CODE_SIGN_IDENTITY).
+//
+// The project-level settings in project.yml override this file, so
+// CODE_SIGN_IDENTITY must not be in `settings.base` there.
+
+CODE_SIGN_IDENTITY = -
+
+#include? "Local.xcconfig"

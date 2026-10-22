@@ -167,6 +167,7 @@ sources = [
   "MactermTests/**/*.swift",
   "Macterm/Info.plist",
   "project.yml",
+  "Configs/*.xcconfig",
   "scripts/test.sh",
   "scripts/setup.sh",
 ]
