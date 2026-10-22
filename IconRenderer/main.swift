@@ -117,6 +117,31 @@ guard let rendered = finalized.renderedIcon(with: configuration) else {
     fail(.renderFailed, "IconRendering returned no image")
 }
 
+/// The share of the body that the render covers, read from a 32 px copy. A
+/// render is full-bleed, so a working one covers nearly all of it.
+func coverage(of image: CGImage) -> Double {
+    let side = 32
+    var pixels = [UInt8](repeating: 0, count: side * side * 4)
+    guard let context = CGContext(
+        data: &pixels,
+        width: side,
+        height: side,
+        bitsPerComponent: 8,
+        bytesPerRow: side * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else { return 0 }
+    context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+    let opaque = stride(from: 3, to: pixels.count, by: 4).filter { pixels[$0] > 128 }.count
+    return Double(opaque) / Double(side * side)
+}
+
+// An empty render must never reach the Dock as a blank icon.
+let covered = coverage(of: rendered)
+guard covered > 0.5 else {
+    fail(.renderFailed, "IconRendering returned an image that covers \(Int(covered * 100))% of the icon")
+}
+
 guard let colorSpace = CGColorSpace(name: CGColorSpace.displayP3),
       let context = CGContext(
           data: nil,

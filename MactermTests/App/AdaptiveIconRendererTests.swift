@@ -88,12 +88,39 @@ struct AdaptiveIconRendererTests {
         let result = await AdaptiveIconRenderer.render(Self.request)
         let png = try result.get()
         let image = try #require(NSBitmapImageRep(data: png))
-        #expect(image.pixelsWide == 256 && image.pixelsHigh == 256)
+        let summary = Self.describe(image)
+        #expect(image.pixelsWide == 256 && image.pixelsHigh == 256, "\(summary)")
         // The body fills 824/1024 of the canvas: the corner is empty, and the
         // background just inside the body is the requested dark violet.
-        #expect(try #require(image.colorAt(x: 4, y: 4)).alphaComponent < 0.05)
+        #expect(try #require(image.colorAt(x: 4, y: 4)).alphaComponent < 0.05, "\(summary)")
         let inside = try #require(image.colorAt(x: 128, y: 220)?.usingColorSpace(.sRGB))
-        #expect(inside.blueComponent > inside.greenComponent, "background at the body's lower middle: \(inside)")
+        #expect(inside.alphaComponent > 0.95 && inside.blueComponent > inside.greenComponent, "\(summary)")
+    }
+
+    /// What the render holds, for a failure message: the count and bounds of
+    /// the opaque pixels, and the color at a few points.
+    private static func describe(_ image: NSBitmapImageRep) -> String {
+        var opaque = 0
+        var bounds = (minX: Int.max, minY: Int.max, maxX: -1, maxY: -1)
+        for y in 0 ..< image.pixelsHigh {
+            for x in 0 ..< image.pixelsWide where (image.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 {
+                opaque += 1
+                bounds = (min(bounds.minX, x), min(bounds.minY, y), max(bounds.maxX, x), max(bounds.maxY, y))
+            }
+        }
+        let samples = [(128, 40), (128, 128), (128, 220), (60, 90)].map { x, y -> String in
+            guard let c = image.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return "(\(x),\(y)) none" }
+            return String(
+                format: "(%d,%d) rgba %.2f %.2f %.2f %.2f",
+                x,
+                y,
+                c.redComponent,
+                c.greenComponent,
+                c.blueComponent,
+                c.alphaComponent
+            )
+        }
+        return "\(image.pixelsWide)x\(image.pixelsHigh), \(opaque) opaque pixels in \(bounds), " + samples.joined(separator: "; ")
     }
 }
 
