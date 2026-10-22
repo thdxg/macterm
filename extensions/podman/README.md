@@ -5,3 +5,13 @@ Browse the running containers by name, image or status. Follow the logs of a con
 The palette is muted while Podman is not running. On macOS, start the Podman machine first (`podman machine start`).
 
 Needs `podman`.
+
+## Screenshots
+
+### Podman
+
+![Podman](screenshots/podman.png)
+
+### Container
+
+![Container](screenshots/container.png)
