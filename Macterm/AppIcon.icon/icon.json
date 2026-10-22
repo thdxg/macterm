@@ -1,4 +1,8 @@
 {
+  "features" : [
+    "refractivity",
+    "specular-location"
+  ],
   "fill" : {
     "linear-gradient" : [
       "display-p3:0.10196,0.10588,0.12941,1.00000",
@@ -17,6 +21,7 @@
   },
   "groups" : [
     {
+      "blur-material" : null,
       "hidden" : false,
       "layers" : [
         {
@@ -44,6 +49,11 @@
           0
         ]
       },
+      "refractivity" : {
+        "depth" : 0.046328125,
+        "enabled" : false,
+        "strength" : 0.344921875
+      },
       "shadow" : {
         "kind" : "none",
         "opacity" : 0
@@ -55,6 +65,7 @@
       }
     },
     {
+      "blur-material" : null,
       "hidden" : false,
       "layers" : [
         {
@@ -82,17 +93,23 @@
           0
         ]
       },
+      "refractivity" : {
+        "depth" : 0.046328125,
+        "enabled" : true,
+        "strength" : 0.344921875
+      },
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.74
       },
-      "specular" : true,
+      "specular" : "inside",
       "translucency" : {
         "enabled" : true,
         "value" : 0.5
       }
     },
     {
+      "blur-material" : null,
       "hidden" : false,
       "layers" : [
         {
@@ -120,17 +137,23 @@
           0
         ]
       },
+      "refractivity" : {
+        "depth" : 0.046328125,
+        "enabled" : true,
+        "strength" : 0.344921875
+      },
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.74
       },
-      "specular" : true,
+      "specular" : "inside",
       "translucency" : {
         "enabled" : true,
         "value" : 0.5
       }
     },
     {
+      "blur-material" : null,
       "hidden" : false,
       "layers" : [
         {
@@ -158,11 +181,16 @@
           0
         ]
       },
+      "refractivity" : {
+        "depth" : 0.046328125,
+        "enabled" : true,
+        "strength" : 0.344921875
+      },
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.74
       },
-      "specular" : true,
+      "specular" : "inside",
       "translucency" : {
         "enabled" : true,
         "value" : 0.5

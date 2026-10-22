@@ -33,6 +33,12 @@ jobs:
               - ".github/workflows/test.yml"
               # The Xcode pin lives here; a bump must rebuild what it governs.
               - ".github/actions/select-xcode/**"
+              - ".github/actions/build-release/**"
+              - ".github/actions/import-signing-cert/**"
+              # The adaptive icon's helper and its private interfaces, and the
+              # icon that AdaptiveIconTests reads.
+              - "IconRenderer/**"
+              - "Macterm/AppIcon.icon/**"
               - "Macterm/Info.plist"
               - "Macterm/Macterm.entitlements"
               - "Macterm/*.xcstrings"
@@ -45,14 +51,14 @@ jobs:
     name: Unit
     needs: changes
     if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.extensions == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - uses: jdx/mise-action@v5.2.0
 
-      # Pin the toolchain: `macos-26` defaults to whatever Xcode the image
+      # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
       # currently ships, which is how macterm#340's type-check failure stayed
       # invisible here. See the action for the full rationale.
       - name: Select Xcode
@@ -189,7 +195,7 @@ jobs:
     name: End-to-end
     needs: changes
     if: needs.changes.outputs.swift == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -197,7 +203,7 @@ jobs:
 
       - uses: jdx/mise-action@v5.2.0
 
-      # Pin the toolchain: `macos-26` defaults to whatever Xcode the image
+      # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
       # currently ships, which is how macterm#340's type-check failure stayed
       # invisible here. See the action for the full rationale.
       - name: Select Xcode
@@ -262,3 +268,96 @@ jobs:
         with:
           path: build/DerivedData
           key: ${{ steps.derived.outputs.cache-primary-key }}
+
+  # The release build itself, from the recipe that release.yml and
+  # release-tip.yml use (.github/actions/build-release): a universal Release
+  # archive and a DMG from scripts/build.sh. With no secrets, so it is ad-hoc
+  # signed, has the Sparkle placeholder key and is never published. A release
+  # always builds again from its own commit; this only proves that it can.
+  release-build:
+    name: Release Build
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    runs-on: xcode-27
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The version counts commits since the last vX.Y.Z tag.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Version
+        id: version
+        run: |
+          source scripts/_lib.sh
+          echo "version=$(macterm_tip_version)" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        uses: ./.github/actions/build-release
+        with:
+          version: ${{ steps.version.outputs.version }}
+          distribute: "false"
+
+      # ditto keeps the bundle's symlinks and signature, which a plain zip of
+      # the folder does not.
+      - name: Pack the App
+        run: ditto -c -k --keepParent build/export/Macterm.app build/macterm-release.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macterm-release-app
+          path: build/macterm-release.zip
+          retention-days: 3
+
+  # Every other macOS job runs on the newest macOS with the pinned Xcode, so
+  # nothing else runs the app on an older system. This starts the Release
+  # build on older runners (scripts/older-macos-smoke.sh): it must launch
+  # there, and on macOS 26 it must paint its adaptive icon through the
+  # private renderer.
+  #
+  # Two jobs, not a matrix: both checks are required, and a skipped matrix job
+  # reports the unexpanded name `Smoke (${{ matrix.runner }})`. A required
+  # `Smoke (macos-26)` would then never report on a pull request that changes
+  # no Swift, and that pull request could never merge.
+  #
+  # macos-26: the private renderer of the adaptive icon. macos-15: the launch
+  # of an app built with a newer SDK, below macOS 26. (macos-14 is being
+  # retired on GitHub; 15 is the oldest image to keep.)
+  smoke-macos-26:
+    name: Smoke (macos-26)
+    needs: release-build
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: macterm-release-app
+
+      - name: Unpack the App
+        run: ditto -x -k macterm-release.zip build
+
+      - name: Smoke Test
+        run: scripts/older-macos-smoke.sh build/Macterm.app
+
+  smoke-macos-15:
+    name: Smoke (macos-15)
+    needs: release-build
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: macterm-release-app
+
+      - name: Unpack the App
+        run: ditto -x -k macterm-release.zip build
+
+      - name: Smoke Test
+        run: scripts/older-macos-smoke.sh build/Macterm.app
