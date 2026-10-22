@@ -88,13 +88,22 @@ struct AdaptiveIconRendererTests {
         let result = await AdaptiveIconRenderer.render(Self.request)
         let png = try result.get()
         let image = try #require(NSBitmapImageRep(data: png))
-        let summary = Self.describe(image)
-        #expect(image.pixelsWide == 256 && image.pixelsHigh == 256, "\(summary)")
         // The body fills 824/1024 of the canvas: the corner is empty, and the
-        // background just inside the body is the requested dark violet.
-        #expect(try #require(image.colorAt(x: 4, y: 4)).alphaComponent < 0.05, "\(summary)")
-        let inside = try #require(image.colorAt(x: 128, y: 220)?.usingColorSpace(.sRGB))
-        #expect(inside.alphaComponent > 0.95 && inside.blueComponent > inside.greenComponent, "\(summary)")
+        // screen inside the frame is the requested dark violet. (180, 180) is
+        // clear of the frame, whose glass macOS 26 draws translucent, and of
+        // the panes in the top-left.
+        let corner = image.colorAt(x: 4, y: 4)?.alphaComponent ?? 1
+        let screen = image.colorAt(x: 180, y: 180)?.usingColorSpace(.sRGB)
+        let onGrid = image.pixelsWide == 256 && image.pixelsHigh == 256 && corner < 0.05
+        let violet = screen.map { $0.alphaComponent > 0.95 && $0.blueComponent > $0.greenComponent } ?? false
+        // A thrown error reaches the CI log in full, where a comment on
+        // #expect does not.
+        if !(onGrid && violet) { throw RenderSummary(text: Self.describe(image)) }
+    }
+
+    private struct RenderSummary: Error, CustomStringConvertible {
+        let text: String
+        var description: String { text }
     }
 
     /// What the render holds, for a failure message: the count and bounds of
@@ -108,7 +117,7 @@ struct AdaptiveIconRendererTests {
                 bounds = (min(bounds.minX, x), min(bounds.minY, y), max(bounds.maxX, x), max(bounds.maxY, y))
             }
         }
-        let samples = [(128, 40), (128, 128), (128, 220), (60, 90)].map { x, y -> String in
+        let samples = [(128, 40), (128, 128), (180, 180), (128, 220), (60, 90)].map { x, y -> String in
             guard let c = image.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return "(\(x),\(y)) none" }
             return String(
                 format: "(%d,%d) rgba %.2f %.2f %.2f %.2f",
