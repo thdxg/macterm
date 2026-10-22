@@ -122,6 +122,16 @@ if ! grep -q "^Identifier=com.thdxg.macterm$" <<<"$ZMX_SIGNATURE"; then
   echo "ERROR: $ZMX_BINARY is not signed as com.thdxg.macterm. Pane programs would ask for permission as a second app" >&2
   exit 1
 fi
+# The adaptive icon's renderer is copied into Contents/Helpers with the
+# signature that its own target gave it. When a stable identity was requested,
+# an ad-hoc helper means that target was signed apart from the app, so refuse
+# it as for the app and zmx.
+ICON_RENDERER="$APP_BUNDLE/Contents/Helpers/macterm-icon-renderer"
+ICON_RENDERER_SIGNATURE="$(codesign --display --verbose "$ICON_RENDERER" 2>&1 || true)"
+if [[ -n "$CODESIGN_IDENTITY" ]] && grep -q "Signature=adhoc" <<<"$ICON_RENDERER_SIGNATURE"; then
+  echo "ERROR: $ICON_RENDERER has an ad-hoc signature, but MACTERM_CODESIGN_IDENTITY is set" >&2
+  exit 1
+fi
 
 # Package into a compressed DMG with an Applications symlink for drag-install.
 DMG_STAGING="$BUILD_DIR/dmg-staging"

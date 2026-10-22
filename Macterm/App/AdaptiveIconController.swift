@@ -39,6 +39,8 @@ final class AdaptiveIconController {
         "AdaptiveIcon",
         isDirectory: true
     ))
+    /// One helper at a time: a burst of theme changes queues only the last.
+    private let renders = AdaptiveIconRenderer.Queue()
     private var observers: [any NSObjectProtocol] = []
 
     private init() {
@@ -69,7 +71,7 @@ final class AdaptiveIconController {
             supported: AdaptiveIcon.isSupported && suspension == nil,
             configured: configured,
             iconStyle: iconStyle,
-            systemScheme: GhosttyApp.shared.systemScheme
+            systemScheme: { GhosttyApp.shared.systemScheme }
         )
         guard case let .adaptive(appearance) = decision, let theme = themeColors(),
               let paint = AdaptiveIcon.paint(for: theme), let request = request(for: appearance, paint: paint)
@@ -103,9 +105,8 @@ final class AdaptiveIconController {
     }
 
     private func render(_ request: AdaptiveIconRequest, generation: Int) {
-        Task {
-            let started = ContinuousClock.now
-            let result = await AdaptiveIconRenderer.render(request)
+        let started = ContinuousClock.now
+        renders.render(request) { [self] result in
             guard generation == self.generation else { return }
             switch result {
             case let .success(png):
@@ -115,6 +116,10 @@ final class AdaptiveIconController {
                 AppIconPresenter.applyAdaptive(image)
                 let elapsed = started.duration(to: .now)
                 logger.info("adaptive icon (\(request.appearance.rawValue, privacy: .public)) rendered in \(elapsed, privacy: .public)")
+            case .failure(.superseded):
+                // A newer request took this one's place. It says nothing
+                // about the helper, so it suspends nothing.
+                return
             case let .failure(failure):
                 fail(failure)
             }

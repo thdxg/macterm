@@ -41,6 +41,23 @@ struct AdaptiveIconTests {
         0x45475A, 0xF38BA8, 0xA6E3A1, 0xF9E2AF, 0x89B4FA, 0xF5C2E7, 0x94E2D5, 0xBAC2DE,
         0x585B70, 0xF7AEC2, 0xC2ECBF, 0xFCD682, 0xAECCFC, 0xF398DA, 0xB1EAE1, 0xA6ADC8,
     ])
+    /// Palette 0 is the background, and palettes 7 and 8 are about as light
+    /// as palette 15: no gray stands apart from both ends.
+    private static let noMiddleGray = theme(0x1C1C1C, [
+        0x1C1C1C, 0xE06C75, 0x98C379, 0xE5C07B, 0x61AFEF, 0xC678DD, 0x56B6C2, 0xDCDCDC,
+        0xD0D0D0, 0xE06C75, 0x98C379, 0xE5C07B, 0x61AFEF, 0xC678DD, 0x56B6C2, 0xE4E4E4,
+    ])
+    /// A mid-gray background. Palette 15 is the front pane, and every color
+    /// entry but palette 3 is darker than the background: as far from it as
+    /// a step toward the front, but on the other side.
+    private static let midGray = midGrayTheme(palette3: 0xDCCC94)
+
+    private static func midGrayTheme(palette3: Int) -> AdaptiveIcon.ThemeColors {
+        theme(0x7A7A7A, [
+            0x606060, 0x2A0000, 0x002A00, palette3, 0x00002A, 0x2A002A, 0x003030, 0xA0A0A0,
+            0xB4B4B4, 0x200000, 0x002000, 0x202000, 0x000020, 0x200020, 0x002020, 0xFFFFFF,
+        ])
+    }
 
     /// The palette entries a paint took, bottom to top, as the first entry
     /// with that color. Only for "is it a palette entry": a theme can repeat a
@@ -104,7 +121,7 @@ struct AdaptiveIconTests {
     /// Every pane is one palette entry as the theme has it, never a mix.
     @Test
     func eachPaneIsAPaletteEntry() {
-        for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight, Self.catppuccinMocha] {
+        for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight, Self.catppuccinMocha, Self.midGray] {
             let taken = Self.entries(AdaptiveIcon.paint(for: theme), of: theme)
             #expect(taken.count == 4 && !taken.contains(-1), "\(taken)")
         }
@@ -127,12 +144,14 @@ struct AdaptiveIconTests {
 
     /// The panes step down evenly enough: no pane is as light as its
     /// neighbor in front, and the back pane stands apart from the background.
+    /// Distances are signed by the front pane's side of the background.
     @Test
     func thePanesStepDownTowardTheBackground() throws {
-        for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight] {
+        for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight, Self.midGray] {
             let paint = try #require(AdaptiveIcon.paint(for: theme))
             let background = AdaptiveIcon.lightness(theme.background)
-            let distance = paint.layers.map { abs(AdaptiveIcon.lightness($0) - background) }
+            let offset = paint.layers.map { AdaptiveIcon.lightness($0) - background }
+            let distance = offset.map { $0 * (offset[2] < 0 ? -1 : 1) }
             let front = distance[2]
             #expect(distance[0] / front >= AdaptiveIcon.minimumStep, "back pane too close to the background")
             #expect((distance[1] - distance[0]) / front >= AdaptiveIcon.minimumStep, "back and middle too close")
@@ -146,6 +165,23 @@ struct AdaptiveIconTests {
         let flat = AdaptiveIcon.ThemeColors(background: Self.hex(0x808080), palette: Array(repeating: Self.hex(0x808080), count: 16))
         #expect(AdaptiveIcon.paint(for: flat) == nil)
         #expect(AdaptiveIcon.paint(for: AdaptiveIcon.ThemeColors(background: Self.hex(0), palette: [])) == nil)
+    }
+
+    /// The gray nearest 45% is the background itself, so a back pane in it
+    /// would not show. The bundled icon shows instead.
+    @Test
+    func aThemeWithNoGrayBetweenTheEndsPaintsNothing() {
+        #expect(AdaptiveIcon.paint(for: Self.noMiddleGray) == nil)
+    }
+
+    /// On a mid-gray background a dark color entry is as far from the
+    /// background as a light one. Only an entry on the front pane's side is
+    /// a step toward it.
+    @Test
+    func theMiddlePaneIsOnTheFrontPanesSideOfTheBackground() {
+        #expect(AdaptiveIcon.paint(for: Self.midGray)?.layers == Self.colors(Self.midGray, [8, 3, 15, 15]))
+        // With palette 3 dark too, no color entry is on that side.
+        #expect(AdaptiveIcon.paint(for: Self.midGrayTheme(palette3: 0x303000)) == nil)
     }
 
     @Test
@@ -196,7 +232,7 @@ struct AdaptiveIconTests {
                 supported: supported,
                 configured: configured,
                 iconStyle: style,
-                systemScheme: .dark
+                systemScheme: { .dark }
             )
         }
         let custom = GhosttyAppIcon.custom(URL(fileURLWithPath: "/tmp/mine.png"))
@@ -205,6 +241,26 @@ struct AdaptiveIconTests {
         #expect(decide(supported: false) == .configured(.bundled))
         #expect(decide(configured: custom) == .configured(custom))
         #expect(decide(style: "TintedDark") == .configured(.bundled))
+    }
+
+    /// The controller reads the system scheme from `GhosttyApp.shared`. With
+    /// the adaptive icon off, `decide` must not ask for it, so that a test
+    /// that flips the setting never starts libghostty.
+    @Test
+    func theSystemSchemeIsReadOnlyForAnAdaptiveIcon() {
+        var reads = 0
+        let scheme: () -> ThemeResolver.Scheme = {
+            reads += 1
+            return .dark
+        }
+        let custom = GhosttyAppIcon.custom(URL(fileURLWithPath: "/tmp/mine.png"))
+        _ = AdaptiveIcon.decide(enabled: false, supported: true, configured: .bundled, iconStyle: nil, systemScheme: scheme)
+        _ = AdaptiveIcon.decide(enabled: true, supported: false, configured: .bundled, iconStyle: nil, systemScheme: scheme)
+        _ = AdaptiveIcon.decide(enabled: true, supported: true, configured: custom, iconStyle: nil, systemScheme: scheme)
+        #expect(reads == 0)
+        #expect(AdaptiveIcon
+            .decide(enabled: true, supported: true, configured: .bundled, iconStyle: nil, systemScheme: scheme) == .adaptive(.dark))
+        #expect(reads == 1)
     }
 
     /// Tests never start the helper on their own.

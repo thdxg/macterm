@@ -36,7 +36,7 @@ Each pane of the icon is one color from the palette of the theme. The panes go f
 | --- | --- |
 | Frame and front pane | The gray that stands out most from the background: `palette = 15`, `7`, `8` or `0` |
 | Back pane | Another of those grays, at about half that distance from the background. This is usually `palette = 8`. |
-| Middle pane | The color from `palette = 1` to `6` and `9` to `14` whose lightness is nearest the middle between the back pane and the front pane |
+| Middle pane | The color from `palette = 1` to `6` and `9` to `14` whose lightness is nearest the middle between the back pane and the front pane. Only a color on the same side of the background as the front pane counts. |
 | Background | `background`, with `palette = 0` mixed in at the top |
 
 The icon was drawn in eyesclosed, the default theme of Macterm. With eyesclosed, the Dock icon has the same colors as the usual icon of Macterm.
@@ -48,5 +48,6 @@ The Dock icon does not change in these conditions:
 - The icon style of macOS is Clear or Tinted (**System Settings → Appearance → Icon & widget style**). macOS then draws the icon in that style.
 - You set `macos-icon = custom`. Your image is the Dock icon. See [Keys with no Settings equivalent](/docs/configuration#keys-with-no-settings-equivalent).
 - Macterm is not running. Finder, Launchpad and the Dock then show the icon in its usual colors.
+- The palette has no even steps from the background to the front pane. For example, no gray is between the background and the front pane, or no color is on the same side of the background as the front pane. The Dock then shows the icon in its usual colors.
 
 Macterm draws the icon with a part of macOS that Apple does not document. If a macOS update changes that part, Macterm shows the usual icon and continues to work.
