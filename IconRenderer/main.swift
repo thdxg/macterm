@@ -6,10 +6,11 @@
 // app never writes to a pipe that a dead helper closed (an unignored SIGPIPE
 // would stop the app). It is the only code in Macterm that calls Apple's private
 // IconRendering and CoreUI frameworks — the renderer behind every Liquid Glass
-// `.icon` — and it runs in a process of its own for that reason. A changed or
-// missing symbol stops this process at launch, and a trap inside the framework
-// kills only this process: the app sees a failed run and keeps the bundled
-// icon. Nothing here can stop the app.
+// `.icon` — and it runs in a process of its own for that reason. It links them
+// weakly and checks every symbol before the first call (`RequiredSymbols`), so
+// a symbol that this macOS lacks ends the run with an exit code that names it.
+// A trap inside the framework kills only this process. Either way the app sees
+// a failed run and keeps the bundled icon. Nothing here can stop the app.
 //
 // How the icon is drawn: CoreUI reads the icon's layer stack out of the app's
 // own compiled `Assets.car` (the same `AppIcon.icon` that Xcode compiled),
@@ -50,6 +51,11 @@ guard CommandLine.arguments.count == 2,
       let request = try? JSONDecoder().decode(AdaptiveIconRequest.self, from: Data(CommandLine.arguments[1].utf8)),
       request.pixels > 0, request.pixels <= 4096
 else { fail(.badRequest, "the one argument must be an adaptive icon request") }
+
+let missing = RequiredSymbols.missing()
+guard missing.isEmpty else {
+    fail(.apiMissing, "this macOS lacks \(missing.count) private symbols: \(missing.joined(separator: " "))")
+}
 
 let catalog: CUICatalog
 do {

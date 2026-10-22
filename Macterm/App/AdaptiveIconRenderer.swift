@@ -16,7 +16,7 @@ enum AdaptiveIconRenderer {
         case helperMissing
         case launchFailed(String)
         case timedOut
-        case killed(signal: Int32)
+        case killed(signal: Int32, message: String)
         case exited(code: Int32, message: String)
         case notAnImage
 
@@ -26,7 +26,7 @@ enum AdaptiveIconRenderer {
             case .helperMissing: "the helper is not in the bundle"
             case let .launchFailed(reason): "the helper did not launch: \(reason)"
             case .timedOut: "the helper did not finish in time"
-            case let .killed(signal): "the helper stopped on signal \(signal)"
+            case let .killed(signal, message): "the helper stopped on signal \(signal)\(message.isEmpty ? "" : ": " + message)"
             case let .exited(code, message): "the helper exited with \(code): \(message)"
             case .notAnImage: "the helper's output is not an image"
             }
@@ -99,7 +99,7 @@ enum AdaptiveIconRenderer {
 
         if deadline.passed { return .failure(.timedOut) }
         if process.terminationReason == .uncaughtSignal {
-            return .failure(.killed(signal: process.terminationStatus))
+            return .failure(.killed(signal: process.terminationStatus, message: errorText.text))
         }
         guard process.terminationStatus == AdaptiveIconRenderExit.ok.rawValue else {
             return .failure(.exited(code: process.terminationStatus, message: errorText.text))

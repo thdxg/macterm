@@ -57,4 +57,7 @@ enum AdaptiveIconRenderExit: Int32 {
     case structureChanged = 5
     /// IconRendering returned no image, or the PNG could not be written.
     case renderFailed = 6
+    /// This macOS lacks a private symbol that the helper calls
+    /// (`RequiredSymbols`). stderr names each one.
+    case apiMissing = 7
 }

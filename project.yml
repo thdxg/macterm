@@ -256,6 +256,7 @@ targets:
     deploymentTarget: "26.0"
     sources:
       - path: IconRenderer/main.swift
+      - path: IconRenderer/RequiredSymbols.swift
       - path: Macterm/App/AdaptiveIconRequest.swift
     settings:
       base:
@@ -270,9 +271,12 @@ targets:
         OTHER_SWIFT_FLAGS:
           - "-Xcc"
           - "-fmodule-map-file=$(SRCROOT)/IconRenderer/PrivateInterfaces/CoreUIPrivate/module.modulemap"
+        # Weak, so that a symbol a macOS lacks is nil rather than a dyld
+        # abort at launch. RequiredSymbols checks them all before the first
+        # call and exits with a code that names the missing ones.
         OTHER_LDFLAGS:
-          - "$(SRCROOT)/IconRenderer/PrivateInterfaces/IconRendering.tbd"
-          - "$(SRCROOT)/IconRenderer/PrivateInterfaces/CoreUI.tbd"
+          - "-Wl,-weak_library,$(SRCROOT)/IconRenderer/PrivateInterfaces/IconRendering.tbd"
+          - "-Wl,-weak_library,$(SRCROOT)/IconRenderer/PrivateInterfaces/CoreUI.tbd"
 
   MactermTests:
     type: bundle.unit-test

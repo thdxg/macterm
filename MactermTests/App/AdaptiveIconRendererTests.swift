@@ -38,7 +38,7 @@ struct AdaptiveIconRendererTests {
     @Test
     func aHelperKilledBySignalIsAFailure() async throws {
         let result = try await AdaptiveIconRenderer.render(Self.request, helper: helper("kill -SEGV $$"))
-        #expect(result == .failure(.killed(signal: SIGSEGV)))
+        #expect(result == .failure(.killed(signal: SIGSEGV, message: "")))
     }
 
     @Test
