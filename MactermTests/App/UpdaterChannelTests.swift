@@ -52,18 +52,27 @@ struct UpdaterChannelTests {
             contentsOf: root.appendingPathComponent("scripts/build.sh"),
             encoding: .utf8
         )
-        let releaseWorkflow = try String(
-            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+        // Both release workflows build through the one recipe, and the
+        // recipe refuses the placeholder for a build that ships.
+        let buildRecipe = try String(
+            contentsOf: root.appendingPathComponent(".github/actions/build-release/action.yml"),
             encoding: .utf8
         )
+        let releaseWorkflows = try [".github/workflows/release.yml", ".github/workflows/release-tip.yml"].map {
+            try String(contentsOf: root.appendingPathComponent($0), encoding: .utf8)
+        }
 
         #expect(project.contains("SPARKLE_ED_PUBLIC_KEY: \(placeholder)"))
         #expect(buildScript.contains(
             #"SPARKLE_ED_PUBLIC_KEY="${SPARKLE_ED_PUBLIC_KEY:-\#(placeholder)}""#
         ))
-        #expect(releaseWorkflow.contains(
+        #expect(buildRecipe.contains(
             "\"$SPARKLE_ED_PUBLIC_KEY\" == \"\(placeholder)\""
         ))
+        for workflow in releaseWorkflows {
+            #expect(workflow.contains("uses: ./.github/actions/build-release"))
+            #expect(!workflow.contains("distribute: \"false\""))
+        }
     }
 
     /// The feed's ORIGIN is a wire contract in the same way a channel name is,
@@ -357,9 +366,14 @@ struct UpdaterChannelTests {
 
         let lib = repoRoot().appendingPathComponent("scripts/_lib.sh").path
         // The runner's own git configuration (signing, hooks, a default
-        // branch) must not reach this repository.
+        // branch) must not reach this repository. A real git comes first in
+        // PATH: /usr/bin/git is the xcrun shim, and it fails when the selected
+        // Xcode and xcode-select disagree (the xcode-27 runner image).
         let script = """
         set -e
+        for dir in /opt/homebrew/bin /usr/local/bin "${DEVELOPER_DIR:-/nonexistent}/usr/bin"; do
+            if [ -x "$dir/git" ]; then PATH="$dir:$PATH"; break; fi
+        done
         export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
         export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t
         export GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t

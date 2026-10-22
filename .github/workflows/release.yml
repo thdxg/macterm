@@ -81,7 +81,7 @@ jobs:
       # on a release flagged prerelease, so a stable release can never ship a
       # beta version string (and a beta tag can't sneak into the stable
       # channel by forgetting the flag).
-      - name: Check the version
+      - name: Check the Version
         id: version
         env:
           PRERELEASE: ${{ needs.flag.outputs.prerelease }}
@@ -100,11 +100,11 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      # The same recipe as tip and as the "Release build" check of every pull
+      # The same recipe as tip and as the "Release Build" check of every pull
       # request: the pinned Xcode, the GhosttyKit cache, the stable signing
       # certificate (TCC grants survive updates) and the Sparkle key. Only
       # this job compiles — `release` and `bump-cask` never invoke xcodebuild.
-      - name: Build universal release artifact
+      - name: Build Universal Release Artifact
         uses: ./.github/actions/build-release
         with:
           version: ${{ steps.version.outputs.version }}

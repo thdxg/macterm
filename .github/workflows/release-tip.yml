@@ -275,13 +275,13 @@ jobs:
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # The same recipe as stable releases and as the "Release build" check of
+      # The same recipe as stable releases and as the "Release Build" check of
       # every pull request, with the SAME certificate stable and beta use:
       # signing tip with a different identity (or ad-hoc) would reset the TCC
       # privacy grants of everyone who follows tip on every single build.
       # build.sh bakes MactermUpdateChannel=tip into the bundle, so this DMG
       # defaults to following tip even if someone downloads it by hand.
-      - name: Build universal tip artifact
+      - name: Build Universal Tip Artifact
         if: steps.published.outputs.published != 'true'
         uses: ./.github/actions/build-release
         with:

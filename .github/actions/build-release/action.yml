@@ -1,11 +1,11 @@
-name: Build release
+name: Build Release
 description: >-
   Build the universal Release app and its DMG with scripts/build.sh: the
   pinned Xcode, GhosttyKit and zmx from setup, and, for a build that ships,
   the stable signing certificate and the Sparkle public key.
 
 # One recipe for every Release build. release.yml (stable and beta),
-# release-tip.yml (tip) and test.yml ("Release build", on every pull request)
+# release-tip.yml (tip) and test.yml ("Release Build", on every pull request)
 # use it, so a pull request builds the app exactly as a release does. The
 # test build has no secrets: it is ad-hoc signed, has the Sparkle placeholder
 # key, and is never published. Each caller keeps its own job, so its
@@ -57,7 +57,7 @@ runs:
       uses: ./.github/actions/select-xcode
 
     # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
-    - name: Cache epoch
+    - name: Cache Epoch
       id: epoch
       shell: bash
       run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
@@ -89,7 +89,7 @@ runs:
 
     # The stable certificate keeps users' TCC grants across updates. The
     # rationale and the failure modes live in that action.
-    - name: Import signing certificate
+    - name: Import Signing Certificate
       if: inputs.distribute == 'true'
       uses: ./.github/actions/import-signing-cert
       with:
@@ -98,7 +98,7 @@ runs:
 
     # Direct script call, not `mise run build`: that also runs format, lint
     # and test, and checks.yml and test.yml gate those before any release.
-    - name: Build universal Release artifact
+    - name: Build Universal Release Artifact
       shell: bash
       env:
         VERSION: ${{ inputs.version }}
@@ -117,7 +117,7 @@ runs:
         fi
         VERSION="$VERSION" ./scripts/build.sh
 
-    - name: Check the bundle
+    - name: Check the Bundle
       shell: bash
       run: |
         APP=build/export/Macterm.app
