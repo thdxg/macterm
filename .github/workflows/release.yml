@@ -77,65 +77,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: jdx/mise-action@v5.2.0
-
-      # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
-      # currently ships, which is how macterm#340's type-check failure stayed
-      # invisible here. See the action for the full rationale. Only this job
-      # compiles — `release` and `bump-cask` never invoke xcodebuild.
-      - name: Select Xcode
-        id: xcode
-        uses: ./.github/actions/select-xcode
-
-      # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
-      - name: Cache epoch
-        id: epoch
-        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-
-      # GhosttyKit + bundled resources + zmx: shared verbatim with the test and
-      # benchmark workflows (identical key), so a release rides the cache they
-      # keep warm. Only the source-independent download is cached — NOT
-      # DerivedData: a release is a clean universal Release build so the shipped
-      # binary can't inherit a stale incremental artifact.
-      - name: Cache GhosttyKit
-        uses: actions/cache@v6
-        with:
-          path: |
-            GhosttyKit.xcframework
-            Macterm/Resources/ghostty
-            Macterm/Resources/terminfo
-            Macterm/Resources/zmx
-            .zmx-tag
-            .ghosttykit-tag
-          # The tag stamp is cached with the artifacts it describes (test.yml).
-          #
-          # NO restore-keys fallback: pairing a time-rolling key with a prefix
-          # restore-key re-saves stale content under the fresh key forever (see
-          # test.yml). Without it a new week re-downloads the current `latest`.
-          key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
-
-      - name: Setup GhosttyKit
-        run: mise run setup --verbose
-
-      # Signs with the stable self-signed release certificate so users' TCC
-      # privacy grants survive updates. Shared verbatim with release-tip.yml —
-      # the rationale, the failure modes, and the "never rotate casually"
-      # warning live in the action itself.
-      - name: Import signing certificate
-        uses: ./.github/actions/import-signing-cert
-        with:
-          certificate-p12: ${{ secrets.MACTERM_SIGNING_CERT_P12 }}
-          certificate-password: ${{ secrets.MACTERM_SIGNING_CERT_PASSWORD }}
-
-      - name: Build universal release artifact
+      # The tag pattern gates the version: a `-beta.N` suffix is accepted ONLY
+      # on a release flagged prerelease, so a stable release can never ship a
+      # beta version string (and a beta tag can't sneak into the stable
+      # channel by forgetting the flag).
+      - name: Check the version
+        id: version
         env:
-          SPARKLE_ED_PUBLIC_KEY: ${{ secrets.SPARKLE_ED_PUBLIC_KEY }}
           PRERELEASE: ${{ needs.flag.outputs.prerelease }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          # A `-beta.N` suffix is accepted ONLY on a release flagged prerelease,
-          # so a stable release can never ship a beta version string (and a beta
-          # tag can't sneak into the stable channel by forgetting the flag).
           if [[ "$PRERELEASE" == "true" ]]; then
             PATTERN='^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$'
             EXPECTED="vX.Y.Z or vX.Y.Z-beta.N"
@@ -147,16 +98,19 @@ jobs:
             echo "error: tag '$GITHUB_REF_NAME' is not $EXPECTED; refusing to build a placeholder release" >&2
             exit 1
           fi
-          if [[ -z "$SPARKLE_ED_PUBLIC_KEY" || "$SPARKLE_ED_PUBLIC_KEY" == "SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER" ]]; then
-            echo "error: SPARKLE_ED_PUBLIC_KEY is missing or still set to the local-build placeholder; refusing to build a release without auto-updates" >&2
-            exit 1
-          fi
-          # Release builds invoke the build script directly to skip the
-          # format/lint/test deps on `mise run build` — main is already
-          # format/lint-gated by checks.yml and test-gated by test.yml before
-          # a tag is cut, so a release just needs the build itself. Equivalent
-          # to the old ci:build.
-          VERSION="$VERSION" ./scripts/build.sh
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # The same recipe as tip and as the "Release build" check of every pull
+      # request: the pinned Xcode, the GhosttyKit cache, the stable signing
+      # certificate (TCC grants survive updates) and the Sparkle key. Only
+      # this job compiles — `release` and `bump-cask` never invoke xcodebuild.
+      - name: Build universal release artifact
+        uses: ./.github/actions/build-release
+        with:
+          version: ${{ steps.version.outputs.version }}
+          certificate-p12: ${{ secrets.MACTERM_SIGNING_CERT_P12 }}
+          certificate-password: ${{ secrets.MACTERM_SIGNING_CERT_PASSWORD }}
+          sparkle-public-key: ${{ secrets.SPARKLE_ED_PUBLIC_KEY }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

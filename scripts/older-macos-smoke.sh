@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Start a built Macterm on this Mac and check that it runs. CI builds the app
-# once with the pinned Xcode on the newest macOS, then runs this on older
-# macOS runners (test.yml, "Older macOS"), because no test suite runs there:
+# Start a built Macterm on this Mac and check that it runs. CI builds the
+# Release app once with the pinned Xcode on the newest macOS ("Release build"),
+# then runs this on older macOS runners (test.yml, "Smoke"), because no test
+# suite runs there:
 #
 #   - the app starts and its control socket answers `status`, so an SDK or a
 #     Swift runtime from the newer Xcode did not break the launch;

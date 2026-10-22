@@ -1,0 +1,127 @@
+name: Build release
+description: >-
+  Build the universal Release app and its DMG with scripts/build.sh: the
+  pinned Xcode, GhosttyKit and zmx from setup, and, for a build that ships,
+  the stable signing certificate and the Sparkle public key.
+
+# One recipe for every Release build. release.yml (stable and beta),
+# release-tip.yml (tip) and test.yml ("Release build", on every pull request)
+# use it, so a pull request builds the app exactly as a release does. The
+# test build has no secrets: it is ad-hoc signed, has the Sparkle placeholder
+# key, and is never published. Each caller keeps its own job, so its
+# concurrency, its gates and its publish steps stay where they are.
+#
+# The caller checks out the commit first (with tags: the version comes from
+# them). The app lands in build/export/Macterm.app and the DMG in build/.
+#
+# DerivedData is deliberately NOT cached: a Release build is a clean build, so
+# the shipped binary can't inherit a stale incremental artifact.
+
+inputs:
+  version:
+    description: The version that the bundle and the DMG carry.
+    required: true
+  distribute:
+    description: >-
+      "true" for a build that ships: it requires the certificate and the
+      Sparkle key, and refuses the placeholder key. "false" for a check build.
+    default: "true"
+  certificate-p12:
+    description: Base64-encoded PKCS#12 container (secrets.MACTERM_SIGNING_CERT_P12).
+    default: ""
+  certificate-password:
+    description: Password for the container (secrets.MACTERM_SIGNING_CERT_PASSWORD).
+    default: ""
+  sparkle-public-key:
+    description: secrets.SPARKLE_ED_PUBLIC_KEY.
+    default: ""
+  github-token:
+    description: For the release downloads of setup.
+    default: ${{ github.token }}
+
+outputs:
+  xcode-version:
+    description: The selected Xcode version.
+    value: ${{ steps.xcode.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - uses: jdx/mise-action@v5.2.0
+
+    # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
+    # currently ships, which is how macterm#340's type-check failure stayed
+    # invisible. See the action for the full rationale.
+    - name: Select Xcode
+      id: xcode
+      uses: ./.github/actions/select-xcode
+
+    # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
+    - name: Cache epoch
+      id: epoch
+      shell: bash
+      run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+    # GhosttyKit + bundled resources + zmx: the same key as the test and
+    # benchmark workflows, so a release rides the cache they keep warm.
+    - name: Cache GhosttyKit
+      uses: actions/cache@v6
+      with:
+        path: |
+          GhosttyKit.xcframework
+          Macterm/Resources/ghostty
+          Macterm/Resources/terminfo
+          Macterm/Resources/zmx
+          .zmx-tag
+          .ghosttykit-tag
+        # The tag stamp is cached with the artifacts it describes (test.yml).
+        #
+        # NO restore-keys fallback: pairing a time-rolling key with a prefix
+        # restore-key re-saves stale content under the fresh key forever (see
+        # test.yml). Without it a new week re-downloads the current `latest`.
+        key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
+
+    - name: Setup GhosttyKit
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: mise run setup --verbose
+
+    # The stable certificate keeps users' TCC grants across updates. The
+    # rationale and the failure modes live in that action.
+    - name: Import signing certificate
+      if: inputs.distribute == 'true'
+      uses: ./.github/actions/import-signing-cert
+      with:
+        certificate-p12: ${{ inputs.certificate-p12 }}
+        certificate-password: ${{ inputs.certificate-password }}
+
+    # Direct script call, not `mise run build`: that also runs format, lint
+    # and test, and checks.yml and test.yml gate those before any release.
+    - name: Build universal Release artifact
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        DISTRIBUTE: ${{ inputs.distribute }}
+        SPARKLE_ED_PUBLIC_KEY: ${{ inputs.sparkle-public-key }}
+      run: |
+        if [[ "$DISTRIBUTE" == "true" ]]; then
+          if [[ -z "$SPARKLE_ED_PUBLIC_KEY" || "$SPARKLE_ED_PUBLIC_KEY" == "SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER" ]]; then
+            echo "error: SPARKLE_ED_PUBLIC_KEY is missing or still set to the local-build placeholder; refusing to build a release without auto-updates" >&2
+            exit 1
+          fi
+        else
+          # build.sh accepts an ad-hoc signature and the placeholder key for a
+          # build that is never distributed.
+          unset SPARKLE_ED_PUBLIC_KEY
+        fi
+        VERSION="$VERSION" ./scripts/build.sh
+
+    - name: Check the bundle
+      shell: bash
+      run: |
+        APP=build/export/Macterm.app
+        codesign --verify --deep --strict "$APP"
+        lipo -info "$APP/Contents/MacOS/Macterm"
+        lipo -info "$APP/Contents/Helpers/macterm-icon-renderer"
+        ls -la build/*.dmg

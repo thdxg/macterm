@@ -909,9 +909,11 @@ Conventions:
 - Prove that something ran with markers that you assemble at run time (`printf started-%s <nonce>`). No signal for idle or running is independent of the environment.
 - CI runs it as `Test / End-to-end`. A failure uploads `e2e-diagnostics`.
 
-### Older macOS (`scripts/older-macos-smoke.sh`)
+### Release build and older macOS (`scripts/older-macos-smoke.sh`)
 
-Every other macOS job runs on `xcode-27` (macOS 27). `Test / Build for older macOS` builds the Debug app there once. `Test / Older macOS` starts that same build on `macos-26` and `macos-15`, isolated, and requires these things:
+`Test / Release build` builds the universal Release app and its DMG with `.github/actions/build-release`. This is the same recipe that `release.yml` and `release-tip.yml` use. The test build has no secrets: it is ad-hoc signed, has the Sparkle placeholder key, and is never published. A release never reuses it. A release always builds again from its tagged commit, with the certificate and the key.
+
+Every other macOS job runs on `xcode-27` (macOS 27). `Test / Smoke` starts the Release build on `macos-26` and `macos-15`, isolated, and requires these things:
 
 - The control socket answers `status`. A newer SDK or Swift runtime can break the launch on an older system without a compile error.
 - On macOS 26, the app paints its adaptive icon by itself, so the private renderer still works there. This is the only test of it on macOS 26. If the icon is not there, the script runs the helper by hand so that the helper's own error is in the log.
@@ -971,7 +973,7 @@ The script has these rules. We learned each one with the real app:
 
 ## Releasing
 
-Macterm updates itself with Sparkle. `SUFeedURL` is `https://macterm.thdxg.dev/appcast.xml`. `website/Caddyfile` serves it straight from the `gh-pages` branch, which is a store and not a site. A build that a pushed tag starts releases through `release.yml`.
+Macterm updates itself with Sparkle. `SUFeedURL` is `https://macterm.thdxg.dev/appcast.xml`. `website/Caddyfile` serves it straight from the `gh-pages` branch, which is a store and not a site. A build that a pushed tag starts releases through `release.yml`. `release.yml`, `release-tip.yml` and `Test / Release build` share one build recipe, `.github/actions/build-release`.
 
 Secrets:
 

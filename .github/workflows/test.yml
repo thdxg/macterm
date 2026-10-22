@@ -33,6 +33,7 @@ jobs:
               - ".github/workflows/test.yml"
               # The Xcode pin lives here; a bump must rebuild what it governs.
               - ".github/actions/select-xcode/**"
+              - ".github/actions/build-release/**"
               - "Macterm/Info.plist"
               - "Macterm/Macterm.entitlements"
               - "Macterm/*.xcstrings"
@@ -263,80 +264,55 @@ jobs:
           path: build/DerivedData
           key: ${{ steps.derived.outputs.cache-primary-key }}
 
-  # Every other macOS job runs on the newest macOS with the pinned Xcode, so
-  # nothing else runs the app on an older system. This builds it once, and
-  # `older-macos` starts that same build on older runners
-  # (scripts/older-macos-smoke.sh): it must launch there, and on macOS 26 it
-  # must paint its adaptive icon through the private renderer.
-  older-macos-build:
-    name: Build for older macOS
+  # The release build itself, from the recipe that release.yml and
+  # release-tip.yml use (.github/actions/build-release): a universal Release
+  # archive and a DMG from scripts/build.sh. With no secrets, so it is ad-hoc
+  # signed, has the Sparkle placeholder key and is never published. A release
+  # always builds again from its own commit; this only proves that it can.
+  release-build:
+    name: Release build
     needs: changes
     if: needs.changes.outputs.swift == 'true'
     runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
-      - uses: jdx/mise-action@v5.2.0
-
-      - name: Select Xcode
-        id: xcode
-        uses: ./.github/actions/select-xcode
-
-      - name: Cache epoch
-        id: epoch
-        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-
-      # Same key as the unit and end-to-end jobs.
-      - name: Cache GhosttyKit
-        uses: actions/cache@v6
         with:
-          path: |
-            GhosttyKit.xcframework
-            Macterm/Resources/ghostty
-            Macterm/Resources/terminfo
-            Macterm/Resources/zmx
-            .zmx-tag
-            .ghosttykit-tag
-          key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
+          # The version counts commits since the last vX.Y.Z tag.
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Setup GhosttyKit
-        run: mise run setup --verbose
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Restore only: the end-to-end job owns saving this namespace.
-      - name: Restore DerivedData (Debug)
-        uses: actions/cache/restore@v6
-        with:
-          path: build/DerivedData
-          key: derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
-          restore-keys: |
-            derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-
-            derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-
-
-      # The same build as scripts/e2e.sh.
-      - name: Build
+      - name: Version
+        id: version
         run: |
-          xcodegen generate --spec project.yml >/dev/null
-          xcodebuild -project Macterm.xcodeproj -scheme Macterm -configuration Debug \
-            -derivedDataPath build/DerivedData ONLY_ACTIVE_ARCH=YES build \
-            | (xcbeautify --quiet 2>/dev/null || cat)
+          source scripts/_lib.sh
+          echo "version=$(macterm_tip_version)" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        uses: ./.github/actions/build-release
+        with:
+          version: ${{ steps.version.outputs.version }}
+          distribute: "false"
 
       # ditto keeps the bundle's symlinks and signature, which a plain zip of
       # the folder does not.
       - name: Pack the app
-        run: ditto -c -k --keepParent "build/DerivedData/Build/Products/Debug/Macterm Debug.app" build/macterm-debug.zip
+        run: ditto -c -k --keepParent build/export/Macterm.app build/macterm-release.zip
 
       - uses: actions/upload-artifact@v7
         with:
-          name: macterm-debug-app
-          path: build/macterm-debug.zip
+          name: macterm-release-app
+          path: build/macterm-release.zip
           retention-days: 3
 
-  older-macos:
-    name: Older macOS (${{ matrix.runner }})
-    needs: older-macos-build
+  # Every other macOS job runs on the newest macOS with the pinned Xcode, so
+  # nothing else runs the app on an older system. This starts the Release
+  # build on older runners (scripts/older-macos-smoke.sh): it must launch
+  # there, and on macOS 26 it must paint its adaptive icon through the
+  # private renderer.
+  smoke:
+    name: Smoke (${{ matrix.runner }})
+    needs: release-build
     strategy:
       fail-fast: false
       matrix:
@@ -352,10 +328,10 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: macterm-debug-app
+          name: macterm-release-app
 
       - name: Unpack the app
-        run: ditto -x -k macterm-debug.zip build
+        run: ditto -x -k macterm-release.zip build
 
       - name: Smoke test
-        run: scripts/older-macos-smoke.sh "build/Macterm Debug.app"
+        run: scripts/older-macos-smoke.sh build/Macterm.app
