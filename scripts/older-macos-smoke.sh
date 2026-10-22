@@ -17,6 +17,9 @@ set -euo pipefail
 
 APP="${1:?usage: older-macos-smoke.sh <Macterm.app>}"
 [ -d "$APP" ] || { echo "error: no app at $APP" >&2; exit 1; }
+# Absolute: `defaults read` takes a relative path for a domain name, and the
+# process match below needs the full path.
+APP="$(cd "$(dirname "$APP")" && pwd -P)/$(basename "$APP")"
 CLI="$APP/Contents/Resources/bin/macterm"
 BUNDLE_ID="$(defaults read "$APP/Contents/Info.plist" CFBundleIdentifier)"
 VERSION="$(sw_vers -productVersion)"

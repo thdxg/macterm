@@ -356,8 +356,11 @@ struct UpdaterChannelTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let lib = repoRoot().appendingPathComponent("scripts/_lib.sh").path
+        // The runner's own git configuration (signing, hooks, a default
+        // branch) must not reach this repository.
         let script = """
         set -e
+        export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
         export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t
         export GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
         git init -q -b main .
@@ -379,19 +382,30 @@ struct UpdaterChannelTests {
         process.currentDirectoryURL = dir
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        let errors = Pipe()
+        process.standardError = errors
         try process.run()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let errorText = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         process.waitUntilExit()
         let version = String(decoding: data, as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        #expect(process.terminationStatus == 0)
+        // A thrown error reaches the CI log in full, where a comment on
+        // #expect does not.
+        if process.terminationStatus != 0 {
+            throw ScriptFailure(text: "exit \(process.terminationStatus): \(errorText)")
+        }
         // v1.10.0 (not v1.9.0 — version sort, not lexical) plus the two commits
         // on top of it.
         #expect(version == "1.10.0-tip.2")
         // And the result must round-trip through the comparison mapping.
         #expect(try runComparisonHelper(version) == "1.10.0.9999.2")
+    }
+
+    private struct ScriptFailure: Error, CustomStringConvertible {
+        let text: String
+        var description: String { text }
     }
 
     /// Runs the real `sparkle_comparison_version` from scripts/_lib.sh.
