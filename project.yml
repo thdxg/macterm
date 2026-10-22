@@ -158,6 +158,10 @@ targets:
       # the bundle, so it must exist before the app target finishes.
       - target: MactermCLI
         embed: false
+      # Build ordering only, as for the CLI: the post-build script copies the
+      # adaptive icon's renderer into Contents/Helpers.
+      - target: MactermIconRenderer
+        embed: false
       - framework: GhosttyKit.xcframework
         embed: false
       - package: Sparkle
@@ -208,6 +212,11 @@ targets:
           mkdir -p "$SHIM_DIR"
           cp "$SRCROOT/scripts/ghostty-shim.sh" "$SHIM_DIR/ghostty"
           chmod +x "$SHIM_DIR/ghostty"
+          # The adaptive icon's renderer (AdaptiveIconRenderer). Contents/Helpers,
+          # not Resources/bin: it is no command for a pane's PATH.
+          HELPERS_DIR="$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+          mkdir -p "$HELPERS_DIR"
+          cp "$BUILT_PRODUCTS_DIR/macterm-icon-renderer" "$HELPERS_DIR/macterm-icon-renderer"
 
   # The bundled control CLI (`macterm`). Shares ControlProtocol.swift with the
   # app target so the wire codec can never drift between the two,
@@ -234,6 +243,36 @@ targets:
         # shared products dir would otherwise clash).
         PRODUCT_MODULE_NAME: MactermCLI
         PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm.cli
+
+  # The adaptive icon's renderer (`macterm-icon-renderer`, Contents/Helpers).
+  # The only code that calls Apple's private IconRendering and CoreUI
+  # frameworks, in a process of its own so that a changed private API can
+  # stop only the helper, never the app (see IconRenderer/main.swift). Links
+  # against hand-written stubs (IconRenderer/PrivateInterfaces), not against
+  # any copy in Xcode, and shares the request type with the app.
+  MactermIconRenderer:
+    type: tool
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: IconRenderer/main.swift
+      - path: Macterm/App/AdaptiveIconRequest.swift
+    settings:
+      base:
+        PRODUCT_NAME: macterm-icon-renderer
+        PRODUCT_MODULE_NAME: MactermIconRenderer
+        PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm.icon-renderer
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        # The interfaces and stubs exist for arm64 only. An Intel Mac gets a
+        # helper it cannot run, and keeps the bundled icon.
+        ARCHS: arm64
+        SWIFT_INCLUDE_PATHS: "$(SRCROOT)/IconRenderer/PrivateInterfaces"
+        OTHER_SWIFT_FLAGS:
+          - "-Xcc"
+          - "-fmodule-map-file=$(SRCROOT)/IconRenderer/PrivateInterfaces/CoreUIPrivate/module.modulemap"
+        OTHER_LDFLAGS:
+          - "$(SRCROOT)/IconRenderer/PrivateInterfaces/IconRendering.tbd"
+          - "$(SRCROOT)/IconRenderer/PrivateInterfaces/CoreUI.tbd"
 
   MactermTests:
     type: bundle.unit-test

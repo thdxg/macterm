@@ -1,0 +1,10 @@
+--- !tapi-tbd
+# Link stub for the private CoreUI framework, which exists on disk only inside
+# the dyld shared cache. Lists the classes `macterm-icon-renderer` uses.
+tbd-version:     4
+targets:         [ arm64-macos, arm64e-macos ]
+install-name:    '/System/Library/PrivateFrameworks/CoreUI.framework/Versions/A/CoreUI'
+exports:
+  - targets:         [ arm64-macos, arm64e-macos ]
+    objc-classes:    [ CUICatalog, CUINamedIconLayerStack, CUINamedLookup ]
+...

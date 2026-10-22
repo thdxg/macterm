@@ -3,22 +3,29 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "AppIconPresenter")
 
-/// The one place the app icon is written. `GhosttyApp` decides what the config
-/// asks for (`GhosttyAppIcon`) on every load and reload; this installs it.
+/// The one place the app icon is written. `AdaptiveIconController` decides
+/// what the Dock shows — what the config asks for (`GhosttyAppIcon`), or the
+/// adaptive icon — and this installs it.
 ///
 /// `NSApp.applicationIconImage` is the API Ghostty documents for its
 /// `macos-icon` key: it changes the Dock tile and the app switcher, never the
 /// bundle's icon in Finder. Assigning nil restores the bundle icon, which is
-/// how an unset key, a bad path or an undecodable file all revert. Ghostty's
-/// Dock-tile plugin (which redraws the icon while the app isn't running) is
-/// deliberately not mirrored.
+/// how an unset key, a bad path, an undecodable file and a failed adaptive
+/// render all revert. Ghostty's Dock-tile plugin (which redraws the icon while
+/// the app isn't running) is deliberately not mirrored.
 @MainActor
 enum AppIconPresenter {
+    private enum Installed: Equatable {
+        case bundled
+        case custom
+        case adaptive
+    }
+
     /// What is installed right now. Lets a reload that keeps the bundled icon
     /// skip the AppKit write entirely — the common case for anyone who never
     /// set the key — while a custom icon is re-read on every reload so an
     /// edited image file is picked up the way Ghostty picks it up.
-    private static var installed: GhosttyAppIcon = .bundled
+    private static var installed: Installed = .bundled
 
     static func apply(_ icon: GhosttyAppIcon) {
         switch icon {
@@ -30,12 +37,17 @@ enum AppIconPresenter {
                 install(nil, as: .bundled)
                 return
             }
-            install(image, as: icon)
+            install(image, as: .custom)
             logger.info("app icon set from \(url.path, privacy: .public)")
         }
     }
 
-    private static func install(_ image: NSImage?, as icon: GhosttyAppIcon) {
+    /// The bundled icon repainted in the theme (`AdaptiveIconController`).
+    static func applyAdaptive(_ image: NSImage) {
+        install(image, as: .adaptive)
+    }
+
+    private static func install(_ image: NSImage?, as icon: Installed) {
         NSApp.applicationIconImage = image
         installed = icon
     }

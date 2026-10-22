@@ -729,6 +729,18 @@ final class Preferences {
         }
     }
 
+    /// The adaptive icon: the Dock icon repainted in the terminal theme's
+    /// colors (`AdaptiveIcon`, `AdaptiveIconController`). On by default — the
+    /// icon was designed to take the theme — and inert before macOS 26, under
+    /// a `macos-icon = custom` image, and while the system's icon style is
+    /// Clear or Tinted. Any render failure shows the bundled icon instead.
+    var adaptiveIcon: Bool {
+        didSet {
+            Keys.adaptiveIcon.write(adaptiveIcon, to: defaults)
+            AdaptiveIconController.shared.refresh()
+        }
+    }
+
     /// Hide the window's title bar entirely: the toolbar (sidebar toggle, tab
     /// switcher, update button), the title text, and — a side effect of
     /// SwiftUI removing the window toolbar — the traffic lights. The sidebar
@@ -958,6 +970,7 @@ final class Preferences {
         windowGlassEnabled = Keys.windowGlassEnabled.read(defaults)
         windowGlassStyle = Keys.windowGlassStyle.read(defaults)
         adaptiveTerminalChromeEnabled = Keys.adaptiveTerminalChromeEnabled.read(defaults)
+        adaptiveIcon = Keys.adaptiveIcon.read(defaults)
         hideTitleBar = Keys.hideTitleBar.read(defaults)
         ghosttyConfigSelection = Self.readGhosttyConfigSelection(from: defaults)
         passthroughPrograms = Keys.passthroughPrograms.read(defaults)
@@ -1143,6 +1156,7 @@ final class Preferences {
         static let windowGlassStyle = PreferenceStorageKey("macterm.window.glassStyle", default: WindowGlassStyle.regular)
         static let adaptiveTerminalChromeEnabled = PreferenceStorageKey("macterm.window.adaptiveTerminalChromeEnabled", default: false)
         static let hideTitleBar = PreferenceStorageKey("macterm.window.hideTitleBar", default: false)
+        static let adaptiveIcon = PreferenceStorageKey("macterm.window.adaptiveIcon", default: true)
         static let passthroughPrograms = PreferenceStorageKey("macterm.hotkey.passthroughPrograms", default: "")
         static let quickTerminalWidth = PreferenceStorageKey("macterm.quickTerminal.width", default: 0.6) {
             clampFraction($0, fallback: 0.6)

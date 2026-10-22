@@ -1231,6 +1231,15 @@ private struct AppearanceSettings: View {
                     .settingsCaption()
             }
 
+            // The icon is Liquid Glass, which only macOS 26 and later draw.
+            if AdaptiveIcon.systemDrawsGlassIcons {
+                Section("App Icon") {
+                    Toggle("Adaptive icon", isOn: $preferences.adaptiveIcon)
+                    Text("The Dock icon shows the colors of your terminal theme.")
+                        .settingsCaption()
+                }
+            }
+
             Section("Sidebar") {
                 Toggle("Peek sidebar when hidden", isOn: $peekSidebarWhenHidden)
                     .onChange(of: peekSidebarWhenHidden) { _, v in Preferences.shared.peekSidebarWhenHidden = v }

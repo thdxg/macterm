@@ -1,0 +1,76 @@
+// swift-interface-format-version: 1.0
+// swift-module-flags: -target arm64-apple-macos26.0 -enable-library-evolution -swift-version 5 -module-name IconRendering
+//
+// The part of Apple's private IconRendering framework (the renderer behind
+// every Liquid Glass `.icon`) that `macterm-icon-renderer` calls. Written by
+// hand: the framework ships no module. It is built with library evolution, so
+// a client needs only these declarations, not the types' layouts — but each
+// declaration must mangle exactly as the framework exports it: the kinds
+// (struct or enum), the names and the argument labels and types. A
+// declaration that no longer matches is a missing symbol, which stops the
+// helper at launch and leaves the app on its bundled icon. The symbols this
+// links against are listed in ../IconRendering.tbd.
+import CoreGraphics
+import CoreUIPrivate
+import Foundation
+import Swift
+
+public struct IconColor {
+  public init(red: Swift.Double, green: Swift.Double, blue: Swift.Double, alpha: Swift.Double)
+}
+
+public struct Icon {
+  public struct GradientPlacement {
+    public init(start: CoreGraphics.CGPoint, end: CoreGraphics.CGPoint)
+  }
+  public struct Fill {
+    public static func solid(_: IconRendering.IconColor) -> IconRendering.Icon.Fill
+    public static func gradient(start: IconRendering.IconColor, end: IconRendering.IconColor, placement: IconRendering.Icon.GradientPlacement?) -> IconRendering.Icon.Fill
+  }
+  public struct Element {
+    public var fill: IconRendering.Icon.Fill? { get set }
+  }
+  public struct Layer {
+    public var elements: [IconRendering.Icon.Element] { get set }
+  }
+  public var chiclet: IconRendering.Icon.Fill { get set }
+  public var layers: [IconRendering.Icon.Layer] { get set }
+}
+
+public enum ICRIconPlatform {
+  case main
+}
+
+public struct RenderingMode {
+  public static var color: IconRendering.RenderingMode { get }
+}
+
+public struct ICRRenderingParameters {
+}
+
+public struct ICRIconStyle {
+  public enum SystemAppearance {
+    case light
+    case dark
+  }
+  public init(platform: IconRendering.ICRIconPlatform, appearance: IconRendering.ICRIconStyle.SystemAppearance, renderingMode: IconRendering.RenderingMode)
+}
+
+public struct GlobalConfiguration {
+  public init()
+}
+
+public struct FinalizedIcon {
+  public struct Configuration {
+    public init(icon: IconRendering.Icon, style: IconRendering.ICRIconStyle, parametersOverride: IconRendering.ICRRenderingParameters?)
+  }
+  public struct ScaledSize {
+    public init(points: CoreGraphics.CGSize, scale: Swift.Int)
+  }
+  public init(config: IconRendering.FinalizedIcon.Configuration, size: IconRendering.FinalizedIcon.ScaledSize)
+  public func renderedIcon(with: IconRendering.GlobalConfiguration) -> CoreGraphics.CGImage?
+}
+
+extension CoreUIPrivate.CUINamedIconLayerStack {
+  public func makeIcon() throws -> IconRendering.Icon
+}

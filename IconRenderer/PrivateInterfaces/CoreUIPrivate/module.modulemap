@@ -1,0 +1,4 @@
+module CoreUIPrivate {
+    header "CoreUIPrivate.h"
+    export *
+}

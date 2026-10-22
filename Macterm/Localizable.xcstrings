@@ -847,6 +847,22 @@
         }
       }
     },
+    "Adaptive icon" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "적응형 아이콘"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自适应图标"
+          }
+        }
+      }
+    },
     "Add" : {
       "comment" : "Settings → General: the button of the open panel that adds Ghostty config files",
       "localizations" : {
@@ -1247,6 +1263,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "任意命令"
+          }
+        }
+      }
+    },
+    "App Icon" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앱 아이콘"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App 图标"
           }
         }
       }
@@ -8955,6 +8987,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "那不是磁盘上的文件夹。"
+          }
+        }
+      }
+    },
+    "The Dock icon shows the colors of your terminal theme." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dock 아이콘이 터미널 테마의 색상으로 표시됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "程序坞图标会显示终端主题的颜色。"
           }
         }
       }

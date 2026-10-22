@@ -46,6 +46,7 @@ Define a term only when it is Macterm-specific or when it is ambiguous. Do not d
 | **extension** | A folder that you install. It adds one or more palettes. |
 | **palette file** | A YAML file that defines one palette. |
 | **mirror** | The copy of a tab in a second window. Its panes follow the real panes. |
+| **adaptive icon** | The Dock icon of Macterm in the colors of your terminal theme. Write "Dock icon" for the icon in the Dock, and "app icon" for the icon in general. |
 | **CLI** | The `macterm` command. Write "the CLI". |
 | **agent skill** | A text file that teaches a coding agent to use the CLI. Write "skill" only in this meaning. |
 | **coding agent** | A program such as Claude Code that works in a terminal. Write "agent" after the first use. |

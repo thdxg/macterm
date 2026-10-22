@@ -270,8 +270,9 @@ final class GhosttyApp {
     /// way Ghostty.app does, so unsetting the key or fixing the path takes
     /// effect on the next reload without a relaunch. Both keys are read from
     /// the loaded config rather than the raw text so a `config-file` include
-    /// counts; the decision itself is `GhosttyAppIcon`, the write is
-    /// `AppIconPresenter`.
+    /// counts; the decision itself is `GhosttyAppIcon`. The config's choice
+    /// goes to `AdaptiveIconController`, which shows it or, for the bundled
+    /// icon, the adaptive icon; the write is `AppIconPresenter`.
     private func applyAppIcon() {
         let style = read(GhosttyAppIcon.styleKey)
         let customPath = read(GhosttyAppIcon.customPathKey)
@@ -285,7 +286,7 @@ final class GhosttyApp {
                 "macos-custom-icon = \(customPath ?? "", privacy: .public) is not an absolute path; using the bundled icon"
             )
         }
-        AppIconPresenter.apply(icon)
+        AdaptiveIconController.shared.configuredIconDidChange(icon)
     }
 
     /// Re-apply the *current* config object to the app and every live surface,
