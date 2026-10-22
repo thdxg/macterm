@@ -909,6 +909,16 @@ Conventions:
 - Prove that something ran with markers that you assemble at run time (`printf started-%s <nonce>`). No signal for idle or running is independent of the environment.
 - CI runs it as `Test / End-to-end`. A failure uploads `e2e-diagnostics`.
 
+### Older macOS (`scripts/older-macos-smoke.sh`)
+
+Every other macOS job runs on `xcode-27` (macOS 27). `Test / Build for older macOS` builds the Debug app there once. `Test / Older macOS` starts that same build on `macos-26` and `macos-15`, isolated, and requires these things:
+
+- The control socket answers `status`. A newer SDK or Swift runtime can break the launch on an older system without a compile error.
+- On macOS 26, the app paints its adaptive icon by itself, so the private renderer still works there. This is the only test of it on macOS 26. If the icon is not there, the script runs the helper by hand so that the helper's own error is in the log.
+- Before macOS 26, the app does not try.
+
+The CLI takes `--socket` after the subcommand (`macterm status --socket <path>`).
+
 ### Benchmarks
 
 `mise run bench` and `.github/workflows/benchmark.yml` measure the delta of CPU time, RSS and wakeups across `focused`, `workload-focused` and `workload-unfocused`. Darwin notifications drive them (`BenchmarkControl`, `MACTERM_BENCHMARK=1`, which also skips the notification prompt, Sparkle and the first-run seed).

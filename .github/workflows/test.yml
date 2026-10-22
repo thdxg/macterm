@@ -262,3 +262,100 @@ jobs:
         with:
           path: build/DerivedData
           key: ${{ steps.derived.outputs.cache-primary-key }}
+
+  # Every other macOS job runs on the newest macOS with the pinned Xcode, so
+  # nothing else runs the app on an older system. This builds it once, and
+  # `older-macos` starts that same build on older runners
+  # (scripts/older-macos-smoke.sh): it must launch there, and on macOS 26 it
+  # must paint its adaptive icon through the private renderer.
+  older-macos-build:
+    name: Build for older macOS
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    runs-on: xcode-27
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: jdx/mise-action@v5.2.0
+
+      - name: Select Xcode
+        id: xcode
+        uses: ./.github/actions/select-xcode
+
+      - name: Cache epoch
+        id: epoch
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      # Same key as the unit and end-to-end jobs.
+      - name: Cache GhosttyKit
+        uses: actions/cache@v6
+        with:
+          path: |
+            GhosttyKit.xcframework
+            Macterm/Resources/ghostty
+            Macterm/Resources/terminfo
+            Macterm/Resources/zmx
+            .zmx-tag
+            .ghosttykit-tag
+          key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
+
+      - name: Setup GhosttyKit
+        run: mise run setup --verbose
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Restore only: the end-to-end job owns saving this namespace.
+      - name: Restore DerivedData (Debug)
+        uses: actions/cache/restore@v6
+        with:
+          path: build/DerivedData
+          key: derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-
+            derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-
+
+      # The same build as scripts/e2e.sh.
+      - name: Build
+        run: |
+          xcodegen generate --spec project.yml >/dev/null
+          xcodebuild -project Macterm.xcodeproj -scheme Macterm -configuration Debug \
+            -derivedDataPath build/DerivedData ONLY_ACTIVE_ARCH=YES build \
+            | (xcbeautify --quiet 2>/dev/null || cat)
+
+      # ditto keeps the bundle's symlinks and signature, which a plain zip of
+      # the folder does not.
+      - name: Pack the app
+        run: ditto -c -k --keepParent "build/DerivedData/Build/Products/Debug/Macterm Debug.app" build/macterm-debug.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macterm-debug-app
+          path: build/macterm-debug.zip
+          retention-days: 3
+
+  older-macos:
+    name: Older macOS (${{ matrix.runner }})
+    needs: older-macos-build
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-26: the private renderer of the adaptive icon. macos-15: the
+        # launch of an app built with a newer SDK, below macOS 26. (macos-14
+        # is being retired on GitHub; 15 is the oldest image to keep.)
+        runner: [macos-26, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: macterm-debug-app
+
+      - name: Unpack the app
+        run: ditto -x -k macterm-debug.zip build
+
+      - name: Smoke test
+        run: scripts/older-macos-smoke.sh "build/Macterm Debug.app"
