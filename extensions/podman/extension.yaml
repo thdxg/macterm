@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
+name: Podman
+description: "Follow the logs of running containers and open shells in them"
+icon: icon.png
+authors: [thdxg]

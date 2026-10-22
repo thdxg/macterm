@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
+name: Podman
+description: Follow a running container's logs or open a shell in it
+requires: [podman]
+when: { run: podman info, unavailable: Podman is not running }
+root: containers
+nodes:
+  containers:
+    placeholder: Search containers...
+    list: podman ps --format json
+    title: ".Names[0]"
+    subtitle: .Image
+    match: [".Names[0]", .Image, .Status]
+    export: { CONTAINER: .Id }
+    enter: container
+  container:
+    items:
+      - { title: Logs, subtitle: Follow in a split, action: { run: podman logs -f "$CONTAINER", in: split } }
+      - { title: Shell, action: { run: podman exec -it "$CONTAINER" sh, in: split } }
+      - { title: Stop, action: { run: podman stop "$CONTAINER" } }
