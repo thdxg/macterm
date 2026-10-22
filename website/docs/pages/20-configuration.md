@@ -34,7 +34,7 @@ Macterm has its own defaults for a few keys. Macterm loads them before your conf
 
 | Key | Macterm default |
 | --- | --- |
-| `theme` | `"Rose Pine"` |
+| `theme` | `eyesclosed` |
 | `font-size` | `16` |
 | `macos-option-as-alt` | `true` |
 | `window-padding-x`, `window-padding-y` | `16` |
