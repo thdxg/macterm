@@ -87,6 +87,22 @@ enum MactermExtension {
             && !path.dropFirst(screenshotsFolder.count + 1).contains("/")
     }
 
+    /// The screenshots that the card of an extension shows, from the paths
+    /// of its files: the order that its README shows them in, then the
+    /// others by name, at most `maxScreenshots`. The README of each
+    /// extension shows its main screen first, and a file name says nothing
+    /// about the order (`branch.png` sorts before `branches.png`).
+    static func screenshots(in paths: some Sequence<String>, readme: String?) -> [String] {
+        let all = Set(paths.filter(isScreenshot))
+        var ordered: [String] = []
+        for match in (readme ?? "").matches(of: #/screenshots/[^\s)"'>]+/#) {
+            let path = String(match.output)
+            if all.contains(path), !ordered.contains(path) { ordered.append(path) }
+        }
+        ordered += all.subtracting(ordered).sorted()
+        return Array(ordered.prefix(maxScreenshots))
+    }
+
     /// The part of the screen a screenshot of a palette at `palette` shows,
     /// both in AppKit's screen coordinates: `screenshotPointSize`, centred on
     /// the palette across, `screenshotTopMargin` above it, and moved onto

@@ -5107,6 +5107,22 @@
         }
       }
     },
+    "Next Screenshot" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 스크린샷"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一张截图"
+          }
+        }
+      }
+    },
     "Next Tab" : {
       "localizations" : {
         "ko" : {
@@ -6592,6 +6608,22 @@
         }
       }
     },
+    "Previous Screenshot" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 스크린샷"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一张截图"
+          }
+        }
+      }
+    },
     "Previous Tab" : {
       "localizations" : {
         "ko" : {
@@ -7816,6 +7848,28 @@
         }
       }
     },
+    "Screenshot %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Screenshot %1$lld of %2$lld"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스크린샷 %1$lld / %2$lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截图 %1$lld / %2$lld"
+          }
+        }
+      }
+    },
     "Screenshot saved" : {
       "localizations" : {
         "ko" : {
@@ -8486,6 +8540,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示标签页状态指示器"
+          }
+        }
+      }
+    },
+    "Show the screenshots at full size" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스크린샷을 원래 크기로 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以原始大小显示截图"
           }
         }
       }
@@ -9243,6 +9313,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "该行没有目录"
+          }
+        }
+      }
+    },
+    "The screenshot is not an image that Macterm can read." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 읽을 수 있는 이미지가 아닌 스크린샷입니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该截图不是 Macterm 可以读取的图像。"
           }
         }
       }

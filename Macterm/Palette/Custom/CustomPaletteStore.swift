@@ -65,6 +65,9 @@ final class CustomPaletteStore {
         let paletteIDs: [String]
         /// What its card and each of its palettes show.
         let icon: PaletteIcon
+        /// The paths of its screenshots, in the order that its card shows
+        /// them (`MactermExtension.screenshots(in:readme:)`).
+        var screenshots: [String] = []
         /// Where it came from, when Install put it here. nil for an
         /// extension of the user's own.
         let source: ExtensionSource?
@@ -170,14 +173,19 @@ final class CustomPaletteStore {
             } else {
                 iconProblem.map { "\(MactermExtension.manifestName): \($0)" }
             }
+            let files = ExtensionSource.files(in: folder)
             return InstalledExtension(
                 id: id,
                 folder: folder,
                 manifest: manifest,
                 paletteIDs: palettes.map(\.id),
                 icon: icon,
+                screenshots: MactermExtension.screenshots(
+                    in: files.keys,
+                    readme: try? String(contentsOf: folder.appendingPathComponent(MactermExtension.readmeName), encoding: .utf8)
+                ),
                 source: ExtensionSource.read(in: folder),
-                files: ExtensionSource.files(in: folder),
+                files: files,
                 problem: problem,
                 features: palettes.map { palette in
                     String(

@@ -15,7 +15,8 @@ private let logger = Logger(subsystem: appBundleID, category: "PaletteRegistry")
 /// `<ref>:extensions`); their text — manifest, palettes, README, any script —
 /// comes from `raw.githubusercontent.com`, which the API's hourly limit
 /// doesn't count. Read each time Settings → Extensions opens, at most once an
-/// hour (`refreshInterval`), never in the background. Installing copies the
+/// hour (`refreshInterval`), never in the background. Screenshots are read
+/// only when a card shows them (`ExtensionScreenshotLoader`). Installing copies the
 /// folder into `~/.config/macterm/extensions/<id>/`; nothing here runs its
 /// commands.
 @MainActor @Observable
@@ -143,6 +144,9 @@ final class PaletteRegistry {
     /// Update and an automatic update must never write one folder at the
     /// same time.
     private(set) var writingIDs: Set<String> = []
+    /// The screenshots of the cards, read when a card shows them, through
+    /// the same `fetch`.
+    @ObservationIgnored let screenshots: ExtensionScreenshotLoader
 
     init(
         ref: String = PaletteRegistry.defaultRef,
@@ -150,6 +154,7 @@ final class PaletteRegistry {
     ) {
         self.ref = ref
         self.fetch = fetch
+        screenshots = ExtensionScreenshotLoader(ref: ref, fetch: fetch)
     }
 
     /// `main`. A debug build can read another branch with
