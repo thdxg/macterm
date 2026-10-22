@@ -130,13 +130,14 @@ func coverage(of image: CGImage) -> Double {
         bytesPerRow: side * 4,
         space: CGColorSpaceCreateDeviceRGB(),
         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-    ) else { return 0 }
+    )
+    else { return 0 }
     context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
-    let opaque = stride(from: 3, to: pixels.count, by: 4).filter { pixels[$0] > 128 }.count
+    let opaque = stride(from: 3, to: pixels.count, by: 4).count(where: { pixels[$0] > 128 })
     return Double(opaque) / Double(side * side)
 }
 
-// An empty render must never reach the Dock as a blank icon.
+/// An empty render must never reach the Dock as a blank icon.
 let covered = coverage(of: rendered)
 guard covered > 0.5 else {
     fail(.renderFailed, "IconRendering returned an image that covers \(Int(covered * 100))% of the icon")
