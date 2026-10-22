@@ -110,7 +110,10 @@ let finalized = FinalizedIcon(
     config: .init(icon: icon, style: style, parametersOverride: nil),
     size: .init(points: CGSize(width: body, height: body), scale: 1)
 )
-guard let rendered = finalized.renderedIcon(with: GlobalConfiguration()) else {
+let configuration = RequiredSymbols.isPresent(RequiredSymbols.configurationInits[0])
+    ? GlobalConfiguration(lightAngle: 0)
+    : GlobalConfiguration()
+guard let rendered = finalized.renderedIcon(with: configuration) else {
     fail(.renderFailed, "IconRendering returned no image")
 }
 

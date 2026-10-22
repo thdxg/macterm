@@ -6,8 +6,8 @@ import Foundation
 /// names every missing symbol in one exit (`apiMissing`), and the app keeps the
 /// bundled icon.
 ///
-/// The Swift symbols are the ones in `PrivateInterfaces/IconRendering.tbd`,
-/// without the leading underscore. `IconRendererSymbolsTests` keeps the two
+/// `swift` and `configurationInits` together are the symbols in
+/// `PrivateInterfaces/IconRendering.tbd`, without the leading underscore. `IconRendererSymbolsTests` keeps the two
 /// lists the same.
 enum RequiredSymbols {
     static let swift = [
@@ -47,11 +47,19 @@ enum RequiredSymbols {
         "$s13IconRendering12ICRIconStyleVMa",
         "$s13IconRendering15ICRIconPlatformO4mainyA2CmFWC",
         "$s13IconRendering15ICRIconPlatformOMa",
-        "$s13IconRendering19GlobalConfigurationVACycfC",
         "$s13IconRendering19GlobalConfigurationVMa",
         "$s13IconRendering22ICRRenderingParametersVMa",
         "$s13IconRendering22ICRRenderingParametersVMn",
         "$sSo22CUINamedIconLayerStackC0B9RenderingE04makeB0AC0B0VyKF",
+    ]
+
+    /// The constructors of `GlobalConfiguration`, in the order the helper
+    /// tries them. macOS 26 has no `init()`. `init(lightAngle: 0)` renders
+    /// the same icon, because `init()` sets `lightAngle` to 0 (measured on
+    /// macOS 27). One of the two is enough.
+    static let configurationInits = [
+        "$s13IconRendering19GlobalConfigurationV10lightAngleACSd_tcfC",
+        "$s13IconRendering19GlobalConfigurationVACycfC",
     ]
 
     /// The CoreUI classes in `PrivateInterfaces/CoreUI.tbd`.
@@ -59,9 +67,13 @@ enum RequiredSymbols {
 
     /// Each symbol and class that this process cannot find.
     static func missing() -> [String] {
-        let everywhere = UnsafeMutableRawPointer(bitPattern: -2) // RTLD_DEFAULT
-        let symbols = swift.filter { dlsym(everywhere, $0) == nil }
+        let symbols = swift.filter { !isPresent($0) }
         let classes = objcClasses.filter { NSClassFromString($0) == nil }
-        return symbols + classes
+        let configuration = configurationInits.contains(where: isPresent) ? [] : configurationInits
+        return symbols + configuration + classes
+    }
+
+    static func isPresent(_ symbol: String) -> Bool {
+        dlsym(UnsafeMutableRawPointer(bitPattern: -2), symbol) != nil // RTLD_DEFAULT
     }
 }

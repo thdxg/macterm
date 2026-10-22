@@ -58,6 +58,7 @@ public struct ICRIconStyle {
 
 public struct GlobalConfiguration {
   public init()
+  public init(lightAngle: Swift.Double)
 }
 
 public struct FinalizedIcon {
