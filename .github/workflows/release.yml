@@ -67,7 +67,7 @@ jobs:
 
   build:
     needs: flag
-    runs-on: macos-26
+    runs-on: xcode-27
     permissions:
       contents: write
     env:
@@ -79,7 +79,7 @@ jobs:
 
       - uses: jdx/mise-action@v5.2.0
 
-      # Pin the toolchain: `macos-26` defaults to whatever Xcode the image
+      # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
       # currently ships, which is how macterm#340's type-check failure stayed
       # invisible here. See the action for the full rationale. Only this job
       # compiles — `release` and `bump-cask` never invoke xcodebuild.
@@ -166,7 +166,7 @@ jobs:
 
   release:
     needs: [flag, build]
-    runs-on: macos-26
+    runs-on: xcode-27
     permissions:
       contents: write
       pages: write
@@ -256,7 +256,7 @@ jobs:
     # carries a real JSON boolean; that property is lost the moment the value
     # comes from a job output.)
     if: ${{ needs.flag.outputs.prerelease == 'false' }}
-    runs-on: macos-26
+    runs-on: xcode-27
     env:
       GH_TOKEN: ${{ secrets.HOMEBREW_TAP_PAT }}
       VERSION: ${{ needs.release.outputs.version }}

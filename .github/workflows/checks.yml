@@ -36,7 +36,7 @@ jobs:
     name: Format
     needs: changes
     if: needs.changes.outputs.swift == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -50,7 +50,7 @@ jobs:
     name: Lint
     needs: changes
     if: needs.changes.outputs.swift == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@v7

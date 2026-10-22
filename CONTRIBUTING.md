@@ -6,9 +6,9 @@ This guide is for work on the app. To contribute an extension, see the [`extensi
 
 ## Setup
 
-You need macOS 26 or later and a full installation of Xcode 26. The Command Line Tools are not enough. `xcodebuild` needs the Xcode app to build the macOS app target. The code uses macOS 26 SDK APIs behind `#available` checks. The shipped app runs on macOS 14 or later.
+You need macOS 26 or later and a full installation of Xcode 27. The app icon uses Icon Composer 27 features, and the asset compiler of Xcode 26 cannot build it. The Command Line Tools are not enough. `xcodebuild` needs the Xcode app to build the macOS app target. The code uses macOS 26 SDK APIs behind `#available` checks. The shipped app runs on macOS 14 or later.
 
-CI builds with one pinned Xcode version (`.github/actions/select-xcode`). A green CI run therefore names a known toolchain. Any Xcode 26 works on your Mac. CI does not catch a failure that only occurs with an Xcode 26.x older than the pin. That is how [#340](https://github.com/thdxg/macterm/pull/340) reached main.
+CI builds with one pinned Xcode version (`.github/actions/select-xcode`). A green CI run therefore names a known toolchain. Any Xcode 27 works on your Mac. CI does not catch a failure that only occurs with an Xcode 27.x older than the pin. That is how [#340](https://github.com/thdxg/macterm/pull/340) reached main.
 
 Install the tools:
 

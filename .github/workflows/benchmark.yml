@@ -101,7 +101,7 @@ jobs:
     if: |
       always() && needs.changes.outputs.swift == 'true'
       && needs.baseline.result != 'cancelled'
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
     # Read-only: the label/comment writes live in benchmark-report.yml, which
     # runs with a read/write token because a fork PR can't get one here. This
@@ -115,7 +115,7 @@ jobs:
 
       - uses: jdx/mise-action@v5.2.0
 
-      # Pin the toolchain: `macos-26` defaults to whatever Xcode the image
+      # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
       # currently ships, which is how macterm#340's type-check failure stayed
       # invisible here. See the action for the full rationale.
       - name: Select Xcode

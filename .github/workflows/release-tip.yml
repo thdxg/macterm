@@ -188,7 +188,7 @@ jobs:
     name: Build and publish
     needs: gate
     if: needs.gate.outputs.build == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     # The newest commit replaces an older one still building: a tip build is
     # ~20 minutes of macOS runner, and finishing one that a newer commit has
     # already outdated only publishes it for a newer one to overwrite.
@@ -278,7 +278,7 @@ jobs:
       - uses: jdx/mise-action@v5.2.0
         if: steps.published.outputs.published != 'true'
 
-      # Pin the toolchain: `macos-26` defaults to whatever Xcode the image
+      # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
       # currently ships, which is how macterm#340's type-check failure stayed
       # invisible here. See the action for the full rationale.
       - name: Select Xcode

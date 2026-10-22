@@ -8,9 +8,13 @@ description: >
 # unpinned until macterm#340: `MactermApp.body` failed to type-check on Xcode
 # 26.3 while compiling fine on the 26.6 that `macos-26` happened to default to,
 # so nothing here could see it. Pinning doesn't by itself test the older Xcode
-# a contributor may have — CONTRIBUTING.md asks only for "Xcode 26" — but it
+# a contributor may have — CONTRIBUTING.md asks only for "Xcode 27" — but it
 # does mean a green run names a toolchain, and that a future image bump is a
 # reviewable one-line change instead of a silent one.
+#
+# Xcode 27 because AppIcon.icon uses Icon Composer 27 keys (refractivity, inner
+# specular): the actool of Xcode 26 stops on them. Xcode 27 is only on GitHub's
+# `xcode-27` image (macOS 27), so every macOS job runs there.
 
 inputs:
   version:
@@ -18,7 +22,7 @@ inputs:
       Xcode version to select, spelled as it appears in
       /Applications/Xcode_<version>.app on the runner image.
     required: false
-    default: "26.6"
+    default: "27.1"
 
 outputs:
   version:
