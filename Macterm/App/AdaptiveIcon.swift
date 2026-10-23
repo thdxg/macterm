@@ -22,7 +22,8 @@ enum AdaptiveIcon {
     struct Paint: Equatable {
         var backgroundTop: Color
         var backgroundBottom: Color
-        /// Bottom to top: back pane, middle pane, front pane, frame.
+        /// Bottom to top, one for each group: the characters, the back pane,
+        /// the middle pane, and the front pane with the frame.
         var layers: [Color]
     }
 
@@ -44,7 +45,8 @@ enum AdaptiveIcon {
     ///
     /// - The frame and the front pane are the gray that stands out most from
     ///   the background: palette 15 in most dark themes, palette 0 in a light
-    ///   theme whose black is its text color.
+    ///   theme whose black is its text color. They share a group, and a
+    ///   group takes one color.
     /// - The back pane is another gray, the one nearest 45% of that distance.
     ///   It is nearly always palette 8. Palette 0 is often the background
     ///   itself, and palette 7 is often as bright as palette 15. It must be at
@@ -53,11 +55,15 @@ enum AdaptiveIcon {
     ///   back and the front pane, at least `minimumStep` from each. If no
     ///   entry clears both steps, the nearest entry on the front side of the
     ///   back pane.
-    /// - The background runs from palette 0 mixed 23% into the background,
-    ///   down to the background.
+    /// - The characters behind the panes take the back pane's color. The
+    ///   layer is faint, so the back pane's step from the background keeps
+    ///   them quiet in every theme.
+    /// - The background is flat: the theme background. The characters thin
+    ///   out toward the bottom, which is the icon's gradient.
     ///
     /// In eyesclosed, the theme the icon was drawn in, this picks palette 8,
-    /// 5 and 15, which are the bundled icon's own fills. Nil when the theme
+    /// 5 and 15 and the background #111214, which are the bundled icon's own
+    /// fills. Nil when the theme
     /// has no such ramp: no gray differs from the background, no other gray
     /// stands apart from both ends, or no color entry is between the back
     /// and the front pane's side.
@@ -75,9 +81,9 @@ enum AdaptiveIcon {
         let candidates = clear.isEmpty ? accentEntries.filter { share[$0] > share[back] } : clear
         guard let middle = first(of: candidates, by: { abs(share[$0] - target) }) else { return nil }
         return Paint(
-            backgroundTop: mix(theme.palette[0], into: theme.background, amount: 0.23),
+            backgroundTop: theme.background,
             backgroundBottom: theme.background,
-            layers: [theme.palette[back], theme.palette[middle], theme.palette[front], theme.palette[front]]
+            layers: [theme.palette[back], theme.palette[back], theme.palette[middle], theme.palette[front]]
         )
     }
 
@@ -102,15 +108,6 @@ enum AdaptiveIcon {
         let m = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
         let s = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
         return 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s
-    }
-
-    /// `amount` of `color` over `base`, per sRGB component.
-    static func mix(_ color: Color, into base: Color, amount: Double) -> Color {
-        Color(
-            red: base.red + (color.red - base.red) * amount,
-            green: base.green + (color.green - base.green) * amount,
-            blue: base.blue + (color.blue - base.blue) * amount
-        )
     }
 
     /// The global default that holds the system's icon style (System Settings

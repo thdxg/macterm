@@ -150,13 +150,15 @@ struct AdaptiveIconRendererTests {
             "the test host has no Contents/Helpers/macterm-icon-renderer"
         )
         // Each pane gets a pure color of its own, so a pane that takes
-        // another layer's fill (IconRendering changed its order) shows.
+        // another layer's fill (IconRendering changed its order) shows. The
+        // characters, at the bottom, are violet: the screen check below
+        // stays true where they cover it.
         var request = Self.request
         request.layers = [
+            .init(red: 0.5, green: 0, blue: 1),
             .init(red: 1, green: 0, blue: 0),
             .init(red: 0, green: 1, blue: 0),
             .init(red: 0, green: 0, blue: 1),
-            .init(red: 1, green: 1, blue: 0),
         ]
         let result = await AdaptiveIconRenderer.render(request)
         let png = try result.get()

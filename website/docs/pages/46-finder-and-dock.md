@@ -37,7 +37,8 @@ Each pane of the icon is one color from the palette of the theme. The panes go f
 | Frame and front pane | The gray that stands out most from the background: `palette = 15`, `7`, `8` or `0` |
 | Back pane | Another of those grays, at about half that distance from the background. This is usually `palette = 8`. |
 | Middle pane | The color from `palette = 1` to `6` and `9` to `14` whose lightness is nearest the middle between the back pane and the front pane. Only a color on the same side of the background as the front pane counts. |
-| Background | `background`, with `palette = 0` mixed in at the top |
+| Characters behind the panes | The color of the back pane |
+| Background | `background` |
 
 The icon was drawn in eyesclosed, the default theme of Macterm. With eyesclosed, the Dock icon has the same colors as the usual icon of Macterm.
 

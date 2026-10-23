@@ -41,6 +41,11 @@ enum IconCanvas {
     static let shadowBlur = 32.0 / 1024.0
     static let shadowOffset = 8.0 / 1024.0
     static let shadowAlpha = 0.25
+    /// The direction of the light, in radians. IconRendering's default, 0,
+    /// lights the top rims. 2.6 lights the tops and the top-right corners of
+    /// the panes, as the design does. A system render of the bundled icon
+    /// uses the system's own light.
+    static let lightAngle = 2.6
 }
 
 func iconColor(_ color: AdaptiveIconRequest.Color) -> IconColor {
@@ -111,7 +116,7 @@ let finalized = FinalizedIcon(
     size: .init(points: CGSize(width: body, height: body), scale: 1)
 )
 let configuration = RequiredSymbols.isPresent(RequiredSymbols.configurationInits[0])
-    ? GlobalConfiguration(lightAngle: 0)
+    ? GlobalConfiguration(lightAngle: IconCanvas.lightAngle)
     : GlobalConfiguration()
 guard let rendered = finalized.renderedIcon(with: configuration) else {
     fail(.renderFailed, "IconRendering returned no image")

@@ -108,14 +108,24 @@ struct AdaptiveIconTests {
         for (painted, bundled) in zip(paint.layers, fills) {
             #expect(Self.close(painted, bundled), "painted \(painted), bundled \(bundled)")
         }
-        #expect(paint.layers == Self.colors(Self.eyesclosed, [8, 5, 15, 15]))
+        #expect(paint.layers == Self.colors(Self.eyesclosed, [8, 8, 5, 15]))
     }
 
+    /// The background is flat: the characters draw the icon's gradient.
     @Test
-    func theBackgroundRunsFromALighterTopToTheThemeBackground() throws {
+    func theBackgroundIsTheThemeBackground() throws {
         let paint = try #require(AdaptiveIcon.paint(for: Self.eyesclosed))
+        #expect(paint.backgroundTop == Self.hex(0x111214))
         #expect(paint.backgroundBottom == Self.hex(0x111214))
-        #expect(Self.close(paint.backgroundTop, Self.hex(0x1A1B20)))
+    }
+
+    /// The characters behind the panes take the back pane's color.
+    @Test
+    func theCharactersTakeTheBackPanesColor() throws {
+        for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight, Self.midGray] {
+            let paint = try #require(AdaptiveIcon.paint(for: theme))
+            #expect(paint.layers[0] == paint.layers[1])
+        }
     }
 
     /// Every pane is one palette entry as the theme has it, never a mix.
@@ -129,16 +139,16 @@ struct AdaptiveIconTests {
 
     @Test
     func theMiddlePaneIsTheColorNearestTheMiddleOfTheRamp() {
-        #expect(AdaptiveIcon.paint(for: Self.rosePine)?.layers == Self.colors(Self.rosePine, [8, 1, 15, 15]))
+        #expect(AdaptiveIcon.paint(for: Self.rosePine)?.layers == Self.colors(Self.rosePine, [8, 8, 1, 15]))
         // Palette 0 is the background in Gruvbox, so the back pane is palette 8.
-        #expect(AdaptiveIcon.paint(for: Self.gruvboxDark)?.layers == Self.colors(Self.gruvboxDark, [8, 14, 15, 15]))
+        #expect(AdaptiveIcon.paint(for: Self.gruvboxDark)?.layers == Self.colors(Self.gruvboxDark, [8, 8, 14, 15]))
     }
 
     /// The front pane is the gray that stands out most, which in a light
     /// theme is a black entry, and in Catppuccin Mocha is palette 7.
     @Test
     func theFrontPaneIsTheGrayThatStandsOutMost() {
-        #expect(AdaptiveIcon.paint(for: Self.gitHubLight)?.layers == Self.colors(Self.gitHubLight, [15, 9, 0, 0]))
+        #expect(AdaptiveIcon.paint(for: Self.gitHubLight)?.layers == Self.colors(Self.gitHubLight, [15, 15, 9, 0]))
         #expect(AdaptiveIcon.paint(for: Self.catppuccinMocha)?.layers.last == Self.catppuccinMocha.palette[7])
     }
 
@@ -150,7 +160,8 @@ struct AdaptiveIconTests {
         for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight, Self.midGray] {
             let paint = try #require(AdaptiveIcon.paint(for: theme))
             let background = AdaptiveIcon.lightness(theme.background)
-            let offset = paint.layers.map { AdaptiveIcon.lightness($0) - background }
+            // The panes only: the first layer is the characters.
+            let offset = paint.layers.dropFirst().map { AdaptiveIcon.lightness($0) - background }
             let distance = offset.map { $0 * (offset[2] < 0 ? -1 : 1) }
             let front = distance[2]
             #expect(distance[0] / front >= AdaptiveIcon.minimumStep, "back pane too close to the background")
@@ -179,7 +190,7 @@ struct AdaptiveIconTests {
     /// a step toward it.
     @Test
     func theMiddlePaneIsOnTheFrontPanesSideOfTheBackground() {
-        #expect(AdaptiveIcon.paint(for: Self.midGray)?.layers == Self.colors(Self.midGray, [8, 3, 15, 15]))
+        #expect(AdaptiveIcon.paint(for: Self.midGray)?.layers == Self.colors(Self.midGray, [8, 8, 3, 15]))
         // With palette 3 dark too, no color entry is on that side.
         #expect(AdaptiveIcon.paint(for: Self.midGrayTheme(palette3: 0x303000)) == nil)
     }
@@ -189,12 +200,6 @@ struct AdaptiveIconTests {
         #expect(abs(AdaptiveIcon.lightness(Self.hex(0x000000))) < 1e-6)
         #expect(abs(AdaptiveIcon.lightness(Self.hex(0xFFFFFF)) - 1) < 1e-3)
         #expect(AdaptiveIcon.lightness(Self.hex(0x696D7D)) < AdaptiveIcon.lightness(Self.hex(0x9A9DAE)))
-    }
-
-    @Test
-    func mixIsLinearPerComponent() {
-        let mixed = AdaptiveIcon.mix(Color(red: 1, green: 0.5, blue: 0), into: Color(red: 0, green: 0.5, blue: 1), amount: 0.25)
-        #expect(mixed == Color(red: 0.25, green: 0.5, blue: 0.75))
     }
 
     // MARK: - Icon style

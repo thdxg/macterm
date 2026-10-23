@@ -54,9 +54,10 @@ enum RequiredSymbols {
     ]
 
     /// The constructors of `GlobalConfiguration`, in the order the helper
-    /// tries them. macOS 26 has no `init()`. `init(lightAngle: 0)` renders
-    /// the same icon, because `init()` sets `lightAngle` to 0 (measured on
-    /// macOS 27). One of the two is enough.
+    /// tries them. macOS 26 has no `init()`. `init(lightAngle:)` sets the
+    /// design's light (`IconCanvas.lightAngle`). `init()` sets `lightAngle`
+    /// to 0 (measured on macOS 27): the same icon, lit from the top. One of
+    /// the two is enough.
     static let configurationInits = [
         "$s13IconRendering19GlobalConfigurationV10lightAngleACSd_tcfC",
         "$s13IconRendering19GlobalConfigurationVACycfC",
