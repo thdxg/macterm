@@ -223,4 +223,17 @@ struct OpenFolderTests {
 
         #expect(info["MDItemKeywords"] as? String == "Terminal")
     }
+
+    @Test
+    func files_show_the_document_icon_and_folders_keep_their_own() throws {
+        let info = try #require(Bundle.main.infoDictionary)
+        let types = try #require(info["CFBundleDocumentTypes"] as? [[String: Any]])
+        for entry in types {
+            let name = entry["CFBundleTypeName"] as? String
+            // Finder draws a folder that opens with Macterm as a folder.
+            let expected = name == "Folders" ? nil : "Document"
+            #expect(entry["CFBundleTypeIconFile"] as? String == expected, "\(name ?? "?")")
+        }
+        #expect(Bundle.main.url(forResource: "Document", withExtension: "icns") != nil)
+    }
 }

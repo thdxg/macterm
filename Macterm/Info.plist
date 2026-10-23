@@ -61,6 +61,8 @@
 			</array>
 		</dict>
 		<dict>
+			<key>CFBundleTypeIconFile</key>
+			<string>Document</string>
 			<key>CFBundleTypeName</key>
 			<string>Text Files</string>
 			<key>CFBundleTypeRole</key>
@@ -73,6 +75,8 @@
 			</array>
 		</dict>
 		<dict>
+			<key>CFBundleTypeIconFile</key>
+			<string>Document</string>
 			<key>CFBundleTypeName</key>
 			<string>Source Files</string>
 			<key>CFBundleTypeRole</key>
