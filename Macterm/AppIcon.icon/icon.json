@@ -18,14 +18,14 @@
           "hidden" : false,
           "image-name" : "front-pane.png",
           "name" : "front-pane",
+          "opacity" : 0.5,
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
               -464.9999999999999,
               -217.99999999999983
             ]
-          },
-          "opacity" : 0.5
+          }
         },
         {
           "fill" : {
@@ -34,14 +34,14 @@
           "hidden" : false,
           "image-name" : "frame.png",
           "name" : "frame",
+          "opacity" : 0.7,
           "position" : {
             "scale" : 0.8793103448275863,
             "translation-in-points" : [
               0,
               0
             ]
-          },
-          "opacity" : 0.7
+          }
         }
       ],
       "lighting" : "individual",
@@ -79,14 +79,14 @@
           "hidden" : false,
           "image-name" : "middle-pane.png",
           "name" : "middle-pane",
+          "opacity" : 0.6,
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
               -373.9999999999998,
               -217.99999999999994
             ]
-          },
-          "opacity" : 0.6
+          }
         }
       ],
       "lighting" : "individual",
@@ -124,14 +124,14 @@
           "hidden" : false,
           "image-name" : "back-pane.png",
           "name" : "back-pane",
+          "opacity" : 0.5,
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
               -299.9999999999999,
               -217.99999999999983
             ]
-          },
-          "opacity" : 0.5
+          }
         }
       ],
       "lighting" : "individual",
@@ -166,7 +166,7 @@
           "fill" : {
             "solid" : "srgb:0.41176,0.42745,0.49020,1.00000"
           },
-          "glass" : false,
+          "glass" : true,
           "hidden" : false,
           "image-name" : "ascii.png",
           "name" : "ascii",
@@ -194,8 +194,8 @@
       },
       "specular" : false,
       "translucency" : {
-        "enabled" : false,
-        "value" : 0
+        "enabled" : true,
+        "value" : 0.6
       }
     }
   ],
