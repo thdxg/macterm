@@ -5,7 +5,8 @@
 // assets/demo/), so the only images left to render are the ones every page
 // loads in its <head>:
 //   img/og.png                1200x630 social card, letterboxed on the canvas
-//   img/icon-<size>.png       favicon, apple-touch-icon and header brand mark
+//   img/icon-<size>.png       favicon and apple-touch-icon
+//   img/app-icon-<size>.png   the app icon above the landing page's hero text
 //
 // The originals in assets/ stay untouched and authoritative; everything here is
 // a generated artifact (public/img/ is gitignored), so replacing an original is
@@ -33,8 +34,11 @@ const OUT_DIR = join(here, "public", "img");
 const OG = { width: 1200, height: 630, background: "#111214" };
 
 // 180 is the apple-touch-icon size iOS actually asks for; 32 and 16 are the
-// classic favicon rungs. The 508x508 original has no business being either.
+// classic favicon rungs. The 1024x1024 original has no business being either.
 const ICON_SIZES = [180, 32, 16];
+
+// The hero shows the app icon at 64 CSS px: 1x and 2x.
+const HERO_ICON_SIZES = [64, 128];
 
 // From the hero, the same image the repo README leads with.
 async function buildOgCard() {
@@ -53,21 +57,26 @@ async function buildOgCard() {
     .toFile(join(OUT_DIR, "og.png"));
 }
 
-// Built from the bare glyph, not the full app icon: the site's brand mark sits
-// on the header's own dark ground and a favicon sits on the browser's, so the
-// icon's background plate would read as a plate rather than as the mark. The
-// glyph is the three panes cropped to their bounds and padded to a square, so
-// it needs no re-cropping.
+// Built from the app icon itself, the same image the README leads with.
+// icons/icon.png is the full-bleed squircle with transparent corners and no
+// padding or shadow, so it needs no cropping. The apple-touch-icon is flattened
+// onto the site's ground: iOS fills transparent pixels with black and applies
+// its own corner mask.
 async function buildIcons() {
-  const input = join(SRC_DIR, "icons", "glyph.png");
+  const input = join(SRC_DIR, "icons", "icon.png");
   if (!existsSync(input)) {
     throw new Error(`build-images: ${input} is missing — no icons to build`);
   }
   for (const size of ICON_SIZES) {
+    let image = sharp(input).resize({ width: size, height: size });
+    if (size === 180) image = image.flatten({ background: OG.background });
+    await image.png({ compressionLevel: 9 }).toFile(join(OUT_DIR, `icon-${size}.png`));
+  }
+  for (const size of HERO_ICON_SIZES) {
     await sharp(input)
       .resize({ width: size, height: size })
       .png({ compressionLevel: 9 })
-      .toFile(join(OUT_DIR, `icon-${size}.png`));
+      .toFile(join(OUT_DIR, `app-icon-${size}.png`));
   }
 }
 
@@ -75,7 +84,9 @@ async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   await buildOgCard();
   await buildIcons();
-  console.log(`build-images: wrote og.png and ${ICON_SIZES.length} icons to ${OUT_DIR}`);
+  console.log(
+    `build-images: wrote og.png, ${ICON_SIZES.length} icons and ${HERO_ICON_SIZES.length} hero icons to ${OUT_DIR}`,
+  );
 }
 
 await main();
