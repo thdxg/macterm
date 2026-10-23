@@ -37,7 +37,7 @@ Macterm has its own defaults for a few keys. Macterm loads them before your conf
 | `theme` | `eyesclosed` |
 | `font-size` | `16` |
 | `macos-option-as-alt` | `true` |
-| `window-padding-x`, `window-padding-y` | `16` |
+| `window-padding-x`, `window-padding-y` | `12` |
 | `tab-inherit-working-directory` | `false`. New tabs start at the project root. |
 | `macos-secure-input-indication` | `false`. The password bubble marks a password prompt instead. |
 | `background-opacity-cells` | `true`. The backgrounds that a program paints follow the window opacity. |

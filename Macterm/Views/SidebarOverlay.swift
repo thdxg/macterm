@@ -132,7 +132,7 @@ enum SidebarPeekInteraction {
 enum SidebarOverlayMetrics {
     static let panelInset: CGFloat = 4
     /// The strip at the leading edge that opens a peek by itself. Both trigger
-    /// widths stay inside the terminal's 16-point `window-padding-x`
+    /// widths stay inside the terminal's 12-point `window-padding-x`
     /// (`MactermConfig.defaultsBody`), so no pointer over text can open a peek:
     /// #447 was the overlay opening while the pointer travelled leftward to
     /// select the first characters of a line, because the approach corridor

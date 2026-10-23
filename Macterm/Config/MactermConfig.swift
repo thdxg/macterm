@@ -177,11 +177,11 @@ final class MactermConfig {
             note: "The Option key sends Alt to the program in the pane. Set false to type special characters with it."
         ),
         .init(
-            line: "window-padding-x = 16",
+            line: "window-padding-x = 12",
             note: "The space between the text and the left and right edges of a pane, in points."
         ),
         .init(
-            line: "window-padding-y = 16",
+            line: "window-padding-y = 12",
             note: "The space between the text and the top and bottom edges of a pane, in points."
         ),
         // A new tab starts at the project root; ghostty would start it in the
