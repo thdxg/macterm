@@ -54,9 +54,9 @@
         ]
       },
       "refractivity" : {
-        "depth" : 0.04,
+        "depth" : 0.03,
         "enabled" : true,
-        "strength" : 0.3
+        "strength" : 0.22
       },
       "shadow" : {
         "kind" : "neutral",
@@ -99,9 +99,9 @@
         ]
       },
       "refractivity" : {
-        "depth" : 0.04,
+        "depth" : 0.03,
         "enabled" : true,
-        "strength" : 0.3
+        "strength" : 0.22
       },
       "shadow" : {
         "kind" : "neutral",
@@ -144,9 +144,9 @@
         ]
       },
       "refractivity" : {
-        "depth" : 0.085,
+        "depth" : 0.06,
         "enabled" : true,
-        "strength" : 0.6
+        "strength" : 0.42
       },
       "shadow" : {
         "kind" : "neutral",
