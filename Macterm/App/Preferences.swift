@@ -1203,7 +1203,7 @@ final class Preferences {
         static let passwordAutofillAuthentication = PreferenceStorageKey(
             "macterm.passwords.autofillAuthentication", default: PasswordAutofillAuthentication.untilLocked
         )
-        static let peekSidebarWhenHidden = PreferenceStorageKey("macterm.sidebar.peekWhenHidden", default: true)
+        static let peekSidebarWhenHidden = PreferenceStorageKey("macterm.sidebar.peekWhenHidden", default: false)
         static let sidebarWidth = PreferenceStorageKey("macterm.sidebar.width", default: defaultSidebarWidth) {
             clampSidebarWidth($0)
         }
