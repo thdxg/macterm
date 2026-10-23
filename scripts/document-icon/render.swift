@@ -2,21 +2,24 @@
 // opens with Macterm by default (`CFBundleTypeIconFile` in Info.plist).
 //
 // The page is the app icon's background with the app icon's pane glyph at its
-// top-left. The page's bottom color and the glyph's geometry come from
+// top-left. As on the app icon, a grid of characters covers the page, and its
+// density is the gradient: heavy characters at the top thin out to dots at the
+// bottom, on one flat color. The colors and the glyph's geometry come from
 // `Macterm/AppIcon.icon`. The page outline follows the system's generic
 // document (`NSWorkspace.icon(for:)` at 1024 px, measured on macOS 27).
 //
 // The glyph is real Liquid Glass. `macterm-icon-renderer` (the adaptive
-// icon's helper) draws the whole app icon on a background gradient that
-// matches the page at the glyph's rows, and this script crops the glyph out
-// with soft edges. Glass shows what is behind it, so a glyph that is cut out
-// with a transparency would show a different background on the page. A crop
-// of a render on the page's own colors needs no transparency: its background
-// is the page.
+// icon's helper) draws the whole app icon on the page's own background, and
+// this script crops the glyph out with soft edges. Glass shows what is behind
+// it, so a glyph that is cut out with a transparency would show a different
+// background on the page. A crop of a render on the page's own background
+// needs no transparency: its background is the page.
 //
-// The script compiles its own copy of the icon, with the character group
-// hidden: the page is plain, so the glass shows the page's colors and its
-// grain.
+// The page's characters must be behind that glass too. The script compiles its
+// own copy of the icon, with the character layer replaced by the page's grid
+// moved onto the icon's canvas: the same characters at the same places. The
+// glass then refracts the characters that surround it, and the crop meets the
+// page with no seam.
 //
 // Usage: swift scripts/document-icon/render.swift <AppIcon.icon> <macterm-icon-renderer> <out.iconset>
 
@@ -165,18 +168,6 @@ func onPage(_ point: CGPoint) -> CGPoint {
     )
 }
 
-/// The page's top color. The app icon is flat, and its characters draw its
-/// gradient. The page has no characters, so it has a gradient of its own, from
-/// this color down to the icon's background.
-let pageTop = CGColor(colorSpace: p3, components: [0.155, 0.159, 0.206, 1])!
-/// The page's gradient, top to bottom.
-let pageGradient = [pageTop, background]
-
-/// The page's color at a row of the page.
-func pageColor(atY y: Double) -> CGColor {
-    blend(pageGradient[0], toward: pageGradient[1], by: (y - page.minY) / page.height)
-}
-
 /// `color` moved `amount` of the way to `target`, in Display P3. An amount
 /// outside 0…1 extrapolates.
 func blend(_ color: CGColor, toward target: CGColor, by amount: Double) -> CGColor {
@@ -184,6 +175,92 @@ func blend(_ color: CGColor, toward target: CGColor, by amount: Double) -> CGCol
     let to = target.converted(to: p3, intent: .defaultIntent, options: nil)!.components!
     let mixed: [CGFloat] = (0 ..< 3).map { from[$0] + (to[$0] - from[$0]) * amount } + [1]
     return CGColor(colorSpace: p3, components: mixed)!
+}
+
+// MARK: - The characters
+
+/// The character grid of the page, as `scripts/app-icon/characters.swift`
+/// draws the app icon's: the same ramp, alpha, density and dither. The cells
+/// are a little smaller, so that the page has about as many rows as the icon.
+enum Characters {
+    static let ramp = Array(" .:-=+*#%@")
+    static let alpha = 0.32
+    static let cellHeight = 64.0
+    static let densityTop = 0.85
+    static let densityBottom = 0.05
+    static let dither = 3.0
+    static let seed: UInt64 = 3
+}
+
+/// The characters' color: the fill of the app icon's Characters group.
+guard let charactersGroup = icon.groups.first(where: { $0.name == "Characters" }),
+      let charactersFill = charactersGroup.layers.first?.fill.solid
+else { fail("expected a Characters group in icon.json") }
+let charactersColor = color(charactersFill).copy(alpha: Characters.alpha)!
+
+/// A random value in 0..<1 for each cell.
+func hash(_ x: Int, _ y: Int) -> Double {
+    var h = UInt64(bitPattern: Int64(x)) &* 0x9E37_79B9_7F4A_7C15 ^ UInt64(bitPattern: Int64(y)) &* 0xC2B2_AE3D_27D4_EB4F ^ Characters.seed
+    h = (h ^ (h >> 30)) &* 0xBF58_476D_1CE4_E5B9
+    h = (h ^ (h >> 27)) &* 0x94D0_49BB_1331_11EB
+    h ^= h >> 31
+    return Double(h >> 11) / Double(1 << 53)
+}
+
+let characterFont = CTFontCreateWithName("SFMono-Medium" as CFString, Characters.cellHeight * 0.8, nil)
+let cellWidth: Double = {
+    var glyph = CGGlyph()
+    var advance = CGSize.zero
+    var letter = UniChar(UInt8(ascii: "M"))
+    CTFontGetGlyphsForCharacters(characterFont, &letter, &glyph, 1)
+    CTFontGetAdvancesForGlyphs(characterFont, .horizontal, &glyph, &advance, 1)
+    return Double(advance.width)
+}()
+
+/// Draws the page's characters in page points, y down, in `color`. The
+/// context maps page points to its own space.
+func drawCharacters(in context: CGContext, color: CGColor) {
+    let rows = Int((page.height / Characters.cellHeight).rounded(.up))
+    let columns = Int((page.width / cellWidth).rounded(.up))
+    for row in 0 ... rows {
+        for column in 0 ... columns {
+            let top = page.minY + Double(row) * Characters.cellHeight
+            let t = (top - page.minY + Characters.cellHeight / 2) / page.height
+            let density = Characters.densityTop + (Characters.densityBottom - Characters.densityTop) * t
+            let step = density * Double(Characters.ramp.count - 1) + (hash(column, row) - 0.5) * Characters.dither
+            let character = Characters.ramp[max(0, min(Characters.ramp.count - 1, Int(step.rounded())))]
+            if character == " " { continue }
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(character), attributes: [
+                kCTFontAttributeName as NSAttributedString.Key: characterFont,
+                kCTForegroundColorAttributeName as NSAttributedString.Key: color,
+            ]))
+            // CoreText draws y up: flip around the baseline.
+            context.saveGState()
+            context.translateBy(x: page.minX + Double(column) * cellWidth, y: top + Characters.cellHeight * 0.8)
+            context.scaleBy(x: 1, y: -1)
+            context.textPosition = .zero
+            CTLineDraw(line, context)
+            context.restoreGState()
+        }
+    }
+}
+
+/// The page's characters on the app icon's canvas, as a mask for the
+/// Characters layer: 2 pixels a point, so the layer's scale is 0.5.
+func charactersMask() -> CGImage {
+    let pixels = Int(iconCanvas * 2)
+    let context = CGContext(
+        data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
+        space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    )!
+    // Canvas points, y down; then page points onto the canvas, the inverse of `onPage`.
+    context.translateBy(x: 0, y: CGFloat(pixels))
+    context.scaleBy(x: 2, y: -2)
+    context.translateBy(x: glyphBounds.minX, y: glyphBounds.minY)
+    context.scaleBy(x: 1 / glyphScale, y: 1 / glyphScale)
+    context.translateBy(x: -glyphOrigin.x, y: -glyphOrigin.y)
+    drawCharacters(in: context, color: CGColor(srgbRed: 1, green: 1, blue: 1, alpha: Characters.alpha))
+    return context.makeImage()!
 }
 
 // MARK: - The glass glyph
@@ -199,19 +276,14 @@ let glyphCrop = CGRect(
 )
 /// How far in from the crop's edge the glyph fades in, on the app icon's canvas.
 let feather = 28.0
-/// The matte values between the glyph's shadow and its glass.
-let glassMatte = 0.12 ... 0.3
 
 func requestColor(_ color: CGColor) -> [String: Double] {
     let components = color.converted(to: sRGB, intent: .defaultIntent, options: nil)!.components!
     return ["red": components[0], "green": components[1], "blue": components[2]]
 }
 
-/// The group of the app icon that the page leaves out: the characters.
-let pageHidesGroup = "Characters"
-
-/// Compiles a copy of the icon with its character group hidden, as Xcode compiles
-/// the app's own, and returns the path of the catalog.
+/// Compiles a copy of the icon with the page's characters in place of its own,
+/// as Xcode compiles the app's, and returns the path of the catalog.
 func compileCatalog() -> String {
     let work = FileManager.default.temporaryDirectory.appendingPathComponent("document-icon-\(getpid())")
     try? FileManager.default.removeItem(at: work)
@@ -223,10 +295,20 @@ func compileCatalog() -> String {
         guard var document = try JSONSerialization.jsonObject(with: Data(contentsOf: jsonURL)) as? [String: Any],
               var groups = document["groups"] as? [[String: Any]]
         else { fail("cannot read icon.json") }
-        for group in groups.indices where groups[group]["name"] as? String == pageHidesGroup {
-            groups[group]["hidden"] = true
+        for group in groups.indices where groups[group]["name"] as? String == "Characters" {
+            guard var layers = groups[group]["layers"] as? [[String: Any]] else { continue }
+            for layer in layers.indices where layers[layer]["name"] as? String == "ascii" {
+                layers[layer]["image-name"] = "page-characters.png"
+                layers[layer]["position"] = ["scale": 0.5, "translation-in-points": [0, 0]]
+            }
+            groups[group]["layers"] = layers
         }
         document["groups"] = groups
+        let maskURL = copy.appendingPathComponent("Assets/page-characters.png")
+        guard let destination = CGImageDestinationCreateWithURL(maskURL as CFURL, "public.png" as CFString, 1, nil)
+        else { fail("cannot write \(maskURL.path)") }
+        CGImageDestinationAddImage(destination, charactersMask(), nil)
+        guard CGImageDestinationFinalize(destination) else { fail("cannot write \(maskURL.path)") }
         try JSONSerialization.data(withJSONObject: document).write(to: jsonURL)
     } catch {
         fail("cannot copy the icon: \(error)")
@@ -250,20 +332,16 @@ func compileCatalog() -> String {
 
 let catalogPath = compileCatalog()
 
-/// The app icon in real glass, from the helper, on a background gradient
-/// from `top` to `bottom`.
-func renderGlassIcon(top: CGColor, bottom: CGColor) -> CGImage {
+/// The app icon in real glass, from the helper, on the page's background.
+func renderGlassIcon() -> CGImage {
     let request: [String: Any] = [
         "catalogPath": catalogPath,
         "iconName": "AppIcon",
         "appearance": "dark",
-        "backgroundTop": requestColor(top),
-        "backgroundBottom": requestColor(bottom),
+        "backgroundTop": requestColor(background),
+        "backgroundBottom": requestColor(background),
         // Bottom to top, as `AdaptiveIconRequest.layers`: the reverse of `groups`.
-        // The hidden group drops out of the compiled icon, so its color does too.
-        "layers": icon.groups.reversed().filter { $0.name != pageHidesGroup }.map {
-            requestColor(color($0.layers[0].fill.solid!))
-        },
+        "layers": icon.groups.reversed().map { requestColor(color($0.layers[0].fill.solid!)) },
         "pixels": renderPixels,
     ]
     let process = Process()
@@ -281,28 +359,6 @@ func renderGlassIcon(top: CGColor, bottom: CGColor) -> CGImage {
     return image
 }
 
-/// The RGBA bytes of an image, in Display P3.
-func pixels(of image: CGImage) -> [UInt8] {
-    var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
-    let context = CGContext(
-        data: &bytes, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
-        space: p3, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-    )!
-    context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-    return bytes
-}
-
-/// A white image whose alpha is `alpha`, one value for each pixel.
-func alphaImage(_ alpha: [UInt8], width: Int, height: Int) -> CGImage {
-    let bytes = alpha.flatMap { [$0, $0, $0, $0] } // Premultiplied: white is its alpha.
-    return CGImage(
-        width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
-        space: p3, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-        provider: CGDataProvider(data: Data(bytes) as CFData)!, decode: nil, shouldInterpolate: true,
-        intent: .defaultIntent
-    )!
-}
-
 /// The smooth step from 0 at `low` to 1 at `high`.
 func smoothStep(_ low: Double, _ high: Double, _ value: Double) -> Double {
     let t = min(1, max(0, (value - low) / (high - low)))
@@ -311,25 +367,14 @@ func smoothStep(_ low: Double, _ high: Double, _ value: Double) -> Double {
 
 /// The glass glyph on the page.
 struct Glyph {
-    /// The crop of the render on the page's colors, faded in from its edges.
+    /// The crop of the render on the page's background, faded in from its edges.
     var image: CGImage
-    /// Where the glyph's glass is: the area that the grain keeps off.
-    var coverage: CGImage
     /// The crop's rect on the page.
     var rect: CGRect
 }
 
 func glassGlyph() -> Glyph {
-    // The chiclet's gradient runs over the whole canvas, so its ends are the
-    // page colors at the rows where the canvas's top and bottom would land.
-    let render = renderGlassIcon(
-        top: pageColor(atY: onPage(.zero).y),
-        bottom: pageColor(atY: onPage(CGPoint(x: 0, y: iconCanvas)).y)
-    )
-    let black = CGColor(colorSpace: sRGB, components: [0, 0, 0, 1])!
-    let white = CGColor(colorSpace: sRGB, components: [1, 1, 1, 1])!
-    let onBlack = renderGlassIcon(top: black, bottom: black)
-    let onWhite = renderGlassIcon(top: white, bottom: white)
+    let render = renderGlassIcon()
 
     // Where the helper puts the body: `IconCanvas` in IconRenderer/main.swift.
     let canvas = Double(renderPixels)
@@ -342,10 +387,7 @@ func glassGlyph() -> Glyph {
         width: glyphCrop.width * unit,
         height: glyphCrop.height * unit
     ).integral
-    guard let crop = render.cropping(to: pixelCrop),
-          let blackCrop = onBlack.cropping(to: pixelCrop),
-          let whiteCrop = onWhite.cropping(to: pixelCrop)
-    else { fail("cannot crop the render") }
+    guard let crop = render.cropping(to: pixelCrop) else { fail("cannot crop the render") }
     let width = crop.width
     let height = crop.height
 
@@ -364,73 +406,15 @@ func glassGlyph() -> Glyph {
     )!
     guard let faded = crop.masking(mask) else { fail("cannot fade the crop") }
 
-    // Where the glass is. What differs between the render on black and the
-    // render on white is the background that shows through, so the matte is
-    // 1 - (white - black). It is near 0 in the panes' shadow and higher on the
-    // panes. The panes are partly clear, so the step starts low: at 0.3 and
-    // 0.6 the grain covered the lower half of the back pane.
-    let blackPixels = pixels(of: blackCrop)
-    let whitePixels = pixels(of: whiteCrop)
-    let coverage: [UInt8] = (0 ..< width * height).map { pixel in
-        let difference = (0 ..< 3).reduce(0) { $0 + Int(whitePixels[pixel * 4 + $1]) - Int(blackPixels[pixel * 4 + $1]) }
-        let matte = 1 - Double(difference) / (3 * 255)
-        return UInt8((smoothStep(glassMatte.lowerBound, glassMatte.upperBound, matte) * 255).rounded())
-    }
-
     let topLeft = onPage(glyphCrop.origin)
     let bottomRight = onPage(CGPoint(x: glyphCrop.maxX, y: glyphCrop.maxY))
     return Glyph(
         image: faded,
-        coverage: alphaImage(coverage, width: width, height: height),
         rect: CGRect(x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y)
     )
 }
 
 let glyph = glassGlyph()
-
-// MARK: - Grain
-
-/// The strongest speck of grain: the alpha of a white or black pixel over the page.
-let grainStrength = 0.06
-/// Below this edge, in pixels, the icon has no grain: one speck would be a
-/// large part of the glyph.
-let grainMinimumPixels = 64
-
-/// SplitMix64, so that each run draws the same grain and a new run changes
-/// `Document.icns` only when the drawing changes.
-struct Grain: RandomNumberGenerator {
-    var state: UInt64
-    mutating func next() -> UInt64 {
-        state &+= 0x9E37_79B9_7F4A_7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-        return z ^ (z >> 31)
-    }
-}
-
-/// Specks of white and black, one for each pixel: the sum of two uniform
-/// values, so that most specks are faint and few are strong.
-func grain(pixels: Int) -> CGImage? {
-    guard pixels >= grainMinimumPixels else { return nil }
-    var random = Grain(state: UInt64(pixels))
-    var bytes = [UInt8](repeating: 0, count: pixels * pixels * 4)
-    for pixel in 0 ..< pixels * pixels {
-        let value = (Double.random(in: -1 ... 1, using: &random) + Double.random(in: -1 ... 1, using: &random)) / 2
-        let alpha = UInt8((abs(value) * grainStrength * 255).rounded())
-        let level = value > 0 ? alpha : 0 // Premultiplied: white is its alpha.
-        bytes[pixel * 4] = level
-        bytes[pixel * 4 + 1] = level
-        bytes[pixel * 4 + 2] = level
-        bytes[pixel * 4 + 3] = alpha
-    }
-    return CGImage(
-        width: pixels, height: pixels, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: pixels * 4,
-        space: p3, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-        provider: CGDataProvider(data: Data(bytes) as CFData)!, decode: nil, shouldInterpolate: false,
-        intent: .defaultIntent
-    )
-}
 
 // MARK: - Drawing
 
@@ -473,17 +457,14 @@ func render(pixels: Int) -> CGImage {
     context.saveGState()
     context.setShadow(offset: CGSize(width: 0, height: -8 * unit), blur: 24 * unit, color: CGColor(gray: 0, alpha: 0.35))
     context.addPath(pagePath())
-    context.setFillColor(pageGradient[1])
+    context.setFillColor(background)
     context.fillPath()
     context.restoreGState()
 
     context.saveGState()
     context.addPath(pagePath())
     context.clip()
-    context.drawLinearGradient(
-        CGGradient(colorsSpace: p3, colors: pageGradient as CFArray, locations: [0, 1])!,
-        start: CGPoint(x: 0, y: page.minY), end: CGPoint(x: 0, y: page.maxY), options: []
-    )
+    drawCharacters(in: context, color: charactersColor)
 
     // The glass glyph. The image is y down; draw it flipped back.
     context.saveGState()
@@ -496,7 +477,7 @@ func render(pixels: Int) -> CGImage {
     context.saveGState()
     context.setShadow(offset: CGSize(width: -4 * unit, height: -8 * unit), blur: 28 * unit, color: CGColor(gray: 0, alpha: 0.6))
     context.addPath(flapPath())
-    context.setFillColor(pageGradient[0])
+    context.setFillColor(background)
     context.fillPath()
     context.restoreGState()
     context.restoreGState()
@@ -508,31 +489,13 @@ func render(pixels: Int) -> CGImage {
     let white = CGColor(gray: 1, alpha: 1)
     context.drawLinearGradient(
         CGGradient(colorsSpace: p3, colors: [
-            blend(pageGradient[0], toward: white, by: 0.16),
-            blend(pageGradient[0], toward: white, by: 0.04),
+            blend(background, toward: white, by: 0.16),
+            blend(background, toward: white, by: 0.04),
         ] as CFArray, locations: [0, 1])!,
         start: CGPoint(x: (foldX + page.maxX) / 2 + 20, y: (page.minY + foldY) / 2 - 20),
         end: CGPoint(x: foldX, y: foldY), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
     )
     context.restoreGState()
-
-    // Grain on the page and the flap, one speck per device pixel. The glass
-    // glyph keeps clear of it.
-    if let grain = grain(pixels: pixels) {
-        context.saveGState()
-        context.addPath(pagePath())
-        context.clip()
-        context.beginTransparencyLayer(auxiliaryInfo: nil)
-        context.interpolationQuality = .none
-        context.draw(grain, in: CGRect(x: 0, y: 0, width: iconCanvas, height: iconCanvas))
-        context.interpolationQuality = .high
-        context.setBlendMode(.destinationOut)
-        context.translateBy(x: 0, y: glyph.rect.maxY + glyph.rect.minY)
-        context.scaleBy(x: 1, y: -1)
-        context.draw(glyph.coverage, in: glyph.rect)
-        context.endTransparencyLayer()
-        context.restoreGState()
-    }
 
     // A rim, so that the page keeps its edge on a dark window: light at the
     // top, as glass catches the light, and fading down the sides.

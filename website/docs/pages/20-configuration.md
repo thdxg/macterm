@@ -110,7 +110,7 @@ Macterm can open text files in a terminal editor such as Helix or Neovim. macOS 
 2. Set `$EDITOR` in your shell config. Set `$VISUAL` if you want it to win over `$EDITOR`. For example, `$env.EDITOR = "hx"` in nu or `export EDITOR=nvim` in zsh. If you set neither, files open in `vi`.
 3. In **Settings → General → Opening Text Files**, choose **Open in**: **New split** (next to the current pane, along its longer side) or **New tab**.
 
-Finder then shows these files with the Macterm document icon: a dark page with the Macterm panes at its top-left. Finder can keep the old icon in its cache until you open the folder again.
+Finder then shows these files with the Macterm document icon: a dark page of terminal characters, with the Macterm panes at its top-left. Finder can keep the old icon in its cache until you open the folder again.
 
 You can double-click such a file, open it with **Open With → Macterm**, or run `open -a Macterm file.rs`. In each case, the file opens in the project that contains it. If no project contains it, Macterm creates a project for the folder of the file.
 
