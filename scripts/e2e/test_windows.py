@@ -9,6 +9,7 @@ The window verbs exist partly so this suite can drive them — a keybinding and 
 menu item are not reachable from here without an Accessibility grant.
 """
 
+import re
 import time
 import uuid
 
@@ -229,5 +230,60 @@ def test_leadership_follows_window_focus_for_the_whole_tab(app):
         wait_for(lambda: all_are(False), timeout=30, message="leadership to move back with focus")
     finally:
         app.cli("window", "focus", "1", check=False)
+        _close_extra_windows(app, before)
+        app.cli("tab", "close", tab["id"], "--project", project, "--force", check=False)
+
+
+def test_a_closed_window_takes_no_keys_from_a_new_pane(app):
+    """A closed window leaves the registry, but its view can live on. It built
+    a mirror of every new pane of the tab that it showed, and the mirror's zmx
+    client could lead the new session. zmx drops each key of a non-leader that
+    is not user input, so ⌃D in the new pane did nothing until a Return.
+
+    Asserted on the new session's client count and on ⌃D ending its shell.
+    """
+    before = len(_windows(app))
+    project = _windows(app)[0].get("projectID")
+    assert project, f"the first window should show a project: {_windows(app)[0]}"
+    tab = app.cli_json("tab", "new", "--project", project)["tabs"][0]
+    try:
+        source = app.panes(tab=tab["id"])[0]["id"]
+        wait_for(lambda: app.pane_text(pane=source), timeout=60, message="the source surface")
+        app.cli("window", "new")
+        wait_for(lambda: len(_windows(app)) == before + 1, timeout=30, message="the new window")
+        second = str(before + 1)
+        app.cli("project", "select", project, "--window", second)
+        app.cli("tab", "select", tab["id"], "--project", project, "--window", second)
+        app.cli("window", "close", "--window", second)
+        wait_for(lambda: len(_windows(app)) == before, timeout=30, message="the second window to close")
+
+        known = {p["id"] for p in app.panes(tab=tab["id"])}
+        app.cli("pane", "split", "--direction", "right", "--pane", source)
+        new = wait_for(
+            lambda: [p for p in app.panes(tab=tab["id"]) if p["id"] not in known],
+            timeout=30,
+            message="the split's pane",
+        )[0]
+        wait_for(lambda: app.pane_text(pane=new["id"]), timeout=60, message="the split's prompt")
+        info = app.cli("session", "info", new["session"]).stdout
+        match = re.search(r"clients:(\d+)", info)
+        assert match and match.group(1) == "1", f"the new session must have one client: {info.strip()}"
+
+        # The pane's text is no sign that the shell reads yet: CI's bash prints
+        # a banner before its prompt, and a ⌃D that arrives before the line
+        # editor reads the tty is lost. Typing a marker to wait for would make
+        # this client the leader, which is the state under test. So press ⌃D
+        # again until the shell ends: before the fix, zmx dropped every one.
+        def gone():
+            return new["id"] not in {p["id"] for p in app.panes(tab=tab["id"])}
+
+        deadline = time.monotonic() + 30
+        while not gone():
+            assert time.monotonic() < deadline, "⌃D never ended the new pane's shell"
+            app.cli("pane", "key", "ctrl+d", "--pane", new["id"], check=False)
+            settle = time.monotonic() + 2
+            while not gone() and time.monotonic() < settle:
+                time.sleep(0.25)
+    finally:
         _close_extra_windows(app, before)
         app.cli("tab", "close", tab["id"], "--project", project, "--force", check=False)
