@@ -94,6 +94,7 @@ guard layers.count == request.layers.count, layers.allSatisfy({ !$0.elements.isE
 }
 
 for (index, color) in request.layers.enumerated() {
+    guard let color else { continue }
     var elements = layers[index].elements
     for element in elements.indices {
         elements[element].fill = .solid(iconColor(color))

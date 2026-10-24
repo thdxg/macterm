@@ -97,7 +97,8 @@ struct AdaptiveIconTests {
         for (group, fills) in groups.enumerated() where group < paint.layers.count {
             for (element, fill) in fills.enumerated() {
                 let accent = paint.accents.first { $0.group == group && $0.element == element }
-                let painted = accent?.color ?? paint.layers[group]
+                // A group that keeps its bundled fills has nothing to compare.
+                guard let painted = accent?.color ?? paint.layers[group] else { continue }
                 let bundled = try #require(fill, "layer \(element) of group \(group) has no solid fill")
                 #expect(Self.close(painted, bundled), "group \(group), layer \(element): painted \(painted), bundled \(bundled)")
             }
@@ -124,13 +125,14 @@ struct AdaptiveIconTests {
         }
     }
 
-    /// The frames keep the bundled colors in every theme, a light one too.
+    /// The frames keep their bundled fills in every theme, a light one too.
     @Test
-    func theFramesKeepTheBundledColors() throws {
+    func theFramesKeepTheBundledFills() throws {
         for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight, Self.catppuccinMocha, Self.midGray] {
             let paint = try #require(AdaptiveIcon.paint(for: theme))
-            #expect(paint.layers[2] == AdaptiveIcon.darkRing)
-            #expect(paint.layers[3] == AdaptiveIcon.silverFrame)
+            #expect(paint.layers[2] == nil)
+            #expect(paint.layers[3] == nil)
+            #expect(!paint.accents.contains { $0.group >= 2 })
         }
     }
 

@@ -25,8 +25,9 @@ enum AdaptiveIcon {
         var backgroundTop: Color
         var backgroundBottom: Color
         /// Bottom to top, one for each group: the characters, the glass pane,
-        /// the dark ring, and the silver frame.
-        var layers: [Color]
+        /// the dark ring, and the silver frame. Nil keeps the group's bundled
+        /// fills.
+        var layers: [Color?]
         /// The layers with a color of their own: the characters' mesh copies
         /// and the cross.
         var accents: [AdaptiveIconRequest.Accent]
@@ -60,14 +61,8 @@ enum AdaptiveIcon {
     /// still the gray its lid comes from. Gruvbox's palette 0 is the
     /// background itself, so its lid comes from the next gray.
     static let lidMinimumStep = 0.05
-    /// The frames keep the bundled icon's colors in every theme: the silver
-    /// frame and the dark ring of `AppIcon.icon`. Only the characters and the
-    /// screen follow the theme.
-    static let silverFrame = Color(red: 0.80392, green: 0.81176, blue: 0.81961)
-    static let darkRing = Color(red: 0.06667, green: 0.07059, blue: 0.07843)
-
-    /// The icon's colors. The frames keep the bundled colors (`silverFrame`,
-    /// `darkRing`). The cross is palette 7 mixed `crossMix` toward palette 8.
+    /// The icon's colors. The frames keep their bundled fills in every theme:
+    /// Ghostty's gradients, from `AppIcon.icon`. The cross is palette 7 mixed `crossMix` toward palette 8.
     /// The characters are a mesh gradient of the theme's ANSI colors
     /// (`characterBase`, `characterMesh`). The screen is the theme's lid.
     ///
@@ -98,7 +93,7 @@ enum AdaptiveIcon {
             backgroundBottom: screen,
             // The glass pane is the screen's own color, so that only its
             // glass shows.
-            layers: [theme.palette[characterBase], screen, darkRing, silverFrame],
+            layers: [theme.palette[characterBase], screen, nil, nil],
             accents: characterMesh.map { .init(group: charactersGroup, element: $0.element, color: theme.palette[$0.palette]) }
                 + [.init(group: crossGroup, element: crossElement, color: mix(theme.palette[7], into: theme.palette[8], amount: crossMix))]
         )

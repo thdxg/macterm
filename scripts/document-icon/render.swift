@@ -310,9 +310,12 @@ func renderGlassIcon() -> CGImage {
         "backgroundTop": requestColor(background),
         "backgroundBottom": requestColor(background),
         // Bottom to top, as `AdaptiveIconRequest.layers`: the reverse of
-        // `groups`. Each group takes the fill of the first layer it keeps.
-        "layers": icon.groups.reversed().map { group in
-            requestColor(color(group.layers.first { !leftOut($0.name) }!.fill.solid!))
+        // `groups`. Each group takes the fill of the first layer it keeps,
+        // or keeps its own fills when that fill is not a solid color (the
+        // frames' gradients).
+        "layers": icon.groups.reversed().map { group -> Any in
+            guard let solid = group.layers.first(where: { !leftOut($0.name) })!.fill.solid else { return NSNull() }
+            return requestColor(color(solid))
         },
         "pixels": renderPixels,
     ]
