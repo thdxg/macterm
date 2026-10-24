@@ -121,7 +121,7 @@
         },
         {
           "fill" : {
-            "solid" : "srgb:0.57255,0.58235,0.63529,1.00000"
+            "solid" : "srgb:1.00000,0.67059,0.63529,1.00000"
           },
           "glass" : true,
           "hidden" : false,
@@ -284,7 +284,7 @@
       },
       "specular" : false,
       "translucency" : {
-        "enabled" : true,
+        "enabled" : false,
         "value" : 0.8
       },
       "opacity" : 1

@@ -34,7 +34,7 @@ import ImageIO
 /// The alpha of every character.
 let alpha = 1.0
 /// The height of a cell in canvas points. The font is 80% of it.
-let cellHeight = 96.0
+let cellHeight = 144.0
 /// The density at the top and at the bottom, from 0 (space) to 1 (@).
 let densityTop = 0.85
 let densityBottom = 0.05

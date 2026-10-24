@@ -37,8 +37,12 @@ enum AdaptiveIcon {
     /// reverse of `layers` in `icon.json`.
     static let crossGroup = 1
     static let crossElement = 0
-    /// The cross is a gray halfway from palette 8 to palette 7.
-    static let crossMix = 0.5
+    /// The cross takes the most colorful of these entries (red, green,
+    /// yellow, blue, magenta, cyan), by OKLab chroma, the earliest on a tie.
+    /// The cross is the icon's largest light shape, so its color is what
+    /// shows in the Dock. The most colorful entry gives even a muted theme
+    /// a color there.
+    static let crossEntries = [1, 2, 3, 4, 5, 6]
     /// The characters' group (the bottom one), and the palette entry of each
     /// mesh copy of the characters by its place in that group: top-left red,
     /// top-right yellow, left magenta, right green, bottom-left cyan. The
@@ -67,7 +71,7 @@ enum AdaptiveIcon {
     static let darkRing = Color(red: 0.06667, green: 0.07059, blue: 0.07843)
 
     /// The icon's colors. The frames keep the bundled colors (`silverFrame`,
-    /// `darkRing`). The cross is palette 7 mixed `crossMix` toward palette 8.
+    /// `darkRing`). The cross is the most colorful of `crossEntries`.
     /// The characters are a mesh gradient of the theme's ANSI colors
     /// (`characterBase`, `characterMesh`). The screen is the theme's lid.
     ///
@@ -80,8 +84,8 @@ enum AdaptiveIcon {
     /// the background, it is palette 8, and the mix comes near Gruvbox's own
     /// `bg1`.
     ///
-    /// In eyesclosed, the theme the icon was drawn in, this picks `#9295A2`
-    /// for the cross and the lid for the screen, and eyesclosed's own ANSI
+    /// In eyesclosed, the theme the icon was drawn in, this picks its red
+    /// (`#FFABA2`) for the cross and the lid for the screen, and eyesclosed's own ANSI
     /// colors for the characters: the bundled icon's own fills. Nil when the
     /// theme has no gray that differs from the background.
     static func paint(for theme: ThemeColors) -> Paint? {
@@ -93,6 +97,7 @@ enum AdaptiveIcon {
         // `front` itself qualifies, so a lid gray always exists.
         let lidGray = first(of: neutralEntries.filter { share[$0] >= lidMinimumStep }, by: { share[$0] }) ?? front
         let screen = mix(theme.palette[lidGray], into: theme.background, amount: lidMix)
+        let cross = first(of: crossEntries, by: { -chroma(theme.palette[$0]) }) ?? crossEntries[0]
         return Paint(
             backgroundTop: screen,
             backgroundBottom: screen,
@@ -100,7 +105,7 @@ enum AdaptiveIcon {
             // glass shows.
             layers: [theme.palette[characterBase], screen, darkRing, silverFrame],
             accents: characterMesh.map { .init(group: charactersGroup, element: $0.element, color: theme.palette[$0.palette]) }
-                + [.init(group: crossGroup, element: crossElement, color: mix(theme.palette[7], into: theme.palette[8], amount: crossMix))]
+                + [.init(group: crossGroup, element: crossElement, color: theme.palette[cross])]
         )
     }
 
@@ -117,6 +122,24 @@ enum AdaptiveIcon {
 
     /// OKLab lightness (0 black, 1 white) of an sRGB color.
     static func lightness(_ color: Color) -> Double {
+        oklab(color).lightness
+    }
+
+    /// OKLab chroma (0 for a gray) of an sRGB color.
+    static func chroma(_ color: Color) -> Double {
+        let lab = oklab(color)
+        return (lab.a * lab.a + lab.b * lab.b).squareRoot()
+    }
+
+    /// A color in OKLab: lightness, and the green-red and blue-yellow axes.
+    private struct OKLab {
+        var lightness: Double
+        var a: Double
+        var b: Double
+    }
+
+    /// An sRGB color in OKLab.
+    private static func oklab(_ color: Color) -> OKLab {
         func linear(_ c: Double) -> Double {
             c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
         }
@@ -124,7 +147,11 @@ enum AdaptiveIcon {
         let l = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
         let m = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
         let s = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
-        return 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s
+        return OKLab(
+            lightness: 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+            a: 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+            b: 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+        )
     }
 
     /// `amount` of `color` over `base`, per sRGB component.

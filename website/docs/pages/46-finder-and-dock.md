@@ -35,7 +35,7 @@ The frames keep their usual silver and dark colors. The characters, the cross an
 | Part of the icon | Theme color |
 | --- | --- |
 | Characters | A blend of the theme's colors: `palette = 4` (blue) over all, with `palette = 1` (red) at the top left, `3` (yellow) at the top right, `5` (magenta) on the left, `2` (green) on the right and `6` (cyan) at the bottom left. |
-| Cross | Halfway between `palette = 7` and `palette = 8`. |
+| Cross | The most colorful of `palette = 1` to `6`. In most themes, this is `palette = 1` (red). |
 | Screen | A color a small step away from `background`, as for a status bar or a popup: the nearest gray, mixed a little into `background`. That gray is usually `palette = 0`. |
 
 The icon was drawn in eyesclosed, the default theme of Macterm. With eyesclosed, the Dock icon has the same colors as the usual icon of Macterm.
