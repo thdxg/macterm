@@ -537,6 +537,9 @@ private func anchorName(_ value: Double, zero: String, one: String) -> String {
 // MARK: - General
 
 private struct GeneralSettings: View {
+    @Environment(AppState.self)
+    private var appState
+
     /// Seeded from and written back through `Preferences` (the single
     /// UserDefaults seam that redirects to a wiped side-suite under XCTest).
     /// NOT `@AppStorage`, which binds to `UserDefaults.standard` — banned by the
@@ -760,7 +763,7 @@ private struct GeneralSettings: View {
     private var defaultGhosttyLocationRows: some View {
         let found = defaultGhosttyConfigFiles.filter { $0.resolvedPath != nil }
         ForEach(found) { file in
-            GhosttyDefaultLocationRow(file: file)
+            GhosttyDefaultLocationRow(file: file) { openGhosttyConfigFile(file.searchedPath) }
         }
         if found.isEmpty {
             Text("No default config files found.")
@@ -781,6 +784,7 @@ private struct GeneralSettings: View {
                     problem: customGhosttyConfigProblem(customGhosttyConfigPaths[index]),
                     canMoveUp: index > 0,
                     canMoveDown: index < customGhosttyConfigPaths.count - 1,
+                    onOpen: { openGhosttyConfigFile(customGhosttyConfigPaths[index]) },
                     onEdit: { beginEditingCustomGhosttyConfigPath(at: index) },
                     onMoveUp: { moveCustomGhosttyConfigPath(at: index, by: -1) },
                     onMoveDown: { moveCustomGhosttyConfigPath(at: index, by: 1) },
@@ -817,6 +821,13 @@ private struct GeneralSettings: View {
             .onSubmit { commitCustomGhosttyConfigEdit() }
         }
         .padding(.vertical, 2)
+    }
+
+    /// Open a listed config file in the terminal editor, the way Open Macterm
+    /// Config does.
+    private func openGhosttyConfigFile(_ path: String) {
+        let expanded = (path as NSString).expandingTildeInPath
+        appState.appDelegate?.finderServices.openTextFiles([expanded])
     }
 
     /// Persist both config layers together, then reload once.
@@ -965,9 +976,11 @@ private struct GeneralSettings: View {
 
 /// One discovered default location, read-only: Ghostty's own loader owns
 /// this set and its order, so the row just shows what was found (and where a
-/// symlink leads). Customization happens in the custom list instead.
+/// symlink leads). A click on the path opens the file in the terminal editor.
+/// Customization happens in the custom list instead.
 private struct GhosttyDefaultLocationRow: View {
     let file: GhosttyConfigSource.DefaultFileLocation
+    let onOpen: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -976,7 +989,9 @@ private struct GhosttyDefaultLocationRow: View {
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text((file.searchedPath as NSString).abbreviatingWithTildeInPath)
+                Button((file.searchedPath as NSString).abbreviatingWithTildeInPath, action: onOpen)
+                    .buttonStyle(.link)
+                    .linkPointer()
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(file.searchedPath)
@@ -1001,7 +1016,8 @@ private struct GhosttyDefaultLocationRow: View {
 
 /// One custom config file: its path and its actions in a menu — the same row
 /// shape as the Projects pane. Move Up/Down matter because later files
-/// override earlier ones. A non-nil `problem` swaps the file icon for a
+/// override earlier ones. A click on the path opens the file in the terminal
+/// editor. A non-nil `problem` swaps the file icon for a
 /// warning triangle whose tooltip carries the reason, keeping the row
 /// single-line.
 private struct GhosttyConfigFileRow: View {
@@ -1009,6 +1025,7 @@ private struct GhosttyConfigFileRow: View {
     let problem: String?
     let canMoveUp: Bool
     let canMoveDown: Bool
+    let onOpen: () -> Void
     let onEdit: () -> Void
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
@@ -1033,9 +1050,13 @@ private struct GhosttyConfigFileRow: View {
                     .frame(width: 16)
             }
 
-            Text((path as NSString).abbreviatingWithTildeInPath)
+            // A missing file has nothing to open; the warning icon edits it.
+            Button((path as NSString).abbreviatingWithTildeInPath, action: onOpen)
+                .buttonStyle(.link)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .disabled(problem != nil)
+                .linkPointer(problem == nil)
                 .help(path)
 
             Spacer(minLength: 8)
@@ -1062,6 +1083,19 @@ private struct GhosttyConfigFileRow: View {
             .fixedSize()
         }
         .padding(.vertical, 2)
+    }
+}
+
+private extension View {
+    /// The pointing hand over a path that a click opens. macOS 14 has no
+    /// link pointer and keeps the arrow.
+    @ViewBuilder
+    func linkPointer(_ isActive: Bool = true) -> some View {
+        if #available(macOS 15.0, *), isActive {
+            pointerStyle(.link)
+        } else {
+            self
+        }
     }
 }
 
