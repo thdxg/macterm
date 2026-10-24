@@ -114,26 +114,14 @@ struct AdaptiveIconTests {
         #expect(Self.close(paint.backgroundTop, Self.hex(0x1A1B21)))
     }
 
-    /// The cross is the most colorful of palette 1 to 6. Red wins in most
-    /// themes, also in muted eyesclosed. GitHub Light's magenta is a little
-    /// more colorful than its red.
+    /// The cross is palette 7 mixed halfway toward palette 8.
     @Test
-    func theCrossIsTheMostColorfulANSIColor() throws {
-        let expected = [
-            (Self.eyesclosed, 1), (Self.rosePine, 1), (Self.gruvboxDark, 1), (Self.gitHubLight, 5), (Self.catppuccinMocha, 1),
-        ]
-        for (theme, entry) in expected {
+    func theCrossIsAGrayBetweenPalette7And8() throws {
+        for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight] {
             let paint = try #require(AdaptiveIcon.paint(for: theme))
             let cross = try #require(paint.accents.first { $0.group == AdaptiveIcon.crossGroup && $0.element == AdaptiveIcon.crossElement })
-            #expect(cross.color == theme.palette[entry])
+            #expect(cross.color == AdaptiveIcon.mix(theme.palette[7], into: theme.palette[8], amount: AdaptiveIcon.crossMix))
         }
-    }
-
-    /// Chroma is 0 for a gray and grows with color.
-    @Test
-    func chromaIsZeroForAGray() {
-        #expect(AdaptiveIcon.chroma(Self.hex(0x808080)) < 1e-6)
-        #expect(AdaptiveIcon.chroma(Self.hex(0xFF0000)) > AdaptiveIcon.chroma(Self.hex(0xFFABA2)))
     }
 
     /// The frames keep the bundled colors in every theme, a light one too.

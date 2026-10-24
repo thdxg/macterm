@@ -121,7 +121,7 @@
         },
         {
           "fill" : {
-            "solid" : "srgb:1.00000,0.67059,0.63529,1.00000"
+            "solid" : "srgb:0.57255,0.58235,0.63529,1.00000"
           },
           "glass" : true,
           "hidden" : false,
@@ -148,7 +148,7 @@
         ]
       },
       "refractivity" : {
-        "depth" : 0.1205859375,
+        "depth" : 0.06,
         "enabled" : true,
         "strength" : 0.370234375
       },
