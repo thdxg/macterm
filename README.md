@@ -98,7 +98,7 @@ An extension adds custom actions to the command palette. You can streamline work
 
 **To create your own:** make a folder in `~/.config/macterm/extensions/` with an `extension.yaml` file and a `palettes/` folder of YAML files. See the [extension docs](https://macterm.thdxg.dev/docs/extensions) for more detail.
 
-**To contribute:** add the folder of your extension to [`extensions/`](extensions/) in a pull request. [`extensions/README.md`](extensions/README.md) gives the steps and the rules. When the pull request merges, everyone can install the extension.
+**To contribute:** Open a PR to add your extension folder to [`extensions/`](extensions/).
 
 ## Cookbook
 
