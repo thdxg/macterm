@@ -356,13 +356,16 @@ func pagePath() -> CGPath {
     return path
 }
 
-/// The folded-over corner: the triangle that the cut removed, flipped onto the page.
+/// The folded-over corner: the triangle that the cut removed, flipped onto the
+/// page. Its two sharp tips are the ends of the fold, on the page's edge, so
+/// the flap stays joined to the page along the fold. Rounding a 45° tip cuts it
+/// far back and leaves the flap floating; the page's own rounded cut corners
+/// round the tips instead, because the flap is drawn clipped to the page.
 func flapPath() -> CGPath {
     let path = CGMutablePath()
-    path.move(to: CGPoint(x: foldX + 30, y: page.minY + 30))
-    path.addArc(tangent1End: CGPoint(x: foldX, y: page.minY), tangent2End: CGPoint(x: foldX, y: foldY), radius: 14)
+    path.move(to: CGPoint(x: foldX, y: page.minY))
     path.addArc(tangent1End: CGPoint(x: foldX, y: foldY), tangent2End: CGPoint(x: page.maxX, y: foldY), radius: foldRadius)
-    path.addArc(tangent1End: CGPoint(x: page.maxX, y: foldY), tangent2End: CGPoint(x: foldX, y: page.minY), radius: 14)
+    path.addLine(to: CGPoint(x: page.maxX, y: foldY))
     path.closeSubpath()
     return path
 }
@@ -409,6 +412,8 @@ func render(pixels: Int) -> CGImage {
 
     // The flap: lighter than the page, brightest at the cut.
     context.saveGState()
+    context.addPath(pagePath())
+    context.clip()
     context.addPath(flapPath())
     context.clip()
     let white = CGColor(gray: 1, alpha: 1)
