@@ -121,6 +121,9 @@ struct MactermApp: App {
             }
             // SwiftUI's own item fixes ⌘, on it. Rendered from the command
             // instead, it shows the user's chord, and a rebind moves it.
+            // This group does not remove SwiftUI's item: the `Settings`
+            // scene adds it as a command of its own. `.commandsRemoved()` on
+            // that scene removes it (#658).
             CommandGroup(replacing: .appSettings) {
                 AppCommandMenuItem(command: .settings, appState: appState, projectStore: projectStore, titleOverride: "Settings…")
             }
@@ -236,6 +239,11 @@ struct MactermApp: App {
                 .modifier(AppColorScheme())
                 .modifier(PendingDialogAlert(appState: appState, host: .settings))
         }
+        // The scene's only command is SwiftUI's Settings… item, with ⌘, fixed
+        // on it. Without this, the app menu shows it next to the item that
+        // `.appSettings` renders from `AppCommand.settings`: two Settings…
+        // items (#658, measured on macOS 27).
+        .commandsRemoved()
     }
 }
 
