@@ -9,6 +9,8 @@ struct MainWindow: View {
     private var appState
     @Environment(ProjectStore.self)
     private var projectStore
+    @Environment(\.openSettings)
+    private var openSettings
     /// This window's own selection state (#345). `@State` so each window
     /// instance of the `WindowGroup` gets its own, which is what lets two
     /// windows show different projects.
@@ -302,6 +304,7 @@ struct MainWindow: View {
         .modifier(PendingDialogAlert(appState: appState, host: .mainWindow, windowID: windowState.id))
         .onAppear {
             AdaptiveTerminalChrome.shared.mainWindowDidAppear()
+            appState.openSettings = { [openSettings] in openSettings() }
         }
         .onDisappear {
             if let attachedWindow { appState.windowDidClose(attachedWindow) }

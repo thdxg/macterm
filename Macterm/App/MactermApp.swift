@@ -119,6 +119,11 @@ struct MactermApp: App {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesMenuItem()
             }
+            // SwiftUI's own item fixes ⌘, on it. Rendered from the command
+            // instead, it shows the user's chord, and a rebind moves it.
+            CommandGroup(replacing: .appSettings) {
+                AppCommandMenuItem(command: .settings, appState: appState, projectStore: projectStore, titleOverride: "Settings…")
+            }
             CommandGroup(replacing: .saveItem) {
                 AppCommandMenuItem(
                     command: .copySessionID,

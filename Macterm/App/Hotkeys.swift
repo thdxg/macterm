@@ -44,6 +44,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case closeWindow = "close_window"
     case openProject = "open_project"
     case zoomPane = "zoom_pane"
+    case settings
     case toggleCommandPalette = "toggle_command_palette"
     case reloadGhosttyConfig = "reload_ghostty_config"
     case openMactermConfig = "open_macterm_config"
@@ -158,6 +159,9 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .openProject: "cmd+o"
         case .zoomPane: "cmd+shift+return"
         case .toggleCommandPalette: "cmd+p"
+        // The macOS chord for an app's settings. The app menu's Settings…
+        // item renders from this command, so a rebind moves the menu too.
+        case .settings: "cmd+,"
         case .reloadGhosttyConfig: "cmd+shift+,"
         // Unbound by default: it opens an editor pane, which is a palette
         // action rather than a reflex, and ⌘, already belongs to Settings.

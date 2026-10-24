@@ -299,6 +299,8 @@ extension AppCommand {
             return { ctx.appState.appDelegate?.closeFocusedTerminalWindow() }
         case .toggleCommandPalette:
             return { ctx.appState.isCommandPaletteVisible.toggle() }
+        case .settings:
+            return { ctx.appState.requestSettings() }
         case .reloadGhosttyConfig:
             return {
                 guard GhosttyApp.shared.reloadAndReport() else { return }

@@ -361,6 +361,14 @@ struct HotkeysTests {
     }
 
     @Test
+    func settings_ships_on_the_macOS_settings_chord() {
+        #expect(HotkeyAction.settings.defaultShortcut == "cmd+,")
+        #expect(HotkeyAction.settings.title == "Settings")
+        #expect(AppCommand.settings.hotkeyAction == .settings)
+        #expect(AppCommand.settings.category == .other)
+    }
+
+    @Test
     func move_tab_and_move_pane_ship_on_the_arrow_keys() {
         #expect(HotkeyAction.moveTabUp.defaultShortcut == "ctrl+left")
         #expect(HotkeyAction.moveTabDown.defaultShortcut == "ctrl+right")

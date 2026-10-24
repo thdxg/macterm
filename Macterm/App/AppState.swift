@@ -97,6 +97,14 @@ final class AppState {
     /// app has a window anyway.
     var openNewWindow: (() -> Void)?
 
+    /// Opens the Settings window, or fronts it when it is open.
+    ///
+    /// Installed by `MainWindow` for the same reason as `openNewWindow`: the
+    /// `Settings` scene opens only through SwiftUI's `openSettings`
+    /// environment action. Nil until the first window's view tree appears —
+    /// a Settings invoked before then is dropped, as for `openNewWindow`.
+    var openSettings: (() -> Void)?
+
     /// Windows the snapshot says were open, minus the one the scene opens for
     /// itself — a FIFO that `registerWindow` pops as each restored window
     /// arrives, so every window adopts its own entry in order. This used to be
@@ -244,6 +252,14 @@ final class AppState {
             return
         }
         openNewWindow()
+    }
+
+    func requestSettings() {
+        guard let openSettings else {
+            logger.warning("requestSettings: no scene handler installed yet")
+            return
+        }
+        openSettings()
     }
 
     /// One `WindowState` per real window, keyed by its `NSWindow`.
