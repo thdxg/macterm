@@ -92,7 +92,7 @@ Macterm has its own settings for window opacity, sidebar behavior, quick termina
 
 ## Extensions
 
-An extension streamlines your workflows for Git, Docker, Kubernetes, SSH, coding agents and more. Currently, it adds screens to the command palette (for example, a list of the Git branches of the project that you can switch to, log or diff). More capabilities are planned on the roadmap.
+An extension streamlines your workflows for Git, Docker, Kubernetes, SSH, coding agents and more. Currently, it adds screens to the command palette ([example](extensions/git/README.md)). More capabilities are planned on the roadmap.
 
 **To install:** open **Settings → Extensions**, find the extension and click **Install**. Its palettes appear at once in the **Palettes** section of the command palette (<kbd>⌘P</kbd>).
 
