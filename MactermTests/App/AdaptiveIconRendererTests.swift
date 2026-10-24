@@ -194,7 +194,7 @@ struct AdaptiveIconRendererTests {
     /// 256 px: the body starts at 25 px, the frame spans its first 10 px and
     /// the ring the next 11. The cross's upper arm (green) runs down at
     /// x 597 pt of 1024, 145 px (`scripts/app-icon/frame.swift`).
-    private static let panePoints: [((x: Int, y: Int), Channel)] = [((128, 30), .blue), ((128, 41), .red), ((145, 85), .green)]
+    private static let panePoints: [((x: Int, y: Int), Channel)] = [((128, 30), .blue), ((128, 41), .red), ((153, 86), .green)]
 
     private static func dominant(_ color: NSColor) -> Channel {
         if color.redComponent > color.greenComponent, color.redComponent > color.blueComponent { return .red }

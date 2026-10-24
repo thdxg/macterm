@@ -108,16 +108,7 @@ struct AdaptiveIconTests {
                 guard let painted = accent?.color ?? paint.layers[group] else { continue }
                 let bundled = try #require(fill, "layer \(element) of group \(group) has no solid or gradient fill")
                 #expect(Self.close(painted, bundled.top), "group \(group), layer \(element): painted \(painted), bundled \(bundled.top)")
-                #expect(
-                    (accent?.bottom == nil) == (bundled.bottom == nil),
-                    "group \(group), layer \(element): one of the painted and the bundled fill is a gradient"
-                )
-                if let paintedBottom = accent?.bottom, let bundledBottom = bundled.bottom {
-                    #expect(
-                        Self.close(paintedBottom, bundledBottom),
-                        "group \(group), layer \(element): bottom \(paintedBottom), bundled \(bundledBottom)"
-                    )
-                }
+                #expect(bundled.bottom == nil, "group \(group), layer \(element): painted a solid color over a bundled gradient")
             }
         }
         for accent in paint.accents {
@@ -128,18 +119,19 @@ struct AdaptiveIconTests {
         }
         let background = try #require(Self.bundled.background)
         #expect(Self.close(paint.backgroundTop, background), "painted \(paint.backgroundTop), bundled \(background)")
-        // eyesclosed's lid.
-        #expect(Self.close(paint.backgroundTop, Self.hex(0x1A1B21)))
+        // eyesclosed's background, and its lid, its own palette 0.
+        #expect(Self.close(paint.backgroundTop, Self.hex(0x111214)))
+        #expect(try Self.close(#require(paint.layers[1]), Self.hex(0x383B4A)))
     }
 
-    /// The cross is the silver frame's gradient in every theme, a light one too.
+    /// The cross is the theme's white, palette 7, in every theme, a light one
+    /// too. The cross's shade is black.
     @Test
-    func theCrossIsTheFramesGradient() throws {
+    func theCrossIsTheThemesWhite() throws {
         for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight] {
             let paint = try #require(AdaptiveIcon.paint(for: theme))
             let cross = try #require(paint.accents.first { $0.group == AdaptiveIcon.crossGroup && $0.element == AdaptiveIcon.crossElement })
-            #expect(cross.color == AdaptiveIcon.crossTop)
-            #expect(cross.bottom == AdaptiveIcon.crossBottom)
+            #expect(cross.color == theme.palette[7])
             let shade = try #require(paint.accents
                 .first { $0.group == AdaptiveIcon.charactersGroup && $0.element == AdaptiveIcon.crossShadeElement })
             #expect(shade.color == AdaptiveIcon.crossShade)
@@ -157,29 +149,27 @@ struct AdaptiveIconTests {
         }
     }
 
-    /// The screen is the lid: palette 0 mixed into the background in
-    /// eyesclosed, Rose Pine and Catppuccin Mocha. It is flat.
+    /// The screen fades from the theme's lid, palette 0 itself in
+    /// eyesclosed, Rose Pine and Catppuccin Mocha, to its background. The
+    /// glass pane over the characters is the lid.
     @Test
-    func theScreenIsPalette0MixedIntoTheBackground() throws {
+    func theScreenFadesFromPalette0ToTheBackground() throws {
         for theme in [Self.eyesclosed, Self.rosePine, Self.catppuccinMocha] {
             let paint = try #require(AdaptiveIcon.paint(for: theme))
-            #expect(paint.backgroundTop == AdaptiveIcon.mix(theme.palette[0], into: theme.background, amount: AdaptiveIcon.lidMix))
-            #expect(paint.backgroundBottom == paint.backgroundTop)
-            // The glass pane over the characters has the screen's color.
-            #expect(paint.layers[1] == paint.backgroundTop)
+            #expect(paint.backgroundTop == theme.background)
+            #expect(paint.backgroundBottom == theme.background)
+            #expect(paint.layers[1] == theme.palette[0])
+            let gradient = try #require(paint.accents
+                .first { $0.group == AdaptiveIcon.charactersGroup && $0.element == AdaptiveIcon.screenGradientElement })
+            #expect(gradient.color == theme.palette[0])
         }
     }
 
-    /// Gruvbox's palette 0 is its background, so its lid comes from palette
-    /// 8, near Gruvbox's own bg1 (#3C3836).
+    /// Gruvbox's palette 0 is its background, so its lid is palette 8.
     @Test
     func aPalette0AtTheBackgroundTakesTheNextGray() throws {
         let paint = try #require(AdaptiveIcon.paint(for: Self.gruvboxDark))
-        #expect(paint.backgroundTop == AdaptiveIcon.mix(
-            Self.gruvboxDark.palette[8],
-            into: Self.gruvboxDark.background,
-            amount: AdaptiveIcon.lidMix
-        ))
+        #expect(paint.layers[1] == Self.gruvboxDark.palette[8])
     }
 
     /// The lid steps toward the side of the gray that stands out most: darker
@@ -187,22 +177,22 @@ struct AdaptiveIconTests {
     /// whose palette 0 is on the other side.
     @Test
     func theLidStepsTowardTheFrontGray() throws {
-        let light = try #require(AdaptiveIcon.paint(for: Self.gitHubLight))
-        #expect(AdaptiveIcon.lightness(light.backgroundTop) < AdaptiveIcon.lightness(Self.gitHubLight.background))
-        let mid = try #require(AdaptiveIcon.paint(for: Self.midGray))
-        #expect(AdaptiveIcon.lightness(mid.backgroundTop) > AdaptiveIcon.lightness(Self.midGray.background))
+        let light = try #require(AdaptiveIcon.paint(for: Self.gitHubLight)?.layers[1])
+        #expect(AdaptiveIcon.lightness(light) < AdaptiveIcon.lightness(Self.gitHubLight.background))
+        let mid = try #require(AdaptiveIcon.paint(for: Self.midGray)?.layers[1])
+        #expect(AdaptiveIcon.lightness(mid) > AdaptiveIcon.lightness(Self.midGray.background))
     }
 
-    /// The characters are a mesh of the theme's ANSI colors: blue over all,
-    /// and red, yellow, magenta, green and cyan toward their corners.
+    /// The characters are one color, the theme's blue: no layer of their
+    /// group has a color of its own but the screen's gradient and the cross's
+    /// shade.
     @Test
-    func theCharactersAreAMeshOfTheANSIColors() throws {
+    func theCharactersAreTheThemesBlue() throws {
         for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight, Self.catppuccinMocha, Self.midGray] {
             let paint = try #require(AdaptiveIcon.paint(for: theme))
             #expect(paint.layers[AdaptiveIcon.charactersGroup] == theme.palette[4])
-            let mesh = paint.accents.filter { $0.group == AdaptiveIcon.charactersGroup && $0.element != AdaptiveIcon.crossShadeElement }
-            #expect(mesh.map(\.element) == [1, 2, 3, 4, 5])
-            #expect(mesh.map(\.color) == [1, 3, 5, 2, 6].map { theme.palette[$0] })
+            let accents = paint.accents.filter { $0.group == AdaptiveIcon.charactersGroup }
+            #expect(accents.map(\.element) == [AdaptiveIcon.screenGradientElement, AdaptiveIcon.crossShadeElement])
         }
     }
 

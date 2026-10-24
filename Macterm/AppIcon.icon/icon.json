@@ -4,7 +4,7 @@
     "specular-location"
   ],
   "fill" : {
-    "solid" : "srgb:0.10196,0.10588,0.12941,1.00000"
+    "solid" : "srgb:0.06667,0.07059,0.07843,1.00000"
   },
   "groups" : [
     {
@@ -110,7 +110,7 @@
       "layers" : [
         {
           "fill" : {
-            "solid" : "srgb:0.10196,0.10588,0.12941,1.00000"
+            "solid" : "srgb:0.21961,0.23137,0.29020,1.00000"
           },
           "glass" : true,
           "hidden" : false,
@@ -127,10 +127,7 @@
         },
         {
           "fill" : {
-            "linear-gradient" : [
-              "srgb:0.87945,0.87945,0.87945,1.00000",
-              "srgb:0.40000,0.40000,0.40392,1.00000"
-            ]
+            "solid" : "srgb:0.73333,0.73725,0.78039,1.00000"
           },
           "glass" : true,
           "hidden" : false,
@@ -194,91 +191,6 @@
         },
         {
           "fill" : {
-            "solid" : "srgb:0.84706,0.81569,0.81569,1.00000"
-          },
-          "glass" : false,
-          "hidden" : false,
-          "image-name" : "ascii-bottom-left.png",
-          "name" : "ascii-bottom-left",
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          },
-          "opacity" : 0.5
-        },
-        {
-          "fill" : {
-            "solid" : "srgb:0.46667,0.60784,0.69020,1.00000"
-          },
-          "glass" : false,
-          "hidden" : false,
-          "image-name" : "ascii-right.png",
-          "name" : "ascii-right",
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          },
-          "opacity" : 0.5
-        },
-        {
-          "fill" : {
-            "solid" : "srgb:0.60392,0.61569,0.68235,1.00000"
-          },
-          "glass" : false,
-          "hidden" : false,
-          "image-name" : "ascii-left.png",
-          "name" : "ascii-left",
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          },
-          "opacity" : 0.5
-        },
-        {
-          "fill" : {
-            "solid" : "srgb:0.92549,0.84706,0.68235,1.00000"
-          },
-          "glass" : false,
-          "hidden" : false,
-          "image-name" : "ascii-top-right.png",
-          "name" : "ascii-top-right",
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          },
-          "opacity" : 0.5
-        },
-        {
-          "fill" : {
-            "solid" : "srgb:1.00000,0.67059,0.63529,1.00000"
-          },
-          "glass" : false,
-          "hidden" : false,
-          "image-name" : "ascii-top-left.png",
-          "name" : "ascii-top-left",
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          },
-          "opacity" : 0.5
-        },
-        {
-          "fill" : {
             "solid" : "srgb:0.71765,0.78431,0.79608,1.00000"
           },
           "glass" : true,
@@ -293,6 +205,22 @@
             ]
           },
           "opacity" : 0.5
+        },
+        {
+          "fill" : {
+            "solid" : "srgb:0.21961,0.23137,0.29020,1.00000"
+          },
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "screen-gradient.png",
+          "name" : "screen-gradient",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
       "lighting" : "combined",

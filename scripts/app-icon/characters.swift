@@ -1,6 +1,5 @@
-// Draws the character layers of the app icon:
-// Macterm/AppIcon.icon/Assets/ascii.png, and one copy of it for each corner
-// of the mesh gradient, ascii-<corner>.png.
+// Draws the character layer of the app icon:
+// Macterm/AppIcon.icon/Assets/ascii.png.
 //
 // The layer is a monospace grid of characters under all the glass. Each of
 // the four panes has a grid of its own, as a terminal pane does: it starts
@@ -25,12 +24,6 @@
 //
 // A seeded generator picks the offsets, so a run with no change here writes
 // the same file.
-//
-// The mesh gradient: each copy is the characters faded by a soft Gaussian blob
-// at one place near the edge (`corners`). The copies are flat layers over the
-// characters, and each takes one ANSI color of the theme. They blend as the
-// colors of a mesh gradient do. They must be flat: a glass layer traces its
-// edge where its alpha crosses a threshold, and a fade made that edge a ring.
 //
 // Usage: swift scripts/app-icon/characters.swift <AppIcon.icon/Assets>
 
@@ -67,20 +60,16 @@ let ramp: [[String]] = [
 /// The cross, as `scripts/app-icon/frame.swift` draws it: points down from
 /// the top-left, and each quadrant's inner corner radius (the icon's corner
 /// radius, 26.15% of the side, less the dark ring's 108 pt inset).
-let cross = (x: 597.0, y: 593.0, gap: 54.0, radius: canvas * 0.2615 - 108)
+let cross = (x: 597.0, y: 593.0, gap: 52.0, radius: canvas * 0.2615 - 108)
+/// The cross's turn, as `frame.swift` draws it: the characters' grids turn
+/// clockwise with it, so their rows stay parallel to its arms.
+let crossAngle = 8.0
 
 guard CommandLine.arguments.count == 2 else {
     FileHandle.standardError.write(Data("usage: characters.swift <AppIcon.icon/Assets>\n".utf8))
     exit(2)
 }
 let outDir = URL(fileURLWithPath: CommandLine.arguments[1])
-
-/// Where each copy is brightest, in canvas points down from the top-left,
-/// and how wide its blob is (the standard deviation).
-let corners: [(name: String, x: Double, y: Double)] = [
-    ("top-left", 130, 130), ("top-right", 894, 130), ("left", 80, 540), ("right", 944, 540), ("bottom-left", 130, 930),
-]
-let blobWidth = 230.0
 
 /// A random value in 0..<1 for each cell.
 func hash(_ x: Int, _ y: Int) -> Double {
@@ -160,6 +149,11 @@ let bottomRow = cross.y + cross.gap / 2 + margin - cellHeight * 0.22
 let columns = Int(canvas / cellWidth) + 1
 let rows = Int(canvas / cellHeight) + 1
 var downward = CGAffineTransform(translationX: 0, y: canvas).scaledBy(x: 1, y: -1)
+// Turn the panes and their grids about the cross's middle. CoreGraphics runs
+// y up, so clockwise is a negative angle.
+context.translateBy(x: cross.x, y: canvas - cross.y)
+context.rotate(by: -crossAngle * .pi / 180)
+context.translateBy(x: -cross.x, y: -(canvas - cross.y))
 for pane in panePaths() {
     context.saveGState()
     context.addPath(pane.path.copy(using: &downward)!)
@@ -183,36 +177,4 @@ func write(_ image: CGImage, _ name: String) {
     guard CGImageDestinationFinalize(destination) else { exit(1) }
 }
 
-let characters = context.makeImage()!
-write(characters, "ascii")
-
-/// A gray Gaussian blob, white at its center: the copy's alpha.
-func blob(x: Double, y: Double) -> CGImage {
-    let gray = CGContext(
-        data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
-        space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue
-    )!
-    let stops = 16
-    let radius = 3 * blobWidth
-    let locations = (0 ..< stops).map { CGFloat($0) / CGFloat(stops - 1) }
-    let components = locations.flatMap { t -> [CGFloat] in
-        let d = Double(t) * radius
-        return [CGFloat(exp(-d * d / (2 * blobWidth * blobWidth))), 1]
-    }
-    let gradient = CGGradient(colorSpace: CGColorSpaceCreateDeviceGray(), colorComponents: components, locations: locations, count: stops)!
-    // CoreGraphics runs y up.
-    let center = CGPoint(x: x, y: Double(size) - y)
-    gray.drawRadialGradient(gradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: radius, options: [])
-    return gray.makeImage()!
-}
-
-for corner in corners {
-    let copy = CGContext(
-        data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
-        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-    )!
-    let rect = CGRect(x: 0, y: 0, width: size, height: size)
-    copy.clip(to: rect, mask: blob(x: corner.x, y: corner.y))
-    copy.draw(characters, in: rect)
-    write(copy.makeImage()!, "ascii-\(corner.name)")
-}
+write(context.makeImage()!, "ascii")

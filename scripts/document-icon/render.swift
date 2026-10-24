@@ -4,14 +4,14 @@
 // The page is the app icon's screen, in the page's shape, with none of its
 // cross: one glass pane over the whole page. Behind the glass, a grid of
 // characters covers the page, and its density is the gradient: heavy
-// characters at the top thin out to dots at the bottom, in one color, with no
-// mesh gradient. The colors come from `Macterm/AppIcon.icon`. The page outline
+// characters at the top thin out to dots at the bottom, in one color. The
+// colors come from `Macterm/AppIcon.icon`. The page outline
 // follows the system's generic document (`NSWorkspace.icon(for:)` at 1024 px,
 // measured on macOS 27).
 //
 // The page is real Liquid Glass. The script compiles its own copy of the icon,
 // with the pane and the characters drawn again for the page, and without the
-// cross and the characters' mesh copies (`leftOut`): in a region of the
+// cross, its shade and the screen's gradient (`leftOut`): in a region of the
 // icon's canvas with the page's shape, inside the frames.
 // `macterm-icon-renderer` (the adaptive icon's helper) draws that copy, and the
 // script lays the region over the page.
@@ -88,10 +88,10 @@ func color(_ text: String) -> CGColor {
 let icon = try JSONDecoder().decode(IconFile.self, from: Data(contentsOf: iconURL.appendingPathComponent("icon.json")))
 
 /// The layers of the app icon that the page leaves out: the cross, its shade
-/// and the characters' mesh copies. Each group keeps at least one layer, so the copy
+/// and the screen's gradient. Each group keeps at least one layer, so the copy
 /// has the app icon's groups, as the helper requires.
 func leftOut(_ name: String) -> Bool {
-    name.hasPrefix("cross") || name.hasPrefix("ascii-")
+    name.hasPrefix("cross") || name == "screen-gradient"
 }
 /// The app icon's background: one flat color.
 guard let solidFill = icon.fill.solid else { fail("expected a solid background in icon.json") }

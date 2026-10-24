@@ -1,6 +1,7 @@
-// Draws the two frame rings, the glass pane, the cross and the cross's shade
-// of the app icon: Macterm/AppIcon.icon/Assets/frame-silver.png,
-// frame-dark.png, glass-pane.png, cross.png and cross-shade.png.
+// Draws the two frame rings, the glass pane, the cross, the cross's shade and
+// the screen's gradient of the app icon: Macterm/AppIcon.icon/Assets/
+// frame-silver.png, frame-dark.png, glass-pane.png, cross.png, cross-shade.png
+// and screen-gradient.png.
 //
 // The rings follow the macOS icon shape: a rounded square with continuous
 // corners, as SwiftUI's `RoundedRectangle(style: .continuous)` draws them,
@@ -63,14 +64,18 @@ func shape(inset: Double) -> CGPath {
 /// shape, as the v1.32.1 icon's glyph left it between its four panes. Each
 /// quadrant rounds only its corner that faces the middle, so the cross opens
 /// up where its arms meet. The position is that glyph's, moved onto the
-/// screen: the arms cross 60% of the way across and down. The gap is 54 pt,
-/// thinner than the glyph's 66 pt. Each inner corner has the radius of the dark ring's inner
+/// screen: the arms cross 60% of the way across and down. The gap is as wide
+/// as the silver frame (52 pt). Each inner corner has the radius of the dark ring's inner
 /// corners (about 160 pt), so every quadrant's corners match. The arms run
 /// 4 pt under the dark ring. Points run down from the top-left.
-let cross = (x: 597.0, y: 593.0, gap: 54.0, radius: canvas * iconRadius - rings[1].inner)
+let cross = (x: 597.0, y: 593.0, gap: rings[0].inner, radius: canvas * iconRadius - rings[1].inner)
+/// The cross turns clockwise by this many degrees about its middle, with
+/// the panes, and `characters.swift` turns the characters' grids with it.
+let crossAngle = 8.0
 
-/// The four quadrants. Each one runs far past the screen on its outer sides.
-/// The glass pane is the four of them, so it never covers the cross.
+/// The four quadrants, turned by `crossAngle`. Each one runs far past the
+/// screen on its outer sides. The glass pane is the four of them, so it never
+/// covers the cross.
 func quadrantPaths() -> [CGPath] {
     let far = 2 * canvas
     let half = cross.gap / 2
@@ -84,7 +89,11 @@ func quadrantPaths() -> [CGPath] {
         (CGRect(x: cross.x + half, y: cross.y + half, width: far, height: far),
          RectangleCornerRadii(topLeading: cross.radius)),
     ]
-    return quadrants.map { UnevenRoundedRectangle(cornerRadii: $1, style: .continuous).path(in: $0).cgPath }
+    // Points run down, so a positive angle turns clockwise.
+    var turn = CGAffineTransform(translationX: cross.x, y: cross.y)
+        .rotated(by: crossAngle * .pi / 180)
+        .translatedBy(x: -cross.x, y: -cross.y)
+    return quadrants.map { UnevenRoundedRectangle(cornerRadii: $1, style: .continuous).path(in: $0).cgPath.copy(using: &turn)! }
 }
 
 /// Draws `paths`, with the cross's points running down from the top-left.
@@ -152,3 +161,34 @@ let shaded = crossImage.clampedToExtent()
     .transformed(by: CGAffineTransform(translationX: 0, y: -shade.offset))
     .cropped(to: crossImage.extent)
 writeImage(CIContext().createCGImage(shaded, from: crossImage.extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB))!, "cross-shade")
+
+/// The screen's gradient: opaque at the top of the screen and transparent at
+/// its bottom, along the cross's turn. The icon's background is the theme's
+/// background, and the paint rule fills this layer with the theme's lid, so
+/// the screen fades from the lid at the top to the background at the bottom. It is a flat layer at the bottom
+/// of the characters' group, whose images are 1 pixel a point.
+let screenGradient: CGImage = {
+    let pixels = Int(canvas)
+    let context = CGContext(
+        data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    )!
+    let gradient = CGGradient(
+        colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+        colorComponents: [1, 1, 1, 1, 1, 1, 1, 0], locations: [0, 1], count: 2
+    )!
+    // Down the screen, turned clockwise by `crossAngle`: points run down from
+    // the top-left, and CoreGraphics runs up.
+    let angle = crossAngle * .pi / 180
+    let half = (canvas - 2 * screenInset) / 2
+    let down = (x: -sin(angle) * half, y: cos(angle) * half)
+    let middle = canvas / 2
+    context.drawLinearGradient(
+        gradient,
+        start: CGPoint(x: middle - down.x, y: canvas - (middle - down.y)),
+        end: CGPoint(x: middle + down.x, y: canvas - (middle + down.y)),
+        options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+    )
+    return context.makeImage()!
+}()
+writeImage(screenGradient, "screen-gradient")

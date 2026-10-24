@@ -28,8 +28,7 @@ enum AdaptiveIcon {
         /// the dark ring, and the silver frame. Nil keeps the group's bundled
         /// fills.
         var layers: [Color?]
-        /// The layers with a color of their own: the characters' mesh copies
-        /// and the cross.
+        /// The layers with a color of their own: the cross and its shade.
         var accents: [AdaptiveIconRequest.Accent]
     }
 
@@ -38,55 +37,49 @@ enum AdaptiveIcon {
     /// reverse of `layers` in `icon.json`.
     static let crossGroup = 1
     static let crossElement = 0
-    /// The cross is the silver frame's gradient, top to bottom, in every
-    /// theme, so it reads as part of the frame. The frame keeps its bundled
-    /// fill, but the cross shares its group with the panes, which take the
-    /// theme's screen, so the cross takes the gradient as an accent.
-    static let crossTop = Color(red: 0.87945, green: 0.87945, blue: 0.87945)
-    static let crossBottom = Color(red: 0.40000, green: 0.40000, blue: 0.40392)
-    /// The characters' group (the bottom one), and the palette entry of each
-    /// mesh copy of the characters by its place in that group: top-left red,
-    /// top-right yellow, left magenta, right green, bottom-left cyan. The
-    /// characters themselves (element 0) are blue, palette 4, so the bottom
-    /// right stays blue.
+    /// The cross is the theme's white, palette 7: it follows the theme, and
+    /// it stays light, as the silver frame is.
+    static let crossEntry = 7
+    /// The characters' group (the bottom one), and the palette entry the
+    /// characters take: blue, one color over the whole screen.
     static let charactersGroup = 0
+    /// The screen's gradient: the bottom layer of the characters' group. Over
+    /// the background, which is the theme's background color, it lays the lid
+    /// at the top of the screen and fades it out toward the bottom, along the
+    /// cross's turn.
+    static let screenGradientElement = 0
     /// The cross's shade: the top layer of the characters' group, black in
     /// every theme, as a shadow is.
-    static let crossShadeElement = 6
+    static let crossShadeElement = 2
     static let crossShade = Color(red: 0, green: 0, blue: 0)
     static let characterBase = 4
-    static let characterMesh: [(element: Int, palette: Int)] = [(1, 1), (2, 3), (3, 5), (4, 2), (5, 6)]
 
     /// The gray entries (bright white, white, bright black, black), in the
     /// order that breaks a tie.
     static let neutralEntries = [15, 7, 8, 0]
-    /// The screen is the theme's "lid": the step just past the background
-    /// that a status bar or a popup takes. eyesclosed names it (`#1A1B21`),
-    /// and it is the theme's palette 0 mixed this much into its background.
-    static let lidMix = 0.23
     /// The smallest step the lid's gray keeps from the background. Rose
     /// Pine's palette 0 is only 9% of the way to its frame gray, and it is
     /// still the gray its lid comes from. Gruvbox's palette 0 is the
     /// background itself, so its lid comes from the next gray.
     static let lidMinimumStep = 0.05
     /// The icon's colors. The frames keep their bundled fills in every theme:
-    /// Ghostty's gradients, from `AppIcon.icon`. The cross is the silver
-    /// frame's gradient (`crossTop`, `crossBottom`).
-    /// The characters are a mesh gradient of the theme's ANSI colors
-    /// (`characterBase`, `characterMesh`). The screen is the theme's lid.
+    /// Ghostty's gradients, from `AppIcon.icon`. The cross is the theme's
+    /// white (`crossEntry`).
+    /// The characters are the theme's blue (`characterBase`). The screen is a
+    /// gradient from the theme's lid at the top to its background at the
+    /// bottom (`screenGradientElement`).
     ///
-    /// The lid is the nearest gray (palette 15, 7, 8 or 0) that is at least
-    /// `lidMinimumStep` from the background toward the gray that stands out
-    /// most, mixed `lidMix` into the background. Distances are OKLab lightness
-    /// away from the background, signed by the side of the gray that stands
-    /// out most, so a light theme gets a lid darker than its background. That
-    /// gray is palette 0 in most dark themes. In Gruvbox, whose palette 0 is
-    /// the background, it is palette 8, and the mix comes near Gruvbox's own
-    /// `bg1`.
+    /// The lid is the theme's next gray past the background: the nearest gray
+    /// (palette 15, 7, 8 or 0) that is at least `lidMinimumStep` from the
+    /// background toward the gray that stands out most, itself, with no mix.
+    /// Distances are OKLab lightness away from the background, signed by the
+    /// side of the gray that stands out most, so a light theme gets a lid
+    /// darker than its background. That gray is palette 0 in most dark
+    /// themes. In Gruvbox, whose palette 0 is the background, it is palette 8.
     ///
-    /// In eyesclosed, the theme the icon was drawn in, this picks the lid
-    /// for the screen, and eyesclosed's own ANSI
-    /// colors for the characters: the bundled icon's own fills. Nil when the
+    /// In eyesclosed, the theme the icon was drawn in, this picks its
+    /// background and its palette 0 for the screen, and its blue for the
+    /// characters: the bundled icon's own fills. Nil when the
     /// theme has no gray that differs from the background.
     static func paint(for theme: ThemeColors) -> Paint? {
         guard theme.palette.count >= 16 else { return nil }
@@ -96,16 +89,17 @@ enum AdaptiveIcon {
         let share = offset.map { $0 / offset[front] }
         // `front` itself qualifies, so a lid gray always exists.
         let lidGray = first(of: neutralEntries.filter { share[$0] >= lidMinimumStep }, by: { share[$0] }) ?? front
-        let screen = mix(theme.palette[lidGray], into: theme.background, amount: lidMix)
+        let lid = theme.palette[lidGray]
         return Paint(
-            backgroundTop: screen,
-            backgroundBottom: screen,
-            // The glass pane is the screen's own color, so that only its
-            // glass shows.
-            layers: [theme.palette[characterBase], screen, nil, nil],
-            accents: characterMesh.map { .init(group: charactersGroup, element: $0.element, color: theme.palette[$0.palette]) }
-                + [.init(group: crossGroup, element: crossElement, color: crossTop, bottom: crossBottom)]
-                + [.init(group: charactersGroup, element: crossShadeElement, color: crossShade)]
+            backgroundTop: theme.background,
+            backgroundBottom: theme.background,
+            // The glass pane is the lid, so that only its glass shows.
+            layers: [theme.palette[characterBase], lid, nil, nil],
+            accents: [
+                .init(group: crossGroup, element: crossElement, color: theme.palette[crossEntry]),
+                .init(group: charactersGroup, element: screenGradientElement, color: lid),
+                .init(group: charactersGroup, element: crossShadeElement, color: crossShade),
+            ]
         )
     }
 

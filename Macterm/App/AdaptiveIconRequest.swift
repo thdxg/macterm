@@ -18,14 +18,11 @@ struct AdaptiveIconRequest: Codable, Equatable, Hashable {
     }
 
     /// One layer's fill: `element` counts the layers of group `group` in
-    /// the order IconRendering keeps them, as `group` counts `layers`. With
-    /// `bottom`, the fill is a gradient from `color` at the top of the layer
-    /// to `bottom` at its bottom.
+    /// the order IconRendering keeps them, as `group` counts `layers`.
     struct Accent: Codable, Equatable, Hashable {
         var group: Int
         var element: Int
         var color: Color
-        var bottom: Color?
     }
 
     /// An sRGB color, each component 0…1.
