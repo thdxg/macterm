@@ -6,7 +6,7 @@ import Yams
 /// declared. One file per project:
 ///
 ///     name: API server           # optional, display only
-///     path: devbox:~/dev/api     # required — the project's identity
+///     path: devbox:~/dev/api     # folder-backed project identity
 ///     zmxPath: ~/bin/zmx         # optional — explicit remote zmx path
 ///     tabs:                      # optional — same schema as LayoutFile
 ///       - run: "npm run dev"
@@ -16,11 +16,18 @@ import Yams
 /// path, re-resolved on every use — the filename is a cosmetic slug and never
 /// identity. `zmxPath` (#104) is the absolute remote zmx path used verbatim
 /// when PATH resolution can't find it (only meaningful for remote `path`).
+/// A project without a folder omits `path` and declares its UUID as `id`.
+/// Its layout matches that ID, including after a rename. Relative pane paths
+/// resolve from the home folder.
 /// Files and the runtime project list are deliberately decoupled: Macterm
 /// writes a file only on explicit "Save Layout", and never deletes one.
 struct ProjectFile: Codable, Equatable {
     var name: String?
-    var path: String
+    /// Identity for a project without a folder. Folder-backed files keep
+    /// matching by path and do not need this field. Declared second, so a
+    /// saved file has it at the top: a hand edit of `tabs:` does not reach it.
+    var id: UUID?
+    var path: String?
     var zmxPath: String?
     var tabs: [LayoutTab]?
 
@@ -31,9 +38,47 @@ struct ProjectFile: Codable, Equatable {
         guard let tabs, !tabs.isEmpty else { return nil }
         return LayoutFile(name: name, tabs: tabs)
     }
+
+    /// The project this file declares. nil when it names none: no path, and
+    /// no ID or the pinned workspace's. `parse` refuses such a file and
+    /// `ProjectFileStore.write` refuses to write one.
+    var identity: ProjectFileIdentity? {
+        ProjectFileIdentity(path: path, id: id)
+    }
 }
 
-/// Lenient header decode used for path matching: only `name`/`path` are
+/// What a layout file declares as its project: the folder of a project with
+/// one, else the ID of a project without one. The one value every lookup in
+/// `ProjectFileStore` takes, so no caller can pass a path and forget the ID.
+enum ProjectFileIdentity: Equatable, CustomStringConvertible {
+    case path(String)
+    case id(UUID)
+
+    init(_ project: Project) {
+        self = project.path.map(Self.path) ?? .id(project.id)
+    }
+
+    /// A path wins over an ID. The pinned workspace's ID identifies no
+    /// project file.
+    init?(path: String?, id: UUID?) {
+        if let path {
+            self = .path(path)
+        } else if let id, id != PinnedTabs.projectID {
+            self = .id(id)
+        } else {
+            return nil
+        }
+    }
+
+    var description: String {
+        switch self {
+        case let .path(path): path
+        case let .id(id): "id \(id.uuidString)"
+        }
+    }
+}
+
+/// Lenient header decode used for path matching: only `name`/`path`/`id` are
 /// examined, so a schema error inside `tabs:` still identifies which project
 /// a file declares (and the full-decode error can then surface on apply
 /// instead of the file silently unmatching). Only raw YAML syntax errors
@@ -41,6 +86,40 @@ struct ProjectFile: Codable, Equatable {
 struct ProjectFileHeader: Codable, Equatable {
     var name: String?
     var path: String?
+    var id: UUID?
+
+    /// A folder matches by `path`. A project without one matches only a file
+    /// that declares its ID and no path.
+    func matches(_ identity: ProjectFileIdentity) -> Bool {
+        switch identity {
+        case let .path(projectPath): ProjectPath.matches(path, projectPath)
+        case let .id(projectID): path == nil && id == projectID
+        }
+    }
+}
+
+/// `id` was an unknown key, which decoding ignored, before projects without a
+/// folder. A file with a folder can carry an `id:` that is not a UUID (a note
+/// that someone wrote), so a bad value reads as no ID and does not fail the
+/// file. A file with no path and a bad ID then fails as a file with no ID.
+extension ProjectFile {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        id = try? container.decodeIfPresent(UUID.self, forKey: .id)
+        path = try container.decodeIfPresent(String.self, forKey: .path)
+        zmxPath = try container.decodeIfPresent(String.self, forKey: .zmxPath)
+        tabs = try container.decodeIfPresent([LayoutTab].self, forKey: .tabs)
+    }
+}
+
+extension ProjectFileHeader {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        path = try container.decodeIfPresent(String.self, forKey: .path)
+        id = try? container.decodeIfPresent(UUID.self, forKey: .id)
+    }
 }
 
 extension ProjectFile {
@@ -52,7 +131,20 @@ extension ProjectFile {
 
     static func parse(yaml: String) throws -> ProjectFile {
         do {
-            return try YAMLDecoder().decode(ProjectFile.self, from: yaml)
+            let file = try YAMLDecoder().decode(ProjectFile.self, from: yaml)
+            guard file.identity != nil else {
+                throw DecodingError.keyNotFound(
+                    CodingKeys.path,
+                    .init(
+                        codingPath: [],
+                        debugDescription: """
+                        A project file needs a path or a project ID. \
+                        The ID must be a UUID that is not the ID of the pinned tabs.
+                        """
+                    )
+                )
+            }
+            return file
         } catch {
             throw LayoutFileError.parse(underlying: error)
         }

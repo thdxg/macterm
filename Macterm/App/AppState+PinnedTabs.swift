@@ -92,7 +92,13 @@ extension AppState {
             return
         }
         // moveTab removes the record (its unpin hook) and rewrites the file.
-        moveTab(tabID, from: PinnedTabs.projectID, to: dest.id, destPath: dest.path)
+        moveTab(
+            tabID,
+            from: PinnedTabs.projectID,
+            to: dest.id,
+            destPath: dest.defaultDirectory,
+            destSessionSlug: dest.sessionSlug
+        )
     }
 
     /// Unpin a record that has NO live tab (its sessions died) into a

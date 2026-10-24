@@ -112,6 +112,12 @@ struct MactermApp: App {
                 Divider()
                 AppCommandMenuItem(command: .newTab, appState: appState, projectStore: projectStore, titleOverride: "New Tab")
                 AppCommandMenuItem(command: .openProject, appState: appState, projectStore: projectStore, titleOverride: "Open Project…")
+                AppCommandMenuItem(
+                    command: .newFolderlessProject,
+                    appState: appState,
+                    projectStore: projectStore,
+                    titleOverride: "New Project Without Folder…"
+                )
             }
             CommandGroup(replacing: .toolbar) {
                 ToolbarVisibilityMenuItem()

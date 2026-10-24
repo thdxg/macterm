@@ -387,6 +387,7 @@ struct ControlProjectInfo: Codable, Equatable {
     var index: Int?
     var id: String
     var name: String
+    /// Empty for a project without a folder. Keep the wire type as String.
     var path: String
     var active: Bool
     /// Whether a live workspace exists for the project this launch.

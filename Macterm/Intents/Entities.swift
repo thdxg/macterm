@@ -15,8 +15,12 @@ struct MactermProjectEntity: AppEntity {
     @Property(title: "Name")
     var name: String
 
+    /// Empty for a project without a folder, as on the control socket.
     @Property(title: "Path")
     var path: String
+
+    /// The subtitle in the picker: the path, or "No folder" where it is empty.
+    private let pathLabel: String
 
     static var typeDisplayRepresentation: TypeDisplayRepresentation {
         TypeDisplayRepresentation(name: "Project")
@@ -25,14 +29,17 @@ struct MactermProjectEntity: AppEntity {
     static let defaultQuery = MactermProjectQuery()
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(name)", subtitle: "\(path)")
+        DisplayRepresentation(title: "\(name)", subtitle: "\(pathLabel)")
     }
 
     @MainActor
     init(_ project: Project) {
         id = project.id
+        // Before the `@Property` values: a wrapper's setter needs every
+        // plain stored property set first.
+        pathLabel = project.pathLabel
         name = project.name
-        path = project.path
+        path = project.path ?? ""
     }
 }
 

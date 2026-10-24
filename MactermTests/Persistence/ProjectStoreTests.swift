@@ -10,6 +10,139 @@ struct ProjectStoreTests {
     }
 
     @Test
+    func folderless_projects_keep_separate_ids_and_persist_without_a_path() {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("folderless-\(UUID()).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = makeStore(fileURL: url)
+        let first = store.create(name: "Scratch")
+        let second = store.create(name: "Scratch")
+        #expect(first.id != second.id)
+        #expect(first.path == nil)
+        #expect(first.defaultDirectory == ProjectPath.currentHome)
+        #expect(!first.isRemote)
+        #expect(first.location == nil)
+        #expect(!ProjectPath.matches(first.path, second.path))
+        #expect(!ProjectPath.matches(first.path, ProjectPath.currentHome))
+        let reloaded = makeStore(fileURL: url)
+        #expect(reloaded.projects.map(\.id) == [first.id, second.id])
+        #expect(reloaded.projects.allSatisfy { $0.path == nil })
+        let rooted = store.findOrCreate(name: "Home", path: ProjectPath.currentHome)
+        #expect(rooted.id != first.id && rooted.id != second.id)
+    }
+
+    /// What a build from before projects without a folder decodes: `path`
+    /// is a required String. One row it cannot decode fails the whole array.
+    private struct LegacyProject: Decodable {
+        let id: UUID
+        let name: String
+        let path: String
+    }
+
+    @Test
+    func projects_without_a_folder_stay_out_of_the_file_that_older_builds_read() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("split-\(UUID()).json")
+        let folderlessURL = ProjectStore.folderlessFileURL(beside: url)
+        defer {
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: folderlessURL)
+        }
+        let store = makeStore(fileURL: url)
+        let rooted = store.create(name: "api", path: "/tmp/api")
+        #expect(!FileManager.default.fileExists(atPath: folderlessURL.path))
+        let scratch = store.create(name: "Scratch")
+
+        let legacy = try JSONDecoder().decode([LegacyProject].self, from: Data(contentsOf: url))
+        #expect(legacy.map(\.id) == [rooted.id])
+        let folderless = try JSONDecoder().decode([Project].self, from: Data(contentsOf: folderlessURL))
+        #expect(folderless.map(\.id) == [scratch.id])
+
+        // One list again, in sidebar order, after a relaunch.
+        #expect(makeStore(fileURL: url).projects.map(\.id) == [rooted.id, scratch.id])
+    }
+
+    /// A build of this feature before the split wrote rows with no path to
+    /// `projects.json`. They still load, and the next save moves them.
+    @Test
+    func rows_without_a_path_in_the_main_file_move_on_the_next_save() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("split-migrate-\(UUID()).json")
+        let folderlessURL = ProjectStore.folderlessFileURL(beside: url)
+        defer {
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: folderlessURL)
+        }
+        let rooted = Project(name: "api", path: "/tmp/api", sortOrder: 0)
+        let scratch = Project(name: "Scratch", sortOrder: 1)
+        try JSONEncoder().encode([rooted, scratch]).write(to: url)
+
+        let store = makeStore(fileURL: url)
+        #expect(store.projects.map(\.id) == [rooted.id, scratch.id])
+        store.rename(id: rooted.id, to: "API")
+        #expect(try JSONDecoder().decode([LegacyProject].self, from: Data(contentsOf: url)).map(\.id) == [rooted.id])
+        #expect(makeStore(fileURL: url).projects.map(\.id) == [rooted.id, scratch.id])
+    }
+
+    /// A save that stopped after the folderless file leaves a project in both
+    /// files. The list keeps one copy.
+    @Test
+    func a_project_in_both_files_loads_once() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("split-dup-\(UUID()).json")
+        let folderlessURL = ProjectStore.folderlessFileURL(beside: url)
+        defer {
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: folderlessURL)
+        }
+        let scratch = Project(name: "Scratch", sortOrder: 0)
+        try JSONEncoder().encode([scratch]).write(to: url)
+        try JSONEncoder().encode([scratch]).write(to: folderlessURL)
+        #expect(makeStore(fileURL: url).projects.map(\.id) == [scratch.id])
+    }
+
+    @Test
+    func a_corrupt_folderless_file_fails_the_load_and_preserves_both_files() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("split-corrupt-\(UUID()).json")
+        let folderlessURL = ProjectStore.folderlessFileURL(beside: url)
+        defer {
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: folderlessURL)
+        }
+        let rooted = Project(name: "api", path: "/tmp/api", sortOrder: 0)
+        let main = try JSONEncoder().encode([rooted])
+        try main.write(to: url)
+        let garbage = Data("{ not valid json".utf8)
+        try garbage.write(to: folderlessURL)
+
+        let store = makeStore(fileURL: url)
+        #expect(store.loadFailed)
+        store.create(name: "Scratch")
+        #expect(try Data(contentsOf: url) == main)
+        #expect(try Data(contentsOf: folderlessURL) == garbage)
+    }
+
+    @Test
+    func import_folderless_layout_preserves_id_and_rejects_collisions() throws {
+        let store = makeStore()
+        let id = UUID()
+        let first = try #require(store.importFolderless(name: "Imported", id: id))
+        #expect(first.path == nil)
+        #expect(store.importFolderless(name: "Again", id: id)?.id == first.id)
+        #expect(store.projects.count == 1)
+        #expect(store.importFolderless(name: "Reserved", id: PinnedTabs.projectID) == nil)
+        let rooted = store.create(name: "Rooted", path: "/tmp")
+        #expect(store.importFolderless(name: "Collision", id: rooted.id) == nil)
+        // Settings asks the same question before it offers the import.
+        #expect(store.canImportFolderless(id: id))
+        #expect(store.canImportFolderless(id: UUID()))
+        #expect(!store.canImportFolderless(id: PinnedTabs.projectID))
+        #expect(!store.canImportFolderless(id: rooted.id))
+    }
+
+    @Test
+    func import_folderless_suffixes_the_reserved_name() throws {
+        let store = makeStore()
+        #expect(try #require(store.importFolderless(name: "Pinned", id: UUID())).name == "Pinned 2")
+    }
+
+    @Test
     func find_or_create_reuses_canonical_local_path() {
         let store = makeStore()
         let base = FileManager.default.temporaryDirectory
@@ -250,5 +383,7 @@ struct ProjectStoreTests {
 
         // The corrupt file is preserved, not clobbered with the empty/new state.
         #expect(try Data(contentsOf: fileURL) == garbage)
+        // The launch restore reads the verdict (`restoreSelection`).
+        #expect(store.loadFailed)
     }
 }

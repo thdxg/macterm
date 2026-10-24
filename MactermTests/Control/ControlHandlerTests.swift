@@ -50,6 +50,32 @@ struct ControlHandlerTests {
     // MARK: - Envelope behavior
 
     @Test
+    func project_create_without_path_requires_name_and_keeps_independent_workspaces() async throws {
+        let (handler, state, store) = makeHandler()
+        let first = await handler.handle(request("project.create", args: ControlArgs(name: "  Scratch  ", select: true)))
+        #expect(first.ok)
+        let project = try #require(store.projects.first)
+        #expect(project.name == "Scratch")
+        #expect(project.path == nil)
+        #expect(first.data?.projects?.first?.path.isEmpty == true)
+        #expect(state.workspaces[project.id]?.activeTab?.focusedPane?.projectPath == ProjectPath.currentHome)
+        let second = await handler.handle(request("project.create", args: ControlArgs(name: "Scratch")))
+        #expect(second.ok)
+        #expect(second.data?.projects?.first?.id != project.id.uuidString)
+        #expect(state.activeProjectID == project.id)
+        for name in ["", " ", "Pinned"] {
+            let rejected = await handler.handle(request("project.create", args: ControlArgs(name: name)))
+            #expect(rejected.error?.code == .badRequest)
+        }
+        let emptyPath = await handler.handle(request("project.create", args: ControlArgs(path: "", name: "Invalid")))
+        #expect(emptyPath.error?.code == .badRequest)
+        let nothing = await handler.handle(request("project.create", args: ControlArgs()))
+        #expect(nothing.error?.code == .badRequest)
+        #expect(nothing.error?.message == "project.create requires a path or a name")
+        #expect(store.projects.count == 2)
+    }
+
+    @Test
     func unknown_command_yields_typed_error_with_hint() async {
         let (handler, _, _) = makeHandler()
         let response = await handler.handle(request("frobnicate"))
@@ -147,7 +173,7 @@ struct ControlHandlerTests {
     func tab_list_defaults_to_active_project() async {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
-        appState.createTab(projectID: project.id, projectPath: project.path)
+        appState.createTab(projectID: project.id, projectPath: project.defaultDirectory)
         let response = await handler.handle(request("tab.list"))
         let tabs = response.data?.tabs
         #expect(tabs?.count == 2)
@@ -162,7 +188,7 @@ struct ControlHandlerTests {
         let (handler, appState, projectStore) = makeHandler()
         let first = seedProject(appState, projectStore, name: "first")
         let second = seedProject(appState, projectStore, name: "second")
-        appState.createTab(projectID: second.id, projectPath: second.path)
+        appState.createTab(projectID: second.id, projectPath: second.defaultDirectory)
 
         for selector in ["first", "project:1", "1", first.id.uuidString] {
             let response = await handler.handle(request("tab.list", args: ControlArgs(project: selector)))
@@ -247,7 +273,7 @@ struct ControlHandlerTests {
     func pane_list_scopes_to_a_tab_selector() async {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
-        appState.createTab(projectID: project.id, projectPath: project.path)
+        appState.createTab(projectID: project.id, projectPath: project.defaultDirectory)
         appState.splitPane(direction: .vertical, projectID: project.id, projects: [project])
 
         let all = await handler.handle(request("pane.list"))
@@ -693,7 +719,7 @@ struct ControlHandlerTests {
         let remote = Project(name: "remote", path: "host:~/repo", zmxPath: "/opt/custom/bin/zmx")
         projectStore.add(remote)
         // Restored but never opened: no selectProject stamp on any pane.
-        let workspace = Workspace(projectID: remote.id, projectPath: remote.path)
+        let workspace = Workspace(projectID: remote.id, projectPath: remote.defaultDirectory)
         appState.workspaces[remote.id] = workspace
         var warmed: [UUID] = []
         appState.incubatePane = { pane in
@@ -735,7 +761,7 @@ struct ControlHandlerTests {
         let sourceFocus = sourceTab.focusedPaneID
         let sourceHistory = sourceTab.paneFocusHistory.items
         try sourceTab.toggleZoom(paneID: #require(sourceFocus))
-        let selectedTabID = try #require(appState.createTab(projectID: project.id, projectPath: project.path))
+        let selectedTabID = try #require(appState.createTab(projectID: project.id, projectPath: project.defaultDirectory))
         let keyProject = otherProject ? seedProject(appState, projectStore, name: "elsewhere") : project
         let background = WindowState(activeProjectID: project.id)
         let key = WindowState(activeProjectID: keyProject.id)
@@ -898,7 +924,7 @@ struct ControlHandlerTests {
         appState.zmx = .noop
         let remote = Project(name: "remote", path: "host:~/repo", zmxPath: "/opt/custom/bin/zmx")
         projectStore.add(remote)
-        let workspace = Workspace(projectID: remote.id, projectPath: remote.path)
+        let workspace = Workspace(projectID: remote.id, projectPath: remote.defaultDirectory)
         appState.workspaces[remote.id] = workspace
         let tab = try #require(workspace.activeTab)
         let sourceID = try #require(tab.focusedPaneID)
@@ -950,7 +976,7 @@ struct ControlHandlerTests {
     func tab_select_activates_by_index() async throws {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
-        appState.createTab(projectID: project.id, projectPath: project.path)
+        appState.createTab(projectID: project.id, projectPath: project.defaultDirectory)
         let workspace = try #require(appState.workspaces[project.id])
         let firstID = try #require(workspace.tabs.first?.id)
 
@@ -966,7 +992,7 @@ struct ControlHandlerTests {
     func tab_close_removes_tab_and_kills_sessions() async throws {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
-        appState.createTab(projectID: project.id, projectPath: project.path)
+        appState.createTab(projectID: project.id, projectPath: project.defaultDirectory)
         let workspace = try #require(appState.workspaces[project.id])
         #expect(workspace.tabs.count == 2)
 
@@ -988,8 +1014,8 @@ struct ControlHandlerTests {
     func tab_move_places_tab_at_final_slot_in_both_directions() async throws {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
-        appState.createTab(projectID: project.id, projectPath: project.path)
-        appState.createTab(projectID: project.id, projectPath: project.path)
+        appState.createTab(projectID: project.id, projectPath: project.defaultDirectory)
+        appState.createTab(projectID: project.id, projectPath: project.defaultDirectory)
         let workspace = try #require(appState.workspaces[project.id])
         let ids = workspace.tabs.map(\.id)
         #expect(ids.count == 3)
@@ -1014,7 +1040,7 @@ struct ControlHandlerTests {
     func tab_move_same_slot_is_an_ok_noop() async throws {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
-        appState.createTab(projectID: project.id, projectPath: project.path)
+        appState.createTab(projectID: project.id, projectPath: project.defaultDirectory)
         let workspace = try #require(appState.workspaces[project.id])
         let before = workspace.tabs.map(\.id)
 
@@ -1028,7 +1054,7 @@ struct ControlHandlerTests {
     func tab_move_validates_selector_and_slot() async throws {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
-        appState.createTab(projectID: project.id, projectPath: project.path)
+        appState.createTab(projectID: project.id, projectPath: project.defaultDirectory)
         let workspace = try #require(appState.workspaces[project.id])
         let before = workspace.tabs.map(\.id)
 
@@ -1255,7 +1281,7 @@ struct ControlHandlerTests {
         let workspace = try #require(appState.workspaces[project.id])
         let firstTab = try #require(workspace.tabs.first)
         let firstPane = try #require(firstTab.splitRoot.allPanes().first)
-        appState.createTab(projectID: project.id, projectPath: project.path)
+        appState.createTab(projectID: project.id, projectPath: project.defaultDirectory)
         #expect(workspace.activeTabID != firstTab.id)
 
         let response = await handler.handle(request(
@@ -1579,7 +1605,7 @@ struct ControlHandlerTests {
 
         let saved = await handler.handle(request("layout.save"))
         #expect(saved.ok)
-        #expect(appState.projectFiles.find(forProjectPath: dir.path) != nil)
+        #expect(appState.projectFiles.find(for: .path(dir.path)) != nil)
 
         // Reconciling the unchanged workspace against its own save is
         // non-destructive: applies cleanly without --force.

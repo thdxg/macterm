@@ -420,7 +420,7 @@ final class CustomPaletteScope: PaletteScope {
     static func commandContext(exports: [String: String], context: PaletteContext) -> ([String: String], String) {
         (
             environment(exports: exports, context: context),
-            projectDirectory(context) ?? FileManager.default.homeDirectoryForCurrentUser.path
+            projectDirectory(context) ?? ProjectPath.currentHome
         )
     }
 
@@ -514,7 +514,7 @@ enum CustomPaletteActions {
                     appState.presentToast(String(localized: "A remote project cannot open a directory on this Mac"))
                     return
                 }
-                guard let directory = directory(operand, base: project.path, appState: appState) else { return }
+                guard let directory = directory(operand, base: project.defaultDirectory, appState: appState) else { return }
                 if place == .split, let pane = appState.focusedPane(for: projectID) {
                     appState.splitPane(
                         pane.id,
@@ -537,7 +537,7 @@ enum CustomPaletteActions {
                         pane.id,
                         direction: .auto(for: pane.nsView?.bounds.size ?? .zero),
                         projectID: projectID,
-                        projectDirectory: project.path,
+                        projectDirectory: project.defaultDirectory,
                         command: typed,
                         env: env
                     )
@@ -586,7 +586,8 @@ enum CustomPaletteActions {
         let path = (operand as NSString).expandingTildeInPath
         guard !path.hasPrefix("/") else { return URL(fileURLWithPath: path) }
         let project = appState.activeProjectID.flatMap { id in projects.first { $0.id == id } }
-        let base = project.flatMap { $0.isRemote ? nil : $0.path } ?? FileManager.default.homeDirectoryForCurrentUser.path
+        // The same home as `commandContext`: `$HOME` first, as the listing ran.
+        let base = project.flatMap { $0.isRemote ? nil : $0.path } ?? ProjectPath.currentHome
         return URL(fileURLWithPath: base, isDirectory: true).appendingPathComponent(path).standardizedFileURL
     }
 }

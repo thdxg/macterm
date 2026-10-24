@@ -16,6 +16,8 @@ private let logger = Logger(subsystem: appBundleID, category: "ProjectFileStore"
 /// when none is owned (a single declaration, a hand-renamed file), the first
 /// in byte-lexicographic filename order wins; a genuine duplicate is logged and
 /// ignored, never deleted.
+/// A project without a folder matches by `id` instead. Its home-directory
+/// fallback and display name never identify a layout.
 @MainActor
 struct ProjectFileStore {
     let directoryURL: URL
@@ -83,32 +85,29 @@ struct ProjectFileStore {
             }
     }
 
-    /// Every file declaring `projectPath`, in filename order — the first is
+    /// Every file declaring `identity`, in filename order — the first is
     /// the one `find`/`loadFull` use; the rest are ignored duplicates the UI
     /// surfaces (a hand-authored copy, or a realign-delete that failed).
-    func matches(forProjectPath projectPath: String) -> [ScannedFile] {
-        matches(forProjectPath: projectPath, in: scan())
+    func matches(for identity: ProjectFileIdentity) -> [ScannedFile] {
+        matches(for: identity, in: scan())
     }
 
-    private func matches(forProjectPath projectPath: String, in scanned: [ScannedFile]) -> [ScannedFile] {
-        scanned.filter { file in
-            guard let declared = file.header?.path else { return false }
-            return ProjectPath.matches(declared, projectPath)
-        }
+    private func matches(for identity: ProjectFileIdentity, in scanned: [ScannedFile]) -> [ScannedFile] {
+        scanned.filter { $0.header?.matches(identity) == true }
     }
 
-    /// The file that resolves for `projectPath`. When several files declare it
+    /// The file that resolves for `identity`. When several files declare it
     /// (a directory backing multiple projects), `preferredSlug` picks the one
     /// whose filename is that project's own (`ProjectSlug.owns`); without a
     /// preference, or when none is owned (a single declaration, a hand-renamed
     /// file, a legacy pre-slug file), the first in filename order wins. nil
-    /// when no file declares that path.
-    func find(forProjectPath projectPath: String, preferredSlug: String? = nil) -> ScannedFile? {
-        find(forProjectPath: projectPath, preferredSlug: preferredSlug, in: scan())
+    /// when no file declares it.
+    func find(for identity: ProjectFileIdentity, preferredSlug: String? = nil) -> ScannedFile? {
+        find(for: identity, preferredSlug: preferredSlug, in: scan())
     }
 
-    private func find(forProjectPath projectPath: String, preferredSlug: String?, in scanned: [ScannedFile]) -> ScannedFile? {
-        let found = matches(forProjectPath: projectPath, in: scanned)
+    private func find(for identity: ProjectFileIdentity, preferredSlug: String?, in scanned: [ScannedFile]) -> ScannedFile? {
+        let found = matches(for: identity, in: scanned)
         // A directory can back several projects; when it does, the project's
         // own slug picks its file. This resolves cleanly (no ambiguity to log).
         if let preferredSlug,
@@ -119,22 +118,22 @@ struct ProjectFileStore {
         if found.count > 1 {
             let ignored = found.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
             let winner = found[0].url.lastPathComponent
-            logger.warning("Duplicate files declare \(projectPath, privacy: .public)")
+            logger.warning("Duplicate files declare \(identity.description, privacy: .public)")
             logger.warning("Using \(winner, privacy: .public), ignoring \(ignored, privacy: .public)")
         }
         return found.first
     }
 
-    /// Fully decode the file that resolves for `projectPath` (see `find` for
+    /// Fully decode the file that resolves for `identity` (see `find` for
     /// how `preferredSlug` disambiguates a shared directory). nil when no file
     /// matches; throws `LayoutFileError.parse` when one matches but doesn't
     /// decode (surfaced to the user as the apply-error dialog).
-    func loadFull(forProjectPath projectPath: String, preferredSlug: String? = nil) throws -> ProjectFile? {
-        try loadFull(forProjectPath: projectPath, preferredSlug: preferredSlug, in: scan())
+    func loadFull(for identity: ProjectFileIdentity, preferredSlug: String? = nil) throws -> ProjectFile? {
+        try loadFull(for: identity, preferredSlug: preferredSlug, in: scan())
     }
 
-    private func loadFull(forProjectPath projectPath: String, preferredSlug: String?, in scanned: [ScannedFile]) throws -> ProjectFile? {
-        guard let match = find(forProjectPath: projectPath, preferredSlug: preferredSlug, in: scanned) else { return nil }
+    private func loadFull(for identity: ProjectFileIdentity, preferredSlug: String?, in scanned: [ScannedFile]) throws -> ProjectFile? {
+        guard let match = find(for: identity, preferredSlug: preferredSlug, in: scanned) else { return nil }
         let text: String
         do {
             text = try String(contentsOf: match.url, encoding: .utf8)
@@ -147,7 +146,7 @@ struct ProjectFileStore {
     /// What "Apply Layout" can do for a project — drives the palette's
     /// muted state.
     enum ApplyState: Equatable {
-        /// No file declares this project's path.
+        /// No file declares this project.
         case none
         /// A file matches and declares at least one tab.
         case applicable
@@ -158,15 +157,15 @@ struct ProjectFileStore {
         case invalid
     }
 
-    func applyState(forProjectPath projectPath: String, preferredSlug: String? = nil) -> ApplyState {
+    func applyState(for identity: ProjectFileIdentity, preferredSlug: String? = nil) -> ApplyState {
         // Scan the directory ONCE and thread it through find + loadFull, rather
         // than re-scanning (and re-parsing every file's header) three times
         // within this single operation. Statelessness across DISTINCT
         // operations is intentional; the intra-operation rescans were waste.
         let scanned = scan()
-        guard find(forProjectPath: projectPath, preferredSlug: preferredSlug, in: scanned) != nil else { return .none }
+        guard find(for: identity, preferredSlug: preferredSlug, in: scanned) != nil else { return .none }
         do {
-            guard let file = try loadFull(forProjectPath: projectPath, preferredSlug: preferredSlug, in: scanned) else { return .none }
+            guard let file = try loadFull(for: identity, preferredSlug: preferredSlug, in: scanned) else { return .none }
             return file.layoutFile == nil ? .emptyTabs : .applicable
         } catch {
             return .invalid
@@ -177,18 +176,24 @@ struct ProjectFileStore {
 
     /// One layout file as the Projects settings pane lists it: its filename,
     /// the path it declares, and how many tabs it lays out. `declaredPath` is
-    /// nil when the file has no `path:` (or doesn't parse at all) — such a file
-    /// matches no project and can only be removed or hand-fixed.
+    /// nil for a project without a folder or an invalid header. `declaredID`
+    /// identifies a project without a folder.
     struct Listing: Identifiable, Equatable {
         let url: URL
         let declaredName: String?
         let declaredPath: String?
+        var declaredID: UUID?
         let tabCount: Int
         /// The file couldn't be decoded past its header.
         let isInvalid: Bool
 
         var id: URL { url }
         var filename: String { url.lastPathComponent }
+
+        /// Whether this file declares `project`: the rule that `find` applies.
+        func declares(_ project: Project) -> Bool {
+            ProjectFileHeader(name: declaredName, path: declaredPath, id: declaredID).matches(ProjectFileIdentity(project))
+        }
     }
 
     /// Every layout file in the directory, in filename order — including ones
@@ -207,6 +212,7 @@ struct ProjectFileStore {
                 url: file.url,
                 declaredName: file.header?.name,
                 declaredPath: file.header?.path,
+                declaredID: file.header?.id,
                 tabCount: full?.tabs?.count ?? 0,
                 isInvalid: full == nil
             )
@@ -228,7 +234,7 @@ struct ProjectFileStore {
 
     // MARK: - Write
 
-    /// Write `file` as the declaration for its `path`, named by the slug of
+    /// Write `file` as the declaration for its identity, named by the slug of
     /// `projectName`. The one mutation path (explicit "Save Layout") — nothing
     /// else in the app writes or deletes project files.
     ///
@@ -252,11 +258,16 @@ struct ProjectFileStore {
     /// realign-deleting one would clobber another project's layout now that a
     /// directory can back several projects. Empty (the default) keeps the
     /// single-project realign behavior.
+    ///
+    /// Throws `LayoutFileError.noIdentity` for a file that names no project
+    /// (see `ProjectFile.identity`): `parse` would refuse it, so it would
+    /// match nothing once written.
     @discardableResult
     func write(_ file: ProjectFile, projectName: String, reservedSlugs: Set<String> = []) throws -> URL {
+        guard let identity = file.identity else { throw LayoutFileError.noIdentity }
         var file = file
-        if case .local = ProjectPath.parse(file.path) {
-            file.path = ProjectPath.homeContracted(file.path)
+        if let path = file.path, case .local = ProjectPath.parse(path) {
+            file.path = ProjectPath.homeContracted(path)
         }
         try FileManager.default.createDirectory(
             at: directoryURL,
@@ -270,8 +281,7 @@ struct ProjectFileStore {
             // declares — binding it would let a save realign-delete the
             // pinned-tabs declaration.
             guard scanned.url.lastPathComponent.lowercased() != PinnedLayoutStore.filename else { return false }
-            guard let declared = scanned.header?.path else { return false }
-            return ProjectPath.matches(declared, file.path)
+            return scanned.header?.matches(identity) == true
         }
         // This project's own declaration — the same preference order `find`
         // resolves with, so a save rewrites exactly the file an apply reads.

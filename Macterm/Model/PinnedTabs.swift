@@ -30,8 +30,10 @@ enum PinnedTabs {
     /// The one test every naming path applies. A name somebody typed is
     /// refused where they typed it (`project create --name`,
     /// `project rename`, the sidebar's rename, the New Project intent, the
-    /// remote sheet); a name nobody chose — the folder's own, which most
-    /// creation paths default to — is suffixed instead (`ProjectStore.create`).
+    /// remote sheet, the sheet of a project without a folder); a name nobody
+    /// chose here — the folder's own, which most creation paths default to,
+    /// or the `name:` of a layout file that Settings imports — is suffixed
+    /// instead (`ProjectStore.create`, `ProjectStore.importFolderless`).
     static func reservesName(_ name: String) -> Bool {
         name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == displayName.lowercased()
     }

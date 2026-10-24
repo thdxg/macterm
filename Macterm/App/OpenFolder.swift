@@ -64,7 +64,8 @@ enum TextFileProject {
         let local = projects.filter { !$0.isRemote }
         var closest: (project: Project, depth: Int)?
         for project in local {
-            let directory = ProjectPath.canonicalLocal(project.path)
+            guard let path = project.path else { continue }
+            let directory = ProjectPath.canonicalLocal(path)
             guard contains(directory, file), directory.count > closest?.depth ?? -1 else { continue }
             closest = (project, directory.count)
         }

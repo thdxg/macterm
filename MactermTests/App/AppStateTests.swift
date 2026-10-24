@@ -39,6 +39,114 @@ struct AppStateTests {
     // MARK: - Tabs
 
     @Test
+    func folderless_project_uses_home_and_honors_tab_directory_inheritance() throws {
+        let state = makeAppState()
+        let project = Project(name: "Scratch")
+        state.selectProject(project)
+        let workspace = try #require(state.workspaces[project.id])
+        let initial = try #require(workspace.activeTab?.focusedPane)
+        #expect(initial.projectPath == ProjectPath.currentHome)
+        #expect(state.configuredProjectDirectory(projectID: project.id, projects: [project]) == ProjectPath.currentHome)
+        initial.ensureNSView().currentPwd = "/tmp"
+        state.newTabInheritsWorkingDirectory = { true }
+        state.createTab(projectID: project.id, projects: [project])
+        #expect(workspace.activeTab?.focusedPane?.projectPath == "/tmp")
+        state.newTabInheritsWorkingDirectory = { false }
+        state.createTab(projectID: project.id, projects: [project])
+        #expect(workspace.activeTab?.focusedPane?.projectPath == ProjectPath.currentHome)
+        #expect(state.saveLayout(project: project) == nil)
+        #expect(try state.projectFiles.loadFull(for: .id(project.id))?.id == project.id)
+        #expect(AppCommand.filesUnavailableReason(for: project) != nil)
+    }
+
+    /// Home is the directory of every project without a folder. Its basename
+    /// would give all of them, the pinned tabs and a project in home one
+    /// session slug, so these projects take their name.
+    @Test
+    func a_project_without_a_folder_names_its_sessions_after_itself() throws {
+        let state = makeAppState()
+        let project = Project(name: "My Notes")
+        state.selectProject(project)
+        let first = try #require(state.workspaces[project.id]?.activeTab?.focusedPane)
+        #expect(first.sessionSlug == "mynotes")
+        #expect(first.sessionName.hasPrefix("macterm-mynotes-"))
+        state.createTab(projectID: project.id, projects: [project])
+        #expect(state.workspaces[project.id]?.activeTab?.focusedPane?.sessionSlug == "mynotes")
+
+        // A move into a project that has no workspace yet builds its default tab.
+        let unopened = Project(name: "Later")
+        let movedTabID = try #require(state.workspaces[project.id]?.activeTab?.id)
+        state.moveTab(
+            movedTabID,
+            from: project.id,
+            to: unopened.id,
+            destPath: unopened.defaultDirectory,
+            destSessionSlug: unopened.sessionSlug
+        )
+        let defaultTab = try #require(state.workspaces[unopened.id]?.tabs.first)
+        #expect(defaultTab.splitRoot.allPanes().map(\.sessionSlug) == ["later"])
+
+        // A project with a folder keeps the folder's name.
+        let rooted = seedProject(state, name: "API", path: "/tmp/api")
+        #expect(state.workspaces[rooted.id]?.activeTab?.focusedPane?.sessionSlug == "api")
+        #expect(rooted.sessionSlug == nil)
+    }
+
+    @Test
+    func a_project_without_a_folder_cannot_take_the_current_directory_as_its_path() throws {
+        let state = makeAppState()
+        let projects = ProjectStore(fileURL: FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-replace-path-\(UUID().uuidString).json"))
+        let ctx = AppCommandContext(appState: state, projectStore: projects)
+
+        let scratch = projects.create(name: "Scratch")
+        state.selectProject(scratch)
+        try #require(state.focusedPane(for: scratch.id)).ensureNSView().currentPwd = ProjectPath.currentHome
+        #expect(AppCommand.replaceProjectPathWithCurrentDir.action(in: ctx) == nil)
+        state.replaceProjectPathWithCurrentDir(projectStore: projects)
+        #expect(projects.projects.first { $0.id == scratch.id }?.path == nil)
+
+        // A project with a folder still can.
+        let rooted = projects.create(name: "tmp", path: "/tmp")
+        state.selectProject(rooted)
+        try #require(state.focusedPane(for: rooted.id)).ensureNSView().currentPwd = "/tmp/sub"
+        #expect(AppCommand.replaceProjectPathWithCurrentDir.action(in: ctx) != nil)
+    }
+
+    @Test
+    func apply_layout_without_a_file_names_the_project_and_not_a_path() {
+        let state = makeAppState()
+        let project = Project(name: "Scratch")
+        state.selectProject(project)
+        let error = state.applyLayout(project: project) as? LayoutFileError
+        #expect(error?.englishDescription == "No layout file has the ID of the project “Scratch”. Use “Save Layout” to create one.")
+    }
+
+    /// With the project list unknown, the restore keeps no workspace, so no
+    /// session has a claim. The snapshot is then held as unread: the save
+    /// keeps the file and both reapers skip (`snapshotLoadFailed`).
+    @Test
+    func a_project_list_that_did_not_load_keeps_the_snapshot_and_every_session() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-unread-projects-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let project = Project(name: "p", path: "/tmp", sortOrder: 0)
+        let writer = makeAppState(store: WorkspaceStore(fileURL: url))
+        writer.zmx = .noop
+        writer.restoreSelection(projects: [project])
+        writer.selectProject(project)
+        writer.saveWorkspaces()
+        let saved = try Data(contentsOf: url)
+
+        let reader = makeAppState(store: WorkspaceStore(fileURL: url))
+        reader.zmx = .noop
+        reader.restoreSelection(projects: [], projectListLoadFailed: true)
+        #expect(reader.snapshotLoadFailed)
+        reader.saveWorkspaces()
+        #expect(try Data(contentsOf: url) == saved)
+    }
+
+    @Test
     func createTab_uses_selected_directory_and_preserves_project_session_slug() throws {
         let state = makeAppState()
         state.newTabInheritsWorkingDirectory = { true }
@@ -121,7 +229,7 @@ struct AppStateTests {
         } else {
             let paneID = try #require(state.splitPane(
                 source.id, direction: .horizontal, projectID: project.id,
-                projectDirectory: project.path, command: "test-command",
+                projectDirectory: project.defaultDirectory, command: "test-command",
                 env: environment, focus: focus
             ))
             created = try #require(originalTab.splitRoot.findPane(id: paneID))
@@ -522,7 +630,7 @@ struct AppStateTests {
         let sourceTab = try #require(state.workspaces[p.id]?.activeTab)
         let source = try #require(sourceTab.splitRoot.allPanes().first)
         let mirrorID = try #require(state.mirrorPane(source.id, direction: .horizontal, projectID: p.id))
-        state.separatePane(mirrorID, toProject: p.id, destPath: p.path)
+        state.separatePane(mirrorID, toProject: p.id, destPath: p.defaultDirectory)
         let mirrorTab = try #require(state.workspaces[p.id]?.tabs.first { $0.splitRoot.contains(paneID: mirrorID) })
         #expect(mirrorTab.id != sourceTab.id)
 
@@ -649,7 +757,7 @@ struct AppStateTests {
             rows: 2,
             columns: 2,
             projectID: project.id,
-            projectDirectory: project.path
+            projectDirectory: project.defaultDirectory
         )
 
         #expect(created.count == 3)
@@ -770,7 +878,7 @@ struct AppStateTests {
         let moving = ws1.createTab(projectPath: "/tmp1")
         let staying = try #require(ws1.tabs.first?.id)
 
-        state.moveTab(moving.id, from: p1.id, to: p2.id, destPath: p2.path)
+        state.moveTab(moving.id, from: p1.id, to: p2.id, destPath: p2.defaultDirectory)
 
         // Source lost the tab; destination gained it (object reused, surfaces intact).
         #expect(ws1.tabs.map(\.id) == [staying])
@@ -789,7 +897,7 @@ struct AppStateTests {
         let ws1 = try #require(state.workspaces[p1.id])
         let only = try #require(ws1.tabs.first?.id)
 
-        state.moveTab(only, from: p1.id, to: p2.id, destPath: p2.path)
+        state.moveTab(only, from: p1.id, to: p2.id, destPath: p2.defaultDirectory)
 
         #expect(ws1.tabs.isEmpty)
         #expect(ws1.activeTabID == nil)
@@ -806,7 +914,7 @@ struct AppStateTests {
         let p2 = Project(name: "p2", path: "/tmp2", sortOrder: 1)
         #expect(state.workspaces[p2.id] == nil)
 
-        state.moveTab(tab.id, from: p1.id, to: p2.id, destPath: p2.path)
+        state.moveTab(tab.id, from: p1.id, to: p2.id, destPath: p2.defaultDirectory)
 
         let ws2 = try #require(state.workspaces[p2.id])
         #expect(ws2.tabs.contains { $0.id == tab.id })
@@ -818,7 +926,7 @@ struct AppStateTests {
         let p = seedProject(state)
         let ws = try #require(state.workspaces[p.id])
         let before = ws.tabs.map(\.id)
-        try state.moveTab(#require(before.first), from: p.id, to: p.id, destPath: p.path)
+        try state.moveTab(#require(before.first), from: p.id, to: p.id, destPath: p.defaultDirectory)
         #expect(ws.tabs.map(\.id) == before)
     }
 
@@ -828,7 +936,7 @@ struct AppStateTests {
         let p1 = seedProject(state, name: "p1", path: "/tmp1")
         let p2 = seedProject(state, name: "p2", path: "/tmp2")
         let ws2Before = try #require(state.workspaces[p2.id]).tabs.count
-        state.moveTab(UUID(), from: p1.id, to: p2.id, destPath: p2.path)
+        state.moveTab(UUID(), from: p1.id, to: p2.id, destPath: p2.defaultDirectory)
         #expect(state.workspaces[p2.id]?.tabs.count == ws2Before)
     }
 
@@ -841,7 +949,7 @@ struct AppStateTests {
         let ws = try #require(state.workspaces[p.id])
         let destTab = try #require(ws.activeTab)
         let destPane = try #require(destTab.splitRoot.allPanes().first?.id)
-        let sourceTab = ws.createTab(projectPath: p.path)
+        let sourceTab = ws.createTab(projectPath: p.defaultDirectory)
         let sourcePane = try #require(sourceTab.splitRoot.allPanes().first?.id)
         ws.selectTab(destTab.id)
 
@@ -864,7 +972,7 @@ struct AppStateTests {
         let ws = try #require(state.workspaces[p.id])
         let destTab = try #require(ws.activeTab)
         state.splitPane(direction: .horizontal, projectID: p.id, projects: [p])
-        let sourceTab = ws.createTab(projectPath: p.path)
+        let sourceTab = ws.createTab(projectPath: p.defaultDirectory)
         ws.selectTab(destTab.id)
 
         state.mergeTab(sourceTab.id, from: p.id, at: .rootEdge(.left), inProject: p.id)
@@ -936,7 +1044,7 @@ struct AppStateTests {
         let dragged = try #require(tab.focusedPaneID)
         tab.zoomedPaneID = dragged
 
-        state.separatePane(dragged, toProject: p.id, destPath: p.path)
+        state.separatePane(dragged, toProject: p.id, destPath: p.defaultDirectory)
 
         // The source tab keeps its remaining pane, exits the stale zoom, and
         // repairs focus; the dragged Pane object lives on in the new tab.
@@ -959,7 +1067,7 @@ struct AppStateTests {
         state.splitPane(direction: .horizontal, projectID: p.id, projects: [p])
         let dragged = try #require(tab.focusedPaneID)
 
-        state.separatePane(dragged, toProject: p.id, destPath: p.path, at: 0)
+        state.separatePane(dragged, toProject: p.id, destPath: p.defaultDirectory, at: 0)
 
         #expect(ws.tabs.count == 2)
         #expect(ws.tabs.first?.splitRoot.allPanes().map(\.id) == [dragged])
@@ -979,7 +1087,7 @@ struct AppStateTests {
         let dragged = try #require(sourceTab.focusedPaneID)
         let ws2TabsBefore = ws2.tabs.count
 
-        state.separatePane(dragged, toProject: p2.id, destPath: p2.path)
+        state.separatePane(dragged, toProject: p2.id, destPath: p2.defaultDirectory)
 
         #expect(sourceTab.splitRoot.allPanes().count == 1)
         #expect(ws2.tabs.count == ws2TabsBefore + 1)
@@ -998,7 +1106,7 @@ struct AppStateTests {
         let ws = try #require(state.workspaces[p.id])
         let tab = try #require(ws.activeTab)
         let onlyPane = try #require(tab.focusedPaneID)
-        state.separatePane(onlyPane, toProject: p.id, destPath: p.path)
+        state.separatePane(onlyPane, toProject: p.id, destPath: p.defaultDirectory)
         #expect(ws.tabs.count == 1)
         #expect(tab.splitRoot.allPanes().map(\.id) == [onlyPane])
     }
@@ -1008,7 +1116,7 @@ struct AppStateTests {
         let state = makeAppState()
         let p = seedProject(state)
         let ws = try #require(state.workspaces[p.id])
-        state.separatePane(UUID(), toProject: p.id, destPath: p.path)
+        state.separatePane(UUID(), toProject: p.id, destPath: p.defaultDirectory)
         #expect(ws.tabs.count == 1)
     }
 
@@ -1021,7 +1129,7 @@ struct AppStateTests {
         let other = seedProject(state, name: "other", path: "/tmp/other")
         let ws = try #require(state.workspaces[p.id])
         let first = try #require(ws.activeTabID)
-        let second = ws.createTab(projectPath: p.path).id
+        let second = ws.createTab(projectPath: p.defaultDirectory).id
         // Seed a tab in the sibling project so a leak across projects would show.
         _ = try #require(state.workspaces[other.id]?.activeTabID)
         state.activeProjectID = p.id
@@ -1042,7 +1150,7 @@ struct AppStateTests {
         _ = seedProject(state, name: "other", path: "/tmp/other")
         let ws = try #require(state.workspaces[p.id])
         let first = try #require(ws.activeTabID)
-        let second = ws.createTab(projectPath: p.path).id
+        let second = ws.createTab(projectPath: p.defaultDirectory).id
         state.activeProjectID = p.id
         ws.selectTab(first)
 
@@ -1644,7 +1752,7 @@ struct AppStateTests {
         #expect(ws.tabs[0].splitRoot.allPanes().count == 1)
         #expect(state.pendingDialog == nil)
         // The file is still there for Apply Layout to pick up.
-        #expect(files.applyState(forProjectPath: dir.path) == .applicable)
+        #expect(files.applyState(for: .path(dir.path)) == .applicable)
     }
 
     @Test
@@ -1664,7 +1772,7 @@ struct AppStateTests {
         #expect(state.pendingDialog == nil)
         #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
         // Nothing is written on open — files appear only on explicit Save Layout.
-        #expect(files.find(forProjectPath: dir.path) == nil)
+        #expect(files.find(for: .path(dir.path)) == nil)
     }
 
     @Test
@@ -1713,7 +1821,7 @@ struct AppStateTests {
         state.applyLayoutPresentingError(project)
 
         #expect(state.pendingDialog?.kind == .layoutError(verb: .apply))
-        #expect(files.find(forProjectPath: dir.path) == nil)
+        #expect(files.find(for: .path(dir.path)) == nil)
         // The live workspace is untouched by a failed apply.
         #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
     }
@@ -1910,8 +2018,8 @@ struct AppStateTests {
         state.saveLayoutPresentingError(project, siblingProjects: [project, sibling])
 
         #expect(state.pendingDialog == nil)
-        #expect(files.find(forProjectPath: root, preferredSlug: "other")?.url.lastPathComponent == "other.yaml")
-        #expect(files.find(forProjectPath: root, preferredSlug: "proj")?.url.lastPathComponent == "proj.yaml")
+        #expect(files.find(for: .path(root), preferredSlug: "other")?.url.lastPathComponent == "other.yaml")
+        #expect(files.find(for: .path(root), preferredSlug: "proj")?.url.lastPathComponent == "proj.yaml")
     }
 
     @Test
@@ -1992,11 +2100,11 @@ struct AppStateTests {
 
         #expect(state.pendingDialog == nil)
         // Both files coexist — saving bravo didn't realign-delete alpha's.
-        #expect(files.find(forProjectPath: dir.path, preferredSlug: "alpha")?.url.lastPathComponent == "alpha.yaml")
-        #expect(files.find(forProjectPath: dir.path, preferredSlug: "bravo")?.url.lastPathComponent == "bravo.yaml")
+        #expect(files.find(for: .path(dir.path), preferredSlug: "alpha")?.url.lastPathComponent == "alpha.yaml")
+        #expect(files.find(for: .path(dir.path), preferredSlug: "bravo")?.url.lastPathComponent == "bravo.yaml")
         // Each resolves the file it wrote, identified by the stored name.
-        #expect(try files.loadFull(forProjectPath: dir.path, preferredSlug: "alpha")?.name == "alpha")
-        #expect(try files.loadFull(forProjectPath: dir.path, preferredSlug: "bravo")?.name == "bravo")
+        #expect(try files.loadFull(for: .path(dir.path), preferredSlug: "alpha")?.name == "alpha")
+        #expect(try files.loadFull(for: .path(dir.path), preferredSlug: "bravo")?.name == "bravo")
     }
 
     @Test
@@ -2192,11 +2300,11 @@ struct AppStateTests {
         let error = state.saveLayout(project: p)
 
         #expect(error == nil)
-        let saved = try #require(try files.loadFull(forProjectPath: root))
+        let saved = try #require(try files.loadFull(for: .path(root)))
         #expect(saved.name == "proj")
         #expect(saved.path == root)
         #expect(saved.tabs?.count == 1)
-        #expect(files.find(forProjectPath: root)?.url.lastPathComponent == "proj.yaml")
+        #expect(files.find(for: .path(root))?.url.lastPathComponent == "proj.yaml")
     }
 
     // MARK: - panesToWarm (eager process start for focused project)
@@ -2647,7 +2755,7 @@ struct AppStateTests {
         let p2 = seedProject(state, name: "p2", path: "/tmp2")
         let moving = try #require(state.workspaces[p1.id]?.tabs.first?.id)
 
-        state.moveTab(moving, from: p1.id, to: p2.id, destPath: p2.path)
+        state.moveTab(moving, from: p1.id, to: p2.id, destPath: p2.defaultDirectory)
 
         await killed.settleExpectingNone()
         #expect(await killed.names.isEmpty)
@@ -2666,7 +2774,7 @@ struct AppStateTests {
         let originalSessionNames = Set(panes.map(\.sessionName))
         let originalPaths = Set(panes.map(\.projectPath))
 
-        state.moveTab(tab.id, from: p1.id, to: p2.id, destPath: p2.path)
+        state.moveTab(tab.id, from: p1.id, to: p2.id, destPath: p2.defaultDirectory)
 
         // Routing identity (projectID) is restamped to the destination so a
         // notification click navigates to the right workspace.
@@ -2685,10 +2793,10 @@ struct AppStateTests {
         // Give p2 two tabs so there's a middle slot to drop into.
         let dest = try #require(state.workspaces[p2.id])
         let d0 = dest.tabs[0].id
-        let d1 = dest.createTab(projectPath: p2.path).id
+        let d1 = dest.createTab(projectPath: p2.defaultDirectory).id
         let moving = try #require(state.workspaces[p1.id]?.activeTab)
 
-        state.moveTab(moving.id, from: p1.id, to: p2.id, destPath: p2.path, toIndex: 1)
+        state.moveTab(moving.id, from: p1.id, to: p2.id, destPath: p2.defaultDirectory, toIndex: 1)
 
         #expect(dest.tabs.map(\.id) == [d0, moving.id, d1])
         #expect(dest.activeTabID == moving.id)
@@ -2706,7 +2814,7 @@ struct AppStateTests {
         let p = seedProject(state, name: "p", path: "/tmp")
         let ws = try #require(state.workspaces[p.id])
         let t1 = ws.tabs[0].id
-        let t2 = ws.createTab(projectPath: p.path).id
+        let t2 = ws.createTab(projectPath: p.defaultDirectory).id
 
         state.reorderTab(t1, inProject: p.id, toIndex: 2)
         #expect(ws.tabs.map(\.id) == [t2, t1])
@@ -2723,8 +2831,8 @@ struct AppStateTests {
         let p = seedProject(state)
         let ws = try #require(state.workspaces[p.id])
         let t1 = ws.tabs[0].id
-        let t2 = ws.createTab(projectPath: p.path).id
-        let t3 = ws.createTab(projectPath: p.path).id
+        let t2 = ws.createTab(projectPath: p.defaultDirectory).id
+        let t3 = ws.createTab(projectPath: p.defaultDirectory).id
         ws.activeTabID = t1
         let ctx = AppCommandContext(appState: state, projectStore: ProjectStore(
             fileURL: FileManager.default.temporaryDirectory

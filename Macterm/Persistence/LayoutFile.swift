@@ -191,12 +191,18 @@ enum LayoutFileError: Error, LocalizedError, EnglishDescribedError {
     case parse(underlying: Error)
     /// No central project file declares this project's path.
     case noProjectFile(projectPath: String)
+    /// No central project file declares the ID of this project without a
+    /// folder. The name is only for the message: the ID is the identity.
+    case noFolderlessProjectFile(projectName: String)
     /// A central project file matches but has no/empty `tabs:` — a bare
     /// declaration with nothing to apply.
     case noTabs
     /// A delete was asked for a file outside the projects directory — a guard
     /// against a stale URL ever reaching `removeItem`.
     case outsideProjectsDirectory(filename: String)
+    /// A write was asked for a file that names no project (no path, and no
+    /// usable ID). It would match nothing, so it is never written.
+    case noIdentity
 
     /// Each message, one time. `detail` is the text of the underlying error,
     /// in the language that the message resolves to.
@@ -204,8 +210,11 @@ enum LayoutFileError: Error, LocalizedError, EnglishDescribedError {
         switch self {
         case .parse: "The layout file is invalid and was not applied.\n\n\(detail)"
         case let .noProjectFile(projectPath): "No layout file declares \(projectPath). Use “Save Layout” to create one."
+        case let .noFolderlessProjectFile(projectName):
+            "No layout file has the ID of the project “\(projectName)”. Use “Save Layout” to create one."
         case .noTabs: "The layout file declares no tabs, so there is no layout to apply."
         case let .outsideProjectsDirectory(filename): "“\(filename)” is not in the projects directory."
+        case .noIdentity: "The layout file has no path and no project ID, so Macterm did not save it."
         }
     }
 

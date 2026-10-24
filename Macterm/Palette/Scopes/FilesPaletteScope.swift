@@ -133,9 +133,9 @@ final class FilesPaletteScope: PaletteScope {
     private static func projectRoot(_ context: PaletteContext) -> (Project, URL)? {
         guard let projectID = context.appState.activeProjectID,
               let project = context.projectStore.projects.first(where: { $0.id == projectID }),
-              !project.isRemote
+              !project.isRemote, let path = project.path
         else { return nil }
-        return (project, URL(fileURLWithPath: (project.path as NSString).expandingTildeInPath, isDirectory: true))
+        return (project, URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true))
     }
 
     func activate(context: PaletteContext, onChange: @escaping @MainActor () -> Void) {
@@ -246,7 +246,7 @@ enum FilesPaletteActions {
             projectID: project.id,
             command: command,
             env: env,
-            newPaneWorkingDirectory: directory ?? pane.liveLocalWorkingDirectory() ?? project.path
+            newPaneWorkingDirectory: directory ?? pane.liveLocalWorkingDirectory() ?? project.defaultDirectory
         )
     }
 }

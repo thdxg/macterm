@@ -134,7 +134,7 @@ struct BackgroundCreationTests {
         #expect(wsP.tabs.isEmpty)
         #expect(wsP.activeTabID == nil)
 
-        let newTabID = try #require(state.createTab(projectID: p.id, projectPath: p.path, focus: false))
+        let newTabID = try #require(state.createTab(projectID: p.id, projectPath: p.defaultDirectory, focus: false))
 
         // The workspace adopts the new tab as active, so the window already on
         // the project renders it (and it is not treated as an unrendered pane
@@ -166,7 +166,7 @@ struct BackgroundCreationTests {
         let firstTab = try #require(ws.activeTab)
 
         // A second tab becomes active; the first is now the "unseen" tab.
-        let secondTabID = try #require(state.createTab(projectID: p.id, projectPath: p.path))
+        let secondTabID = try #require(state.createTab(projectID: p.id, projectPath: p.defaultDirectory))
 
         state.warmFocusedProject()
 
@@ -206,7 +206,7 @@ struct BackgroundCreationTests {
         // Move it into a normal project: the pane's routing identity is
         // rebound, but its session and warmed surface stay put.
         let dest = seedProject(state, name: "dest", path: "/dest")
-        state.moveTab(tab.id, from: PinnedTabs.projectID, to: dest.id, destPath: dest.path)
+        state.moveTab(tab.id, from: PinnedTabs.projectID, to: dest.id, destPath: dest.defaultDirectory)
         #expect(pane.projectID == dest.id)
 
         let wsDest = try #require(state.workspaces[dest.id])

@@ -172,7 +172,7 @@ struct LayoutSerializerTests {
 
         let layout = LayoutSerializer.layout(for: ws, projectName: "proj", projectRoot: root, liveCommand: { $0.command })
         try store.write(ProjectFile(name: "proj", path: root, tabs: layout.tabs), projectName: "proj")
-        let loaded = try #require(try store.loadFull(forProjectPath: root))
+        let loaded = try #require(try store.loadFull(for: .path(root)))
 
         #expect(loaded.path == root)
         guard case let .split(b) = loaded.tabs?[0].layout else {

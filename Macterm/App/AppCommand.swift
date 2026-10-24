@@ -57,6 +57,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     // Projects
     case openProject
     case newRemoteProject
+    case newFolderlessProject
     case renameProject
     case unloadProject
     case removeProject
@@ -144,6 +145,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .passwordManager: "Password Manager"
         case .openProject: "Open Project"
         case .newRemoteProject: "New Remote Project"
+        case .newFolderlessProject: "New Project Without Folder"
         case .renameProject: "Rename Current Project"
         case .unloadProject: "Unload Current Project"
         case .removeProject: "Remove Current Project"
@@ -213,6 +215,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .autofillPassword: .panes
         case .openProject,
              .newRemoteProject,
+             .newFolderlessProject,
              .renameProject,
              .unloadProject,
              .removeProject,
@@ -295,6 +298,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .applyLayout: .applyLayout
         case .saveLayout: .saveLayout
         case .newRemoteProject,
+             .newFolderlessProject,
              .newDesktopWidget,
              .unloadProject,
              .removeProject,

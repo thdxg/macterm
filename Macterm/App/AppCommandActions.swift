@@ -115,7 +115,7 @@ extension AppCommand {
             if projectID == PinnedTabs.projectID {
                 destPath = PinnedTabs.fallbackRoot
             } else if let current {
-                destPath = current.path
+                destPath = current.defaultDirectory
             } else {
                 return nil
             }
@@ -226,6 +226,8 @@ extension AppCommand {
             return { view.explainOutput() }
         case .openProject:
             return { _ = ctx.appState.openProject(store: ctx.projectStore) }
+        case .newFolderlessProject:
+            return { ctx.appState.isNewFolderlessProjectSheetPresented = true }
         case .newRemoteProject:
             return { ctx.appState.isNewRemoteProjectSheetPresented = true }
         case .renameProject:
@@ -255,10 +257,13 @@ extension AppCommand {
             // Remote projects (#104): OSC 7 reports a directory on the REMOTE
             // host — writing it into `Project.path` would corrupt the
             // project's identity into a local-looking path.
+            // A project without a folder has no path to replace: its first
+            // shell sits in home, which must never become its path.
             guard let current, !current.isRemote,
+                  let path = current.path,
                   let pane = ctx.appState.focusedPane(for: current.id),
                   let pwd = pane.nsView?.currentPwd, !pwd.isEmpty,
-                  current.path != pwd
+                  path != pwd
             else { return nil }
             return { ctx.appState.replaceProjectPathWithCurrentDir(projectStore: ctx.projectStore) }
         case .applyLayout:
@@ -267,7 +272,10 @@ extension AppCommand {
             // failing silently. `.none`/`.emptyTabs` disable the menu item and
             // mute the palette row (see `paletteDisabledHint`).
             guard let current else { return nil }
-            switch ctx.appState.projectFiles.applyState(forProjectPath: current.path, preferredSlug: ProjectSlug.slug(from: current.name)) {
+            switch ctx.appState.projectFiles.applyState(
+                for: ProjectFileIdentity(current),
+                preferredSlug: ProjectSlug.slug(from: current.name)
+            ) {
             case .applicable,
                  .invalid:
                 return { ctx.appState.applyLayoutPresentingError(current) }
@@ -366,7 +374,10 @@ extension AppCommand {
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
         else { return nil }
-        switch ctx.appState.projectFiles.applyState(forProjectPath: current.path, preferredSlug: ProjectSlug.slug(from: current.name)) {
+        switch ctx.appState.projectFiles.applyState(
+            for: ProjectFileIdentity(current),
+            preferredSlug: ProjectSlug.slug(from: current.name)
+        ) {
         case .none:
             return String(localized: "No layout file for this project")
         case .emptyTabs:
@@ -401,7 +412,8 @@ extension AppCommand {
     /// walks the local file system, which a remote project's files aren't on.
     @MainActor
     static func filesUnavailableReason(for project: Project) -> String? {
-        project.isRemote ? String(localized: "The Files screen is not available for remote projects") : nil
+        if project.path == nil { return String(localized: "This project has no folder") }
+        return project.isRemote ? String(localized: "The Files screen is not available for remote projects") : nil
     }
 
     /// Secondary line for an *enabled* palette row. Only "Apply Layout" uses
@@ -417,7 +429,7 @@ extension AppCommand {
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
         else { return nil }
         let slug = ProjectSlug.slug(from: current.name)
-        let mine = ctx.appState.projectFiles.matches(forProjectPath: current.path)
+        let mine = ctx.appState.projectFiles.matches(for: ProjectFileIdentity(current))
             .filter { ProjectSlug.owns(filename: $0.url.lastPathComponent, slug: slug) }
         guard mine.count > 1 else { return nil }
         let ignored = mine.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")

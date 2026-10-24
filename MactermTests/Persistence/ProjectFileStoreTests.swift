@@ -24,19 +24,78 @@ struct ProjectFileStoreTests {
     // MARK: - Matching
 
     @Test
+    func folderless_layouts_match_by_id_across_renames_and_do_not_overwrite_each_other() throws {
+        let store = makeStore()
+        defer { try? FileManager.default.removeItem(at: store.directoryURL) }
+        let firstID = UUID()
+        let secondID = UUID()
+        let first = ProjectFile(name: "Scratch", id: firstID, path: nil, tabs: [LayoutTab(name: "One", layout: .pane(LayoutPane()))])
+        let second = ProjectFile(name: "Scratch", id: secondID, path: nil, tabs: [LayoutTab(name: "Two", layout: .pane(LayoutPane()))])
+        let firstURL = try store.write(first, projectName: "Scratch")
+        let secondURL = try store.write(second, projectName: "Scratch")
+        #expect(firstURL != secondURL)
+        #expect(try store.loadFull(for: .id(firstID)) == first)
+        #expect(try store.loadFull(for: .id(secondID)) == second)
+        #expect(store.find(for: .path(ProjectPath.currentHome)) == nil)
+        let renamedURL = try store.write(first, projectName: "Renamed")
+        #expect(!FileManager.default.fileExists(atPath: firstURL.path))
+        #expect(store.find(for: .id(firstID))?.url.resolvingSymlinksInPath()
+            == renamedURL.resolvingSymlinksInPath())
+        #expect(try store.loadFull(for: .id(secondID)) == second)
+        #expect(store.applyState(for: .id(firstID)) == .applicable)
+    }
+
+    /// The rule that `parse` applies holds for a write too: a file that names
+    /// no project would match nothing, so it is never written.
+    @Test
+    func write_refuses_a_file_without_a_path_or_a_usable_id() {
+        let store = makeStore()
+        defer { try? FileManager.default.removeItem(at: store.directoryURL) }
+        let tabs = [LayoutTab(name: "Shell", layout: .pane(LayoutPane()))]
+        #expect(throws: LayoutFileError.self) {
+            try store.write(ProjectFile(name: "Nothing", tabs: tabs), projectName: "Nothing")
+        }
+        #expect(throws: LayoutFileError.self) {
+            try store.write(ProjectFile(name: "Pinned ID", id: PinnedTabs.projectID, tabs: tabs), projectName: "Pinned ID")
+        }
+        #expect(filenames(store).isEmpty)
+    }
+
+    /// The match rule that Settings labels a file with is `find`'s own.
+    @Test
+    func listing_declares_the_projects_that_find_matches() throws {
+        let store = makeStore()
+        defer { try? FileManager.default.removeItem(at: store.directoryURL) }
+        let folderless = Project(id: UUID(), name: "Scratch", path: nil)
+        let rooted = Project(name: "api", path: "/srv/api")
+        try writeRaw(store, filename: "scratch.yaml", yaml: "id: \(folderless.id.uuidString)\ntabs:\n  - {}\n")
+        try writeRaw(store, filename: "api.yaml", yaml: "path: /srv/api/\nid: \(folderless.id.uuidString)\n")
+        let listings = Dictionary(uniqueKeysWithValues: store.listAll().map { ($0.filename, $0) })
+        let scratch = try #require(listings["scratch.yaml"])
+        let api = try #require(listings["api.yaml"])
+        #expect(scratch.declares(folderless))
+        #expect(!scratch.declares(rooted))
+        // A file with a path declares only its folder, whatever ID it carries.
+        #expect(api.declares(rooted))
+        #expect(!api.declares(folderless))
+        #expect(store.find(for: ProjectFileIdentity(folderless))?.url.lastPathComponent == "scratch.yaml")
+        #expect(store.find(for: ProjectFileIdentity(rooted))?.url.lastPathComponent == "api.yaml")
+    }
+
+    @Test
     func finds_file_by_canonical_path_not_filename() throws {
         let store = makeStore()
         try writeRaw(store, filename: "whatever.yaml", yaml: "path: /a/b/")
-        let match = store.find(forProjectPath: "/a/b")
+        let match = store.find(for: .path("/a/b"))
         #expect(match?.url.lastPathComponent == "whatever.yaml")
-        #expect(store.find(forProjectPath: "/a/c") == nil)
+        #expect(store.find(for: .path("/a/c")) == nil)
     }
 
     @Test
     func missing_directory_scans_empty() {
         let store = makeStore()
         #expect(store.scan().isEmpty)
-        #expect(store.find(forProjectPath: "/a") == nil)
+        #expect(store.find(for: .path("/a")) == nil)
     }
 
     @Test
@@ -44,21 +103,21 @@ struct ProjectFileStoreTests {
         let store = makeStore()
         try writeRaw(store, filename: "b.yaml", yaml: "name: B\npath: /same")
         try writeRaw(store, filename: "a.yaml", yaml: "name: A\npath: /same")
-        #expect(store.find(forProjectPath: "/same")?.url.lastPathComponent == "a.yaml")
+        #expect(store.find(for: .path("/same"))?.url.lastPathComponent == "a.yaml")
     }
 
     @Test
     func yml_extension_is_scanned_too() throws {
         let store = makeStore()
         try writeRaw(store, filename: "p.yml", yaml: "path: /a")
-        #expect(store.find(forProjectPath: "/a") != nil)
+        #expect(store.find(for: .path("/a")) != nil)
     }
 
     // MARK: - Apply state
 
     @Test
     func apply_state_none_without_matching_file() {
-        #expect(makeStore().applyState(forProjectPath: "/a") == .none)
+        #expect(makeStore().applyState(for: .path("/a")) == .none)
     }
 
     @Test
@@ -69,16 +128,16 @@ struct ProjectFileStoreTests {
         tabs:
           - run: btop
         """)
-        #expect(store.applyState(forProjectPath: "/a") == .applicable)
+        #expect(store.applyState(for: .path("/a")) == .applicable)
     }
 
     @Test
     func apply_state_empty_tabs_for_bare_declaration() throws {
         let store = makeStore()
         try writeRaw(store, filename: "p.yaml", yaml: "path: /a")
-        #expect(store.applyState(forProjectPath: "/a") == .emptyTabs)
+        #expect(store.applyState(for: .path("/a")) == .emptyTabs)
         try writeRaw(store, filename: "p.yaml", yaml: "path: /a\ntabs: []")
-        #expect(store.applyState(forProjectPath: "/a") == .emptyTabs)
+        #expect(store.applyState(for: .path("/a")) == .emptyTabs)
     }
 
     @Test
@@ -89,9 +148,9 @@ struct ProjectFileStoreTests {
         tabs:
           - split: { direction: horizontal, first: { } }
         """)
-        #expect(store.applyState(forProjectPath: "/a") == .invalid)
+        #expect(store.applyState(for: .path("/a")) == .invalid)
         #expect(throws: LayoutFileError.self) {
-            try store.loadFull(forProjectPath: "/a")
+            try store.loadFull(for: .path("/a"))
         }
     }
 
@@ -171,7 +230,7 @@ struct ProjectFileStoreTests {
         let store = makeStore()
         try store.write(ProjectFile(name: "API Server", path: "/a"), projectName: "API Server")
         #expect(filenames(store) == ["api_server.yaml"])
-        #expect(try store.loadFull(forProjectPath: "/a")?.name == "API Server")
+        #expect(try store.loadFull(for: .path("/a"))?.name == "API Server")
     }
 
     @Test
@@ -180,7 +239,7 @@ struct ProjectFileStoreTests {
         try writeRaw(store, filename: "repo.yaml", yaml: "path: /other")
         try store.write(ProjectFile(name: "repo", path: "/mine"), projectName: "repo")
         #expect(filenames(store) == ["repo.yaml", "repo_2.yaml"])
-        #expect(store.find(forProjectPath: "/mine")?.url.lastPathComponent == "repo_2.yaml")
+        #expect(store.find(for: .path("/mine"))?.url.lastPathComponent == "repo_2.yaml")
     }
 
     @Test
@@ -191,7 +250,7 @@ struct ProjectFileStoreTests {
             LayoutTab(name: nil, layout: .pane(LayoutPane(cwd: nil, run: "btop", shell: nil))),
         ]), projectName: "api")
         #expect(filenames(store) == ["api.yaml"])
-        #expect(store.applyState(forProjectPath: "/a") == .applicable)
+        #expect(store.applyState(for: .path("/a")) == .applicable)
     }
 
     @Test
@@ -210,7 +269,7 @@ struct ProjectFileStoreTests {
         try store.write(ProjectFile(name: "api", path: "/mine"), projectName: "api")
         #expect(filenames(store) == ["api.yaml", "api_2.yaml"])
         // The other project's file is untouched.
-        #expect(store.find(forProjectPath: "/other")?.url.lastPathComponent == "api.yaml")
+        #expect(store.find(for: .path("/other"))?.url.lastPathComponent == "api.yaml")
     }
 
     @Test
@@ -239,7 +298,7 @@ struct ProjectFileStoreTests {
             encoding: .utf8
         )
         #expect(!text.contains(home))
-        let loaded = try store.loadFull(forProjectPath: "\(home)/dev/api")
+        let loaded = try store.loadFull(for: .path("\(home)/dev/api"))
         #expect(loaded?.path == "~/dev/api")
     }
 
@@ -247,7 +306,7 @@ struct ProjectFileStoreTests {
     func write_outside_home_stays_absolute() throws {
         let store = makeStore()
         try store.write(ProjectFile(name: "app", path: "/srv/app"), projectName: "app")
-        #expect(try store.loadFull(forProjectPath: "/srv/app")?.path == "/srv/app")
+        #expect(try store.loadFull(for: .path("/srv/app"))?.path == "/srv/app")
     }
 
     @Test
@@ -263,7 +322,7 @@ struct ProjectFileStoreTests {
         try writeRaw(store, filename: "b.yaml", yaml: "path: /same")
         try writeRaw(store, filename: "a.yaml", yaml: "path: /same")
         try writeRaw(store, filename: "other.yaml", yaml: "path: /other")
-        #expect(store.matches(forProjectPath: "/same").map(\.url.lastPathComponent) == ["a.yaml", "b.yaml"])
+        #expect(store.matches(for: .path("/same")).map(\.url.lastPathComponent) == ["a.yaml", "b.yaml"])
     }
 
     @Test
@@ -271,7 +330,7 @@ struct ProjectFileStoreTests {
         let store = makeStore()
         try writeRaw(store, filename: "broken.yaml", yaml: "path: [unclosed")
         try writeRaw(store, filename: "good.yaml", yaml: "path: /a")
-        #expect(store.find(forProjectPath: "/a")?.url.lastPathComponent == "good.yaml")
+        #expect(store.find(for: .path("/a"))?.url.lastPathComponent == "good.yaml")
         #expect(store.scan().count == 2)
     }
 
@@ -293,11 +352,11 @@ struct ProjectFileStoreTests {
         try writeRaw(store, filename: "api.yaml", yaml: "name: api\npath: /repo")
         try writeRaw(store, filename: "web.yaml", yaml: "name: web\npath: /repo")
         // Path alone is ambiguous; the slug picks each project's own file.
-        #expect(store.find(forProjectPath: "/repo", preferredSlug: "api")?.url.lastPathComponent == "api.yaml")
-        #expect(store.find(forProjectPath: "/repo", preferredSlug: "web")?.url.lastPathComponent == "web.yaml")
+        #expect(store.find(for: .path("/repo"), preferredSlug: "api")?.url.lastPathComponent == "api.yaml")
+        #expect(store.find(for: .path("/repo"), preferredSlug: "web")?.url.lastPathComponent == "web.yaml")
         // No preference (or one that matches nothing) falls back to filename order.
-        #expect(store.find(forProjectPath: "/repo")?.url.lastPathComponent == "api.yaml")
-        #expect(store.find(forProjectPath: "/repo", preferredSlug: "gone")?.url.lastPathComponent == "api.yaml")
+        #expect(store.find(for: .path("/repo"))?.url.lastPathComponent == "api.yaml")
+        #expect(store.find(for: .path("/repo"), preferredSlug: "gone")?.url.lastPathComponent == "api.yaml")
     }
 
     @Test
@@ -309,8 +368,8 @@ struct ProjectFileStoreTests {
         // its own file rather than realign-deleting api's.
         try store.write(ProjectFile(name: "web", path: "/repo"), projectName: "web", reservedSlugs: ["api"])
         #expect(filenames(store) == ["api.yaml", "web.yaml"])
-        #expect(try store.loadFull(forProjectPath: "/repo", preferredSlug: "api")?.name == "api")
-        #expect(try store.loadFull(forProjectPath: "/repo", preferredSlug: "web")?.name == "web")
+        #expect(try store.loadFull(for: .path("/repo"), preferredSlug: "api")?.name == "api")
+        #expect(try store.loadFull(for: .path("/repo"), preferredSlug: "web")?.name == "web")
     }
 
     @Test
@@ -326,7 +385,7 @@ struct ProjectFileStoreTests {
         // The save binds to api.yaml (slug-owned) and rewrites it in place. It
         // must NOT bind aaa.yaml and then realign-delete it.
         #expect(filenames(store) == ["aaa.yaml", "api.yaml"])
-        #expect(try store.loadFull(forProjectPath: "/repo", preferredSlug: "api")?.name == "api")
+        #expect(try store.loadFull(for: .path("/repo"), preferredSlug: "api")?.name == "api")
     }
 
     /// The default store keeps the single layout files (`pinned.yaml`,

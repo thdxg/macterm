@@ -289,6 +289,9 @@ struct MainWindow: View {
         .overlay {
             ToastOverlay()
         }
+        .sheet(isPresented: $windowState.isNewFolderlessProjectSheetPresented) {
+            NewFolderlessProjectSheet()
+        }
         .sheet(isPresented: $windowState.isNewRemoteProjectSheetPresented) {
             NewRemoteProjectSheet()
         }
@@ -315,7 +318,7 @@ struct MainWindow: View {
         }
         .task {
             guard !appState.hasRestoredSelection else { return }
-            appState.restoreSelection(projects: projectStore.projects)
+            appState.restoreSelection(projects: projectStore.projects, projectListLoadFailed: projectStore.loadFailed)
             // After the restore, never before: "is this a fresh install?" is
             // only answerable once the snapshot is loaded, `pinned.yaml` is
             // reconciled and a load failure is known (see FirstRunSeed).
@@ -858,7 +861,7 @@ struct MainWindow: View {
         guard let project = activeProject else { return "" }
         // The pinned workspace has no project directory worth advertising.
         if project.id == PinnedTabs.projectID { return "" }
-        return project.path
+        return project.path ?? ""
     }
 }
 
@@ -965,7 +968,7 @@ struct EmptyProjectView: View {
                 Text(project.name)
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(MactermTheme.fg)
-                Text(project.path)
+                Text(project.pathLabel)
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(MactermTheme.fgMuted)
                     .textSelection(.enabled)
@@ -1120,7 +1123,7 @@ struct WorkspaceView: View {
             direction: direction,
             position: position,
             projectID: project.id,
-            projectDirectory: project.path
+            projectDirectory: project.defaultDirectory
         )
     }
 

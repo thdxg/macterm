@@ -529,46 +529,41 @@ final class ControlHandler {
     /// workspace. Leaving the flag out takes the directory's own name, which
     /// nobody typed, so that one is `ProjectStore.create`'s to disambiguate.
     private func projectCreate(_ args: ControlArgs) throws -> ControlData {
-        guard let rawPath = args.path, !rawPath.isEmpty else {
-            throw ControlError(code: .badRequest, message: "project.create requires a path")
-        }
-        guard let parsed = ProjectPath.parse(rawPath) else {
-            throw ControlError(code: .badRequest, message: "\"\(rawPath)\" is not an absolute or ~-prefixed path")
-        }
-        // A remote spec ([user@]host:dir, #104) is stored verbatim — there is
-        // no local directory to canonicalize or existence-check; a wrong host
-        // or dir surfaces in the pane itself (ssh's error / the cd
-        // diagnostic), same as a sheet-created remote project.
-        let canonical: String
-        switch parsed {
-        case .local:
-            canonical = ProjectPath.canonicalLocal(rawPath)
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: canonical, isDirectory: &isDirectory),
-                  isDirectory.boolValue
-            else {
-                throw ControlError(code: .notFound, message: "no directory at \(canonical)")
-            }
-        case .remote:
-            canonical = rawPath
-        }
-        // An empty `--name` is refused rather than read as "no name": leaving
-        // the flag out already says that, so an empty value is a mistake (an
-        // unset shell variable, typically) that should fail, not fall back.
         let name = args.name?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let name {
             guard !name.isEmpty else { throw Self.emptyNameError }
             guard !PinnedTabs.reservesName(name) else { throw Self.reservedNameError }
+        }
+        let canonical: String?
+        if let rawPath = args.path {
+            guard let parsed = ProjectPath.parse(rawPath) else {
+                throw ControlError(code: .badRequest, message: "\"\(rawPath)\" is not an absolute or ~-prefixed path")
+            }
+            switch parsed {
+            case .local:
+                let directory = ProjectPath.canonicalLocal(rawPath)
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: directory, isDirectory: &isDirectory), isDirectory.boolValue else {
+                    throw ControlError(code: .notFound, message: "no directory at \(directory)")
+                }
+                canonical = directory
+            case .remote:
+                canonical = rawPath
+            }
+        } else {
+            canonical = nil
+        }
+        // Without `--name`, the directory names the project. Without either,
+        // nothing does.
+        guard let projectName = name ?? canonical.map({ ($0 as NSString).lastPathComponent }) else {
+            throw ControlError(code: .badRequest, message: "project.create requires a path or a name")
         }
 
         // Always create — `project create` is not idempotent: re-running adds a
         // distinct project for the same directory. `--select` only activates
         // the just-created project; scripts that want create-or-select must
         // check `project list` first.
-        let project = projectStore.create(
-            name: name ?? (canonical as NSString).lastPathComponent,
-            path: canonical
-        )
+        let project = projectStore.create(name: projectName, path: canonical)
         if args.select == true {
             // The same selection path the sidebar runs.
             appState.selectProject(project)
@@ -848,7 +843,7 @@ final class ControlHandler {
             direction: placement.direction,
             position: placement.position,
             projectID: project.id,
-            projectDirectory: project.path,
+            projectDirectory: project.defaultDirectory,
             remoteZmxPath: project.zmxPath,
             command: args.run,
             focus: args.focus ?? true
@@ -1279,7 +1274,7 @@ final class ControlHandler {
             rows: rows,
             columns: cols,
             projectID: project.id,
-            projectDirectory: project.path,
+            projectDirectory: project.defaultDirectory,
             command: args.run
         )
         guard !created.isEmpty else {
@@ -1593,7 +1588,7 @@ final class ControlHandler {
             index: projectStore.projects.firstIndex { $0.id == project.id }.map { $0 + 1 },
             id: project.id.uuidString,
             name: project.name,
-            path: project.path,
+            path: project.path ?? "",
             active: project.id == appState.activeProjectID,
             // "Loaded" = a workspace exists (tabs/panes addressable over
             // this protocol) — NOT `AppState.isProjectLoaded`, which asks

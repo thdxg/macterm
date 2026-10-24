@@ -23,6 +23,7 @@ struct ProjectsSettings: View {
     @State private var layouts: [ProjectFileStore.Listing] = []
     @State private var layoutPendingDeletion: ProjectFileStore.Listing?
     @State private var deleteFailure: String?
+    @State private var isNewFolderlessProjectPresented = false
 
     var body: some View {
         Form {
@@ -57,9 +58,10 @@ struct ProjectsSettings: View {
                 HStack {
                     Text("Projects")
                     Spacer()
-                    // The same two creation paths the sidebar offers, so a
+                    // The same creation paths the sidebar offers, so a
                     // project can be added without leaving Settings.
                     Menu {
+                        Button("Without Folder…") { isNewFolderlessProjectPresented = true }
                         Button("Local Folder…") { addLocalProject() }
                         Button("Remote Machine…") { addRemoteProject() }
                     } label: {
@@ -82,6 +84,7 @@ struct ProjectsSettings: View {
                         LayoutRow(
                             layout: layout,
                             hasProject: hasProject(for: layout),
+                            canCreateProject: canCreateProject(from: layout),
                             onCreateProject: { createProject(from: layout) },
                             onRemove: { layoutPendingDeletion = layout }
                         )
@@ -102,6 +105,7 @@ struct ProjectsSettings: View {
             }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $isNewFolderlessProjectPresented) { NewFolderlessProjectSheet() }
         .onAppear { reloadLayouts() }
         // Reflect a Save Layout made from this pane (or elsewhere while it's
         // open) — a save can create a file the list doesn't know about yet.
@@ -168,8 +172,17 @@ struct ProjectsSettings: View {
     /// project for a path is legal (a directory is not an identity), but for a
     /// file that already has one it's rarely what's wanted, so it's labeled.
     private func hasProject(for layout: ProjectFileStore.Listing) -> Bool {
-        guard let declared = layout.declaredPath else { return false }
-        return projectStore.projects.contains { ProjectPath.matches($0.path, declared) }
+        projectStore.projects.contains { layout.declares($0) }
+    }
+
+    /// Whether `createProject` can make or open a project for this file. A
+    /// file with a path always can. A file without one needs a valid ID that
+    /// `ProjectStore.importFolderless` accepts: not the ID of a project with
+    /// a folder (an invalid file already covers the pinned tabs' ID).
+    private func canCreateProject(from layout: ProjectFileStore.Listing) -> Bool {
+        if layout.declaredPath != nil { return true }
+        guard !layout.isInvalid, let id = layout.declaredID else { return false }
+        return projectStore.canImportFolderless(id: id)
     }
 
     /// Add a project for this file's declaration and select it. The new
@@ -177,13 +190,21 @@ struct ProjectsSettings: View {
     /// effect through Apply Layout (the row menu beside it), never on
     /// selection.
     private func createProject(from layout: ProjectFileStore.Listing) {
-        guard let path = layout.declaredPath else { return }
         // `name:` is optional in a project file; fall back to the filename,
         // which is the slug of a name Macterm itself wrote.
         let declared = layout.declaredName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = (declared?.isEmpty == false ? declared : nil)
             ?? layout.url.deletingPathExtension().lastPathComponent
-        let project = projectStore.create(name: name, path: path)
+        let project: Project
+        if let path = layout.declaredPath {
+            project = projectStore.create(name: name, path: path)
+        } else if let id = layout.declaredID,
+                  let imported = projectStore.importFolderless(name: name, id: id)
+        {
+            project = imported
+        } else {
+            return
+        }
         appState.selectProject(project)
     }
 
@@ -241,7 +262,7 @@ private struct ProjectRow: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(project.name)
-                Text(project.path)
+                Text(project.pathLabel)
                     .settingsCaption()
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -314,7 +335,7 @@ private struct ProjectRow: View {
     /// surfaces the parse error instead of silently doing nothing.
     private var canApplyLayout: Bool {
         switch appState.projectFiles.applyState(
-            forProjectPath: project.path,
+            for: ProjectFileIdentity(project),
             preferredSlug: ProjectSlug.slug(from: project.name)
         ) {
         case .applicable,
@@ -344,6 +365,7 @@ private struct UnloadedBadge: View {
 private struct LayoutRow: View {
     let layout: ProjectFileStore.Listing
     let hasProject: Bool
+    let canCreateProject: Bool
     let onCreateProject: () -> Void
     let onRemove: () -> Void
 
@@ -364,8 +386,8 @@ private struct LayoutRow: View {
             Spacer(minLength: 8)
 
             Menu {
-                Button(hasProject ? "Create Another Project" : "Create Project") { onCreateProject() }
-                    .disabled(layout.declaredPath == nil)
+                Button(createTitle) { onCreateProject() }
+                    .disabled(!canCreateProject)
                 Divider()
                 Button("Remove", role: .destructive) { onRemove() }
             } label: {
@@ -378,13 +400,21 @@ private struct LayoutRow: View {
         .padding(.vertical, 2)
     }
 
+    private var createTitle: String {
+        if hasProject, layout.declaredPath == nil { return String(localized: "Open Project") }
+        return hasProject ? String(localized: "Create Another Project") : String(localized: "Create Project")
+    }
+
     private var subtitle: String {
         if layout.isInvalid {
             return String(localized: "Invalid file. Fix it in an editor to use it.")
         }
-        guard let path = layout.declaredPath else {
-            return String(localized: "No path declared.")
+        // A valid file with no path that cannot make a project: its ID is
+        // the ID of a project with a folder.
+        if layout.declaredPath == nil, !canCreateProject {
+            return String(localized: "The ID in this file belongs to a project with a folder.")
         }
+        let path = layout.declaredPath ?? String(localized: "No folder")
         return switch layout.tabCount {
         case 0: String(localized: "\(path) — no tabs", comment: "Settings → Layouts: a layout file's path and tab count")
         case 1: String(localized: "\(path) — 1 tab", comment: "Settings → Layouts: a layout file's path and tab count")

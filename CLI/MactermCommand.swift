@@ -144,13 +144,13 @@ struct ProjectCommand: ParsableCommand {
 
     struct Create: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Add a project for a local directory or a remote spec. Each run adds a new project."
+            abstract: "Add a project with or without a folder. Each run adds a new project."
         )
 
-        @Argument(help: "Project directory (absolute or ~-prefixed), or a remote [user@]host:dir.")
-        var path: String
+        @Argument(help: "Project directory or remote [user@]host:dir. Omit it with --name to create a project without a folder.")
+        var path: String?
 
-        @Option(help: "Display name. The default is the name of the directory.")
+        @Option(help: "Display name. Required without a path. Otherwise defaults to the directory name.")
         var name: String?
 
         @Flag(help: "Select the project too.")

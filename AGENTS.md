@@ -356,8 +356,8 @@ Pinned tabs belong to no project. The sidebar shows them above the projects. The
 - At launch, every record materializes. `materializeRestoredPinnedTabs` asks `zmx ls` which sessions survived. A session that is dead starts again from the declaration. The declaration refreshes at pin time, when the pinned foreground changes (debounced), and at quit. It never refreshes at unload.
 - Sidebar drag: the pinned rows and the tab lists share one `.dropDestination` at the level of the ForEach. It drives the native insertion line. Rows have no destinations of their own. A target on a row kills the line and swallows clicks. `PinTabDropZone` above the List makes the first pin possible by drag. `--project pinned` addresses the workspace over the CLI.
 - **No project may have the name `Pinned`** (any case, padding ignored). `ControlHandler.resolveProject` reads it as this workspace before any project, so such a project cannot be reached by name.
-  - `PinnedTabs.reservesName` is the one test that every naming path applies. A typed name is refused where the user typed it. These paths are CLI `project create --name` and `project rename`, the notice of the sidebar rename, the New Project intent, and the remote sheet.
-  - A name that nobody chose (the own name of a folder) becomes `Pinned 2` in `ProjectStore.create`. `ProjectStore.rename` refuses it outright.
+  - `PinnedTabs.reservesName` is the one test that every naming path applies. A typed name is refused where the user typed it. These paths are CLI `project create --name` and `project rename`, the notice of the sidebar rename, the New Project intent, the remote sheet, and the sheet of a project without a folder.
+  - A name that nobody chose becomes `Pinned 2`. This is the own name of a folder (`ProjectStore.create`), or the `name:` of a layout file that Settings imports for a project without a folder (`ProjectStore.importFolderless`). `ProjectStore.rename` refuses it outright.
   - Projects that got their names before the rule keep their names.
 
 ### Desktop widgets
@@ -1097,12 +1097,20 @@ The GUI text is in three String Catalogs: `Macterm/Localizable.xcstrings` (the a
 
 ### Persistence
 
-- Workspaces are in `~/Library/Application Support/<display name>/workspaces_v3.json` (schema v6, written as v7 only while desktop widgets exist). Projects are in `projects.json`. The wrapper configs are next to them. Debug builds use `Macterm Debug/`, and the Debug bundle is `Macterm Debug.app` (`PRODUCT_MODULE_NAME` stays `Macterm`). Write the space wherever you name the bundle by path.
+- Workspaces are in `~/Library/Application Support/<display name>/workspaces_v3.json` (schema v6, written as v7 only while desktop widgets exist). Projects are in `projects.json`, and projects without a folder are in `projects_folderless.json` next to it. The wrapper configs are next to them. Debug builds use `Macterm Debug/`, and the Debug bundle is `Macterm Debug.app` (`PRODUCT_MODULE_NAME` stays `Macterm`). Write the space wherever you name the bundle by path.
 - `Pane` IDs are new at every restore. The session identity (`sessionID` and `sessionName`, stored exactly as given) is what connects a pane to its session again.
   - Only an explicit Apply Layout applies a declared layout (palette, menu, Settings row, `layout apply`). When you select a project or start Macterm again, Macterm never reads it. The snapshot restores, and a project without a snapshot gets the default workspace.
 - **A directory is not an identity**. `ProjectStore.create` always appends a new project. `findOrCreate` exists only for callers that must be idempotent (the benchmark).
+- **A project can have no folder.** `Project.path == nil` records this state. Never store the home folder as its path. `Project.defaultDirectory` supplies home when a terminal or a relative layout path needs a directory. New tabs and splits still follow the Ghostty directory-inheritance settings. Files, Copy Path, Worktrees and Replace Project Path with Current Directory need a project folder. Extension commands run from home but receive no project-directory export.
+  - **Never write a project without a folder to `projects.json`** (`ProjectStore.folderlessFileURL`). Older builds decode `path` as a required key. One such row makes them read no projects, and then their restore drops every workspace and reaps every session. In a file of its own, an older build does not see these projects. It reaps only their sessions.
+  - **A project list that did not load keeps the snapshot and every session** (`restoreSelection(projectListLoadFailed:)` → `WorkspaceStore.preserveForUnreadProjects`). With no projects, the restore keeps no workspace, so no session has a claim.
+  - Their zmx sessions take the name of the project as the slug (`Project.sessionSlug`). With home as the directory, every such project, the pinned tabs and a project in home would share the user name as their slug.
+- **Layouts for projects without folders match by UUID.** `ProjectFile.id` stores the project ID, and `path` is absent. Names and the home folder never identify these layouts. Keep the ID across a rename or an import. `ProjectStore.importFolderless` refuses the pinned ID and IDs that belong to projects with folders.
+  - Every lookup in `ProjectFileStore` takes one `ProjectFileIdentity` (`.path` or `.id`, from `ProjectFileIdentity(project)`). Do not pass a path and an ID separately: a caller that forgot the ID would find no layout for these projects.
+  - `ProjectFileStore.write` refuses a file with no identity (`LayoutFileError.noIdentity`), because `parse` would refuse it.
+  - A bad `id:` reads as no ID. Before this feature, `id` was a key that decoding ignored, so a file with a folder that carries another `id:` keeps working.
 - Project declarations are YAML in `~/.config/macterm/projects/`. All build flavors share them. They look at the `$HOME` env first, through `ProjectPath.currentHome`.
-  - `name:` is for display only. `path:` is the identity (scp-style, with `~` when Macterm writes it). `tabs:` is optional.
+  - `name:` is for display only. `path:` identifies a project folder (scp-style, with `~` when Macterm writes it). Without a folder, `id:` is the identity. `tabs:` is optional.
   - The schema is `assets/project.schema.json`. Keep them in sync.
   - Only an explicit Save Layout and the editor of the user write a file. Only Settings → Projects → Layouts → Remove deletes it.
   - Matching is by the canonical `path:`. The slug of the name of the project breaks a tie when one directory backs several projects (`ProjectSlug.owns`). Macterm surfaces duplicates. It never deletes them.

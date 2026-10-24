@@ -2,11 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/project.schema.json",
   "title": "Macterm project",
-  "description": "A Macterm project declaration. One file for each project in ~/.config/macterm/projects/. It declares the path of the project and, if you want, its tab and pane layout. Macterm matches a file to a project by `path`. The file name does not matter. \"Save Layout\" writes the file. You can edit it by hand.",
+  "description": "A Macterm project declaration. One file for each project in ~/.config/macterm/projects/. It declares the path of the project and, if you want, its tab and pane layout. Macterm matches a file to a project by `path`, or by `id` for a project without a folder. The file name does not matter. \"Save Layout\" writes the file. You can edit it by hand.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["path"],
+  "oneOf": [{ "required": ["path"] }, { "required": ["id"], "not": { "required": ["path"] } }],
   "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The project ID for a project without a folder. Omit path and keep this ID when you rename the project. Relative pane directories start from the home folder."
+    },
     "name": {
       "type": "string",
       "description": "The display name that Macterm recorded when it saved the file. The project list of the app keeps its own name while the app runs, so the two names can be different. This name is only information."

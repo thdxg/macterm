@@ -42,6 +42,25 @@ struct LayoutReconcilerTests {
         )
     }
 
+    /// `Project.sessionSlug` names every new pane of a project without a
+    /// folder. Without it, a pane takes the basename of its cwd, as before.
+    @Test
+    func new_panes_take_the_session_slug_when_one_is_given() throws {
+        let pid = UUID()
+        let file = try layout("""
+        tabs:
+          - split:
+              direction: horizontal
+              first: {}
+              second: { cwd: "/tmp/web" }
+        """)
+        let home = ProjectPath.currentHome
+        let named = LayoutReconciler.plan(layout: file, workspace: nil, projectRoot: home, projectID: pid, sessionSlug: "notes")
+        #expect(named.tabs[0].root.allPanes().map(\.sessionSlug) == ["notes", "notes"])
+        let plain = LayoutReconciler.plan(layout: file, workspace: nil, projectRoot: "/srv/api", projectID: pid)
+        #expect(plain.tabs[0].root.allPanes().map(\.sessionSlug) == ["api", "web"])
+    }
+
     @Test
     func remote_pane_matches_its_declared_run_through_the_default_seams() throws {
         // Remote panes (#104): the default liveCommand seam answers from the

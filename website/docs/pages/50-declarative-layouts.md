@@ -8,7 +8,7 @@ description: Describe the tabs, splits and commands of a project in YAML.
 
 # Declarative layouts
 
-Describe the tabs, splits and commands of a project in YAML. The files are in `~/.config/macterm/projects/`, one file for each project. Macterm matches a file to a project by `path`. The file name does not matter.
+Describe the tabs, splits and commands of a project in YAML. The files are in `~/.config/macterm/projects/`, one file for each project. Macterm matches a file to a project by `path`, or by `id` for a project without a folder. The file name does not matter.
 
 ```yaml title="~/.config/macterm/projects/myapp.yaml"
 name: "MyApp"
@@ -44,3 +44,11 @@ zmxPath: "~/bin/zmx"
 ```
 
 See [remote projects](/docs/remote-projects).
+
+## Projects without folders
+
+Select **New Project → Without Folder…** and enter a name. The first terminal starts in your home folder. New tabs and splits follow your directory-inheritance settings. **Files**, **Copy Path**, **Worktrees** and **Replace Project Path with Current Directory** need a project folder.
+
+**Save Layout** records the project ID as `id` and omits `path`. Keep that ID when you edit the layout or rename the project. Two projects with the same name have separate IDs and layout files. Relative `cwd` values start from your home folder. Absolute paths and paths that start with `~` work too.
+
+The project ID also lets **Settings → Projects → Layouts → Create Project** restore a project from its saved file.

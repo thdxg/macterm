@@ -76,11 +76,13 @@ enum LayoutBuilder {
     static func makePane(
         _ pane: LayoutPane,
         projectRoot: String,
-        projectID: UUID
+        projectID: UUID,
+        sessionSlug: String? = nil
     ) -> Pane {
         Pane(
             projectPath: resolveCwd(pane.cwd, projectRoot: projectRoot),
             projectID: projectID,
+            sessionSlug: sessionSlug,
             command: (pane.run?.isEmpty == false) ? pane.run : nil,
             shell: pane.shell
         )

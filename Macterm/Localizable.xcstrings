@@ -4929,6 +4929,38 @@
         }
       }
     },
+    "New Project Without Folder" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더 없는 새 프로젝트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建无文件夹项目"
+          }
+        }
+      }
+    },
+    "New Project Without Folder…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더 없는 새 프로젝트…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建无文件夹项目…"
+          }
+        }
+      }
+    },
     "New Project…" : {
       "localizations" : {
         "ko" : {
@@ -5235,6 +5267,22 @@
         }
       }
     },
+    "No folder" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无文件夹"
+          }
+        }
+      }
+    },
     "No keybinds match “%@”." : {
       "localizations" : {
         "ko" : {
@@ -5279,6 +5327,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此项目没有布局文件"
+          }
+        }
+      }
+    },
+    "No layout file has the ID of the project “%@”. Use “Save Layout” to create one." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 “%@”의 ID를 가진 레이아웃 파일이 없습니다. “레이아웃 저장”을 사용하여 만드십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有布局文件带有项目“%@”的 ID。请使用“存储布局”创建一个。"
           }
         }
       }
@@ -5343,22 +5407,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "旁边没有可运行的窗格"
-          }
-        }
-      }
-    },
-    "No path declared." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "선언된 경로가 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未声明路径。"
           }
         }
       }
@@ -9125,6 +9173,22 @@
         }
       }
     },
+    "The ID in this file belongs to a project with a folder." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 파일의 ID는 폴더가 있는 프로젝트의 ID입니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件中的 ID 属于一个有文件夹的项目。"
+          }
+        }
+      }
+    },
     "The background matches the color of each full-screen program." : {
       "localizations" : {
         "ko" : {
@@ -9237,6 +9301,22 @@
         }
       }
     },
+    "The first terminal starts in your home folder." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "첫 번째 터미널은 홈 폴더에서 시작합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第一个终端在主文件夹中启动。"
+          }
+        }
+      }
+    },
     "The keys that move the cursor and select text in copy mode. A change applies the next time the mode starts." : {
       "localizations" : {
         "ko" : {
@@ -9281,6 +9361,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "布局文件未声明任何标签页，因此没有可应用的布局。"
+          }
+        }
+      }
+    },
+    "The layout file has no path and no project ID, so Macterm did not save it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃 파일에 경로와 프로젝트 ID가 없어 Macterm이 저장하지 않았습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "布局文件没有路径，也没有项目 ID，因此 Macterm 未存储它。"
           }
         }
       }
@@ -9576,6 +9672,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此面板的文件已不存在"
+          }
+        }
+      }
+    },
+    "This project has no folder" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프로젝트에는 폴더가 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目没有文件夹"
           }
         }
       }
@@ -10344,6 +10456,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "窗口"
+          }
+        }
+      }
+    },
+    "Without Folder…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더 없이…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不关联文件夹…"
           }
         }
       }

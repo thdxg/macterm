@@ -511,9 +511,9 @@ final class Workspace: Identifiable {
         return tabs.first { $0.id == activeTabID }
     }
 
-    init(projectID: UUID, projectPath: String) {
+    init(projectID: UUID, projectPath: String, sessionSlug: String? = nil) {
         self.projectID = projectID
-        let tab = TerminalTab(projectPath: projectPath, projectID: projectID)
+        let tab = TerminalTab(projectPath: projectPath, projectID: projectID, sessionSlug: sessionSlug)
         tabs.append(tab)
         activeTabID = tab.id
     }

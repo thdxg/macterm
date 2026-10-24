@@ -480,6 +480,20 @@ struct CustomPaletteScopeTests {
             == (NSHomeDirectory() as NSString).appendingPathComponent("x"))
     }
 
+    /// A project without a folder runs its listings in the home of
+    /// `commandContext` (`$HOME` first), so a relative `open:` path resolves
+    /// against that same home.
+    @Test
+    func a_relative_open_path_of_a_project_without_a_folder_resolves_where_the_listing_ran() throws {
+        let (context, _, _) = try makeContext(files: [:])
+        let scratch = context.projectStore.create(name: "Scratch")
+        context.appState.selectProject(scratch)
+        let (_, directory) = CustomPaletteScope.commandContext(exports: [:], context: context)
+        #expect(directory == ProjectPath.currentHome)
+        let url = CustomPaletteActions.fileURL("src/main.swift", appState: context.appState, projects: context.projectStore.projects)
+        #expect(url.path == URL(fileURLWithPath: directory).appendingPathComponent("src/main.swift").standardizedFileURL.path)
+    }
+
     /// An item's `when:` mutes it, with its reason, once the check fails;
     /// items sharing one command run it once; the rest stay as they are.
     @Test

@@ -33,7 +33,7 @@ struct FilesPaletteScopeTests {
         return root
     }
 
-    private func makeContext(path: String, remote: Bool = false) -> PaletteContext {
+    private func makeContext(path: String?, remote: Bool = false) -> PaletteContext {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent(
             "macterm-files-ctx-\(UUID().uuidString)",
             isDirectory: true
@@ -47,6 +47,19 @@ struct FilesPaletteScopeTests {
         store.add(project)
         state.selectProject(project)
         return PaletteContext(appState: state, projectStore: store)
+    }
+
+    @Test
+    func a_project_without_a_folder_does_not_scan_the_home_directory() {
+        let context = makeContext(path: nil)
+        let counter = Counter()
+        let scope = FilesPaletteScope(scan: { _ in counter.increment()
+            return []
+        })
+        scope.activate(context: context, onChange: {})
+        #expect(counter.value == 0)
+        #expect(scope.failure != nil)
+        scope.deactivate()
     }
 
     @Test

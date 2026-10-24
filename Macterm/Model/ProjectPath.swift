@@ -141,8 +141,9 @@ enum ProjectPath: Equatable {
     /// Locals compare canonically; remotes compare structurally (same
     /// user/host/directory after parsing). A local never equals a remote,
     /// and unparseable strings match nothing.
-    static func matches(_ a: String, _ b: String) -> Bool {
-        switch (parse(a), parse(b)) {
+    static func matches(_ a: String?, _ b: String?) -> Bool {
+        guard let a, let b else { return false }
+        return switch (parse(a), parse(b)) {
         case let (.local(pa), .local(pb)):
             canonicalLocal(pa) == canonicalLocal(pb)
         case let (.remote(ua, ha, da), .remote(ub, hb, db)):

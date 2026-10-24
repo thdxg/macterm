@@ -84,7 +84,7 @@ enum Output {
                 project.active ? "*" : " ",
                 project.name,
                 project.loaded ? tabs : "not loaded",
-                project.path,
+                project.path.isEmpty ? "no folder" : project.path,
             ]
         }
         printColumns(rows)

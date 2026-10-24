@@ -12,7 +12,7 @@ struct ProjectSource: PaletteSource {
     func items(query: String, context: PaletteContext) -> [PaletteItem] {
         let query = SearchQuery(query)
         return context.projectStore.projects.compactMap { project in
-            guard let match = Search.match(query, fields: [project.name, project.path]) else { return nil }
+            guard let match = Search.match(query, fields: [project.name, project.path ?? ""]) else { return nil }
             return makeItem(
                 project: project,
                 category: String(localized: "Project"),
@@ -41,7 +41,7 @@ struct ProjectSource: PaletteSource {
         PaletteItem(
             id: "project:\(project.id.uuidString)",
             title: project.name,
-            subtitle: project.path,
+            subtitle: project.pathLabel,
             category: category,
             score: score
         ) { [appState = context.appState] in

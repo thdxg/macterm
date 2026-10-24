@@ -365,6 +365,7 @@ struct SidebarContent: View {
         ) {
             HStack(spacing: 0) {
                 Menu {
+                    Button("Without Folder…") { windowState.isNewFolderlessProjectSheetPresented = true }
                     Button("Local Folder…") { openProject() }
                     Button("Remote Machine…") {
                         windowState.isNewRemoteProjectSheetPresented = true
@@ -682,7 +683,8 @@ struct SidebarContent: View {
                     item.tabID,
                     from: item.sourceProjectID,
                     to: project.id,
-                    destPath: project.path,
+                    destPath: project.defaultDirectory,
+                    destSessionSlug: project.sessionSlug,
                     toIndex: index
                 )
             }
@@ -702,7 +704,8 @@ struct SidebarContent: View {
             appState.separatePane(
                 item.paneID,
                 toProject: project.id,
-                destPath: project.path,
+                destPath: project.defaultDirectory,
+                destSessionSlug: project.sessionSlug,
                 at: index
             )
         }
@@ -769,6 +772,7 @@ struct SidebarContent: View {
         } else {
             // Right-click on empty space.
             Menu("New Project") {
+                Button("Without Folder…") { windowState.isNewFolderlessProjectSheetPresented = true }
                 Button("Local Folder…") { openProject() }
                 Button("Remote Machine…") { windowState.isNewRemoteProjectSheetPresented = true }
             }
@@ -783,9 +787,11 @@ struct SidebarContent: View {
         Button("New Tab") { createTab(in: project) }
         worktreesMenu(for: project)
         Button("Copy Path") {
+            guard let path = project.path else { return }
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(project.path, forType: .string)
+            NSPasteboard.general.setString(path, forType: .string)
         }
+        .disabled(project.path == nil)
         Divider()
         Button("Rename Project") { requestProjectRename(project.id) }
         ProjectColorMenu(selection: project.color) { color in
@@ -820,7 +826,7 @@ struct SidebarContent: View {
     /// files are reachable only over ssh, which a menu never starts.
     @ViewBuilder
     private func worktreesMenu(for project: Project) -> some View {
-        let worktrees = GitWorktrees.list(projectPath: project.path)
+        let worktrees = project.path.map { GitWorktrees.list(projectPath: $0) } ?? []
         if worktrees.isEmpty {
             // A disabled item, not a disabled `Menu`: a context menu drops
             // `.disabled` on a submenu item — measured on macOS 27, it renders
@@ -887,7 +893,8 @@ struct SidebarContent: View {
                             record.id,
                             from: PinnedTabs.projectID,
                             to: destination.id,
-                            destPath: destination.path
+                            destPath: destination.defaultDirectory,
+                            destSessionSlug: destination.sessionSlug
                         )
                         windowState.expandedProjects.insert(destination.id)
                     }
@@ -938,7 +945,13 @@ struct SidebarContent: View {
             Menu("Move to Project") {
                 ForEach(moveTargets) { destination in
                     Button(destination.name) {
-                        appState.moveTab(tab.id, from: project.id, to: destination.id, destPath: destination.path)
+                        appState.moveTab(
+                            tab.id,
+                            from: project.id,
+                            to: destination.id,
+                            destPath: destination.defaultDirectory,
+                            destSessionSlug: destination.sessionSlug
+                        )
                         windowState.expandedProjects.insert(destination.id)
                     }
                 }
@@ -1307,7 +1320,7 @@ private struct SidebarProjectRow: View {
                     Image(systemName: "network")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .help(project.path)
+                        .help(project.pathLabel)
                 }
             }
             .inlineRenameClickTarget(onSelect: select, onBeginRename: beginRename)

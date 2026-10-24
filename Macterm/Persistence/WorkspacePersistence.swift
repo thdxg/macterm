@@ -259,6 +259,14 @@ final class WorkspaceStore {
         self.fileURL = fileURL
     }
 
+    /// Treat the snapshot as unread for this run, though it decoded: the
+    /// project list did not load (`ProjectStore.loadFailed`), so the restore
+    /// keeps no workspace and claims no session. The same fail-closed stance
+    /// as a failed load: `save` keeps the file and both reapers skip.
+    func preserveForUnreadProjects() {
+        loadFailed = true
+    }
+
     /// What `load()` recovered: the ordinary per-project snapshots plus the
     /// pinned section (empty for pre-v5 files).
     struct Loaded {

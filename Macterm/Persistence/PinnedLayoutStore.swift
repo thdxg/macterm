@@ -174,7 +174,7 @@ struct PinnedLayoutStore {
         } catch {
             return .invalid(BilingualMessage({ "\(Self.filename) is not valid YAML: \($0)" }, error: error))
         }
-        guard file.path.trimmingCharacters(in: .whitespaces).lowercased() == PinnedTabs.pathMarker else {
+        guard file.path?.trimmingCharacters(in: .whitespaces).lowercased() == PinnedTabs.pathMarker else {
             return .invalid(BilingualMessage(
                 "\(Self.filename) is missing the `path: \(PinnedTabs.pathMarker)` marker. Macterm does not touch it"
             ))

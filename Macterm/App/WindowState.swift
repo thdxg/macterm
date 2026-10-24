@@ -153,6 +153,7 @@ final class WindowState: Identifiable {
     }
 
     var isNewRemoteProjectSheetPresented = false
+    var isNewFolderlessProjectSheetPresented = false
     /// The password editor sheet up in this window — the palette's Password
     /// Manager adding an entry.
     var passwordEditor: PasswordEditorRequest?

@@ -167,7 +167,7 @@ struct PinnedTabsTests {
         // Back on the project (pinning moved its only tab out, so make a
         // fresh one), close removes the tab outright.
         fx.state.activeProjectID = p.id
-        _ = try #require(fx.state.createTab(projectID: p.id, projectPath: p.path))
+        _ = try #require(fx.state.createTab(projectID: p.id, projectPath: p.defaultDirectory))
         let closeNormal = try #require(AppCommand.closeTab.action(in: ctx))
         closeNormal()
         #expect(fx.state.workspaces[p.id]?.tabs.isEmpty == true)
@@ -194,7 +194,7 @@ struct PinnedTabsTests {
         let p = seedProject(fx.state)
         let ws = try #require(fx.state.workspaces[p.id])
         let pinnedTab = ws.tabs[0]
-        let normalTab = ws.createTab(projectPath: p.path)
+        let normalTab = ws.createTab(projectPath: p.defaultDirectory)
         fx.state.pinTab(pinnedTab.id, fromProject: p.id)
 
         fx.state.closeTabs([
@@ -484,7 +484,7 @@ struct PinnedTabsTests {
         let p = seedProject(fx.state)
         let ws = try #require(fx.state.workspaces[p.id])
         let first = ws.tabs[0]
-        let second = ws.createTab(projectPath: p.path)
+        let second = ws.createTab(projectPath: p.defaultDirectory)
         fx.state.pinTab(first.id, fromProject: p.id)
         fx.state.pinTab(second.id, fromProject: p.id)
         fx.state.selectPinnedTab(second.id)
@@ -523,7 +523,7 @@ struct PinnedTabsTests {
             originProjectID: nil
         )]
 
-        fx.state.moveTab(recordID, from: pinnedID, to: p.id, destPath: p.path)
+        fx.state.moveTab(recordID, from: pinnedID, to: p.id, destPath: p.defaultDirectory)
 
         #expect(fx.state.pinnedRecords.isEmpty)
         let moved = try #require(fx.state.workspaces[p.id]?.tabs.first { $0.id == recordID })
@@ -537,7 +537,7 @@ struct PinnedTabsTests {
         let p = seedProject(fx.state)
         let ws = try #require(fx.state.workspaces[p.id])
         let first = ws.tabs[0]
-        let second = ws.createTab(projectPath: p.path)
+        let second = ws.createTab(projectPath: p.defaultDirectory)
         fx.state.pinTab(first.id, fromProject: p.id)
         fx.state.pinTab(second.id, fromProject: p.id)
 
@@ -612,7 +612,7 @@ struct PinnedTabsTests {
         let p = seedProject(fx.state)
         let ws = try #require(fx.state.workspaces[p.id])
         let a = ws.tabs[0]
-        let b = ws.createTab(projectPath: p.path)
+        let b = ws.createTab(projectPath: p.defaultDirectory)
         fx.state.pinTab(a.id, fromProject: p.id)
         fx.state.pinTab(b.id, fromProject: p.id)
         fx.state.pinnedRecords[0].declaration = LayoutTab(name: "a", layout: .pane(LayoutPane(cwd: "/tmp")))
@@ -764,7 +764,7 @@ struct PinnedTabsTests {
         let p = seedProject(fx.state)
         let ws = try #require(fx.state.workspaces[p.id])
         let first = ws.tabs[0]
-        let second = ws.createTab(projectPath: p.path)
+        let second = ws.createTab(projectPath: p.defaultDirectory)
         fx.state.pinTab(first.id, fromProject: p.id)
 
         // Hand-edit while running: append an entry. The existing entry is
@@ -817,7 +817,7 @@ struct PinnedTabsTests {
         let p = seedProject(fx.state)
         let ws = try #require(fx.state.workspaces[p.id])
         let pinnedTab = ws.tabs[0]
-        let projectTab = ws.createTab(projectPath: p.path)
+        let projectTab = ws.createTab(projectPath: p.defaultDirectory)
         fx.state.pinTab(pinnedTab.id, fromProject: p.id)
         fx.state.selectPinnedTab(pinnedTab.id)
 

@@ -47,7 +47,7 @@ extension AppState {
         let plan = LayoutReconciler.plan(
             layout: FirstRunSeed.projectLayout,
             workspace: nil,
-            projectRoot: project.path,
+            projectRoot: project.defaultDirectory,
             projectID: project.id
         )
         if let planned = plan.tabs.first {

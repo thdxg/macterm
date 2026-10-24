@@ -6,6 +6,17 @@ struct ProjectFileTests {
     // MARK: - Decode
 
     @Test
+    func folderless_layout_round_trips_with_its_project_id() throws {
+        let file = ProjectFile(name: "Scratch", id: UUID(), path: nil, tabs: [LayoutTab(name: "Shell", layout: .pane(LayoutPane()))])
+        let yaml = try file.yaml()
+        #expect(!yaml.contains("path:"))
+        #expect(try ProjectFile.parse(yaml: yaml) == file)
+        #expect(ProjectFile.parseHeader(yaml: yaml)?.id == file.id)
+        #expect(throws: LayoutFileError.self) { try ProjectFile.parse(yaml: "id: not-a-uuid") }
+        #expect(throws: LayoutFileError.self) { try ProjectFile.parse(yaml: "id: \(PinnedTabs.projectID)") }
+    }
+
+    @Test
     func bare_declaration_without_tabs_decodes() throws {
         let file = try ProjectFile.parse(yaml: """
         name: API server
@@ -48,6 +59,42 @@ struct ProjectFileTests {
         }
         #expect(branch.direction == .vertical)
         #expect(branch.ratio == 0.7)
+    }
+
+    /// `id` was a key that decoding ignored before projects without a
+    /// folder. A file with a folder that carries some other `id:` keeps
+    /// reading, with its header too, so it still matches its project.
+    @Test
+    func an_id_that_is_not_a_uuid_does_not_break_a_file_with_a_path() throws {
+        let yaml = """
+        path: ~/dev/api
+        id: api
+        tabs:
+          - {}
+        """
+        let file = try ProjectFile.parse(yaml: yaml)
+        #expect(file.path == "~/dev/api")
+        #expect(file.id == nil)
+        #expect(file.identity == .path("~/dev/api"))
+        let header = try #require(ProjectFile.parseHeader(yaml: yaml))
+        #expect(header.path == "~/dev/api")
+        #expect(header.id == nil)
+    }
+
+    /// The ID is the only identity of a project without a folder, so a saved
+    /// file has it at the top, before `tabs:`, where a hand edit of the
+    /// layout does not reach it.
+    @Test
+    func a_saved_file_writes_its_id_before_its_tabs() throws {
+        let file = ProjectFile(
+            name: "Scratch",
+            id: UUID(),
+            tabs: [LayoutTab(name: "Shell", layout: .pane(LayoutPane(cwd: nil, run: "btop", shell: nil)))]
+        )
+        let lines = try file.yaml().split(separator: "\n").map(String.init)
+        let idLine = try #require(lines.firstIndex { $0.hasPrefix("id:") })
+        let tabsLine = try #require(lines.firstIndex { $0.hasPrefix("tabs:") })
+        #expect(idLine < tabsLine)
     }
 
     @Test

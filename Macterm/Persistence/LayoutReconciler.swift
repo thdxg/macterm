@@ -65,6 +65,7 @@ enum LayoutReconciler {
         workspace: Workspace?,
         projectRoot: String,
         projectID: UUID,
+        sessionSlug: String? = nil,
         liveCommand: @escaping (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) },
         liveShellName: @escaping (Pane) -> String? = { ProcessInspector.runningProcessName(forPane: $0) },
         liveCwd: @escaping (Pane) -> String = { pane in
@@ -99,7 +100,7 @@ enum LayoutReconciler {
                 liveCwd: liveCwd
             )
 
-            let ctx = BuildContext(projectRoot: projectRoot, projectID: projectID)
+            let ctx = BuildContext(projectRoot: projectRoot, projectID: projectID, sessionSlug: sessionSlug)
             let root = buildTree(declaredTab.layout, ctx: ctx, pool: &pool, reused: &reusedPaneIDs)
             plannedTabs.append(PlannedTab(
                 existingTabID: liveTab?.id,
@@ -219,6 +220,8 @@ enum LayoutReconciler {
     private struct BuildContext {
         let projectRoot: String
         let projectID: UUID
+        /// `Project.sessionSlug`: nil names each new pane's sessions by its cwd.
+        let sessionSlug: String?
     }
 
     private static func buildTree(
@@ -238,7 +241,12 @@ enum LayoutReconciler {
                 return .pane(existing)
             }
             // No match → fresh pane (spawn / respawn).
-            return .pane(LayoutBuilder.makePane(p, projectRoot: ctx.projectRoot, projectID: ctx.projectID))
+            return .pane(LayoutBuilder.makePane(
+                p,
+                projectRoot: ctx.projectRoot,
+                projectID: ctx.projectID,
+                sessionSlug: ctx.sessionSlug
+            ))
         case let .split(b):
             return .split(SplitBranch(
                 direction: b.direction,
