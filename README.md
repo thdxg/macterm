@@ -92,7 +92,7 @@ Macterm has its own settings for window opacity, sidebar behavior, quick termina
 
 ## Extensions
 
-An extension adds custom actions to the command palette. You can streamline workflows and commands for various contexts, such as Git, Docker, Kubernetes, SSH and more.
+An extension allows Macterm to streamline your workflows for Git, Docker, Kubernetes, SSH, coding agents and more. Currently, it adds screens to the command palette (for example, a list of the Git branches of the project that you can switch to, log or diff). More capabilities are planned on the roadmap.
 
 **To install:** open **Settings → Extensions**, find the extension and click **Install**. Its palettes appear at once in the **Palettes** section of the command palette (<kbd>⌘P</kbd>).
 
