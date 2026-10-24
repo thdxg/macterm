@@ -187,11 +187,18 @@ func drawCharacters(in context: CGContext, color: CGColor) {
                 kCTFontAttributeName as NSAttributedString.Key: characterFont,
                 kCTForegroundColorAttributeName as NSAttributedString.Key: color,
             ]))
-            // CoreText draws y up: flip around the baseline.
+            // CoreText draws y up: flip around the baseline. Each character's
+            // ink is centered in its cell, as in the app icon, so the rows
+            // and the columns line up.
             context.saveGState()
             context.translateBy(x: page.minX + Double(column) * cellWidth, y: top + Characters.cellHeight * 0.8)
             context.scaleBy(x: 1, y: -1)
             context.textPosition = .zero
+            let ink = CTLineGetImageBounds(line, context)
+            context.textPosition = CGPoint(
+                x: cellWidth / Characters.spacing / 2 - ink.midX,
+                y: Characters.cellHeight * 0.28 - ink.midY
+            )
             CTLineDraw(line, context)
             context.restoreGState()
         }

@@ -138,8 +138,16 @@ func drawCell(column: Int, row: Int, x: Double, top: Double) {
         kCTFontAttributeName as NSAttributedString.Key: font,
         kCTForegroundColorAttributeName as NSAttributedString.Key: color,
     ]))
-    // CoreText draws y up.
-    context.textPosition = CGPoint(x: x, y: canvas - top - cellHeight * 0.8)
+    // Each character's ink is centered in its cell, so the rows and the
+    // columns line up: a period sits on the baseline and a caret near the
+    // cap height, and the light rows at the bottom looked scattered. The
+    // center is where a capital's ink centers, so the heavy characters stay
+    // where the baseline put them. CoreText draws y up.
+    // The image bounds count from the context's text position.
+    context.textPosition = .zero
+    let ink = CTLineGetImageBounds(line, context)
+    let center = CGPoint(x: x + glyphWidth / 2, y: canvas - top - cellHeight * 0.52)
+    context.textPosition = CGPoint(x: center.x - ink.midX, y: center.y - ink.midY)
     CTLineDraw(line, context)
 }
 
