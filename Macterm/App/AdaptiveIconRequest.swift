@@ -17,6 +17,14 @@ struct AdaptiveIconRequest: Codable, Equatable, Hashable {
         case dark
     }
 
+    /// One layer's fill: `element` counts the layers of group `group` in
+    /// the order IconRendering keeps them, as `group` counts `layers`.
+    struct Accent: Codable, Equatable, Hashable {
+        var group: Int
+        var element: Int
+        var color: Color
+    }
+
     /// An sRGB color, each component 0…1.
     struct Color: Codable, Equatable, Hashable {
         var red: Double
@@ -39,6 +47,10 @@ struct AdaptiveIconRequest: Codable, Equatable, Hashable {
     /// adds or removes a group falls back to the bundled icon instead of
     /// painting the wrong layers.
     var layers: [Color]
+    /// Fills for single layers inside a group, applied after `layers`: a
+    /// layer that keeps a color of its own in every theme, such as the
+    /// blush in the characters. Nil when every layer takes its group's fill.
+    var accents: [Accent]?
     /// Edge length of the square PNG, in pixels.
     var pixels: Int
 }

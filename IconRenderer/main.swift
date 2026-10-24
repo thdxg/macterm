@@ -101,6 +101,16 @@ for (index, color) in request.layers.enumerated() {
     layers[index].elements = elements
 }
 
+for accent in request.accents ?? [] {
+    guard layers.indices.contains(accent.group), layers[accent.group].elements.indices.contains(accent.element) else {
+        fail(.structureChanged, "the icon has no layer \(accent.element) in group \(accent.group)")
+    }
+    // Copy out and back, as above: the interface declares no modify accessors.
+    var elements = layers[accent.group].elements
+    elements[accent.element].fill = .solid(iconColor(accent.color))
+    layers[accent.group].elements = elements
+}
+
 icon.layers = layers
 icon.chiclet = .gradient(
     start: iconColor(request.backgroundTop),
