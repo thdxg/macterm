@@ -481,6 +481,53 @@ struct WindowStateTests {
         #expect(state.viewTab(for: project.id, in: b)?.isMirror == false)
     }
 
+    /// A closed window leaves the registry, but its view can live on and keep
+    /// rendering. It must get no tab: a shadow built for it is never dropped,
+    /// and each of its mirrors is a zmx client that can lead a new session,
+    /// so that zmx drops the visible pane's ⌃D until a Return.
+    @Test
+    func a_closed_window_renders_no_tab_and_builds_no_mirrors() throws {
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let real = try #require(ws.activeTab)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        #expect(state.viewTab(for: project.id, in: b)?.isMirror == true)
+
+        state.unregisterWindow(b)
+        #expect(b.shadowTabs.isEmpty)
+
+        // The tab gets a new pane, and the closed window's view renders again.
+        let source = try #require(real.splitRoot.allPanes().first)
+        _ = try #require(state.splitPane(
+            source.id, direction: .horizontal, projectID: project.id, projectDirectory: "/tmp"
+        ))
+        #expect(state.viewTab(for: project.id, in: b) == nil)
+        #expect(b.shadowTabs.isEmpty)
+        #expect(state.viewTab(for: project.id, in: a)?.isMirror == false)
+    }
+
+    /// Before it registers, a window cannot own a tab, so a shadow is all it
+    /// could render, and registration would throw its mirrors away.
+    @Test
+    func a_window_renders_its_tab_only_once_it_registers() throws {
+        let state = makeAppState()
+        let (project, _) = try seedProject(state, tabs: 1)
+        let key = WindowState(activeProjectID: project.id)
+        state.registerWindow(key)
+        state.noteKeyWindow(key)
+        let opening = WindowState(activeProjectID: project.id)
+
+        #expect(state.viewTab(for: project.id, in: opening) == nil)
+        #expect(opening.shadowTabs.isEmpty)
+
+        state.registerWindow(opening)
+        #expect(state.viewTab(for: project.id, in: opening)?.isMirror == true)
+    }
+
     @Test
     func mirror_view_panes_take_part_in_leadership() throws {
         // The mirror's pane is a real zmx client: focusing it claims the pty

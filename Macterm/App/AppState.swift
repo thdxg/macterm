@@ -577,14 +577,31 @@ final class AppState {
     /// is sized for the leader). Ownership is sticky (`tabOwners`), so
     /// switching key windows never swaps which window has the real panes.
     ///
+    /// Only a window that can own a tab renders one (`canRenderTabs`). A
+    /// closed window leaves the registry, but its view can live on and keep
+    /// rendering: it got a fresh shadow on every change of the tab's shape,
+    /// which no reconcile ever dropped, so every new pane had one more zmx
+    /// client. One of them could lead the new session, and zmx then dropped
+    /// each key of the visible pane that is not user input (⌃D, ⌃C) until a
+    /// Return moved leadership back. A window that has not registered yet
+    /// would only build mirrors that registration throws away.
+    ///
     /// Safe from a view body: the only write is to the unobserved
     /// `shadowTabs`.
     func viewTab(for projectID: UUID, in window: WindowState) -> WindowTabView? {
-        guard let selected = selectedTab(for: projectID, in: window) else { return nil }
+        guard canRenderTabs(window), let selected = selectedTab(for: projectID, in: window) else { return nil }
         if ownerWindow(of: selected, in: projectID)?.id == window.id {
             return WindowTabView(tab: selected, mirrorOf: nil)
         }
         return WindowTabView(tab: shadow(of: selected, for: window), mirrorOf: selected)
+    }
+
+    /// Whether `window` can own a tab (`windowsSelecting`): registered, or the
+    /// scene's own window that `restoreWindows` adopted before it attached.
+    /// `windows` is observed, so a window that registers after its first
+    /// render renders again with its tab.
+    private func canRenderTabs(_ window: WindowState) -> Bool {
+        window === windowAdoptedBeforeRegistration || windows.contains { $0.id == window.id }
     }
 
     /// Which window renders the real panes of each tab, by tab id. Written by
