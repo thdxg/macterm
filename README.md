@@ -92,13 +92,13 @@ Macterm has its own settings for window opacity, sidebar behavior, quick termina
 
 ## Extensions
 
-An extension adds screens to the command palette. A screen shows the output of a command as rows that you can search: Git branches, Docker containers, Kubernetes pods, the hosts in `~/.ssh/config`, or anything else that a command can list. A row opens another screen, or it runs a command in a new tab or split. The Macterm repository has extensions for Git, Docker, Podman, Kubernetes, SSH and Claude Code.
+An extension adds custom actions to the command palette. You can streamline workflows and commands for various contexts, such as Git, Docker, Kubernetes, SSH and more.
 
-**Install an extension.** Open **Settings → Extensions**, find the extension and click **Install**. Its palettes appear at once in the **Palettes** section of the command palette (<kbd>⌘P</kbd>). When the repository changes an extension, Macterm updates your copy automatically, unless you changed its files.
+**To install:** open **Settings → Extensions**, find the extension and click **Install**. Its palettes appear at once in the **Palettes** section of the command palette (<kbd>⌘P</kbd>).
 
-**Write your own.** An extension is a folder in `~/.config/macterm/extensions/`. The folder has an `extension.yaml` file and a `palettes/` folder with one YAML file for each palette. Macterm reads the folder again each time that the palette opens, so you do not restart anything. The [extension docs](https://macterm.thdxg.dev/docs/extensions) show how to make one. The [palette reference](https://macterm.thdxg.dev/docs/extension-palettes) gives every key.
+**To create your own:** make a folder in `~/.config/macterm/extensions/` with an `extension.yaml` file and a `palettes/` folder of YAML files. Macterm reads the folder each time that the palette opens, so you do not restart anything. The [extension docs](https://macterm.thdxg.dev/docs/extensions) show how.
 
-**Contribute an extension.** To share an extension with all Macterm users, add its folder to [`extensions/`](extensions/) in a pull request. [`extensions/README.md`](extensions/README.md) gives the steps and the rules. When the pull request merges, the extension shows in Settings → Extensions for everyone.
+**To contribute:** add the folder of your extension to [`extensions/`](extensions/) in a pull request. [`extensions/README.md`](extensions/README.md) gives the steps and the rules. When the pull request merges, everyone can install the extension.
 
 ## Cookbook
 
