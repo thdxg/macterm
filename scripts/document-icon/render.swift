@@ -93,9 +93,12 @@ let icon = try JSONDecoder().decode(IconFile.self, from: Data(contentsOf: iconUR
 func leftOut(_ name: String) -> Bool {
     name.hasPrefix("cross") || name == "screen-gradient"
 }
-/// The app icon's background: one flat color.
-guard let solidFill = icon.fill.solid else { fail("expected a solid background in icon.json") }
-let background = color(solidFill)
+/// The page's color: the app icon's lid, the fill of its screen's gradient
+/// layer, the lighter end of the app icon's screen.
+guard let lidFill = icon.groups.flatMap(\.layers).first(where: { $0.name == "screen-gradient" })?.fill.solid else {
+    fail("expected a screen-gradient layer with a solid fill in icon.json")
+}
+let background = color(lidFill)
 
 /// The icon canvas is 1024 pt.
 let iconCanvas = 1024.0
@@ -136,18 +139,21 @@ func blend(_ color: CGColor, toward target: CGColor, by amount: Double) -> CGCol
 
 /// The character grid of the page, as `scripts/app-icon/characters.swift`
 /// draws the app icon's: the same ramp, density, dither and spacing. The
-/// cells are smaller, so that the page has more rows than the icon.
+/// cells are a little smaller than the icon's, as the page is.
 enum Characters {
     static let ramp: [[String]] = [
         [" "], [".", "·"], [":", "␣", "-"], ["⌃", "+", "="], ["⌥", "*", "←"],
         ["⇧", "⏎", "⇥"], ["#", "⌫", "⎋"], ["%", "@", "⌦"], ["⌘"],
     ]
     static let spacing = 1.6
-    static let cellHeight = 64.0
+    static let cellHeight = 96.0
     static let densityTop = 0.85
     static let densityBottom = 0.05
     static let dither = 3.0
     static let seed: UInt64 = 3
+    /// The grid turns clockwise by this many degrees about the page's middle,
+    /// as the app icon's characters turn with its cross (`crossAngle`).
+    static let angle = 8.0
 }
 
 /// A random value in 0..<1 for each cell.
@@ -170,12 +176,20 @@ let cellWidth: Double = {
 }()
 
 /// Draws the page's characters in page points, y down, in `color`. The
-/// context maps page points to its own space.
+/// context maps page points to its own space. The grid turns by
+/// `Characters.angle`, and it runs two cells past the page on every side, so
+/// the turned grid still covers the page's corners.
 func drawCharacters(in context: CGContext, color: CGColor) {
     let rows = Int((page.height / Characters.cellHeight).rounded(.up))
     let columns = Int((page.width / cellWidth).rounded(.up))
-    for row in 0 ... rows {
-        for column in 0 ... columns {
+    // Points run down, so a positive angle turns clockwise.
+    context.saveGState()
+    defer { context.restoreGState() }
+    context.translateBy(x: page.midX, y: page.midY)
+    context.rotate(by: Characters.angle * .pi / 180)
+    context.translateBy(x: -page.midX, y: -page.midY)
+    for row in -2 ... rows + 2 {
+        for column in -2 ... columns + 2 {
             let top = page.minY + Double(row) * Characters.cellHeight
             let t = (top - page.minY + Characters.cellHeight / 2) / page.height
             let density = Characters.densityTop + (Characters.densityBottom - Characters.densityTop) * t
