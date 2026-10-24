@@ -90,6 +90,16 @@ A few Macterm defaults are different from the Ghostty defaults: theme, font size
 
 Macterm has its own settings for window opacity, sidebar behavior, quick terminal size and keymaps. Open them with **Macterm → Settings**. The [configuration docs](https://macterm.thdxg.dev/docs/configuration) give the full order of precedence and the few window keys that Macterm overrides.
 
+## Extensions
+
+An extension adds screens to the command palette. A screen shows the output of a command as rows that you can search: Git branches, Docker containers, Kubernetes pods, the hosts in `~/.ssh/config`, or anything else that a command can list. A row opens another screen, or it runs a command in a new tab or split. The Macterm repository has extensions for Git, Docker, Podman, Kubernetes, SSH and Claude Code.
+
+**Install an extension.** Open **Settings → Extensions**, find the extension and click **Install**. Its palettes appear at once in the **Palettes** section of the command palette (<kbd>⌘P</kbd>). When the repository changes an extension, Macterm updates your copy automatically, unless you changed its files.
+
+**Write your own.** An extension is a folder in `~/.config/macterm/extensions/`. The folder has an `extension.yaml` file and a `palettes/` folder with one YAML file for each palette. Macterm reads the folder again each time that the palette opens, so you do not restart anything. The [extension docs](https://macterm.thdxg.dev/docs/extensions) show how to make one. The [palette reference](https://macterm.thdxg.dev/docs/extension-palettes) gives every key.
+
+**Contribute an extension.** To share an extension with all Macterm users, add its folder to [`extensions/`](extensions/) in a pull request. [`extensions/README.md`](extensions/README.md) gives the steps and the rules. When the pull request merges, the extension shows in Settings → Extensions for everyone.
+
 ## Cookbook
 
 The community shares workflows and recipes: layouts, keybinds and scripts that people run with Macterm. For example:
