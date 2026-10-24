@@ -127,7 +127,10 @@
         },
         {
           "fill" : {
-            "solid" : "srgb:0.57255,0.58235,0.63529,1.00000"
+            "linear-gradient" : [
+              "srgb:0.87945,0.87945,0.87945,1.00000",
+              "srgb:0.40000,0.40000,0.40392,1.00000"
+            ]
           },
           "glass" : true,
           "hidden" : false,
@@ -187,7 +190,7 @@
               0
             ]
           },
-          "opacity" : 0.75
+          "opacity" : 0.5
         },
         {
           "fill" : {
@@ -204,7 +207,7 @@
               0
             ]
           },
-          "opacity" : 0.75
+          "opacity" : 0.5
         },
         {
           "fill" : {
@@ -221,7 +224,7 @@
               0
             ]
           },
-          "opacity" : 0.75
+          "opacity" : 0.5
         },
         {
           "fill" : {
@@ -238,7 +241,7 @@
               0
             ]
           },
-          "opacity" : 0.75
+          "opacity" : 0.5
         },
         {
           "fill" : {
@@ -255,7 +258,7 @@
               0
             ]
           },
-          "opacity" : 0.75
+          "opacity" : 0.5
         },
         {
           "fill" : {
@@ -272,7 +275,7 @@
               0
             ]
           },
-          "opacity" : 0.75
+          "opacity" : 0.5
         }
       ],
       "lighting" : "combined",

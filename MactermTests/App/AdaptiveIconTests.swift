@@ -53,12 +53,14 @@ struct AdaptiveIconTests {
     }
 
     /// The bundled icon, as `AppIcon.icon/icon.json` in the repo (the source
-    /// Xcode compiles) declares it: the background fill, and the solid fill of
-    /// each layer that draws, in IconRendering's order: groups bottom to top,
+    /// Xcode compiles) declares it: the background fill, and the fill of each
+    /// layer that draws (a solid color, or a gradient's top and bottom), in IconRendering's order: groups bottom to top,
     /// the reverse of the file's `groups`, and in each group its layers in the
     /// reverse of the file's `layers`. A group with no visible layer drops out
     /// of the compiled icon, so it drops out here too.
-    private static let bundled: (background: Color?, groups: [[Color?]]) = {
+    private typealias Fill = (top: Color, bottom: Color?)
+
+    private static let bundled: (background: Color?, groups: [[Fill?]]) = {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // App
             .deletingLastPathComponent() // MactermTests
@@ -66,17 +68,22 @@ struct AdaptiveIconTests {
             .appendingPathComponent("Macterm/AppIcon.icon/icon.json")
         let data = (try? Data(contentsOf: url)) ?? Data()
         let document = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
-        func color(_ fill: Any?) -> Color? {
-            let solid = (fill as? [String: Any])?["solid"] as? String
-            let parts = solid?.split(separator: ":").last?.split(separator: ",").compactMap { Double($0) } ?? []
+        func color(_ text: String?) -> Color? {
+            let parts = text?.split(separator: ":").last?.split(separator: ",").compactMap { Double($0) } ?? []
             return parts.count >= 3 ? Color(red: parts[0], green: parts[1], blue: parts[2]) : nil
         }
-        let groups: [[Color?]] = (document["groups"] as? [[String: Any]] ?? []).reversed().compactMap { group in
+        func fill(_ value: Any?) -> Fill? {
+            let fill = value as? [String: Any]
+            if let solid = color(fill?["solid"] as? String) { return (solid, nil) }
+            let stops = (fill?["linear-gradient"] as? [String] ?? []).compactMap(color)
+            return stops.count == 2 ? (stops[0], stops[1]) : nil
+        }
+        let groups: [[Fill?]] = (document["groups"] as? [[String: Any]] ?? []).reversed().compactMap { group in
             let layers = (group["layers"] as? [[String: Any]] ?? []).filter { $0["hidden"] as? Bool != true }
             guard group["hidden"] as? Bool != true, !layers.isEmpty else { return nil }
-            return layers.reversed().map { color($0["fill"]) }
+            return layers.reversed().map { fill($0["fill"]) }
         }
-        return (color(document["fill"]), groups)
+        return (fill(document["fill"])?.top, groups)
     }()
 
     private static func close(_ a: Color, _ b: Color) -> Bool {
@@ -87,7 +94,7 @@ struct AdaptiveIconTests {
 
     /// The rule and the design agree: in the theme the icon is drawn in, the
     /// adaptive icon is the bundled icon, layer by layer. A layer takes its
-    /// accent's color, or else its group's. A redesign that changes a fill,
+    /// accent's color or gradient, or else its group's color. A redesign that changes a fill,
     /// a layer or the number of groups fails here until `paint(for:)` follows.
     @Test
     func eyesclosedPaintsTheBundledIconsOwnColors() throws {
@@ -99,8 +106,18 @@ struct AdaptiveIconTests {
                 let accent = paint.accents.first { $0.group == group && $0.element == element }
                 // A group that keeps its bundled fills has nothing to compare.
                 guard let painted = accent?.color ?? paint.layers[group] else { continue }
-                let bundled = try #require(fill, "layer \(element) of group \(group) has no solid fill")
-                #expect(Self.close(painted, bundled), "group \(group), layer \(element): painted \(painted), bundled \(bundled)")
+                let bundled = try #require(fill, "layer \(element) of group \(group) has no solid or gradient fill")
+                #expect(Self.close(painted, bundled.top), "group \(group), layer \(element): painted \(painted), bundled \(bundled.top)")
+                #expect(
+                    (accent?.bottom == nil) == (bundled.bottom == nil),
+                    "group \(group), layer \(element): one of the painted and the bundled fill is a gradient"
+                )
+                if let paintedBottom = accent?.bottom, let bundledBottom = bundled.bottom {
+                    #expect(
+                        Self.close(paintedBottom, bundledBottom),
+                        "group \(group), layer \(element): bottom \(paintedBottom), bundled \(bundledBottom)"
+                    )
+                }
             }
         }
         for accent in paint.accents {
@@ -115,13 +132,14 @@ struct AdaptiveIconTests {
         #expect(Self.close(paint.backgroundTop, Self.hex(0x1A1B21)))
     }
 
-    /// The cross is palette 7 mixed halfway toward palette 8.
+    /// The cross is the silver frame's gradient in every theme, a light one too.
     @Test
-    func theCrossIsAGrayBetweenPalette7And8() throws {
+    func theCrossIsTheFramesGradient() throws {
         for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight] {
             let paint = try #require(AdaptiveIcon.paint(for: theme))
             let cross = try #require(paint.accents.first { $0.group == AdaptiveIcon.crossGroup && $0.element == AdaptiveIcon.crossElement })
-            #expect(cross.color == AdaptiveIcon.mix(theme.palette[7], into: theme.palette[8], amount: AdaptiveIcon.crossMix))
+            #expect(cross.color == AdaptiveIcon.crossTop)
+            #expect(cross.bottom == AdaptiveIcon.crossBottom)
         }
     }
 

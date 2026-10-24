@@ -38,8 +38,12 @@ enum AdaptiveIcon {
     /// reverse of `layers` in `icon.json`.
     static let crossGroup = 1
     static let crossElement = 0
-    /// The cross is a gray halfway from palette 8 to palette 7.
-    static let crossMix = 0.5
+    /// The cross is the silver frame's gradient, top to bottom, in every
+    /// theme, so it reads as part of the frame. The frame keeps its bundled
+    /// fill, but the cross shares its group with the panes, which take the
+    /// theme's screen, so the cross takes the gradient as an accent.
+    static let crossTop = Color(red: 0.87945, green: 0.87945, blue: 0.87945)
+    static let crossBottom = Color(red: 0.40000, green: 0.40000, blue: 0.40392)
     /// The characters' group (the bottom one), and the palette entry of each
     /// mesh copy of the characters by its place in that group: top-left red,
     /// top-right yellow, left magenta, right green, bottom-left cyan. The
@@ -62,7 +66,8 @@ enum AdaptiveIcon {
     /// background itself, so its lid comes from the next gray.
     static let lidMinimumStep = 0.05
     /// The icon's colors. The frames keep their bundled fills in every theme:
-    /// Ghostty's gradients, from `AppIcon.icon`. The cross is palette 7 mixed `crossMix` toward palette 8.
+    /// Ghostty's gradients, from `AppIcon.icon`. The cross is the silver
+    /// frame's gradient (`crossTop`, `crossBottom`).
     /// The characters are a mesh gradient of the theme's ANSI colors
     /// (`characterBase`, `characterMesh`). The screen is the theme's lid.
     ///
@@ -75,8 +80,8 @@ enum AdaptiveIcon {
     /// the background, it is palette 8, and the mix comes near Gruvbox's own
     /// `bg1`.
     ///
-    /// In eyesclosed, the theme the icon was drawn in, this picks `#9295A2`
-    /// for the cross and the lid for the screen, and eyesclosed's own ANSI
+    /// In eyesclosed, the theme the icon was drawn in, this picks the lid
+    /// for the screen, and eyesclosed's own ANSI
     /// colors for the characters: the bundled icon's own fills. Nil when the
     /// theme has no gray that differs from the background.
     static func paint(for theme: ThemeColors) -> Paint? {
@@ -95,7 +100,7 @@ enum AdaptiveIcon {
             // glass shows.
             layers: [theme.palette[characterBase], screen, nil, nil],
             accents: characterMesh.map { .init(group: charactersGroup, element: $0.element, color: theme.palette[$0.palette]) }
-                + [.init(group: crossGroup, element: crossElement, color: mix(theme.palette[7], into: theme.palette[8], amount: crossMix))]
+                + [.init(group: crossGroup, element: crossElement, color: crossTop, bottom: crossBottom)]
         )
     }
 

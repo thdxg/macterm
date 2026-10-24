@@ -108,7 +108,13 @@ for accent in request.accents ?? [] {
     }
     // Copy out and back, as above: the interface declares no modify accessors.
     var elements = layers[accent.group].elements
-    elements[accent.element].fill = .solid(iconColor(accent.color))
+    elements[accent.element].fill = accent.bottom.map {
+        .gradient(
+            start: iconColor(accent.color),
+            end: iconColor($0),
+            placement: .init(start: CGPoint(x: 0.5, y: 0), end: CGPoint(x: 0.5, y: 1))
+        )
+    } ?? .solid(iconColor(accent.color))
     layers[accent.group].elements = elements
 }
 

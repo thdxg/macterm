@@ -30,12 +30,11 @@ Right-click the Macterm Dock icon to see **New Window**, **New Tab**, **New Proj
 
 On macOS 26 and later, the Dock icon shows the colors of your terminal theme. The icon keeps its Liquid Glass. The app switcher (<kbd>⌘</kbd><kbd>⇥</kbd>) shows the same icon. When you change the theme and reload the config, or when macOS changes between light and dark, the icon changes too.
 
-The frames keep their usual silver and dark colors. The characters, the cross and the screen get colors of the theme. The grays are `palette = 15`, `7`, `8` and `0`:
+The frames and the cross keep their silver and dark colors in every theme. The characters and the screen get colors of the theme. The grays are `palette = 15`, `7`, `8` and `0`:
 
 | Part of the icon | Theme color |
 | --- | --- |
 | Characters | A blend of the theme's colors: `palette = 4` (blue) over all, with `palette = 1` (red) at the top left, `3` (yellow) at the top right, `5` (magenta) on the left, `2` (green) on the right and `6` (cyan) at the bottom left. |
-| Cross | Halfway between `palette = 7` and `palette = 8`. |
 | Screen | A color a small step away from `background`, as for a status bar or a popup: the nearest gray, mixed a little into `background`. That gray is usually `palette = 0`. |
 
 The icon was drawn in eyesclosed, the default theme of Macterm. With eyesclosed, the Dock icon has the same colors as the usual icon of Macterm.
