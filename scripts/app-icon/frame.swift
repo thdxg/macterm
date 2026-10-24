@@ -1,6 +1,6 @@
-// Draws the two frame rings, the glass pane and the cross of the app icon:
-// Macterm/AppIcon.icon/Assets/frame-silver.png, frame-dark.png,
-// glass-pane.png and cross.png.
+// Draws the two frame rings, the glass pane, the cross and the cross's shade
+// of the app icon: Macterm/AppIcon.icon/Assets/frame-silver.png,
+// frame-dark.png, glass-pane.png, cross.png and cross-shade.png.
 //
 // The rings follow the macOS icon shape: a rounded square with continuous
 // corners, as SwiftUI's `RoundedRectangle(style: .continuous)` draws them,
@@ -17,6 +17,7 @@
 // Usage: swift scripts/app-icon/frame.swift <AppIcon.icon/Assets>
 
 import AppKit
+import CoreImage
 import SwiftUI
 
 /// The macOS icon shape's corner radius, as a share of the side.
@@ -95,9 +96,14 @@ func drawDown(_ context: CGContext, _ paths: [CGPath], rule: CGPathFillRule) {
     context.fillPath(using: rule)
 }
 
-let pixels = Int(canvas * pixelsPerPoint)
-/// Writes a mask that covers `span` points, centered on the canvas.
-func write(_ name: String, span: Double = canvas, draw: (CGContext) -> Void) {
+/// The cross's shade on the characters: the cross, blurred and moved down,
+/// as if the cross casts it from a light above. It is a flat layer in the
+/// characters' group, whose images are 1 pixel a point, and the paint rule
+/// fills it black.
+let shade = (offset: 20.0, blur: 24.0)
+
+/// Draws a mask at `pixels` square that covers `span` points, centered on the canvas.
+func mask(span: Double = canvas, pixels: Int, draw: (CGContext) -> Void) -> CGImage {
     let context = CGContext(
         data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
         space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
@@ -107,10 +113,19 @@ func write(_ name: String, span: Double = canvas, draw: (CGContext) -> Void) {
     // Icon Composer replaces the color with the layer's fill.
     context.setFillColor(CGColor(srgbRed: 0.5, green: 0.5, blue: 0.5, alpha: 1))
     draw(context)
+    return context.makeImage()!
+}
+
+func writeImage(_ image: CGImage, _ name: String) {
     let url = outDir.appendingPathComponent("\(name).png")
     guard let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else { exit(1) }
-    CGImageDestinationAddImage(destination, context.makeImage()!, nil)
+    CGImageDestinationAddImage(destination, image, nil)
     guard CGImageDestinationFinalize(destination) else { exit(1) }
+}
+
+/// Writes a mask that covers `span` points, centered on the canvas, at 2 pixels a point.
+func write(_ name: String, span: Double = canvas, draw: (CGContext) -> Void) {
+    writeImage(mask(span: span, pixels: Int(canvas * pixelsPerPoint), draw: draw), name)
 }
 
 for ring in rings {
@@ -121,10 +136,19 @@ for ring in rings {
     }
 }
 write("glass-pane", span: paneSpan) { drawDown($0, quadrantPaths(), rule: .winding) }
-// The screen less the quadrants.
-write("cross") { context in
+/// The screen less the quadrants.
+func drawCross(_ context: CGContext) {
     context.addPath(shape(inset: screenInset))
     context.clip()
     let everything = CGPath(rect: CGRect(x: -canvas, y: -canvas, width: 3 * canvas, height: 3 * canvas), transform: nil)
     drawDown(context, [everything] + quadrantPaths(), rule: .evenOdd)
 }
+write("cross", draw: drawCross)
+
+// CoreImage runs y up, so down is a negative move.
+let crossImage = CIImage(cgImage: mask(pixels: Int(canvas), draw: drawCross))
+let shaded = crossImage.clampedToExtent()
+    .applyingGaussianBlur(sigma: shade.blur)
+    .transformed(by: CGAffineTransform(translationX: 0, y: -shade.offset))
+    .cropped(to: crossImage.extent)
+writeImage(CIContext().createCGImage(shaded, from: crossImage.extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB))!, "cross-shade")

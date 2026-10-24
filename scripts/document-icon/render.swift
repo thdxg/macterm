@@ -87,11 +87,11 @@ func color(_ text: String) -> CGColor {
 
 let icon = try JSONDecoder().decode(IconFile.self, from: Data(contentsOf: iconURL.appendingPathComponent("icon.json")))
 
-/// The layers of the app icon that the page leaves out: the cross and the
-/// characters' mesh copies. Each group keeps at least one layer, so the copy
+/// The layers of the app icon that the page leaves out: the cross, its shade
+/// and the characters' mesh copies. Each group keeps at least one layer, so the copy
 /// has the app icon's groups, as the helper requires.
 func leftOut(_ name: String) -> Bool {
-    name == "cross" || name.hasPrefix("ascii-")
+    name.hasPrefix("cross") || name.hasPrefix("ascii-")
 }
 /// The app icon's background: one flat color.
 guard let solidFill = icon.fill.solid else { fail("expected a solid background in icon.json") }

@@ -140,6 +140,9 @@ struct AdaptiveIconTests {
             let cross = try #require(paint.accents.first { $0.group == AdaptiveIcon.crossGroup && $0.element == AdaptiveIcon.crossElement })
             #expect(cross.color == AdaptiveIcon.crossTop)
             #expect(cross.bottom == AdaptiveIcon.crossBottom)
+            let shade = try #require(paint.accents
+                .first { $0.group == AdaptiveIcon.charactersGroup && $0.element == AdaptiveIcon.crossShadeElement })
+            #expect(shade.color == AdaptiveIcon.crossShade)
         }
     }
 
@@ -197,7 +200,7 @@ struct AdaptiveIconTests {
         for theme in [Self.eyesclosed, Self.rosePine, Self.gruvboxDark, Self.gitHubLight, Self.catppuccinMocha, Self.midGray] {
             let paint = try #require(AdaptiveIcon.paint(for: theme))
             #expect(paint.layers[AdaptiveIcon.charactersGroup] == theme.palette[4])
-            let mesh = paint.accents.filter { $0.group == AdaptiveIcon.charactersGroup }
+            let mesh = paint.accents.filter { $0.group == AdaptiveIcon.charactersGroup && $0.element != AdaptiveIcon.crossShadeElement }
             #expect(mesh.map(\.element) == [1, 2, 3, 4, 5])
             #expect(mesh.map(\.color) == [1, 3, 5, 2, 6].map { theme.palette[$0] })
         }

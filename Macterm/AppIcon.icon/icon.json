@@ -177,6 +177,23 @@
       "layers" : [
         {
           "fill" : {
+            "solid" : "srgb:0.00000,0.00000,0.00000,1.00000"
+          },
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "cross-shade.png",
+          "name" : "cross-shade",
+          "opacity" : 0.9,
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
             "solid" : "srgb:0.84706,0.81569,0.81569,1.00000"
           },
           "glass" : false,

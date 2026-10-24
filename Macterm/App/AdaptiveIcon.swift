@@ -50,6 +50,10 @@ enum AdaptiveIcon {
     /// characters themselves (element 0) are blue, palette 4, so the bottom
     /// right stays blue.
     static let charactersGroup = 0
+    /// The cross's shade: the top layer of the characters' group, black in
+    /// every theme, as a shadow is.
+    static let crossShadeElement = 6
+    static let crossShade = Color(red: 0, green: 0, blue: 0)
     static let characterBase = 4
     static let characterMesh: [(element: Int, palette: Int)] = [(1, 1), (2, 3), (3, 5), (4, 2), (5, 6)]
 
@@ -101,6 +105,7 @@ enum AdaptiveIcon {
             layers: [theme.palette[characterBase], screen, nil, nil],
             accents: characterMesh.map { .init(group: charactersGroup, element: $0.element, color: theme.palette[$0.palette]) }
                 + [.init(group: crossGroup, element: crossElement, color: crossTop, bottom: crossBottom)]
+                + [.init(group: charactersGroup, element: crossShadeElement, color: crossShade)]
         )
     }
 
