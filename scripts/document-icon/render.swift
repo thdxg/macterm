@@ -1,17 +1,19 @@
 // Draws Macterm's document icon: the page that Finder shows for a file that
 // opens with Macterm by default (`CFBundleTypeIconFile` in Info.plist).
 //
-// The page is the app icon's screen, in the page's shape: the cross runs
-// across the whole page and cuts it into four glass panes, as it cuts the app
-// icon's screen. Behind the glass, a grid of characters covers the page, and
-// its density is the gradient: heavy characters at the top thin out to dots at
-// the bottom, with the app icon's mesh gradient over them. The colors, the
-// cross's place and its width come from `Macterm/AppIcon.icon`. The page
+// The page is the app icon's screen, in the page's shape: four glass panes
+// with a gap between them across the whole page, as on the app icon's screen,
+// but with no cross in the gap. Behind the glass, a grid of characters covers
+// the page, and its density is the gradient: heavy characters at the top thin
+// out to dots at the bottom, in one color, with no mesh gradient. The colors
+// come from `Macterm/AppIcon.icon`, and the gap's place and width from the
+// panes' mask. The page
 // outline follows the system's generic document (`NSWorkspace.icon(for:)` at
 // 1024 px, measured on macOS 27).
 //
 // The page is real Liquid Glass. The script compiles its own copy of the icon,
-// with the cross, the panes and the characters drawn again for the page: in a
+// with the panes and the characters drawn again for the page, and without the
+// cross and the characters' mesh copies (`leftOut`): in a
 // region of the icon's canvas with the page's shape, inside the frames.
 // `macterm-icon-renderer` (the adaptive icon's helper) draws that copy, and the
 // script lays the region over the page.
@@ -87,6 +89,13 @@ func color(_ text: String) -> CGColor {
 }
 
 let icon = try JSONDecoder().decode(IconFile.self, from: Data(contentsOf: iconURL.appendingPathComponent("icon.json")))
+
+/// The layers of the app icon that the page leaves out: the cross and the
+/// characters' mesh copies. Each group keeps at least one layer, so the copy
+/// has the app icon's groups, as the helper requires.
+func leftOut(_ name: String) -> Bool {
+    name == "cross" || name.hasPrefix("ascii-")
+}
 /// The app icon's background: one flat color.
 guard let solidFill = icon.fill.solid else { fail("expected a solid background in icon.json") }
 let background = color(solidFill)
@@ -99,12 +108,13 @@ let iconCanvas = 1024.0
 let screen = CGRect(x: 108, y: 108, width: 808, height: 808)
 let cornerShare = (iconCanvas * 0.2615 - 108) / 808
 
-/// The cross on the app icon's canvas, y down: its middle (the column and the
-/// row of its mask with the most ink, which are its two arms) and its width.
-let crossOnIcon: (center: CGPoint, width: Double) = {
-    guard let group = icon.groups.first(where: { $0.layers.contains { $0.name == "cross" } }),
-          let layer = group.layers.first(where: { $0.name == "cross" })
-    else { fail("expected a layer named cross in icon.json") }
+/// The gap between the panes on the app icon's canvas, y down: its middle
+/// (the column and the row of the panes' mask with the least ink, inside the
+/// screen, which are its two arms) and its width.
+let gapOnIcon: (center: CGPoint, width: Double) = {
+    guard let group = icon.groups.first(where: { $0.layers.contains { $0.name == "glass-pane" } }),
+          let layer = group.layers.first(where: { $0.name == "glass-pane" })
+    else { fail("expected a layer named glass-pane in icon.json") }
     let url = iconURL.appendingPathComponent("Assets").appendingPathComponent(layer.imageName)
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
           let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
@@ -117,22 +127,28 @@ let crossOnIcon: (center: CGPoint, width: Double) = {
         space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     )!
     context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    let scale = layer.position.scale * group.position.scale
+    // Only the screen counts: the mask runs past the icon, and its edges are
+    // no gap. A pixel of the mask, from a point of the canvas.
+    func pixel(_ point: Double, _ size: Int) -> Int { Int(Double(size) / 2 + (point - iconCanvas / 2) / scale) }
+    let xs = pixel(screen.minX, width) ..< pixel(screen.maxX, width)
+    let ys = pixel(screen.minY, height) ..< pixel(screen.maxY, height)
+    // The gap has no ink, so count the space: each arm is a band of columns
+    // (or rows) with the most.
     var columns = [Int](repeating: 0, count: width)
     var rows = [Int](repeating: 0, count: height)
-    for y in 0 ..< height {
-        for x in 0 ..< width {
-            let ink = Int(bytes[(y * width + x) * 4 + 3])
-            columns[x] += ink
-            rows[y] += ink
+    for y in ys {
+        for x in xs {
+            let space = 255 - Int(bytes[(y * width + x) * 4 + 3])
+            columns[x] += space
+            rows[y] += space
         }
     }
-    // Each arm is a band of equal columns (or rows).
     func band(_ sums: [Int]) -> ClosedRange<Int> {
         let top = sums.max()!
         let indices = sums.indices.filter { sums[$0] >= top - top / 50 }
         return indices.first! ... indices.last!
     }
-    let scale = layer.position.scale * group.position.scale
     let vertical = band(columns)
     let horizontal = band(rows)
     // The band of full columns is the arm less its two antialiased edges.
@@ -156,15 +172,15 @@ let foldX = 590.0
 let foldY = page.minY + (page.maxX - foldX)
 let foldRadius = 40.0
 
-/// The cross on the page, in page points: at the same share of the page as of
+/// The gap on the page, in page points: at the same share of the page as of
 /// the app icon's screen, and as wide and as round for the page's width as for
 /// the screen's.
-let crossCenter = CGPoint(
-    x: page.minX + (crossOnIcon.center.x - screen.minX) / screen.width * page.width,
-    y: page.minY + (crossOnIcon.center.y - screen.minY) / screen.height * page.height
+let gapCenter = CGPoint(
+    x: page.minX + (gapOnIcon.center.x - screen.minX) / screen.width * page.width,
+    y: page.minY + (gapOnIcon.center.y - screen.minY) / screen.height * page.height
 )
-let crossWidth = crossOnIcon.width / screen.width * page.width
-let crossRadius = cornerShare * page.width
+let gapWidth = gapOnIcon.width / screen.width * page.width
+let gapRadius = cornerShare * page.width
 
 /// The region of the app icon's canvas that becomes the page: the page's
 /// shape, inside the frames, so that no ring shows.
@@ -189,14 +205,14 @@ func blend(_ color: CGColor, toward target: CGColor, by amount: Double) -> CGCol
 /// with continuous corners, as on the app icon.
 func quadrantPaths() -> [CGPath] {
     let far = 2 * iconCanvas
-    let half = crossWidth / 2
-    let x = crossCenter.x
-    let y = crossCenter.y
+    let half = gapWidth / 2
+    let x = gapCenter.x
+    let y = gapCenter.y
     let quadrants: [(CGRect, RectangleCornerRadii)] = [
-        (CGRect(x: -far, y: -far, width: x - half + far, height: y - half + far), RectangleCornerRadii(bottomTrailing: crossRadius)),
-        (CGRect(x: x + half, y: -far, width: far, height: y - half + far), RectangleCornerRadii(bottomLeading: crossRadius)),
-        (CGRect(x: -far, y: y + half, width: x - half + far, height: far), RectangleCornerRadii(topTrailing: crossRadius)),
-        (CGRect(x: x + half, y: y + half, width: far, height: far), RectangleCornerRadii(topLeading: crossRadius)),
+        (CGRect(x: -far, y: -far, width: x - half + far, height: y - half + far), RectangleCornerRadii(bottomTrailing: gapRadius)),
+        (CGRect(x: x + half, y: -far, width: far, height: y - half + far), RectangleCornerRadii(bottomLeading: gapRadius)),
+        (CGRect(x: -far, y: y + half, width: x - half + far, height: far), RectangleCornerRadii(topTrailing: gapRadius)),
+        (CGRect(x: x + half, y: y + half, width: far, height: far), RectangleCornerRadii(topLeading: gapRadius)),
     ]
     return quadrants.map { UnevenRoundedRectangle(cornerRadii: $1, style: .continuous).path(in: $0).cgPath }
 }
@@ -204,9 +220,8 @@ func quadrantPaths() -> [CGPath] {
 // MARK: - The characters
 
 /// The character grid of the page, as `scripts/app-icon/characters.swift`
-/// draws the app icon's: the same ramp, density, dither, spacing and mesh
-/// corners. The cells are smaller, so that the page has more rows than the
-/// icon.
+/// draws the app icon's: the same ramp, density, dither and spacing. The
+/// cells are smaller, so that the page has more rows than the icon.
 enum Characters {
     static let ramp: [[String]] = [
         [" "], [".", "·"], [":", "␣", "-"], ["⌃", "+", "="], ["⌥", "*", "←"],
@@ -218,21 +233,6 @@ enum Characters {
     static let densityBottom = 0.05
     static let dither = 3.0
     static let seed: UInt64 = 3
-    /// The mesh copies: where each is brightest, as a share of the canvas
-    /// (`corners` in characters.swift, over 1024), and the blob's width.
-    static let corners: [(name: String, x: Double, y: Double)] = [
-        ("top-left", 130, 130), ("top-right", 894, 130), ("left", 80, 540), ("right", 944, 540), ("bottom-left", 130, 930),
-    ].map { ($0.0, $0.1 / 1024, $0.2 / 1024) }
-    static let blobWidth = 230.0 / 1024
-}
-
-/// How much of a mesh copy shows at a point of the page: its Gaussian blob.
-func meshWeight(_ corner: Int, at point: CGPoint) -> Double {
-    let c = Characters.corners[corner]
-    let dx = (point.x - page.minX) / page.width - c.x
-    let dy = (point.y - page.minY) / page.height - c.y
-    let width = Characters.blobWidth
-    return exp(-(dx * dx + dy * dy) / (2 * width * width))
 }
 
 /// A random value in 0..<1 for each cell.
@@ -254,10 +254,9 @@ let cellWidth: Double = {
     return Double(advance.width) * Characters.spacing
 }()
 
-/// Draws the page's characters in page points, y down, each in the color that
-/// `color` gives for its cell's middle. The context maps page points to its
-/// own space.
-func drawCharacters(in context: CGContext, color: (CGPoint) -> CGColor) {
+/// Draws the page's characters in page points, y down, in `color`. The
+/// context maps page points to its own space.
+func drawCharacters(in context: CGContext, color: CGColor) {
     let rows = Int((page.height / Characters.cellHeight).rounded(.up))
     let columns = Int((page.width / cellWidth).rounded(.up))
     for row in 0 ... rows {
@@ -269,10 +268,9 @@ func drawCharacters(in context: CGContext, color: (CGPoint) -> CGColor) {
             let level = Characters.ramp[max(0, min(Characters.ramp.count - 1, Int(step.rounded())))]
             let character = level[Int(hash(column + 7, row + 13) * Double(level.count)) % level.count]
             if character == " " { continue }
-            let middle = CGPoint(x: page.minX + (Double(column) + 0.5) * cellWidth, y: top + Characters.cellHeight / 2)
             let line = CTLineCreateWithAttributedString(NSAttributedString(string: character, attributes: [
                 kCTFontAttributeName as NSAttributedString.Key: characterFont,
-                kCTForegroundColorAttributeName as NSAttributedString.Key: color(middle),
+                kCTForegroundColorAttributeName as NSAttributedString.Key: color,
             ]))
             // CoreText draws y up: flip around the baseline.
             context.saveGState()
@@ -307,10 +305,9 @@ func pageMask(_ draw: (CGContext) -> Void) -> CGImage {
     return context.makeImage()!
 }
 
-/// The page's characters, each at the alpha that `weight` gives at its cell's
-/// middle: 1 for the base layer, a corner's blob for a mesh copy.
-func charactersMask(weight: @escaping (CGPoint) -> Double) -> CGImage {
-    pageMask { context in drawCharacters(in: context) { CGColor(srgbRed: 1, green: 1, blue: 1, alpha: weight($0)) } }
+/// The page's characters.
+func charactersMask() -> CGImage {
+    pageMask { drawCharacters(in: $0, color: CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)) }
 }
 
 /// The panes: the four quadrants.
@@ -318,15 +315,6 @@ func panesMask() -> CGImage {
     pageMask { context in
         for path in quadrantPaths() { context.addPath(path) }
         context.fillPath(using: .winding)
-    }
-}
-
-/// The cross: everything less the quadrants.
-func crossMask() -> CGImage {
-    pageMask { context in
-        context.addRect(CGRect(x: -2 * iconCanvas, y: -2 * iconCanvas, width: 5 * iconCanvas, height: 5 * iconCanvas))
-        for path in quadrantPaths() { context.addPath(path) }
-        context.fillPath(using: .evenOdd)
     }
 }
 
@@ -341,7 +329,7 @@ func requestColor(_ color: CGColor) -> [String: Double] {
     return ["red": components[0], "green": components[1], "blue": components[2]]
 }
 
-/// Compiles a copy of the icon with the page's cross, panes and characters in
+/// Compiles a copy of the icon with the page's panes and characters in
 /// place of its own, as Xcode compiles the app's, and returns the path of the
 /// catalog.
 func compileCatalog() -> String {
@@ -355,14 +343,12 @@ func compileCatalog() -> String {
         guard var document = try JSONSerialization.jsonObject(with: Data(contentsOf: jsonURL)) as? [String: Any],
               var groups = document["groups"] as? [[String: Any]]
         else { fail("cannot read icon.json") }
-        var masks: [String: CGImage] = ["ascii": charactersMask { _ in 1 }, "glass-pane": panesMask(), "cross": crossMask()]
-        for (index, corner) in Characters.corners.enumerated() {
-            masks["ascii-\(corner.name)"] = charactersMask { meshWeight(index, at: $0) }
-        }
+        let masks: [String: CGImage] = ["ascii": charactersMask(), "glass-pane": panesMask()]
         for group in groups.indices {
             guard var layers = groups[group]["layers"] as? [[String: Any]],
                   let groupScale = (groups[group]["position"] as? [String: Any])?["scale"] as? Double
             else { continue }
+            layers.removeAll { leftOut($0["name"] as? String ?? "") }
             for layer in layers.indices {
                 guard let name = layers[layer]["name"] as? String, masks[name] != nil else { continue }
                 layers[layer]["image-name"] = "page-\(name).png"
@@ -410,16 +396,10 @@ func renderGlassIcon() -> CGImage {
         "appearance": "dark",
         "backgroundTop": requestColor(background),
         "backgroundBottom": requestColor(background),
-        // Bottom to top, as `AdaptiveIconRequest.layers`: the reverse of `groups`.
-        // Each group's color is its first layer's, and every layer also gets
-        // its own fill as an accent, so that every layer keeps the bundled
-        // icon's color. Within a group IconRendering counts the layers in the
-        // reverse of `layers` too.
-        "layers": icon.groups.reversed().map { requestColor(color($0.layers[0].fill.solid!)) },
-        "accents": icon.groups.reversed().enumerated().flatMap { index, group in
-            group.layers.reversed().enumerated().map { element, layer -> [String: Any] in
-                ["group": index, "element": element, "color": requestColor(color(layer.fill.solid!))]
-            }
+        // Bottom to top, as `AdaptiveIconRequest.layers`: the reverse of
+        // `groups`. Each group takes the fill of the first layer it keeps.
+        "layers": icon.groups.reversed().map { group in
+            requestColor(color(group.layers.first { !leftOut($0.name) }!.fill.solid!))
         },
         "pixels": renderPixels,
     ]
