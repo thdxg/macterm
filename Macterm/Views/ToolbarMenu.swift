@@ -16,10 +16,12 @@ import SwiftUI
 ///
 /// One menu serves every window. It is rebuilt each time it opens
 /// (`menuNeedsUpdate`), so its checkmarks follow `Preferences` however they
-/// last changed (Settings or another window's menu). Hide Toolbar flips the
-/// same preference as Settings' Show toolbar toggle; the way back is that
-/// toggle or View → Show Toolbar (`ToolbarVisibilityMenuItem`), since a
-/// hidden toolbar takes this menu with it.
+/// last changed (Settings or another window's menu). Hide Toolbar runs the
+/// Toggle Toolbar command (`AppCommand.toggleToolbar`), which flips the same
+/// preference as Settings' Show toolbar toggle; the way back is its keybind
+/// (⌥⌘T by default), that toggle or View → Show Toolbar
+/// (`ToolbarVisibilityMenuItem`), since a hidden toolbar takes this menu with
+/// it.
 @MainActor
 final class ToolbarMenu: NSObject, NSMenuDelegate {
     static let shared = ToolbarMenu()
@@ -74,6 +76,9 @@ final class ToolbarMenu: NSObject, NSMenuDelegate {
 
         let hide = NSMenuItem(title: String(localized: "Hide Toolbar"), action: #selector(hideToolbar(_:)), keyEquivalent: "")
         hide.target = self
+        // Shown, not handled: a pop-up menu takes no key equivalents while it
+        // is closed. The chord is what brings the toolbar back, so say it here.
+        HotkeyMenuSync.apply(HotkeyRegistry.selectedShortcutString(for: .toggleToolbar), to: hide)
         menu.addItem(hide)
         menu.addItem(.separator())
 
@@ -151,17 +156,22 @@ final class ToolbarMenu: NSObject, NSMenuDelegate {
     }
 }
 
-/// View → Hide Toolbar / Show Toolbar: the Settings toggle
-/// (`Preferences.hideTitleBar`) in the slot macOS gives it, titled for what a
-/// click does. Not an `AppCommand` — it has no keybind or palette row.
+/// View → Hide Toolbar / Show Toolbar: the Toggle Toolbar command
+/// (`AppCommand.toggleToolbar`, which flips `Preferences.hideTitleBar`) in the
+/// slot macOS gives it, titled for what a click does, with its keybind.
 /// Observation tracks the `hideTitleBar` read in `body`, so the title follows
 /// the setting however it changes.
 struct ToolbarVisibilityMenuItem: View {
+    let appState: AppState
+    let projectStore: ProjectStore
     private var preferences: Preferences { .shared }
 
     var body: some View {
-        Button(preferences.hideTitleBar ? "Show Toolbar" : "Hide Toolbar") {
-            preferences.hideTitleBar.toggle()
-        }
+        AppCommandMenuItem(
+            command: .toggleToolbar,
+            appState: appState,
+            projectStore: projectStore,
+            titleOverride: preferences.hideTitleBar ? "Show Toolbar" : "Hide Toolbar"
+        )
     }
 }

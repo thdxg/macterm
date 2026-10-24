@@ -329,6 +329,18 @@ struct HotkeysTests {
         #expect(AppCommand.capturePane.category == .panes)
     }
 
+    /// ⌥⌘T, the Show/Hide Toolbar chord of Finder, Mail and Xcode. No other
+    /// default may share it: the responder would run whichever comes first.
+    @Test
+    func toggleToolbar_ships_on_the_macos_toolbar_chord() {
+        #expect(HotkeyAction.toggleToolbar.defaultShortcut == "cmd+opt+t")
+        #expect(HotkeyAction.toggleToolbar.title == "Toggle Toolbar")
+        #expect(AppCommand.toggleToolbar.hotkeyAction == .toggleToolbar)
+        #expect(AppCommand.toggleToolbar.category == .window)
+        let defaults = Dictionary(uniqueKeysWithValues: HotkeyAction.allCases.map { ($0.rawValue, $0.defaultShortcut) })
+        #expect(!HotkeyRegistry.conflictingActionIDs(in: defaults).contains(HotkeyAction.toggleToolbar.rawValue))
+    }
+
     @Test
     func layout_actions_are_unbound_by_default_and_titled_from_command() {
         // Both ship unbound: applying or saving a layout rewrites the live pane

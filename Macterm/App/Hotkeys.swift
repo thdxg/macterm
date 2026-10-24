@@ -17,6 +17,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case splitDown = "split_down"
     case splitAuto = "split_auto"
     case toggleSidebar = "toggle_sidebar"
+    case toggleToolbar = "toggle_toolbar"
     case recentTab = "recent_tab"
     case nextProject = "next_project"
     case previousProject = "previous_project"
@@ -122,6 +123,11 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .splitDown: "cmd+shift+d"
         case .splitAuto: "none"
         case .toggleSidebar: "cmd+\\"
+        // The chord of Show/Hide Toolbar in Finder, Mail and Xcode. No ghostty
+        // default binds it (only ⌘T, ⇧⌘T and ⌃⇧T). A hidden toolbar takes the
+        // traffic lights and the window drag with it, so the way back must be
+        // one keystroke.
+        case .toggleToolbar: "cmd+opt+t"
         case .recentTab: "ctrl+tab"
         case .nextProject: "cmd+]"
         case .previousProject: "cmd+["

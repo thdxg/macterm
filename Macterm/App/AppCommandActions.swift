@@ -284,6 +284,12 @@ extension AppCommand {
             return { ctx.appState.selectPreviousProject(projects: ctx.projectStore.projects) }
         case .toggleSidebar:
             return { ctx.appState.sidebarVisible.toggle() }
+        case .toggleToolbar:
+            // The one preference that View → Hide Toolbar, the toolbar's own
+            // menu and Settings → Appearance → Show toolbar all flip. It is
+            // app-wide, so it needs no window: the chord brings the toolbar
+            // back after it took the traffic lights away.
+            return { Preferences.shared.hideTitleBar.toggle() }
         case .newWindow:
             return { ctx.appState.requestNewWindow() }
         case .newDesktopWidget:

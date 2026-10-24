@@ -26,8 +26,10 @@ struct AppCommandMenuItem: View {
         // Record the rendered title so `HotkeyMenuSync` can find this item's
         // NSMenuItem later. Registering the same string that titles the Button
         // is what keeps the two from drifting — a `titleOverride` added at a
-        // call site can't silently orphan the sync.
-        .task {
+        // call site can't silently orphan the sync. Keyed on the title, so an
+        // item whose title follows state (Hide Toolbar / Show Toolbar)
+        // registers each title that it shows.
+        .task(id: title) {
             if let hotkeyAction = command.hotkeyAction {
                 HotkeyMenuSync.register(title: title, action: hotkeyAction)
             }

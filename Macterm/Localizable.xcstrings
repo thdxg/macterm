@@ -9677,6 +9677,22 @@
         }
       }
     },
+    "Toggle Toolbar" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구 막대 전환"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换工具栏"
+          }
+        }
+      }
+    },
     "Toggle sidebar" : {
       "localizations" : {
         "ko" : {

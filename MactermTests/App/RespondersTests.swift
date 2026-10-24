@@ -62,6 +62,23 @@ struct MainAppResponderTests {
         #expect(fx.state.workspaces[project.id]?.activeTabID != before)
     }
 
+    /// A hidden toolbar takes the traffic lights and the window drag with it,
+    /// so its chord must bring the toolbar back from anywhere: it needs no
+    /// project and no window.
+    @Test
+    func the_toolbar_chord_hides_and_shows_the_toolbar_without_a_project() throws {
+        let fx = makeFixture()
+        let preferences = Preferences.shared
+        let original = preferences.hideTitleBar
+        defer { preferences.hideTitleBar = original }
+        preferences.hideTitleBar = false
+
+        #expect(try fx.responder.handle(keyDown(for: .toggleToolbar)) == .handled)
+        #expect(preferences.hideTitleBar)
+        #expect(try fx.responder.handle(keyDown(for: .toggleToolbar)) == .handled)
+        #expect(!preferences.hideTitleBar)
+    }
+
     @Test
     func a_files_chord_in_a_remote_project_says_so_instead_of_reaching_the_terminal() throws {
         let fx = makeFixture()

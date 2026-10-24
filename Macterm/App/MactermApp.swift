@@ -114,7 +114,7 @@ struct MactermApp: App {
                 AppCommandMenuItem(command: .openProject, appState: appState, projectStore: projectStore, titleOverride: "Open Project…")
             }
             CommandGroup(replacing: .toolbar) {
-                ToolbarVisibilityMenuItem()
+                ToolbarVisibilityMenuItem(appState: appState, projectStore: projectStore)
             }
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesMenuItem()

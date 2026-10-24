@@ -90,6 +90,8 @@ Each row has a **⋯** menu with two options. The options are available only whe
 
 **Copy Mode** (<kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd>) is one of the rows. It starts a keyboard selection over the scrollback with the keys of Vim, or of Helix. See [Copy Mode](/docs/copy-mode).
 
+**Toggle Toolbar** (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>T</kbd>) hides or shows the toolbar. **View → Hide Toolbar** does the same. A hidden toolbar removes the whole title bar, with the window buttons. You also cannot drag the window. To get the toolbar back, press the keys again.
+
 Macterm owns the splits, so Ghostty's split keybinds (`toggle_split_zoom`, `new_split`, `goto_split`, `resize_split` and `equalize_splits`) do nothing in Macterm. Bind the split commands under **Settings → Keymaps**.
 
 ## Read-only panes

@@ -746,8 +746,11 @@ final class Preferences {
     /// SwiftUI removing the window toolbar — the traffic lights. The sidebar
     /// and terminal surface extend to the window's top edge. Tab switching
     /// stays available via the sidebar and Cmd+digit; close/minimize/zoom stay
-    /// available from the Window menu. No AppKit private API involved: the
-    /// window keeps its normal style mask, so edge-resizing still works.
+    /// available from the Window menu. The window cannot be dragged either
+    /// (`WindowAppearance.syncTitleBarHidden`), so the way back is one chord:
+    /// Toggle Toolbar (`AppCommand.toggleToolbar`, ⌥⌘T by default). No AppKit
+    /// private API involved: the window keeps its normal style mask, so
+    /// edge-resizing still works.
     var hideTitleBar: Bool {
         didSet {
             Keys.hideTitleBar.write(hideTitleBar, to: defaults)
