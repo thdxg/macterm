@@ -102,12 +102,17 @@ let iconCanvas = 1024.0
 // MARK: - The page, on a 1024 canvas, y down
 
 let page = CGRect(x: 168, y: 58, width: 688, height: 908)
-let cornerRadius = 34.0
+/// The page's corners, and the two corners where the page meets the fold,
+/// measured on the system's generic document at 1024 px: its corners fit a
+/// 28 pt circle, and the fold's ends a 60 pt one, which makes the fold soft.
+let cornerRadius = 28.0
+let foldCornerRadius = 60.0
 /// The fold starts on the top edge at `foldX` and ends on the right edge at
 /// `foldY`: a 45° cut, as on the system's page.
-let foldX = 590.0
+let foldX = 604.0
 let foldY = page.minY + (page.maxX - foldX)
-let foldRadius = 40.0
+/// The flap's inner corner: the corner of the flap away from the fold.
+let foldRadius = 28.0
 
 /// The region of the app icon's canvas that becomes the page: the page's
 /// shape, inside the frames, so that no ring shows.
@@ -348,8 +353,8 @@ func pagePath() -> CGPath {
     let path = CGMutablePath()
     path.move(to: CGPoint(x: page.minX, y: page.midY))
     path.addArc(tangent1End: CGPoint(x: page.minX, y: page.minY), tangent2End: CGPoint(x: foldX, y: page.minY), radius: cornerRadius)
-    path.addArc(tangent1End: CGPoint(x: foldX, y: page.minY), tangent2End: CGPoint(x: page.maxX, y: foldY), radius: 14)
-    path.addArc(tangent1End: CGPoint(x: page.maxX, y: foldY), tangent2End: CGPoint(x: page.maxX, y: page.maxY), radius: 14)
+    path.addArc(tangent1End: CGPoint(x: foldX, y: page.minY), tangent2End: CGPoint(x: page.maxX, y: foldY), radius: foldCornerRadius)
+    path.addArc(tangent1End: CGPoint(x: page.maxX, y: foldY), tangent2End: CGPoint(x: page.maxX, y: page.maxY), radius: foldCornerRadius)
     path.addArc(tangent1End: CGPoint(x: page.maxX, y: page.maxY), tangent2End: CGPoint(x: page.minX, y: page.maxY), radius: cornerRadius)
     path.addArc(tangent1End: CGPoint(x: page.minX, y: page.maxY), tangent2End: CGPoint(x: page.minX, y: page.minY), radius: cornerRadius)
     path.closeSubpath()
@@ -403,14 +408,16 @@ func render(pixels: Int) -> CGImage {
 
     // The fold casts its shadow onto the page.
     context.saveGState()
-    context.setShadow(offset: CGSize(width: -4 * unit, height: -8 * unit), blur: 28 * unit, color: CGColor(gray: 0, alpha: 0.6))
+    // Down and to the left, soft, as on the system's page.
+    context.setShadow(offset: CGSize(width: -6 * unit, height: -14 * unit), blur: 44 * unit, color: CGColor(gray: 0, alpha: 0.6))
     context.addPath(flapPath())
     context.setFillColor(background)
     context.fillPath()
     context.restoreGState()
     context.restoreGState()
 
-    // The flap: lighter than the page, brightest at the cut.
+    // The flap: lighter than the page. As on the system's page, it is darkest
+    // along the fold and brightest at its inner corner.
     context.saveGState()
     context.addPath(pagePath())
     context.clip()
@@ -419,10 +426,10 @@ func render(pixels: Int) -> CGImage {
     let white = CGColor(gray: 1, alpha: 1)
     context.drawLinearGradient(
         CGGradient(colorsSpace: p3, colors: [
-            blend(background, toward: white, by: 0.16),
             blend(background, toward: white, by: 0.04),
+            blend(background, toward: white, by: 0.16),
         ] as CFArray, locations: [0, 1])!,
-        start: CGPoint(x: (foldX + page.maxX) / 2 + 20, y: (page.minY + foldY) / 2 - 20),
+        start: CGPoint(x: (foldX + page.maxX) / 2, y: (page.minY + foldY) / 2),
         end: CGPoint(x: foldX, y: foldY), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
     )
     context.restoreGState()
