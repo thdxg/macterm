@@ -1,12 +1,15 @@
 // Draws Macterm's document icon: the page that Finder shows for a file that
 // opens with Macterm by default (`CFBundleTypeIconFile` in Info.plist).
 //
-// The page is the app icon's background with the app icon's pane glyph at its
-// top-left. As on the app icon, a grid of characters covers the page, and its
+// The page is the app icon's background with the middle of the app icon's cross
+// at its top-left: where its arms meet, rounded, with the arms fading into the
+// page. As on the app icon, a grid of characters covers the page, and its
 // density is the gradient: heavy characters at the top thin out to dots at the
-// bottom, on one flat color. The colors and the glyph's geometry come from
-// `Macterm/AppIcon.icon`. The page outline follows the system's generic
-// document (`NSWorkspace.icon(for:)` at 1024 px, measured on macOS 27).
+// bottom, on one flat color. The characters carry the app icon's mesh gradient,
+// laid over the page as it is laid over the icon. The colors and the cross's
+// place come from `Macterm/AppIcon.icon`. The page outline follows the
+// system's generic document (`NSWorkspace.icon(for:)` at 1024 px, measured on
+// macOS 27).
 //
 // The glyph is real Liquid Glass. `macterm-icon-renderer` (the adaptive
 // icon's helper) draws the whole app icon on the page's own background, and
@@ -60,11 +63,13 @@ struct IconFile: Decodable {
         var fill: Fill
         var imageName: String
         var name: String
+        var opacity: Double?
         var position: Position
         enum CodingKeys: String, CodingKey {
             case fill
             case imageName = "image-name"
             case name
+            case opacity
             case position
         }
     }
@@ -98,8 +103,22 @@ let background = color(solidFill)
 /// The icon canvas is 1024 pt, and one image pixel is one point.
 let iconCanvas = 1024.0
 
-/// The rect of the opaque pixels of a mask, y down, in its pixels.
-func opaqueBounds(of image: CGImage) -> CGRect {
+/// A layer's mask image.
+func mask(of layer: IconFile.Layer) -> CGImage {
+    let url = iconURL.appendingPathComponent("Assets").appendingPathComponent(layer.imageName)
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+    else { fail("cannot read \(url.path)") }
+    return image
+}
+
+/// The middle of the cross on the app icon's canvas, y down: the column and
+/// the row of its mask with the most ink, which are its two arms.
+let crossCenter: CGPoint = {
+    guard let group = icon.groups.first(where: { $0.layers.contains { $0.name == "cross" } }),
+          let layer = group.layers.first(where: { $0.name == "cross" })
+    else { fail("expected a layer named cross in icon.json") }
+    let image = mask(of: layer)
     let width = image.width
     let height = image.height
     var bytes = [UInt8](repeating: 0, count: width * height * 4)
@@ -108,42 +127,33 @@ func opaqueBounds(of image: CGImage) -> CGRect {
         space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     )!
     context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-    var minX = width, minY = height, maxX = -1, maxY = -1
+    var columns = [Int](repeating: 0, count: width)
+    var rows = [Int](repeating: 0, count: height)
     for y in 0 ..< height {
-        for x in 0 ..< width where bytes[(y * width + x) * 4 + 3] > 127 {
-            minX = min(minX, x)
-            maxX = max(maxX, x)
-            minY = min(minY, y)
-            maxY = max(maxY, y)
+        for x in 0 ..< width {
+            let ink = Int(bytes[(y * width + x) * 4 + 3])
+            columns[x] += ink
+            rows[y] += ink
         }
     }
-    return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
-}
-
-/// Each pane's rect on the app icon's canvas, y down: its opaque pixels, not
-/// its image, whose padding keeps the pane's center. The frame is the app
-/// icon's chiclet rim, which the page replaces.
-let paneRects: [CGRect] = icon.groups.compactMap { group in
-    guard let layer = group.layers.first, layer.name.hasSuffix("-pane") else { return nil }
-    let url = iconURL.appendingPathComponent("Assets").appendingPathComponent(layer.imageName)
-    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-          let mask = CGImageSourceCreateImageAtIndex(source, 0, nil)
-    else { fail("cannot read \(url.path)") }
+    // Each arm is a band of equal columns (or rows): take its middle.
+    func middle(_ sums: [Int]) -> Double {
+        let top = sums.max()!
+        let band = sums.indices.filter { sums[$0] >= top - top / 50 }
+        return Double(band.first! + band.last!) / 2
+    }
     let scale = layer.position.scale * group.position.scale
-    let center = CGPoint(
-        x: iconCanvas / 2 + layer.position.translationInPoints[0] * group.position.scale,
-        y: iconCanvas / 2 + layer.position.translationInPoints[1] * group.position.scale
+    return CGPoint(
+        x: iconCanvas / 2 + (middle(columns) + 0.5 - Double(width) / 2) * scale,
+        y: iconCanvas / 2 + (middle(rows) + 0.5 - Double(height) / 2) * scale
     )
-    let opaque = opaqueBounds(of: mask)
-    return CGRect(
-        x: center.x + (opaque.minX - Double(mask.width) / 2) * scale,
-        y: center.y + (opaque.minY - Double(mask.height) / 2) * scale,
-        width: opaque.width * scale,
-        height: opaque.height * scale
-    )
-}
-guard paneRects.count == 3 else { fail("expected 3 panes in \(iconURL.path), found \(paneRects.count)") }
-let glyphBounds = paneRects.dropFirst().reduce(paneRects[0]) { $0.union($1) }
+}()
+
+/// The part of the app icon's canvas that the glyph shows: a square around
+/// the cross's middle, wide enough for the rounded corners and a little of
+/// each arm.
+let glyphSpan = 680.0
+let glyphBounds = CGRect(x: crossCenter.x - glyphSpan / 2, y: crossCenter.y - glyphSpan / 2, width: glyphSpan, height: glyphSpan)
 
 // MARK: - The page, on a 1024 canvas, y down
 
@@ -156,8 +166,8 @@ let foldY = page.minY + (page.maxX - foldX)
 let foldRadius = 40.0
 
 /// The glyph's box on the page: its top-left corner and its height.
-let glyphOrigin = CGPoint(x: page.minX + 88, y: page.minY + 92)
-let glyphHeight = 300.0
+let glyphOrigin = CGPoint(x: page.minX + 24, y: page.minY + 24)
+let glyphHeight = 380.0
 let glyphScale = glyphHeight / glyphBounds.height
 
 /// A point of the app icon's canvas, on the page.
@@ -180,28 +190,62 @@ func blend(_ color: CGColor, toward target: CGColor, by amount: Double) -> CGCol
 // MARK: - The characters
 
 /// The character grid of the page, as `scripts/app-icon/characters.swift`
-/// draws the app icon's: the same ramp, alpha, density, dither and spacing.
-/// The cells are a little smaller, so that the page has about as many rows as
-/// the icon.
+/// draws the app icon's: the same ramp, density, dither, spacing and mesh
+/// corners. The cells are smaller, so that the page has more rows than the
+/// icon. `alpha` is the flat page's: the app icon's characters are glass, which
+/// lets the screen through, and this alpha matches what the glass shows.
 enum Characters {
     static let ramp: [[String]] = [
         [" "], [".", "·"], [":", "␣", "-"], ["⌃", "+", "="], ["⌥", "*", "←"],
         ["⇧", "⏎", "⇥"], ["#", "⌫", "⎋"], ["%", "@", "⌦"], ["⌘"],
     ]
     static let spacing = 1.6
-    static let alpha = 0.32
+    static let alpha = 0.42
     static let cellHeight = 64.0
     static let densityTop = 0.85
     static let densityBottom = 0.05
     static let dither = 3.0
     static let seed: UInt64 = 3
+    /// The mesh copies: where each is brightest, as a share of the canvas
+    /// (`corners` in characters.swift, over 1024), and the blob's width.
+    static let corners: [(name: String, x: Double, y: Double)] = [
+        ("top-left", 130, 130), ("top-right", 894, 130), ("left", 80, 540), ("right", 944, 540), ("bottom-left", 130, 930),
+    ].map { ($0.0, $0.1 / 1024, $0.2 / 1024) }
+    static let blobWidth = 230.0 / 1024
 }
 
-/// The characters' color: the fill of the app icon's Characters group.
-guard let charactersGroup = icon.groups.first(where: { $0.name == "Characters" }),
-      let charactersFill = charactersGroup.layers.first?.fill.solid
-else { fail("expected a Characters group in icon.json") }
-let charactersColor = color(charactersFill).copy(alpha: Characters.alpha)!
+/// The Characters group: the base layer `ascii`, and a mesh copy for each
+/// corner, `ascii-<corner>`.
+guard let charactersGroup = icon.groups.first(where: { $0.name == "Characters" }) else {
+    fail("expected a Characters group in icon.json")
+}
+func characterLayer(_ name: String) -> IconFile.Layer {
+    guard let layer = charactersGroup.layers.first(where: { $0.name == name }), layer.fill.solid != nil else {
+        fail("expected a layer named \(name) with a solid fill in the Characters group")
+    }
+    return layer
+}
+let baseCharacterColor = color(characterLayer("ascii").fill.solid!)
+let meshColors = Characters.corners.map { color(characterLayer("ascii-\($0.name)").fill.solid!) }
+
+/// How much of a mesh copy shows at a point of the page: its Gaussian blob.
+func meshWeight(_ corner: Int, at point: CGPoint) -> Double {
+    let c = Characters.corners[corner]
+    let dx = (point.x - page.minX) / page.width - c.x
+    let dy = (point.y - page.minY) / page.height - c.y
+    let width = Characters.blobWidth
+    return exp(-(dx * dx + dy * dy) / (2 * width * width))
+}
+
+/// A character's color on the flat page: the base color, with each mesh copy
+/// over it in the order the icon stacks them.
+func flatCharacterColor(at point: CGPoint) -> CGColor {
+    var mixed = baseCharacterColor
+    for corner in Characters.corners.indices {
+        mixed = blend(mixed, toward: meshColors[corner], by: meshWeight(corner, at: point))
+    }
+    return mixed.copy(alpha: Characters.alpha)!
+}
 
 /// A random value in 0..<1 for each cell.
 func hash(_ x: Int, _ y: Int) -> Double {
@@ -222,9 +266,10 @@ let cellWidth: Double = {
     return Double(advance.width) * Characters.spacing
 }()
 
-/// Draws the page's characters in page points, y down, in `color`. The
-/// context maps page points to its own space.
-func drawCharacters(in context: CGContext, color: CGColor) {
+/// Draws the page's characters in page points, y down, each in the color that
+/// `color` gives for its cell's middle. The context maps page points to its
+/// own space.
+func drawCharacters(in context: CGContext, color: (CGPoint) -> CGColor) {
     let rows = Int((page.height / Characters.cellHeight).rounded(.up))
     let columns = Int((page.width / cellWidth).rounded(.up))
     for row in 0 ... rows {
@@ -236,9 +281,10 @@ func drawCharacters(in context: CGContext, color: CGColor) {
             let level = Characters.ramp[max(0, min(Characters.ramp.count - 1, Int(step.rounded())))]
             let character = level[Int(hash(column + 7, row + 13) * Double(level.count)) % level.count]
             if character == " " { continue }
+            let middle = CGPoint(x: page.minX + (Double(column) + 0.5) * cellWidth, y: top + Characters.cellHeight / 2)
             let line = CTLineCreateWithAttributedString(NSAttributedString(string: character, attributes: [
                 kCTFontAttributeName as NSAttributedString.Key: characterFont,
-                kCTForegroundColorAttributeName as NSAttributedString.Key: color,
+                kCTForegroundColorAttributeName as NSAttributedString.Key: color(middle),
             ]))
             // CoreText draws y up: flip around the baseline.
             context.saveGState()
@@ -251,9 +297,11 @@ func drawCharacters(in context: CGContext, color: CGColor) {
     }
 }
 
-/// The page's characters on the app icon's canvas, as a mask for the
-/// Characters layer: 2 pixels a point, so the layer's scale is 0.5.
-func charactersMask() -> CGImage {
+/// The page's characters on the app icon's canvas, as a mask for a layer of
+/// the Characters group: 2 pixels a point, so the layer's scale is 0.5. Each
+/// character's alpha is `weight` at its cell's middle: 1 for the base layer,
+/// a corner's blob for a mesh copy.
+func charactersMask(weight: @escaping (CGPoint) -> Double) -> CGImage {
     let pixels = Int(iconCanvas * 2)
     let context = CGContext(
         data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
@@ -265,23 +313,21 @@ func charactersMask() -> CGImage {
     context.translateBy(x: glyphBounds.minX, y: glyphBounds.minY)
     context.scaleBy(x: 1 / glyphScale, y: 1 / glyphScale)
     context.translateBy(x: -glyphOrigin.x, y: -glyphOrigin.y)
-    drawCharacters(in: context, color: CGColor(srgbRed: 1, green: 1, blue: 1, alpha: Characters.alpha))
+    drawCharacters(in: context) { CGColor(srgbRed: 1, green: 1, blue: 1, alpha: weight($0)) }
     return context.makeImage()!
 }
 
 // MARK: - The glass glyph
 
-/// The render's edge, in pixels. The glyph comes out about 700 px high, more
-/// than the 300 px of the largest document icon.
+/// The render's edge, in pixels. The glyph comes out about 740 px high, more
+/// than the 330 px of the largest document icon.
 let renderPixels = 2048
-/// The part of the app icon's canvas that the page takes: the glyph and its
-/// shadow, and none of the frame.
-let glyphCrop = CGRect(
-    x: glyphBounds.minX - 40, y: glyphBounds.minY - 30,
-    width: glyphBounds.width + 100, height: glyphBounds.height + 80
-)
-/// How far in from the crop's edge the glyph fades in, on the app icon's canvas.
-let feather = 28.0
+/// The part of the app icon's canvas that the page takes: the glyph, and none
+/// of the frame.
+let glyphCrop = glyphBounds
+/// How far in from the crop's edge the glyph fades in, on the app icon's
+/// canvas: far enough that the arms fade into the page.
+let feather = 150.0
 
 func requestColor(_ color: CGColor) -> [String: Double] {
     let components = color.converted(to: sRGB, intent: .defaultIntent, options: nil)!.components!
@@ -301,20 +347,28 @@ func compileCatalog() -> String {
         guard var document = try JSONSerialization.jsonObject(with: Data(contentsOf: jsonURL)) as? [String: Any],
               var groups = document["groups"] as? [[String: Any]]
         else { fail("cannot read icon.json") }
+        // Each character layer: the base, and the mesh copies.
+        var masks: [String: CGImage] = ["ascii": charactersMask { _ in 1 }]
+        for (index, corner) in Characters.corners.enumerated() {
+            masks["ascii-\(corner.name)"] = charactersMask { meshWeight(index, at: $0) }
+        }
         for group in groups.indices where groups[group]["name"] as? String == "Characters" {
             guard var layers = groups[group]["layers"] as? [[String: Any]] else { continue }
-            for layer in layers.indices where layers[layer]["name"] as? String == "ascii" {
-                layers[layer]["image-name"] = "page-characters.png"
+            for layer in layers.indices {
+                guard let name = layers[layer]["name"] as? String, masks[name] != nil else { continue }
+                layers[layer]["image-name"] = "page-\(name).png"
                 layers[layer]["position"] = ["scale": 0.5, "translation-in-points": [0, 0]]
             }
             groups[group]["layers"] = layers
         }
         document["groups"] = groups
-        let maskURL = copy.appendingPathComponent("Assets/page-characters.png")
-        guard let destination = CGImageDestinationCreateWithURL(maskURL as CFURL, "public.png" as CFString, 1, nil)
-        else { fail("cannot write \(maskURL.path)") }
-        CGImageDestinationAddImage(destination, charactersMask(), nil)
-        guard CGImageDestinationFinalize(destination) else { fail("cannot write \(maskURL.path)") }
+        for (name, image) in masks {
+            let maskURL = copy.appendingPathComponent("Assets/page-\(name).png")
+            guard let destination = CGImageDestinationCreateWithURL(maskURL as CFURL, "public.png" as CFString, 1, nil)
+            else { fail("cannot write \(maskURL.path)") }
+            CGImageDestinationAddImage(destination, image, nil)
+            guard CGImageDestinationFinalize(destination) else { fail("cannot write \(maskURL.path)") }
+        }
         try JSONSerialization.data(withJSONObject: document).write(to: jsonURL)
     } catch {
         fail("cannot copy the icon: \(error)")
@@ -347,7 +401,16 @@ func renderGlassIcon() -> CGImage {
         "backgroundTop": requestColor(background),
         "backgroundBottom": requestColor(background),
         // Bottom to top, as `AdaptiveIconRequest.layers`: the reverse of `groups`.
+        // Each group's color is its first layer's, and every layer also gets
+        // its own fill as an accent, so that every layer keeps the bundled
+        // icon's color. Within a group IconRendering counts the layers in the
+        // reverse of `layers` too.
         "layers": icon.groups.reversed().map { requestColor(color($0.layers[0].fill.solid!)) },
+        "accents": icon.groups.reversed().enumerated().flatMap { index, group in
+            group.layers.reversed().enumerated().map { element, layer -> [String: Any] in
+                ["group": index, "element": element, "color": requestColor(color(layer.fill.solid!))]
+            }
+        },
         "pixels": renderPixels,
     ]
     let process = Process()
@@ -470,7 +533,7 @@ func render(pixels: Int) -> CGImage {
     context.saveGState()
     context.addPath(pagePath())
     context.clip()
-    drawCharacters(in: context, color: charactersColor)
+    drawCharacters(in: context, color: flatCharacterColor)
 
     // The glass glyph. The image is y down; draw it flipped back.
     context.saveGState()
