@@ -4,7 +4,7 @@
     "specular-location"
   ],
   "fill" : {
-    "solid" : "srgb:0.06667,0.07059,0.07843,1.00000"
+    "solid" : "srgb:0.10196,0.10588,0.12941,1.00000"
   },
   "groups" : [
     {
@@ -15,28 +15,13 @@
           "fill" : {
             "solid" : "srgb:0.80392,0.81176,0.81961,1.00000"
           },
+          "glass" : true,
           "hidden" : false,
-          "image-name" : "front-pane.png",
-          "name" : "front-pane",
-          "opacity" : 0.85,
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              -464.9999999999999,
-              -217.99999999999983
-            ]
-          }
-        },
-        {
-          "fill" : {
-            "solid" : "srgb:0.80392,0.81176,0.81961,1.00000"
-          },
-          "hidden" : false,
-          "image-name" : "frame.png",
-          "name" : "frame",
+          "image-name" : "frame-silver.png",
+          "name" : "frame-silver",
           "opacity" : 0.9,
           "position" : {
-            "scale" : 0.8793103448275863,
+            "scale" : 0.8620689655172414,
             "translation-in-points" : [
               0,
               0
@@ -45,7 +30,7 @@
         }
       ],
       "lighting" : "individual",
-      "name" : "Front Pane",
+      "name" : "Silver Frame",
       "position" : {
         "scale" : 0.58,
         "translation-in-points" : [
@@ -54,13 +39,13 @@
         ]
       },
       "refractivity" : {
-        "depth" : 0.02,
+        "depth" : 0.1308203125,
         "enabled" : true,
-        "strength" : 0.15
+        "strength" : 0.31296875
       },
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.74
+        "opacity" : 2
       },
       "specular" : "inside",
       "translucency" : {
@@ -72,99 +57,203 @@
       "blur-material" : null,
       "hidden" : false,
       "layers" : [
+        {
+          "fill" : {
+            "solid" : "srgb:0.06667,0.07059,0.07843,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "frame-dark.png",
+          "name" : "frame-dark",
+          "opacity" : 1,
+          "position" : {
+            "scale" : 0.8620689655172414,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "name" : "Dark Ring",
+      "position" : {
+        "scale" : 0.58,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "refractivity" : {
+        "depth" : 0.1308203125,
+        "enabled" : false,
+        "strength" : 0.31296875
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 2
+      },
+      "specular" : "inside",
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material" : null,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "srgb:0.10196,0.10588,0.12941,1.00000"
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "glass-pane.png",
+          "name" : "glass-pane",
+          "opacity" : 0.15,
+          "position" : {
+            "scale" : 1.293103448275862,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "solid" : "srgb:0.57255,0.58235,0.63529,1.00000"
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "cross.png",
+          "name" : "cross",
+          "opacity" : 1,
+          "position" : {
+            "scale" : 0.8620689655172414,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "name" : "Glass Pane",
+      "opacity" : 1,
+      "position" : {
+        "scale" : 0.58,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "refractivity" : {
+        "depth" : 0.1205859375,
+        "enabled" : true,
+        "strength" : 0.370234375
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 1.29
+      },
+      "specular" : "inside",
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.43
+      }
+    },
+    {
+      "blur-material" : null,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "srgb:0.84706,0.81569,0.81569,1.00000"
+          },
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "ascii-bottom-left.png",
+          "name" : "ascii-bottom-left",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          },
+          "opacity" : 0.75
+        },
+        {
+          "fill" : {
+            "solid" : "srgb:0.46667,0.60784,0.69020,1.00000"
+          },
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "ascii-right.png",
+          "name" : "ascii-right",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          },
+          "opacity" : 0.75
+        },
         {
           "fill" : {
             "solid" : "srgb:0.60392,0.61569,0.68235,1.00000"
           },
+          "glass" : false,
           "hidden" : false,
-          "image-name" : "middle-pane.png",
-          "name" : "middle-pane",
-          "opacity" : 0.75,
+          "image-name" : "ascii-left.png",
+          "name" : "ascii-left",
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
-              -373.9999999999998,
-              -217.99999999999994
+              0,
+              0
             ]
-          }
-        }
-      ],
-      "lighting" : "individual",
-      "name" : "Middle Pane",
-      "position" : {
-        "scale" : 0.58,
-        "translation-in-points" : [
-          0,
-          0
-        ]
-      },
-      "refractivity" : {
-        "depth" : 0.02,
-        "enabled" : true,
-        "strength" : 0.15
-      },
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.74
-      },
-      "specular" : "inside",
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
-    },
-    {
-      "blur-material" : 0.04,
-      "hidden" : false,
-      "layers" : [
-        {
-          "fill" : {
-            "solid" : "srgb:0.41176,0.42745,0.49020,1.00000"
           },
+          "opacity" : 0.75
+        },
+        {
+          "fill" : {
+            "solid" : "srgb:0.92549,0.84706,0.68235,1.00000"
+          },
+          "glass" : false,
           "hidden" : false,
-          "image-name" : "back-pane.png",
-          "name" : "back-pane",
-          "opacity" : 0.6,
+          "image-name" : "ascii-top-right.png",
+          "name" : "ascii-top-right",
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
-              -299.9999999999999,
-              -217.99999999999983
+              0,
+              0
             ]
-          }
-        }
-      ],
-      "lighting" : "individual",
-      "name" : "Back Pane",
-      "position" : {
-        "scale" : 0.58,
-        "translation-in-points" : [
-          0,
-          0
-        ]
-      },
-      "refractivity" : {
-        "depth" : 0.04,
-        "enabled" : true,
-        "strength" : 0.28
-      },
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.74
-      },
-      "specular" : "inside",
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
-    },
-    {
-      "blur-material" : null,
-      "hidden" : false,
-      "layers" : [
+          },
+          "opacity" : 0.75
+        },
         {
           "fill" : {
-            "solid" : "srgb:0.41176,0.42745,0.49020,1.00000"
+            "solid" : "srgb:1.00000,0.67059,0.63529,1.00000"
+          },
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "ascii-top-left.png",
+          "name" : "ascii-top-left",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          },
+          "opacity" : 0.75
+        },
+        {
+          "fill" : {
+            "solid" : "srgb:0.71765,0.78431,0.79608,1.00000"
           },
           "glass" : true,
           "hidden" : false,
@@ -176,7 +265,8 @@
               0,
               0
             ]
-          }
+          },
+          "opacity" : 0.75
         }
       ],
       "lighting" : "combined",
@@ -195,8 +285,9 @@
       "specular" : false,
       "translucency" : {
         "enabled" : true,
-        "value" : 0.6
-      }
+        "value" : 0.8
+      },
+      "opacity" : 1
     }
   ],
   "supported-platforms" : {

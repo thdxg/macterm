@@ -13,8 +13,8 @@ struct AdaptiveIconRendererTests {
         backgroundBottom: .init(red: 0.098, green: 0.090, blue: 0.141),
         layers: [
             .init(red: 0.231, green: 0.216, blue: 0.322),
-            .init(red: 0.769, green: 0.655, blue: 0.906),
-            .init(red: 0.878, green: 0.871, blue: 0.957),
+            .init(red: 0.118, green: 0.110, blue: 0.180),
+            .init(red: 0.098, green: 0.090, blue: 0.141),
             .init(red: 0.878, green: 0.871, blue: 0.957),
         ],
         pixels: 256
@@ -149,30 +149,36 @@ struct AdaptiveIconRendererTests {
             FileManager.default.isExecutableFile(atPath: AdaptiveIconRenderer.bundledHelperURL.path),
             "the test host has no Contents/Helpers/macterm-icon-renderer"
         )
-        // Each pane gets a pure color of its own, so a pane that takes
-        // another layer's fill (IconRendering changed its order) shows. The
+        // Each group gets a pure color of its own, so a group that takes
+        // another one's fill (IconRendering changed its order) shows. The
         // characters, at the bottom, are violet: the screen check below
-        // stays true where they cover it.
+        // stays true where they cover it. The glass pane over them is the
+        // screen's own violet, as `AdaptiveIcon.paint` paints it. The cross,
+        // a layer of its own in the pane's group, is green.
         var request = Self.request
         request.layers = [
             .init(red: 0.5, green: 0, blue: 1),
+            request.backgroundTop,
             .init(red: 1, green: 0, blue: 0),
-            .init(red: 0, green: 1, blue: 0),
             .init(red: 0, green: 0, blue: 1),
         ]
+        request.accents = [.init(
+            group: AdaptiveIcon.crossGroup,
+            element: AdaptiveIcon.crossElement,
+            color: .init(red: 0, green: 1, blue: 0)
+        )]
         let result = await AdaptiveIconRenderer.render(request)
         let png = try result.get()
         let image = try #require(NSBitmapImageRep(data: png))
         // The body fills 824/1024 of the canvas: the corner is empty, and the
         // screen inside the frame is the requested dark violet. (180, 180) is
-        // clear of the frame, whose glass macOS 26 draws translucent, and of
-        // the panes in the top-left.
+        // clear of the frame, whose glass macOS 26 draws translucent.
         let corner = image.colorAt(x: 4, y: 4)?.alphaComponent ?? 1
         let screen = image.colorAt(x: 180, y: 180)?.usingColorSpace(.sRGB)
         let onGrid = image.pixelsWide == 256 && image.pixelsHigh == 256 && corner < 0.05
         let violet = screen.map { $0.alphaComponent > 0.95 && $0.blueComponent > $0.greenComponent } ?? false
-        // One point inside each pane, front to back from the left: blue,
-        // green, red.
+        // One point in each ring, at the top middle: the silver frame blue,
+        // the dark ring red. One point on the cross's upper arm: green.
         let panes = Self.panePoints.map { point, channel in
             image.colorAt(x: point.x, y: point.y)?.usingColorSpace(.sRGB).map { Self.dominant($0) == channel && $0.alphaComponent > 0.5 }
                 ?? false
@@ -184,8 +190,11 @@ struct AdaptiveIconRendererTests {
 
     private enum Channel { case red, green, blue }
 
-    /// Front pane (blue), middle pane (green), back pane (red), at 256 px.
-    private static let panePoints: [((x: Int, y: Int), Channel)] = [((72, 90), .blue), ((96, 90), .green), ((116, 90), .red)]
+    /// The silver frame (blue) and the dark ring (red) at the top middle, at
+    /// 256 px: the body starts at 25 px, the frame spans its first 10 px and
+    /// the ring the next 11. The cross's upper arm (green) runs down at
+    /// x 597 pt of 1024, 145 px (`scripts/app-icon/frame.swift`).
+    private static let panePoints: [((x: Int, y: Int), Channel)] = [((128, 30), .blue), ((128, 41), .red), ((145, 85), .green)]
 
     private static func dominant(_ color: NSColor) -> Channel {
         if color.redComponent > color.greenComponent, color.redComponent > color.blueComponent { return .red }

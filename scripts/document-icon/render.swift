@@ -180,10 +180,15 @@ func blend(_ color: CGColor, toward target: CGColor, by amount: Double) -> CGCol
 // MARK: - The characters
 
 /// The character grid of the page, as `scripts/app-icon/characters.swift`
-/// draws the app icon's: the same ramp, alpha, density and dither. The cells
-/// are a little smaller, so that the page has about as many rows as the icon.
+/// draws the app icon's: the same ramp, alpha, density, dither and spacing.
+/// The cells are a little smaller, so that the page has about as many rows as
+/// the icon.
 enum Characters {
-    static let ramp = Array(" .:-=+*#%@")
+    static let ramp: [[String]] = [
+        [" "], [".", "·"], [":", "␣", "-"], ["⌃", "+", "="], ["⌥", "*", "←"],
+        ["⇧", "⏎", "⇥"], ["#", "⌫", "⎋"], ["%", "@", "⌦"], ["⌘"],
+    ]
+    static let spacing = 1.6
     static let alpha = 0.32
     static let cellHeight = 64.0
     static let densityTop = 0.85
@@ -214,7 +219,7 @@ let cellWidth: Double = {
     var letter = UniChar(UInt8(ascii: "M"))
     CTFontGetGlyphsForCharacters(characterFont, &letter, &glyph, 1)
     CTFontGetAdvancesForGlyphs(characterFont, .horizontal, &glyph, &advance, 1)
-    return Double(advance.width)
+    return Double(advance.width) * Characters.spacing
 }()
 
 /// Draws the page's characters in page points, y down, in `color`. The
@@ -228,9 +233,10 @@ func drawCharacters(in context: CGContext, color: CGColor) {
             let t = (top - page.minY + Characters.cellHeight / 2) / page.height
             let density = Characters.densityTop + (Characters.densityBottom - Characters.densityTop) * t
             let step = density * Double(Characters.ramp.count - 1) + (hash(column, row) - 0.5) * Characters.dither
-            let character = Characters.ramp[max(0, min(Characters.ramp.count - 1, Int(step.rounded())))]
+            let level = Characters.ramp[max(0, min(Characters.ramp.count - 1, Int(step.rounded())))]
+            let character = level[Int(hash(column + 7, row + 13) * Double(level.count)) % level.count]
             if character == " " { continue }
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(character), attributes: [
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: character, attributes: [
                 kCTFontAttributeName as NSAttributedString.Key: characterFont,
                 kCTForegroundColorAttributeName as NSAttributedString.Key: color,
             ]))

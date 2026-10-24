@@ -163,6 +163,7 @@ final class AdaptiveIconController {
             backgroundTop: paint.backgroundTop,
             backgroundBottom: paint.backgroundBottom,
             layers: paint.layers,
+            accents: paint.accents,
             pixels: 1024
         )
     }

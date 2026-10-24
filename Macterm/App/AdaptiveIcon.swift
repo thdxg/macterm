@@ -20,70 +20,87 @@ enum AdaptiveIcon {
 
     /// The fills of `AppIcon.icon`, in the order the request carries them.
     struct Paint: Equatable {
+        /// The screen behind the characters. The icon's background is flat,
+        /// so both ends are the same color.
         var backgroundTop: Color
         var backgroundBottom: Color
-        /// Bottom to top, one for each group: the characters, the back pane,
-        /// the middle pane, and the front pane with the frame.
+        /// Bottom to top, one for each group: the characters, the glass pane,
+        /// the dark ring, and the silver frame.
         var layers: [Color]
+        /// The layers with a color of their own: the characters' mesh copies
+        /// and the cross.
+        var accents: [AdaptiveIconRequest.Accent]
     }
+
+    /// Where the cross is: the glass pane's group (the second from the bottom),
+    /// and the first of its layers in IconRendering's order, which is the
+    /// reverse of `layers` in `icon.json`.
+    static let crossGroup = 1
+    static let crossElement = 0
+    /// The cross is a gray halfway from palette 8 to palette 7.
+    static let crossMix = 0.5
+    /// The characters' group (the bottom one), and the palette entry of each
+    /// mesh copy of the characters by its place in that group: top-left red,
+    /// top-right yellow, left magenta, right green, bottom-left cyan. The
+    /// characters themselves (element 0) are blue, palette 4, so the bottom
+    /// right stays blue.
+    static let charactersGroup = 0
+    static let characterBase = 4
+    static let characterMesh: [(element: Int, palette: Int)] = [(1, 1), (2, 3), (3, 5), (4, 2), (5, 6)]
 
     /// The gray entries (bright white, white, bright black, black), in the
     /// order that breaks a tie.
     static let neutralEntries = [15, 7, 8, 0]
-    /// The color entries.
-    static let accentEntries = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14]
-    /// The smallest step the middle pane keeps from its neighbors, as a share
-    /// of the distance from the background to the front pane.
-    static let minimumStep = 0.15
+    /// The screen is the theme's "lid": the step just past the background
+    /// that a status bar or a popup takes. eyesclosed names it (`#1A1B21`),
+    /// and it is the theme's palette 0 mixed this much into its background.
+    static let lidMix = 0.23
+    /// The smallest step the lid's gray keeps from the background. Rose
+    /// Pine's palette 0 is only 9% of the way to its frame gray, and it is
+    /// still the gray its lid comes from. Gruvbox's palette 0 is the
+    /// background itself, so its lid comes from the next gray.
+    static let lidMinimumStep = 0.05
+    /// The frames keep the bundled icon's colors in every theme: the silver
+    /// frame and the dark ring of `AppIcon.icon`. Only the characters and the
+    /// screen follow the theme.
+    static let silverFrame = Color(red: 0.80392, green: 0.81176, blue: 0.81961)
+    static let darkRing = Color(red: 0.06667, green: 0.07059, blue: 0.07843)
 
-    /// The panes as a ramp from the front pane down toward the background,
-    /// each pane one palette entry as the theme has it. Distances are OKLab
-    /// lightness away from the background, signed by the front pane's side,
-    /// so the rule works the same way for a light theme as for a dark one,
-    /// and an entry on the far side of a mid-gray background never counts as
-    /// a step toward the front.
+    /// The icon's colors. The frames keep the bundled colors (`silverFrame`,
+    /// `darkRing`). The cross is palette 7 mixed `crossMix` toward palette 8.
+    /// The characters are a mesh gradient of the theme's ANSI colors
+    /// (`characterBase`, `characterMesh`). The screen is the theme's lid.
     ///
-    /// - The frame and the front pane are the gray that stands out most from
-    ///   the background: palette 15 in most dark themes, palette 0 in a light
-    ///   theme whose black is its text color. They share a group, and a
-    ///   group takes one color.
-    /// - The back pane is another gray, the one nearest 45% of that distance.
-    ///   It is nearly always palette 8. Palette 0 is often the background
-    ///   itself, and palette 7 is often as bright as palette 15. It must be at
-    ///   least `minimumStep` from the background and from the front pane.
-    /// - The middle pane is the color entry nearest the middle between the
-    ///   back and the front pane, at least `minimumStep` from each. If no
-    ///   entry clears both steps, the nearest entry on the front side of the
-    ///   back pane.
-    /// - The characters behind the panes take the back pane's color. The
-    ///   layer is faint, so the back pane's step from the background keeps
-    ///   them quiet in every theme.
-    /// - The background is flat: the theme background. The characters thin
-    ///   out toward the bottom, which is the icon's gradient.
+    /// The lid is the nearest gray (palette 15, 7, 8 or 0) that is at least
+    /// `lidMinimumStep` from the background toward the gray that stands out
+    /// most, mixed `lidMix` into the background. Distances are OKLab lightness
+    /// away from the background, signed by the side of the gray that stands
+    /// out most, so a light theme gets a lid darker than its background. That
+    /// gray is palette 0 in most dark themes. In Gruvbox, whose palette 0 is
+    /// the background, it is palette 8, and the mix comes near Gruvbox's own
+    /// `bg1`.
     ///
-    /// In eyesclosed, the theme the icon was drawn in, this picks palette 8,
-    /// 5 and 15 and the background #111214, which are the bundled icon's own
-    /// fills. Nil when the theme
-    /// has no such ramp: no gray differs from the background, no other gray
-    /// stands apart from both ends, or no color entry is between the back
-    /// and the front pane's side.
+    /// In eyesclosed, the theme the icon was drawn in, this picks `#9295A2`
+    /// for the cross and the lid for the screen, and eyesclosed's own ANSI
+    /// colors for the characters: the bundled icon's own fills. Nil when the
+    /// theme has no gray that differs from the background.
     static func paint(for theme: ThemeColors) -> Paint? {
         guard theme.palette.count >= 16 else { return nil }
         let background = lightness(theme.background)
         let offset = theme.palette.prefix(16).map { lightness($0) - background }
         guard let front = first(of: neutralEntries, by: { -abs(offset[$0]) }), abs(offset[front]) > 0.01 else { return nil }
         let share = offset.map { $0 / offset[front] }
-        guard let back = first(of: neutralEntries.filter { $0 != front }, by: { abs(share[$0] - 0.45) }),
-              share[back] >= minimumStep, share[back] <= 1 - minimumStep
-        else { return nil }
-        let target = (share[back] + 1) / 2
-        let clear = accentEntries.filter { share[$0] <= 1 - minimumStep && share[$0] >= share[back] + minimumStep }
-        let candidates = clear.isEmpty ? accentEntries.filter { share[$0] > share[back] } : clear
-        guard let middle = first(of: candidates, by: { abs(share[$0] - target) }) else { return nil }
+        // `front` itself qualifies, so a lid gray always exists.
+        let lidGray = first(of: neutralEntries.filter { share[$0] >= lidMinimumStep }, by: { share[$0] }) ?? front
+        let screen = mix(theme.palette[lidGray], into: theme.background, amount: lidMix)
         return Paint(
-            backgroundTop: theme.background,
-            backgroundBottom: theme.background,
-            layers: [theme.palette[back], theme.palette[back], theme.palette[middle], theme.palette[front]]
+            backgroundTop: screen,
+            backgroundBottom: screen,
+            // The glass pane is the screen's own color, so that only its
+            // glass shows.
+            layers: [theme.palette[characterBase], screen, darkRing, silverFrame],
+            accents: characterMesh.map { .init(group: charactersGroup, element: $0.element, color: theme.palette[$0.palette]) }
+                + [.init(group: crossGroup, element: crossElement, color: mix(theme.palette[7], into: theme.palette[8], amount: crossMix))]
         )
     }
 
@@ -108,6 +125,15 @@ enum AdaptiveIcon {
         let m = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
         let s = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
         return 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s
+    }
+
+    /// `amount` of `color` over `base`, per sRGB component.
+    static func mix(_ color: Color, into base: Color, amount: Double) -> Color {
+        Color(
+            red: base.red + (color.red - base.red) * amount,
+            green: base.green + (color.green - base.green) * amount,
+            blue: base.blue + (color.blue - base.blue) * amount
+        )
     }
 
     /// The global default that holds the system's icon style (System Settings
