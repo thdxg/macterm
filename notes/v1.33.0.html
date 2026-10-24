@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macterm 1.33.0 release notes</title>
+  <style>
+    body { font: 13px -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 16px; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: transparent; } a { color: #6cb4ff; } }
+    h1, h2, h3 { margin-top: 0.6em; margin-bottom: 0.3em; }
+    h1 { font-size: 1.3em; } h2 { font-size: 1.15em; } h3 { font-size: 1em; }
+    p, ul, ol { margin: 0.4em 0; }
+    ul, ol { padding-left: 1.4em; }
+    code { background: rgba(127, 127, 127, 0.15); padding: 0 4px; border-radius: 3px; font: 12px ui-monospace, monospace; }
+    pre { background: rgba(127, 127, 127, 0.12); padding: 8px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<h2>What's New</h2>
+<ul>
+<li>Copy mode lets you move through the scrollback and select text from the keyboard: press ⌘⇧Space in a pane, and a cursor moves with Vim or Helix keys (choose in Settings → Keymaps → Copy Mode), with counts, search, a click that moves the cursor and page motions that scroll smoothly. (#608, #611, #613, #614, #615, #618, #624)</li>
+<li>Explain Output asks Apple Intelligence on your Mac to explain a selection or the output of the last command in a popover, from the right-click menu, the command palette or ⌘⇧E, and nothing leaves the Mac. (#622)</li>
+<li>Read-Only Mode stops all input to a pane, shows a Read-Only pill on it, and makes <code class="notranslate">macterm pane run</code> and <code class="notranslate">pane key</code> report that the pane refused the input. (#612)</li>
+<li>Macterm is available in Korean and Simplified Chinese, and Settings → General → Language selects the app language. (#617, #619, #620)</li>
+<li>A new Liquid Glass app icon, and on macOS 26 and later the Dock icon takes the colors of your terminal theme (Settings → Appearance → App Icon). (#628, #634, #638, #640, #644, #651, #652)</li>
+<li>Files that open with Macterm by default now show a Macterm document icon in Finder. (#638, #645, #653)</li>
+<li>Settings is a command in the command palette, and you can change its ⌘, keybind in Keymaps. (#649)</li>
+<li>Each Ghostty config path in Settings → General is a link that opens the file in your editor. (#646)</li>
+<li>Settings → Keymaps folds each category, and extension keybinds have their own group. (#625)</li>
+<li>Each card in Settings → Extensions shows the screenshots of the extension before you install it. (#635)</li>
+</ul>
+<h2>Fixes</h2>
+<ul>
+<li>Ctrl+L at a prompt in a pane that is not full keeps the cleared screen in the scrollback again. (#610)</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>New defaults: the eyesclosed theme (#627), 12 pt window padding and the sidebar peek turned off (#641), and Snap to whole row turned on (#623). A setting that you changed keeps your value.</li>
+<li>The adaptive Dock icon and Explain Output need macOS 26 or later. Explain Output also needs a Mac that supports Apple Intelligence, with Apple Intelligence turned on.</li>
+</ul>
+<p>Thanks to <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/thdxg/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/thdxg">@thdxg</a> for this release.</p>
+</body>
+</html>
