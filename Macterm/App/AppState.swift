@@ -176,6 +176,10 @@ final class AppState {
 
     func restoreWindows(adopting first: WindowState) {
         defer {
+            // The adopted window is in `renderingWindows` from here on, and
+            // only a reconcile gives it a shadow when a registered window
+            // already shows its tab (`viewTab` builds none).
+            reconcileWindowViews()
             hasRestoredWindows = true
             runDeferredUntilRestored()
         }
@@ -417,8 +421,9 @@ final class AppState {
         // is both the useful default and what a single-window build did.
         if window.activeProjectID == nil { window.activeProjectID = activeProjectID }
         // Listed before the frame moves: `setFrame` lays the window out at
-        // once, and a window that renders its tab while it is not listed owns
-        // nothing and builds a shadow of mirror panes (see `windowsSelecting`).
+        // once, and a window that renders its tab while it is not listed is
+        // not in `renderingWindows`, so it owns nothing, has no shadow and
+        // draws nothing until the reconcile below runs.
         windows.append(window)
         // A restored window, or the scene's own window when `restoreWindows`
         // handed it the first saved entry before it attached.
@@ -577,14 +582,35 @@ final class AppState {
     /// is sized for the leader). Ownership is sticky (`tabOwners`), so
     /// switching key windows never swaps which window has the real panes.
     ///
-    /// Safe from a view body: the only write is to the unobserved
-    /// `shadowTabs`.
+    /// **A pure read. It never allocates.** The shadow comes from
+    /// `reconcileWindowViews`, which builds it for every window in
+    /// `renderingWindows` inside the mutation that needs it, before SwiftUI
+    /// evaluates a body. A window that is not in that set — one that closed
+    /// but whose view lives on, one that has not registered yet — has no
+    /// shadow and renders nothing. Before this, the shadow was built HERE, as
+    /// a side effect of rendering: a view body, the CLI (`window list`) or a
+    /// leadership read gave any window that asked a fresh tab of mirror
+    /// panes, each one a zmx client that no reconcile dropped. Every stray
+    /// client that we found (#353, #359, #366, #557, #657) came from one
+    /// more caller that nobody had guarded.
+    ///
+    /// Reads the real tab's `shapeSignature` so that a body which renders a
+    /// mirror re-evaluates when the real tab changes shape: the shadow is
+    /// then a new `TerminalTab`, and `shadowTabs` is unobserved.
     func viewTab(for projectID: UUID, in window: WindowState) -> WindowTabView? {
         guard let selected = selectedTab(for: projectID, in: window) else { return nil }
         if ownerWindow(of: selected, in: projectID)?.id == window.id {
             return WindowTabView(tab: selected, mirrorOf: nil)
         }
-        return WindowTabView(tab: shadow(of: selected, for: window), mirrorOf: selected)
+        guard let shadow = window.shadowTabs[selected.id] else { return nil }
+        if shadow.mirrorShape != selected.splitRoot.shapeSignature {
+            // A mutation changed the tab's shape without a reconcile. The
+            // stale shadow still renders; the next reconcile rebuilds it.
+            logger.error(
+                "viewTab: stale shadow of \(selected.id, privacy: .public) in window \(window.id, privacy: .public)"
+            )
+        }
+        return WindowTabView(tab: shadow, mirrorOf: selected)
     }
 
     /// Which window renders the real panes of each tab, by tab id. Written by
@@ -593,20 +619,30 @@ final class AppState {
     /// stored answers always agree.
     private var tabOwners: [UUID: WindowState.ID] = [:]
 
-    /// The windows that show `tab`, in creation order. The scene's own window
-    /// counts from the moment `restoreWindows` adopts it, not only once it
-    /// registers. The launch task can give that window its project before
-    /// the window attaches, and it renders its tab in that gap. Left out, it
-    /// owned nothing and rendered a shadow: each pane built a mirror surface
-    /// and a second zmx client, and registration then threw both away and
-    /// built the real pane again. It comes last, so a registered window that
-    /// already shows the tab keeps it.
-    private func windowsSelecting(_ tab: TerminalTab, in projectID: UUID) -> [WindowState] {
+    /// The windows that render tabs, in creation order: the ones that can own
+    /// a tab, and the ONLY ones that get a shadow. One set for both, so that a
+    /// window can never be given a shadow by a rule that does not also let it
+    /// own the tab.
+    ///
+    /// The registered windows, plus the scene's own window from the moment
+    /// `restoreWindows` adopts it, not only once it registers. The launch
+    /// task can give that window its project before the window attaches, and
+    /// it renders its tab in that gap. Left out, it owned nothing and got a
+    /// shadow: each pane built a mirror surface and a second zmx client, and
+    /// registration then threw both away and built the real pane again. It
+    /// comes last, so a registered window that already shows the tab keeps
+    /// it.
+    private var renderingWindows: [WindowState] {
         var candidates = windows
         if let adopted = windowAdoptedBeforeRegistration, !candidates.contains(where: { $0.id == adopted.id }) {
             candidates.append(adopted)
         }
-        return candidates.filter { $0.activeProjectID == projectID && selectedTab(for: projectID, in: $0)?.id == tab.id }
+        return candidates
+    }
+
+    /// The windows that show `tab`, in creation order.
+    private func windowsSelecting(_ tab: TerminalTab, in projectID: UUID) -> [WindowState] {
+        renderingWindows.filter { $0.activeProjectID == projectID && selectedTab(for: projectID, in: $0)?.id == tab.id }
     }
 
     private func ownerWindow(of tab: TerminalTab, in projectID: UUID) -> WindowState? {
@@ -617,10 +653,19 @@ final class AppState {
         return selecting.first
     }
 
-    /// Settle ownership for every selected tab and drop the shadows nobody
-    /// renders any more. Called wherever a window's selection or project can
-    /// change; cheap (windows × tabs), so also from `saveWorkspaces`, which
-    /// follows every structural mutation.
+    /// Settle ownership for every selected tab, build or refresh the shadow of
+    /// every window that selects a tab it does not own, and drop the shadows
+    /// nobody renders any more.
+    ///
+    /// This is the ONE place that makes a shadow. It runs inside the mutation
+    /// that changes what a window shows — a window registers, closes or
+    /// becomes key, selects a project or a tab, or a tab changes shape
+    /// (`saveWorkspaces` follows every structural mutation) — so a body that
+    /// SwiftUI evaluates after the mutation finds its shadow in `shadowTabs`
+    /// and `viewTab` has nothing to build. Cheap (windows × tabs) and
+    /// idempotent: a shadow whose `mirrorShape` still matches is kept as it
+    /// is. Only `renderingWindows` take part, so a window outside that set
+    /// gets nothing, however often its view renders.
     private func reconcileWindowViews() {
         // Pin every window's selection. A window with no record of its own for
         // its project falls back to `ws.activeTab` — the KEY window's tab — so
@@ -628,7 +673,8 @@ final class AppState {
         // was rebuilt each time (new pane ids, surfaces torn down and made
         // again) and every leadership record for the old mirrors went stale.
         // A window that has landed on a tab keeps it until it selects another.
-        for window in windows {
+        let rendering = renderingWindows
+        for window in rendering {
             guard let projectID = window.activeProjectID, projectID != PinnedTabs.projectID,
                   let ws = workspaces[projectID]
             else { continue }
@@ -638,7 +684,7 @@ final class AppState {
             }
         }
         var owners: [UUID: WindowState.ID] = [:]
-        for window in windows {
+        for window in rendering {
             guard let projectID = window.activeProjectID,
                   let tab = selectedTab(for: projectID, in: window)
             else { continue }
@@ -647,22 +693,24 @@ final class AppState {
             }
         }
         tabOwners = owners
-        for window in windows {
+        for window in rendering {
             var keep: UUID?
             if let projectID = window.activeProjectID,
                let tab = selectedTab(for: projectID, in: window),
                owners[tab.id] != window.id
             {
                 keep = tab.id
+                refreshShadow(of: tab, for: window)
             }
             dropShadows(of: window, except: keep)
         }
     }
 
-    /// The shadow of `tab` for `window`, rebuilt when the real tab's shape
-    /// changed (a split, a closed or moved pane). Ratios are copied at build
-    /// time and are the shadow's own afterwards — the two windows differ in
-    /// size anyway.
+    /// Build the shadow of `tab` for `window`, or rebuild it when the real
+    /// tab's shape changed (a split, a closed or moved pane). A shadow whose
+    /// shape still matches is left as it is. Ratios are copied at build time
+    /// and are the shadow's own afterwards — the two windows differ in size
+    /// anyway. Called only from `reconcileWindowViews`.
     ///
     /// A rebuild keeps the shadow's id and every mirror whose session is still
     /// in the tab, and makes new mirrors only for new sessions. The animated
@@ -671,10 +719,10 @@ final class AppState {
     /// the panes that stayed keep their surfaces and leadership instead of
     /// being torn down and attached again. Only the mirrors whose session
     /// left are retired, after taking their closing ghost.
-    private func shadow(of tab: TerminalTab, for window: WindowState) -> TerminalTab {
+    private func refreshShadow(of tab: TerminalTab, for window: WindowState) {
         let shape = tab.splitRoot.shapeSignature
         let existing = window.shadowTabs[tab.id]
-        if let existing, existing.mirrorShape == shape { return existing }
+        if let existing, existing.mirrorShape == shape { return }
         // By session, in tree order: a tab can hold two panes on one session
         // (`pane mirror`), and each needs a mirror of its own.
         var reusable: [String: [Pane]] = [:]
@@ -697,12 +745,14 @@ final class AppState {
         )
         built.mirrorShape = shape
         window.shadowTabs[tab.id] = built
+        logger.debug(
+            "refreshShadow: tab \(tab.id, privacy: .public) in window \(window.id, privacy: .public) shape=\(shape, privacy: .public)"
+        )
         let departed = reusable.values.flatMap(\.self)
         for pane in departed {
             pane.captureClosingSnapshot()
         }
         retireMirrors(departed)
-        return built
     }
 
     private func dropShadows(of window: WindowState, except keep: UUID?) {
@@ -713,8 +763,10 @@ final class AppState {
     }
 
     /// Detach a shadow's mirrors. `destroySurface` ends the pane's zmx CLIENT
-    /// only — a mirror never owns its session. Deferred because this can run
-    /// from a view body (`viewTab` rebuilding a shadow mid-render).
+    /// only — a mirror never owns its session. Deferred: the reconcile runs
+    /// inside every structural mutation, some of them from a SwiftUI action
+    /// while the mirror's view is still in a hierarchy, and the teardown must
+    /// not happen in that transaction.
     private func retireMirrors(_ panes: [Pane]) {
         guard !panes.isEmpty else { return }
         // Their leadership records die with them. Left in place they point at
@@ -788,15 +840,21 @@ final class AppState {
     /// own recorded choice wins when it still exists; a window with no record
     /// adopts the workspace's current tab. Either way the two agree afterwards,
     /// so keyboard actions land in the tab on screen in the key window.
+    ///
+    /// The reconcile and the claim run on EVERY key change, also for a key
+    /// window on the pinned workspace, which has no selection of its own to
+    /// align: the window may have adopted a project a moment ago, and its
+    /// shadow comes from no other place.
     private func alignKeyWindowTab() {
-        guard let key = keyWindow, let projectID = key.activeProjectID,
-              projectID != PinnedTabs.projectID,
-              let ws = workspaces[projectID]
-        else { return }
-        if let chosen = key.activeTabIDs[projectID], ws.tabs.contains(where: { $0.id == chosen }) {
-            if ws.activeTabID != chosen { ws.peekTab(chosen) }
-        } else if let current = ws.activeTabID {
-            key.activeTabIDs[projectID] = current
+        if let key = keyWindow, let projectID = key.activeProjectID,
+           projectID != PinnedTabs.projectID,
+           let ws = workspaces[projectID]
+        {
+            if let chosen = key.activeTabIDs[projectID], ws.tabs.contains(where: { $0.id == chosen }) {
+                if ws.activeTabID != chosen { ws.peekTab(chosen) }
+            } else if let current = ws.activeTabID {
+                key.activeTabIDs[projectID] = current
+            }
         }
         reconcileWindowViews()
         claimLeadershipForKeyWindow()
@@ -848,19 +906,32 @@ final class AppState {
     /// the key window's tab its session should already be led from that tab —
     /// the claim that ran when the window became key was refused for lack of
     /// a size.
+    ///
+    /// **A pane in the key window's tab claims even when the model counts one
+    /// client.** `isMirrored` counts the clients that Macterm knows of. A
+    /// client that it does not know of — a mirror that a since-closed window
+    /// built and nobody dropped, a `zmx attach` from another terminal —
+    /// attaches first and leads, and zmx then drops ⌃D, ⌃C and every other
+    /// control key of the visible pane (`isUserInput`). Gated on the count,
+    /// nobody claimed. The claim is a no-op in zmx for a client that already
+    /// leads, so for the common case of one real client it costs one write
+    /// at the moment the surface comes up, when there is no selection to
+    /// clear and no scroll to lose. Never for a remote pane: see
+    /// `claimSessionLeadership`.
     func surfaceDidGetSize(paneID: UUID) {
         guard let key = keyWindow, let projectID = key.activeProjectID,
               let view = viewTab(for: projectID, in: key)
         else { return }
-        // A surface coming up ELSEWHERE matters too: its zmx client has just
-        // attached, and the daemon makes a new client leader whenever the
-        // session had none — the state a rebuilt mirror leaves behind, its
-        // old client having detached as the leader. So the key window
-        // re-asserts: the session's record is dropped and its pane claims.
-        if view.tab.splitRoot.findPane(id: paneID) == nil,
-           let elsewhere = allAttachedPanes().first(where: { $0.id == paneID }),
-           isMirrored(elsewhere)
+        if let sized = view.tab.splitRoot.findPane(id: paneID) {
+            if !isMirrored(sized) { assertSessionLeadership(sized) }
+        } else if let elsewhere = allAttachedPanes().first(where: { $0.id == paneID }),
+                  isMirrored(elsewhere)
         {
+            // A surface coming up ELSEWHERE matters too: its zmx client has
+            // just attached, and the daemon makes a new client leader whenever
+            // the session had none — the state a rebuilt mirror leaves behind,
+            // its old client having detached as the leader. So the key window
+            // re-asserts: the session's record is dropped and its pane claims.
             sessionLeaders.removeValue(forKey: elsewhere.sessionName)
         }
         claimLeadership(forPanesIn: view.tab)
@@ -1814,6 +1885,10 @@ final class AppState {
             recordProjectVisit(project.id)
             ensureWorkspace(projectID: project.id, path: project.path)
             stampRemoteZmxPath(project)
+            // The window now selects a tab of this project, which another
+            // window may own: its shadow comes from the reconcile, not from
+            // rendering.
+            reconcileWindowViews()
         }
     }
 
@@ -2020,14 +2095,19 @@ final class AppState {
             .flatMap { $0.splitRoot.allPanes() }
     }
 
-    /// Every pane with a zmx client on a session: the workspace panes plus
-    /// every window's mirror views (#345). The set leadership is judged over —
-    /// a mirror view's pane is a real client that can lead — but NOT the set
-    /// that retains a session: a shadow lives only as long as the tab it
-    /// mirrors. Real panes come first, so an unrecorded leader is inferred as
-    /// a real pane.
+    /// Every pane with a zmx client that Macterm knows of: the workspace panes
+    /// plus the mirror views of every registered window (#345). The set
+    /// leadership is judged over — a mirror view's pane is a real client that
+    /// can lead — but NOT the set that retains a session: a shadow lives only
+    /// as long as the tab it mirrors. Real panes come first, so an unrecorded
+    /// leader is inferred as a real pane.
+    ///
+    /// Walks `renderingWindows`, which hold every shadow there is: only
+    /// `reconcileWindowViews` builds one, and only for them. Still a count of
+    /// what the model knows, never of what zmx has: a client from outside the
+    /// model is exactly what `surfaceDidGetSize` claims against.
     private func allAttachedPanes() -> [Pane] {
-        allLivePanes() + windows.flatMap { window in
+        allLivePanes() + renderingWindows.flatMap { window in
             window.shadowTabs.values.flatMap { $0.splitRoot.allPanes() }
         }
     }
@@ -2217,6 +2297,20 @@ final class AppState {
     func claimSessionLeadership(_ pane: Pane) {
         guard isMirrored(pane), !pane.isRemote else { return }
         guard sessionLeaders[pane.sessionName] != pane.id else { return }
+        sendAndRecordClaim(pane)
+    }
+
+    /// Claim for `pane` without a look at the model: not gated on
+    /// `isMirrored`, and not on the record either. The record is Macterm's
+    /// count of clients, and this is the path for the case where that count
+    /// is wrong (`surfaceDidGetSize`). Remote panes are excluded for the
+    /// reasons in `claimSessionLeadership`.
+    private func assertSessionLeadership(_ pane: Pane) {
+        guard !pane.isRemote else { return }
+        sendAndRecordClaim(pane)
+    }
+
+    private func sendAndRecordClaim(_ pane: Pane) {
         let delivered = sendClaim(pane)
         logger.debug(
             "claim \(pane.sessionName, privacy: .public) by \(pane.id, privacy: .public) delivered=\(delivered, privacy: .public)"

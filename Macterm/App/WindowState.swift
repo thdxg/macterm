@@ -66,9 +66,11 @@ final class WindowState: Identifiable {
     /// the real tab's id (#345). A pane's NSView lives in one window, so when
     /// two windows select one tab the second gets a tab of mirror panes in the
     /// same shape — the same sessions, attached a second time — built and
-    /// rebuilt by `AppState.shadow(of:for:)` as the real tab changes shape.
-    /// Unobserved on purpose: it is written while rendering, and the real
-    /// tab's structure (which IS observed) is what drives re-evaluation.
+    /// rebuilt by `AppState.reconcileWindowViews` as the real tab changes
+    /// shape. Only that reconcile writes it, inside the mutation, before
+    /// SwiftUI evaluates a body; `AppState.viewTab(for:in:)` only reads it.
+    /// Unobserved on purpose: the real tab's structure (which IS observed)
+    /// is what drives re-evaluation.
     @ObservationIgnored
     var shadowTabs: [UUID: TerminalTab] = [:]
 

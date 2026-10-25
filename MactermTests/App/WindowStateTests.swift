@@ -429,9 +429,11 @@ struct WindowStateTests {
         let newSession = try #require(real.splitRoot.findPane(id: added)).sessionName
         #expect(panes[1].sessionName == newSession)
 
-        // Closing the original pane keeps the new pane's mirror.
+        // Closing the original pane keeps the new pane's mirror. Through
+        // `AppState`, as every mutation is: the reconcile that rebuilds the
+        // shadow runs there, never on a read.
         let newMirror = panes[1]
-        real.removePane(source.id)
+        state.closePane(source.id, projectID: project.id)
         let closed = try #require(state.viewTab(for: project.id, in: b)).tab
         #expect(closed.id == before.id)
         #expect(closed.splitRoot.allPanes().map(\.id) == [newMirror.id])
@@ -479,6 +481,126 @@ struct WindowStateTests {
 
         #expect(b.shadowTabs.isEmpty)
         #expect(state.viewTab(for: project.id, in: b)?.isMirror == false)
+    }
+
+    // MARK: - Shadows come from the reconcile, never from a render
+
+    /// A window outside `renderingWindows` gets no shadow, however often its
+    /// view renders and however the tab changes shape: a closed window whose
+    /// SwiftUI view lives on, or a window that has not registered yet. Each
+    /// shadow is a zmx client. Before, `viewTab` built one for any caller,
+    /// the closed window's client led each new session, and zmx dropped ⌃D
+    /// in the visible pane until a Return (#657).
+    @Test
+    func a_window_that_is_not_registered_never_gets_a_shadow() throws {
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let real = try #require(ws.activeTab)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        #expect(state.viewTab(for: project.id, in: b)?.isMirror == true)
+        state.unregisterWindow(b)
+        #expect(b.shadowTabs.isEmpty)
+        let opening = WindowState(activeProjectID: project.id)
+
+        for _ in 0 ..< 3 {
+            let source = try #require(real.splitRoot.allPanes().last)
+            _ = try #require(state.splitPane(
+                source.id, direction: .horizontal, projectID: project.id, projectDirectory: "/tmp"
+            ))
+            for window in [b, opening] {
+                _ = state.viewTab(for: project.id, in: window)
+                _ = state.viewTab(for: project.id, in: window)
+            }
+        }
+
+        #expect(state.viewTab(for: project.id, in: b) == nil)
+        #expect(b.shadowTabs.isEmpty)
+        #expect(state.viewTab(for: project.id, in: opening) == nil)
+        #expect(opening.shadowTabs.isEmpty)
+        #expect(state.viewTab(for: project.id, in: a)?.isMirror == false)
+        for pane in real.splitRoot.allPanes() {
+            #expect(!state.isMirrored(pane), "one client per session: the owner's")
+        }
+
+        // Registration is the one way in, and the reconcile there builds the
+        // shadow at once.
+        state.registerWindow(opening)
+        #expect(opening.shadowTabs[real.id] != nil)
+        #expect(state.viewTab(for: project.id, in: opening)?.isMirror == true)
+    }
+
+    /// The reconcile at registration builds the shadow. `viewTab` reads it:
+    /// two reads return the same tab, and nothing is built on a read.
+    @Test
+    func a_registered_window_gets_its_shadow_from_the_reconcile_and_viewtab_reads_it() throws {
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let real = try #require(ws.activeTab)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+
+        let built = try #require(b.shadowTabs[real.id], "built at registration, before any read")
+        #expect(built.mirrorShape == real.splitRoot.shapeSignature)
+        let first = try #require(state.viewTab(for: project.id, in: b))
+        let second = try #require(state.viewTab(for: project.id, in: b))
+        #expect(first.isMirror)
+        #expect(first.tab === built)
+        #expect(second.tab === built)
+        #expect(b.shadowTabs.count == 1)
+    }
+
+    /// A split in the owner's tab rebuilds the other window's shadow inside
+    /// the mutation, so the shadow has the new shape before any body renders.
+    @Test
+    func a_split_in_the_owners_tab_rebuilds_the_shadow_before_any_read() throws {
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let real = try #require(ws.activeTab)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        let before = try #require(b.shadowTabs[real.id])
+
+        let source = try #require(real.splitRoot.allPanes().first)
+        _ = try #require(state.splitPane(
+            source.id, direction: .vertical, projectID: project.id, projectDirectory: "/tmp"
+        ))
+
+        let after = try #require(b.shadowTabs[real.id])
+        #expect(after !== before)
+        #expect(after.mirrorShape == real.splitRoot.shapeSignature)
+        #expect(after.splitRoot.allPanes().count == 2)
+        #expect(state.viewTab(for: project.id, in: b)?.tab === after)
+    }
+
+    /// A background window that selects a project renders a tab another
+    /// window may own. The selection builds its shadow; no read does.
+    @Test
+    func a_background_window_selecting_a_project_gets_its_shadow_at_once() throws {
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let real = try #require(ws.activeTab)
+        let other = Project(name: "q", path: "/tmp", sortOrder: 1)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: other.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        #expect(b.shadowTabs.isEmpty)
+
+        state.selectProject(project, in: b)
+
+        #expect(b.shadowTabs[real.id] != nil)
+        #expect(state.viewTab(for: project.id, in: b)?.isMirror == true)
     }
 
     @Test
@@ -702,11 +824,13 @@ struct WindowStateTests {
 
         let before = try #require(state.viewTab(for: project.id, in: first))
         #expect(!before.isMirror)
+        #expect(first.shadowTabs.isEmpty, "the adopted window owns its tab, so no reconcile builds it a shadow")
 
         state.registerWindow(first)
         let after = try #require(state.viewTab(for: project.id, in: first))
         #expect(!after.isMirror)
         #expect(after.tab === before.tab, "registration keeps the panes the window already renders")
+        #expect(first.shadowTabs.isEmpty)
     }
 
     @Test
@@ -718,6 +842,7 @@ struct WindowStateTests {
         state.restoreWindows(adopting: first)
 
         #expect(state.viewTab(for: project.id, in: registered)?.isMirror == false)
+        #expect(first.shadowTabs.count == 1, "the restore's reconcile built the adopted window's shadow")
         #expect(state.viewTab(for: project.id, in: first)?.isMirror == true)
     }
 
@@ -947,7 +1072,7 @@ struct WindowStateTests {
         _ = try #require(state.splitPane(
             source.id, direction: .horizontal, projectID: project.id, projectDirectory: "/tmp"
         ))
-        _ = state.viewTab(for: project.id, in: b) // rebuilds the mirror, retiring the old one
+        // The split's reconcile rebuilt the mirror and retired the old one.
         claimed = []
 
         state.noteKeyWindow(a)
@@ -1013,6 +1138,78 @@ struct WindowStateTests {
 
         #expect(claimed == [mirrorPane.id])
         #expect(state.isLeader(mirrorPane))
+    }
+
+    /// The model counts one client, so `isMirrored` is false and the gated
+    /// claim never sent. A client the model does not know of could lead,
+    /// and zmx then drops the visible pane's control keys. The pane in the
+    /// key window's tab claims on its first size whatever the count says.
+    @Test
+    func the_key_windows_pane_claims_on_first_size_with_one_known_client() throws {
+        let state = makeAppState()
+        var claimed: [UUID] = []
+        state.sendClaim = { claimed.append($0.id)
+            return true
+        }
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let realPane = try #require(ws.activeTab?.splitRoot.allPanes().first)
+        let a = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.noteKeyWindow(a)
+        #expect(!state.isMirrored(realPane))
+        #expect(claimed.isEmpty, "becoming key claims nothing for a sole client")
+
+        state.surfaceDidGetSize(paneID: realPane.id)
+
+        #expect(claimed == [realPane.id])
+        #expect(state.isLeader(realPane))
+    }
+
+    /// A pane that comes up in a window that is NOT key claims nothing on
+    /// its own: leadership follows the key window's tab.
+    @Test
+    func a_sole_pane_in_a_background_window_does_not_claim_on_first_size() throws {
+        let state = makeAppState()
+        var claimed: [UUID] = []
+        state.sendClaim = { claimed.append($0.id)
+            return true
+        }
+        let (project, ws) = try seedProject(state, tabs: 2)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        state.selectTab(ws.tabs[1].id, projectID: project.id, in: b)
+        let background = try #require(ws.tabs[1].splitRoot.allPanes().first)
+        claimed = []
+
+        state.surfaceDidGetSize(paneID: background.id)
+
+        #expect(claimed.isEmpty)
+    }
+
+    /// A remote pane's zmx lives on the host and may predate the Claim tag,
+    /// so the unconditional claim never goes to it either.
+    @Test
+    func a_remote_pane_never_claims_on_first_size() throws {
+        let state = makeAppState()
+        var claimed: [UUID] = []
+        state.sendClaim = { claimed.append($0.id)
+            return true
+        }
+        let project = Project(name: "r", path: "me@host:/srv/app", sortOrder: 0)
+        state.restoreSelection(projects: [project])
+        state.selectProject(project)
+        let realPane = try #require(state.workspaces[project.id]?.activeTab?.splitRoot.allPanes().first)
+        #expect(realPane.isRemote)
+        let a = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.noteKeyWindow(a)
+
+        state.surfaceDidGetSize(paneID: realPane.id)
+
+        #expect(claimed.isEmpty)
     }
 
     @Test
