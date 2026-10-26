@@ -1876,12 +1876,16 @@ final class AppState {
     /// reconnecting remote panes — because those follow the project the user
     /// is now in, whichever window that is.
     func selectProject(_ project: Project, in window: WindowState?) {
-        window?.activeProjectID = project.id
         // Only the key window moves the app-wide mirror; a selection made in a
         // background window must not repoint polling at it.
         if window == nil || keyWindowID == window?.id {
+            // The didSet of `activeProjectID` moves the key window to the
+            // project, aligns its tab and reconciles. A key window that already
+            // showed the project would skip all three, and get no shadow of a
+            // tab that another window owns.
             selectProject(project)
         } else {
+            window?.activeProjectID = project.id
             recordProjectVisit(project.id)
             ensureWorkspace(projectID: project.id, path: project.path)
             stampRemoteZmxPath(project)

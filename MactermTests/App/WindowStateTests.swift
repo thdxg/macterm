@@ -603,6 +603,28 @@ struct WindowStateTests {
         #expect(state.viewTab(for: project.id, in: b)?.isMirror == true)
     }
 
+    /// The key window that selects a project renders a tab that another
+    /// window may own. The selection builds its shadow, as for a background
+    /// window.
+    @Test
+    func the_key_window_selecting_a_project_that_another_window_shows_gets_its_shadow_at_once() throws {
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let real = try #require(ws.activeTab)
+        let other = Project(name: "q", path: "/tmp", sortOrder: 1)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: other.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(b)
+        #expect(b.shadowTabs.isEmpty)
+
+        state.selectProject(project, in: b)
+
+        #expect(b.shadowTabs[real.id] != nil)
+        #expect(state.viewTab(for: project.id, in: b)?.isMirror == true)
+    }
+
     @Test
     func mirror_view_panes_take_part_in_leadership() throws {
         // The mirror's pane is a real zmx client: focusing it claims the pty
