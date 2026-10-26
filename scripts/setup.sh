@@ -77,7 +77,7 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # build-2026-10-21-f4d117c: + downstream patch 0018 (thdxg/ghostty#38): a
 # page motion of copy mode eases the viewport under smooth-scroll, as a
 # region scroll of Helix does. No C API change.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-21-f4d117c}"
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-25-64461d0}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit
