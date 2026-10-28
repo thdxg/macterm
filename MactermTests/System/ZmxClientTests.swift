@@ -162,9 +162,10 @@ struct ZmxListingGateTests {
     @Test
     func theGateOpensAgainAfterEachListing() async {
         let gate = ZmxListingGate()
-        let first = await gate.run { 1 }
-        let second = await gate.run { 2 }
-        #expect([first, second] == [1, 2])
+        let first: Int = await gate.run { 1 }
+        let second: Int = await gate.run { 2 }
+        #expect(first == 1)
+        #expect(second == 2)
     }
 }
 
