@@ -4554,28 +4554,6 @@
         }
       }
     },
-    "Macterm is the default app of %lld of %lld text file types. It opens them in the editor that $VISUAL or $EDITOR names in your shell." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Macterm is the default app of %1$lld of %2$lld text file types. It opens them in the editor that $VISUAL or $EDITOR names in your shell."
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm은 텍스트 파일 유형 %2$lld개 중 %1$lld개의 기본 앱입니다. Macterm은 셸의 $VISUAL 또는 $EDITOR가 지정하는 편집기에서 파일을 엽니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm 是 %2$lld 种文本文件类型中 %1$lld 种的默认 App。Macterm 会在 shell 中 $VISUAL 或 $EDITOR 指定的编辑器中打开它们。"
-          }
-        }
-      }
-    },
     "Macterm loads the files from top to bottom. A later file overrides an earlier file." : {
       "localizations" : {
         "ko" : {
@@ -8369,6 +8347,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将 Macterm 设为默认 App…"
+          }
+        }
+      }
+    },
+    "Set Macterm as the default app for text files. It opens them in the editor that $VISUAL or $EDITOR names in your shell." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm을 텍스트 파일의 기본 앱으로 설정합니다. Macterm은 셸의 $VISUAL 또는 $EDITOR가 지정하는 편집기에서 파일을 엽니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将 Macterm 设为文本文件的默认 App。Macterm 会在 shell 中 $VISUAL 或 $EDITOR 指定的编辑器中打开它们。"
           }
         }
       }

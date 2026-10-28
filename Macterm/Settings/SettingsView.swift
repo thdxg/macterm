@@ -770,16 +770,15 @@ private struct GeneralSettings: View {
     }
 
     private var textFileDefaultsCaption: String {
-        let notOpenedHere = textFileTypesNotOpenedHere.count
-        if notOpenedHere == 0 {
+        if textFileTypesNotOpenedHere.isEmpty {
             return String(localized: """
             Finder opens text files with Macterm. Macterm opens them in the editor that \
             $VISUAL or $EDITOR names in your shell.
             """)
         }
         return String(localized: """
-        Macterm is the default app of \(textFileTypes.count - notOpenedHere) of \(textFileTypes.count) \
-        text file types. It opens them in the editor that $VISUAL or $EDITOR names in your shell.
+        Set Macterm as the default app for text files. It opens them in the editor that \
+        $VISUAL or $EDITOR names in your shell.
         """)
     }
 
