@@ -675,8 +675,11 @@ private struct GeneralSettings: View {
                     Preferences.shared.textFilePlacement = v
                 }
                 if !textFileTypesNotOpenedHere.isEmpty {
-                    Button("Set Macterm as Default App…") { isConfirmingTextFileDefaults = true }
-                        .disabled(isSettingTextFileDefaults)
+                    HStack {
+                        Spacer()
+                        Button("Set Macterm as Default App…") { isConfirmingTextFileDefaults = true }
+                            .disabled(isSettingTextFileDefaults)
+                    }
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(textFileDefaultsCaption)
