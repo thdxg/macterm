@@ -108,7 +108,7 @@ The mode also stops password autofill. `macterm pane run` and `macterm pane key`
 
 Macterm can open text files in a terminal editor such as Helix or Neovim. macOS cannot make such an editor a default app on its own.
 
-1. In Finder, select a file and choose **File → Get Info**. Under **Open with**, select **Macterm**. Click **Change All**. Do this for each file type that you want. If Macterm is not in the list, it does not register for that file type. For a single file, use **Open With → Other…**.
+1. Go to **Settings → General → Opening Text Files**. Next to **Default app**, click **Make Default…**, then click **Make Default**. Macterm becomes the default app for each text file type that it knows: plain text, Markdown, JSON, YAML, scripts and source code. It does not take HTML, RTF or SVG files. macOS types `.ts` files as video, so Macterm does not take them either. To change one file type, select a file in Finder and choose **File → Get Info**. Under **Open with**, select an app and click **Change All**. For a single file, use **Open With → Other…**.
 2. Set `$EDITOR` in your shell config. Set `$VISUAL` if you want it to win over `$EDITOR`. For example, `$env.EDITOR = "hx"` in nu or `export EDITOR=nvim` in zsh. If you set neither, files open in `vi`.
 3. In **Settings → General → Opening Text Files**, choose **Open in**: **New split** (next to the current pane, along its longer side) or **New tab**.
 
