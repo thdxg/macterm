@@ -9179,22 +9179,6 @@
         }
       }
     },
-    "Text file types" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "텍스트 파일 유형"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文本文件类型"
-          }
-        }
-      }
-    },
     "That is not a folder on the disk." : {
       "localizations" : {
         "ko" : {
