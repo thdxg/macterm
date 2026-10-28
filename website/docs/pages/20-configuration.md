@@ -108,7 +108,7 @@ The mode also stops password autofill. `macterm pane run` and `macterm pane key`
 
 Macterm can open text files in a terminal editor such as Helix or Neovim. macOS cannot make such an editor a default app on its own.
 
-1. Go to **Settings → General → Opening Text Files**. Next to **Default app**, click **Make Default…**, then click **Make Default**. Macterm becomes the default app for each text file type that it knows: plain text, Markdown, JSON, YAML, scripts and source code. See [File types that Make Default changes](/docs/configuration#file-types-that-make-default-changes). It does not take HTML, RTF or SVG files. To change one file type, select a file in Finder and choose **File → Get Info**. Under **Open with**, select an app and click **Change All**. For a single file, use **Open With → Other…**.
+1. Go to **Settings → General → Opening Text Files**. Click **Set Macterm as Default App…**, then click **Set as Default**. Macterm becomes the default app for each text file type that it knows: plain text, Markdown, JSON, YAML, scripts and source code. See [Text file types](/docs/configuration#text-file-types). It does not take HTML, RTF or SVG files. To change one file type, select a file in Finder and choose **File → Get Info**. Under **Open with**, select an app and click **Change All**. For a single file, use **Open With → Other…**.
 2. Set `$EDITOR` in your shell config. Set `$VISUAL` if you want it to win over `$EDITOR`. For example, `$env.EDITOR = "hx"` in nu or `export EDITOR=nvim` in zsh. If you set neither, files open in `vi`.
 3. In **Settings → General → Opening Text Files**, choose **Open in**: **New split** (next to the current pane, along its longer side) or **New tab**.
 
@@ -120,9 +120,9 @@ You can double-click such a file, open it with **Open With → Macterm**, or run
 
 When you quit the editor, its split or tab closes. Paths that a [remote project](/docs/remote-projects) prints do not open in the editor, because the file is on the host.
 
-### File types that Make Default changes
+### Text file types
 
-**Make Default…** makes Macterm the default app for the files with these extensions. macOS keeps a default app for each file type, so Macterm sets each type in the list. Some extensions share one type, for example `.yaml` and `.yml`.
+**Set Macterm as Default App…** makes Macterm the default app for the files with these extensions. macOS keeps a default app for each file type, so Macterm sets each type in the list. Some extensions share one type, for example `.yaml` and `.yml`.
 
 | Group | Extensions |
 | --- | --- |

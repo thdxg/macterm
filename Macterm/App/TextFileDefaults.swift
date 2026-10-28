@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 private let logger = Logger(subsystem: appBundleID, category: "TextFileDefaults")
 
-/// Settings → General → Opening Text Files → Make Default: Finder's
+/// Settings → General → Opening Text Files → Set Macterm as Default App: Finder's
 /// Get Info → Change All, for every text file type at once.
 ///
 /// Launch Services keeps the default app for each content type on its own. A

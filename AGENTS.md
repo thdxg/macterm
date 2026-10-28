@@ -470,13 +470,13 @@ Unlike Ghostty, Macterm does not declare scripts and executables. A script that 
 
 **Text files (Settings → General → Opening Text Files)** open in the terminal editor of the user (`AppState+TextFiles.swift`).
 
-**Make Default… sets Macterm as the default app of every text file type in one click** (`TextFileDefaults`, Settings → General → Opening Text Files). It is Get Info → Change All, for each type.
+**Set Macterm as Default App… sets Macterm as the default app of every text file type in one click** (`TextFileDefaults`, Settings → General → Opening Text Files). It is Get Info → Change All, for each type.
 
 - Launch Services keeps a default for each content type. A default for `public.text` does not reach `public.python-script`, so the button sets each concrete type.
 - A type is in the list because an extension has it: `TextFileDefaults.commonExtensions` and the extensions of the third plist entry. It keeps a type that conforms to `public.text` or that is dynamic (an extension that macOS does not know). It drops HTML, RTF and images (`excludedTypes`). The filter is why `.ts` stays out: macOS types it as MPEG-2 video.
 - `NSWorkspace.setDefaultApplication(at:toOpen:)` runs one type at a time, because Launch Services can ask the user to agree to a change.
-- The row compares the default app of each type by bundle identifier and reads it again on activation. When every type opens with Macterm, the button is replaced by the name.
-- The docs list every extension that the button changes (`website/docs/pages/20-configuration.md`, "File types that Make Default changes"), and the caption of the row links there (`DocsSection.textFileTypes`). `TextFileDefaultsTests` compares that table with `TextFileDefaults.extensions()`. A new extension in the plist or in `commonExtensions` therefore fails a test until the docs list it. Ghostty has no equivalent. Upstream declined the detection of `file:line` and a link that you can configure (discussions #11378 and #9546). This feature is therefore our own.
+- The section compares the default app of each type by bundle identifier and reads it again on activation. When every type opens with Macterm, the button is gone and the caption says so.
+- The docs list every extension that the button changes (`website/docs/pages/20-configuration.md`, "Text file types"), and the caption of the button links there (`DocsSection.textFileTypes`). `TextFileDefaultsTests` compares that table with `TextFileDefaults.extensions()`. A new extension in the plist or in `commonExtensions` therefore fails a test until the docs list it. Ghostty has no equivalent. Upstream declined the detection of `file:line` and a link that you can configure (discussions #11378 and #9546). This feature is therefore our own.
 
 - **A ⌘-click goes to the pane first** (`GhosttyTerminalNSView.onOpenLink`). This is only for the `.unknown` kind of the link regex. It is never for OSC 8 or for opens by a keybind.
   - `FileLink` splits `:line[:col]` off. The regex of libghostty keeps it, and `foo.swift:42` even parses as a URL scheme. `FileLink` resolves the path against the cwd of the real pane.

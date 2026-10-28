@@ -2671,22 +2671,6 @@
         }
       }
     },
-    "Default app" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "기본 앱"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "默认 App"
-          }
-        }
-      }
-    },
     "Deny" : {
       "comment" : "Button of a permission alert",
       "localizations" : {
@@ -3161,22 +3145,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未找到文件：%@"
-          }
-        }
-      }
-    },
-    "File types that Make Default changes" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "기본으로 설정이 변경하는 파일 유형"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“设为默认”更改的文件类型"
           }
         }
       }
@@ -4738,38 +4706,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 的仓库中在 %@ 没有扩展。"
-          }
-        }
-      }
-    },
-    "Make Default" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "기본으로 설정"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设为默认"
-          }
-        }
-      }
-    },
-    "Make Default…" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "기본으로 설정…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设为默认…"
           }
         }
       }
@@ -8421,6 +8357,22 @@
         }
       }
     },
+    "Set Macterm as Default App…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm을 기본 앱으로 설정…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将 Macterm 设为默认 App…"
+          }
+        }
+      }
+    },
     "Set Project Path to Current Directory" : {
       "localizations" : {
         "ko" : {
@@ -8433,6 +8385,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将项目路径设为当前目录"
+          }
+        }
+      }
+    },
+    "Set as Default" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본으로 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设为默认"
           }
         }
       }
@@ -9207,6 +9175,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "终端内容区域"
+          }
+        }
+      }
+    },
+    "Text file types" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "텍스트 파일 유형"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本文件类型"
           }
         }
       }

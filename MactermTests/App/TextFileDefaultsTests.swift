@@ -3,7 +3,7 @@ import Foundation
 import Testing
 import UniformTypeIdentifiers
 
-/// Make Default sets one Launch Services default for each type in this list,
+/// Set Macterm as Default App sets one Launch Services default for each type in this list,
 /// so a type in it that is not text would take a file that no editor can open
 /// (a video, a web page) away from its app.
 struct TextFileDefaultsTests {
@@ -53,7 +53,7 @@ struct TextFileDefaultsTests {
         #expect(identifiers.contains(go.identifier))
     }
 
-    /// The docs table of the extensions that Make Default changes, read
+    /// The docs table of the extensions that Set Macterm as Default App changes, read
     /// from the source tree, so that a new extension in the plist or in
     /// `commonExtensions` fails here until the docs list it.
     @Test
@@ -64,7 +64,7 @@ struct TextFileDefaultsTests {
             .deletingLastPathComponent() // repo root
             .appendingPathComponent("website/docs/pages/20-configuration.md")
         let text = try String(contentsOf: page, encoding: .utf8)
-        let start = try #require(text.range(of: "### File types that Make Default changes"))
+        let start = try #require(text.range(of: "### Text file types"))
         let rest = text[start.upperBound...]
         let section = rest[..<(rest.range(of: "\n#")?.lowerBound ?? rest.endIndex)]
         let tableRows = section.split(separator: "\n").filter { $0.hasPrefix("| ") }

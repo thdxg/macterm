@@ -551,7 +551,7 @@ private struct GeneralSettings: View {
     @State private var textFilePlacement: TextFilePlacement = Preferences.shared.textFilePlacement
     @State private var appLanguage: String? = Preferences.shared.appLanguage
 
-    /// The text file types that Make Default sets, and the ones whose default
+    /// The text file types that Set Macterm as Default App sets, and the ones whose default
     /// app is another app. Read again on activation, because Finder's Get Info
     /// changes a default while this app is inactive.
     @State private var textFileTypes: [UTType] = TextFileDefaults.contentTypes()
@@ -674,18 +674,14 @@ private struct GeneralSettings: View {
                 .onChange(of: textFilePlacement) { _, v in
                     Preferences.shared.textFilePlacement = v
                 }
-                LabeledContent("Default app") {
-                    if textFileTypesNotOpenedHere.isEmpty {
-                        Text(verbatim: "Macterm")
-                    } else {
-                        Button("Make Default…") { isConfirmingTextFileDefaults = true }
-                            .disabled(isSettingTextFileDefaults)
-                    }
+                if !textFileTypesNotOpenedHere.isEmpty {
+                    Button("Set Macterm as Default App…") { isConfirmingTextFileDefaults = true }
+                        .disabled(isSettingTextFileDefaults)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(textFileDefaultsCaption)
                         .settingsCaption()
-                    Link("File types that Make Default changes", destination: DocsSection.textFileTypes.url)
+                    Link("Text file types", destination: DocsSection.textFileTypes.url)
                         .font(.system(size: 11))
                 }
             } header: {
@@ -764,7 +760,7 @@ private struct GeneralSettings: View {
         .alert("Make Macterm the default app for text files?", isPresented: $isConfirmingTextFileDefaults) {
             Button("Cancel", role: .cancel) {}
                 .keyboardShortcut(.cancelAction)
-            Button("Make Default") { makeTextFileDefaults() }
+            Button("Set as Default") { makeTextFileDefaults() }
                 .keyboardShortcut(.defaultAction)
         } message: {
             Text("""
