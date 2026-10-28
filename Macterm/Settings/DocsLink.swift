@@ -13,6 +13,7 @@ import SwiftUI
 enum DocsSection: String, CaseIterable {
     case ghosttyConfig = "configuration"
     case textFiles = "configuration#open-files-in-your-terminal-editor"
+    case textFileTypes = "configuration#file-types-that-make-default-changes"
     case remoteProjects = "remote-projects"
     case animations = "configuration#animations"
     case quickTerminal = "quick-terminal"

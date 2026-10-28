@@ -682,8 +682,12 @@ private struct GeneralSettings: View {
                             .disabled(isSettingTextFileDefaults)
                     }
                 }
-                Text(textFileDefaultsCaption)
-                    .settingsCaption()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(textFileDefaultsCaption)
+                        .settingsCaption()
+                    Link("File types that Make Default changes", destination: DocsSection.textFileTypes.url)
+                        .font(.system(size: 11))
+                }
             } header: {
                 DocsSectionHeader("Opening Text Files", docs: .textFiles)
             }

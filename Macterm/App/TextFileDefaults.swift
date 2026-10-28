@@ -50,13 +50,26 @@ enum TextFileDefaults {
         var types: [UTType] = []
         for ext in extensions {
             guard let candidate = type(ext),
-                  candidate.conforms(to: .text) || candidate.isDynamic,
-                  !excludedTypes.contains(where: { candidate.conforms(to: $0) }),
+                  isEligible(candidate),
                   seen.insert(candidate.identifier).inserted
             else { continue }
             types.append(candidate)
         }
         return types
+    }
+
+    /// Text, or an extension that macOS does not know, and not a type in
+    /// `excludedTypes`.
+    static func isEligible(_ type: UTType) -> Bool {
+        (type.conforms(to: .text) || type.isDynamic) && !excludedTypes.contains { type.conforms(to: $0) }
+    }
+
+    /// The extensions whose types the button sets, in list order. The docs
+    /// list them (`TextFileDefaultsTests` compares the two).
+    static func extensions(bundle: Bundle = .main) -> [String] {
+        (commonExtensions + declaredExtensions(in: bundle.infoDictionary)).filter { ext in
+            UTType(filenameExtension: ext).map(isEligible) ?? false
+        }
     }
 
     /// The types that the button sets for this app.

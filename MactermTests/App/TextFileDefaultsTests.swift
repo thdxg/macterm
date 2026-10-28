@@ -53,6 +53,28 @@ struct TextFileDefaultsTests {
         #expect(identifiers.contains(go.identifier))
     }
 
+    /// The docs table of the extensions that Make Default changes, read
+    /// from the source tree, so that a new extension in the plist or in
+    /// `commonExtensions` fails here until the docs list it.
+    @Test
+    func the_docs_list_every_extension_that_the_button_changes() throws {
+        let page = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // App
+            .deletingLastPathComponent() // MactermTests
+            .deletingLastPathComponent() // repo root
+            .appendingPathComponent("website/docs/pages/20-configuration.md")
+        let text = try String(contentsOf: page, encoding: .utf8)
+        let start = try #require(text.range(of: "### File types that Make Default changes"))
+        let rest = text[start.upperBound...]
+        let section = rest[..<(rest.range(of: "\n#")?.lowerBound ?? rest.endIndex)]
+        let tableRows = section.split(separator: "\n").filter { $0.hasPrefix("| ") }
+        let documented = tableRows.flatMap { row in
+            row.matches(of: #/`\.([A-Za-z0-9]+)`/#).map { String($0.output.1) }
+        }
+        #expect(documented.count == Set(documented).count, "an extension is in the docs table twice")
+        #expect(Set(documented) == Set(TextFileDefaults.extensions()))
+    }
+
     @Test
     func a_type_opened_by_another_app_or_by_none_is_not_opened_here() {
         let defaults: [String: URL] = [

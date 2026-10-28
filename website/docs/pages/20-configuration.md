@@ -108,7 +108,7 @@ The mode also stops password autofill. `macterm pane run` and `macterm pane key`
 
 Macterm can open text files in a terminal editor such as Helix or Neovim. macOS cannot make such an editor a default app on its own.
 
-1. Go to **Settings → General → Opening Text Files**. Next to **Default app**, click **Make Default…**, then click **Make Default**. Macterm becomes the default app for each text file type that it knows: plain text, Markdown, JSON, YAML, scripts and source code. It does not take HTML, RTF or SVG files. macOS types `.ts` files as video, so Macterm does not take them either. To change one file type, select a file in Finder and choose **File → Get Info**. Under **Open with**, select an app and click **Change All**. For a single file, use **Open With → Other…**.
+1. Go to **Settings → General → Opening Text Files**. Next to **Default app**, click **Make Default…**, then click **Make Default**. Macterm becomes the default app for each text file type that it knows: plain text, Markdown, JSON, YAML, scripts and source code. See [File types that Make Default changes](/docs/configuration#file-types-that-make-default-changes). It does not take HTML, RTF or SVG files. To change one file type, select a file in Finder and choose **File → Get Info**. Under **Open with**, select an app and click **Change All**. For a single file, use **Open With → Other…**.
 2. Set `$EDITOR` in your shell config. Set `$VISUAL` if you want it to win over `$EDITOR`. For example, `$env.EDITOR = "hx"` in nu or `export EDITOR=nvim` in zsh. If you set neither, files open in `vi`.
 3. In **Settings → General → Opening Text Files**, choose **Open in**: **New split** (next to the current pane, along its longer side) or **New tab**.
 
@@ -119,6 +119,19 @@ You can double-click such a file, open it with **Open With → Macterm**, or run
 <kbd>⌘</kbd>-click a path in a pane to open it with its default app. Paths such as `src/main.rs:42:7` work too. Compilers and test runners print paths in this form. When Macterm is the default app, the file opens at that line. The editor gets `+42` before the path. The editors vi, Vim, Neovim, Helix, Kakoune, Emacs, nano and micro all understand this. Other apps cannot receive a line, so they get only the file.
 
 When you quit the editor, its split or tab closes. Paths that a [remote project](/docs/remote-projects) prints do not open in the editor, because the file is on the host.
+
+### File types that Make Default changes
+
+**Make Default…** makes Macterm the default app for the files with these extensions. macOS keeps a default app for each file type, so Macterm sets each type in the list. Some extensions share one type, for example `.yaml` and `.yml`.
+
+| Group | Extensions |
+| --- | --- |
+| Text and data | `.txt` `.text` `.md` `.markdown` `.mdx` `.rst` `.adoc` `.org` `.tex` `.bib` `.json` `.jsonc` `.json5` `.yaml` `.yml` `.toml` `.ini` `.cfg` `.conf` `.properties` `.env` `.xml` `.csv` `.tsv` `.log` `.lock` `.diff` `.patch` |
+| Shells and scripts | `.sh` `.bash` `.zsh` `.fish` `.nu` `.ps1` `.bat` `.awk` `.sed` `.tcl` `.pl` `.py` `.rb` `.php` `.lua` `.vim` `.el` |
+| Source code | `.swift` `.c` `.h` `.cc` `.cpp` `.hpp` `.m` `.mm` `.s` `.cs` `.fsx` `.vb` `.java` `.kt` `.kts` `.scala` `.groovy` `.gradle` `.go` `.rs` `.zig` `.dart` `.js` `.mjs` `.cjs` `.cts` `.jsx` `.vue` `.svelte` `.astro` `.css` `.scss` `.ex` `.exs` `.erb` `.heex` `.elm` `.gleam` `.hs` `.ml` `.mli` `.clj` `.cljs` `.rkt` `.scm` `.lisp` `.jl` `.sol` `.sql` `.graphql` `.gql` `.proto` `.cue` `.nix` |
+| Build and tool files | `.mk` `.cmake` `.hcl` `.tf` `.tfvars` `.editorconfig` `.gitignore` `.gitattributes` `.dockerignore` `.npmrc` |
+
+Macterm does not take a file type that another kind of app opens: HTML (a browser), RTF (a word processor) and SVG (an image). macOS types `.ts` files as MPEG-2 video, not as TypeScript, so Macterm does not take them either. To open such a file with Macterm, use **Open With → Macterm**.
 
 ## Project colors
 
