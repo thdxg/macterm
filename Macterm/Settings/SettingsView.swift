@@ -550,16 +550,25 @@ private struct GeneralSettings: View {
     @State private var textFilePlacement: TextFilePlacement = Preferences.shared.textFilePlacement
     @State private var appLanguage: String? = Preferences.shared.appLanguage
 
-    /// Why session persistence is inactive, when it is. Missing binary is a
-    /// dev-build state; an over-budget socket path is an environment problem
-    /// (very long home/TMPDIR paths push past sun_path).
-    private var zmxUnavailableReason: String {
+    /// Why session persistence is inactive, or nil when there is nothing to
+    /// report. Missing binary is a dev-build state; an over-budget socket path
+    /// is an environment problem (very long home/TMPDIR paths push past
+    /// sun_path). The unit-test host turns zmx off on purpose
+    /// (`ZmxBypass.unitTestHost`), so it reports nothing: a Settings window
+    /// that macOS restores there must not name a cause that is not true.
+    private var zmxUnavailableReason: String? {
         if !ZmxClient.live.isBundled() {
             return String(localized: "Session persistence is off. The zmx binary is not in the app. Run `mise run setup` and build again.")
         }
-        return String(
-            localized: "Session persistence is off. The zmx socket path of this system is too long. Terminals run with no persistence."
-        )
+        switch ZmxClient.liveBypass {
+        case .socketPathTooLong:
+            return String(
+                localized: "Session persistence is off. The zmx socket path of this system is too long. Terminals run with no persistence."
+            )
+        case .unitTestHost,
+             nil:
+            return nil
+        }
     }
 
     /// Ghostty's default locations form an optional base layer. Custom files
@@ -696,7 +705,7 @@ private struct GeneralSettings: View {
             // that persistence is unavailable. It can be silently so (Supacode
             // shipped the same probe and users only noticed via a buried log
             // line), which is the whole reason to say it in the UI at all.
-            if ZmxClient.live.executableURL() == nil {
+            if let zmxUnavailableReason {
                 Section("Session Persistence") {
                     Label {
                         Text(zmxUnavailableReason)

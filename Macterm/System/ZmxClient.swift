@@ -76,8 +76,6 @@ extension ZmxClient {
     static let subprocessTimeout: Duration = .seconds(5)
 
     static let live: ZmxClient = {
-        // Probe the socket-path budget once per process and cache the outcome.
-        let probed = OSAllocatedUnfairLock<ProbeOutcome?>(initialState: nil)
         // The bundled binary at Contents/Resources/zmx/zmx (embed-zmx.sh).
         let cachedBundledURL: URL? = Bundle.main.url(
             forResource: "zmx",
@@ -88,25 +86,7 @@ extension ZmxClient {
         @Sendable
         func resolveExecutable() -> URL? {
             guard let url = cachedBundledURL else { return nil }
-            let outcome: ProbeOutcome = probed.withLock { current in
-                if let current { return current }
-                let computed: ProbeOutcome
-                if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
-                    // The unit-test host is the full app: it boots, spawns the
-                    // active project's panes, and then dies without the quit
-                    // sweep — wrapping here would orphan a zmx daemon on every
-                    // `mise run test`. Plain unpersisted shells under test.
-                    computed = .bypass
-                } else if let reason = ZmxSocketBudget.probe() {
-                    logger.warning("Bypassing zmx wrapping: \(reason, privacy: .public)")
-                    computed = .bypass
-                } else {
-                    computed = .allow
-                }
-                current = computed
-                return computed
-            }
-            return outcome == .allow ? url : nil
+            return liveBypass == nil ? url : nil
         }
 
         @Sendable
@@ -224,7 +204,29 @@ extension ZmxClient {
         sessionListSnapshot: { (entries: [], leaders: [:]) }
     )
 
-    private enum ProbeOutcome: Equatable { case allow, bypass }
+    /// Why this process starts new panes without zmx, or nil when it wraps
+    /// them. Decided once per process, so `live.executableURL` and the
+    /// Settings notice always agree.
+    static var liveBypass: ZmxBypass? {
+        liveBypassCache.withLock { cached in
+            if let cached { return cached }
+            let decided = bypass(environment: ProcessInfo.processInfo.environment)
+            if case let .socketPathTooLong(reason) = decided {
+                logger.warning("Bypassing zmx wrapping: \(reason, privacy: .public)")
+            }
+            cached = .some(decided)
+            return decided
+        }
+    }
+
+    private static let liveBypassCache = OSAllocatedUnfairLock<ZmxBypass??>(initialState: nil)
+
+    /// The pure decision behind `liveBypass`.
+    static func bypass(environment: [String: String]) -> ZmxBypass? {
+        if environment["XCTestConfigurationFilePath"] != nil { return .unitTestHost }
+        if let reason = ZmxSocketBudget.probe(env: environment) { return .socketPathTooLong(reason) }
+        return nil
+    }
 
     /// Kill every `macterm-*` session the live daemon hosts that no live/persisted
     /// pane claims and that has no attached client — i.e. crash / force-quit
@@ -589,6 +591,19 @@ enum ZmxReaper {
             entries.first { $0.name == name }?.owner == owner
         }
     }
+}
+
+/// Why new panes start as plain shells, without `zmx attach`
+/// (`ZmxClient.liveBypass`).
+enum ZmxBypass: Equatable {
+    /// The unit-test host is the full app: it boots, spawns the active
+    /// project's panes, and then dies without the quit sweep, so wrapping
+    /// would orphan a zmx daemon on every `mise run test`. This is on
+    /// purpose, so Settings says nothing about it.
+    case unitTestHost
+    /// `<ZMX_DIR>/<session-name>` would overflow `sun_path`
+    /// (`ZmxSocketBudget.probe`). The payload is the reason for the log.
+    case socketPathTooLong(String)
 }
 
 /// Socket-path budget against macOS' `sockaddr_un.sun_path` limit. If

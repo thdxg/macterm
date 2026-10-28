@@ -58,6 +58,33 @@ struct ZmxSessionListParserTests {
     }
 }
 
+/// Why new panes start without zmx. Settings reports only a real problem,
+/// so the unit-test host (zmx off on purpose) must not read as an over-long
+/// socket path.
+struct ZmxBypassTests {
+    @Test
+    func the_unit_test_host_bypasses_on_purpose() {
+        #expect(ZmxClient.bypass(environment: ["XCTestConfigurationFilePath": "/tmp/x.xctestconfiguration"]) == .unitTestHost)
+        // This process is that host.
+        #expect(ZmxClient.liveBypass == .unitTestHost)
+    }
+
+    @Test
+    func a_long_socket_dir_bypasses_with_its_reason() {
+        let dir = "/" + String(repeating: "d", count: 80)
+        guard case let .socketPathTooLong(reason) = ZmxClient.bypass(environment: ["ZMX_DIR": dir]) else {
+            Issue.record("expected socketPathTooLong")
+            return
+        }
+        #expect(reason.contains(dir))
+    }
+
+    @Test
+    func a_short_socket_dir_outside_tests_wraps() {
+        #expect(ZmxClient.bypass(environment: ["ZMX_DIR": "/tmp/zmx-501"]) == nil)
+    }
+}
+
 struct ZmxSocketBudgetTests {
     @Test
     func defaultTmpDirIsUnderBudget() {
