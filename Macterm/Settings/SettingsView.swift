@@ -674,15 +674,15 @@ private struct GeneralSettings: View {
                 .onChange(of: textFilePlacement) { _, v in
                     Preferences.shared.textFilePlacement = v
                 }
-                if !textFileTypesNotOpenedHere.isEmpty {
-                    HStack {
-                        Spacer()
+                HStack {
+                    Text(textFileDefaultsCaption)
+                        .settingsCaption()
+                    Spacer()
+                    if !textFileTypesNotOpenedHere.isEmpty {
                         Button("Set Macterm as Default App…") { isConfirmingTextFileDefaults = true }
                             .disabled(isSettingTextFileDefaults)
                     }
                 }
-                Text(textFileDefaultsCaption)
-                    .settingsCaption()
             } header: {
                 DocsSectionHeader("Opening Text Files", docs: .textFiles)
             }
