@@ -94,6 +94,16 @@ extension ZmxClient {
             cachedBundledURL
         }
 
+        // Every local `zmx ls` goes through this one gate: see `ZmxListingGate`.
+        let listingGate = ZmxListingGate()
+
+        @Sendable
+        func listLocal() async -> String? {
+            await listingGate.run {
+                await runZmx(["ls"], executable: bundledExecutable(), captureStdout: true)
+            }
+        }
+
         // Remote ops resolve `ssh` via PATH (through /usr/bin/env), NOT a
         // hardcoded /usr/bin/ssh: the PANE's own ssh is PATH-resolved (its
         // command runs through a shell), so ops must dial the same client —
@@ -158,25 +168,16 @@ extension ZmxClient {
                 // nil from runZmx is the UNKNOWN signal (spawn error / timeout /
                 // non-zero exit); preserve it so the reaper never kills on a
                 // failed probe.
-                guard let stdout = await runZmx(
-                    ["ls"], executable: bundledExecutable(), captureStdout: true
-                )
-                else { return nil }
+                guard let stdout = await listLocal() else { return nil }
                 return ZmxSessionListParser.parse(stdout)
             },
             sessionLeaderPIDs: {
-                guard let stdout = await runZmx(
-                    ["ls"], executable: bundledExecutable(), captureStdout: true
-                )
-                else { return [:] }
+                guard let stdout = await listLocal() else { return [:] }
                 return ZmxForegroundResolver.parseLeaderPIDs(stdout)
             },
             sessionListSnapshot: {
                 // Single `zmx ls`, both projections — no second fork/exec.
-                guard let stdout = await runZmx(
-                    ["ls"], executable: bundledExecutable(), captureStdout: true
-                )
-                else { return nil }
+                guard let stdout = await listLocal() else { return nil }
                 return (
                     entries: ZmxSessionListParser.parse(stdout),
                     leaders: ZmxForegroundResolver.parseLeaderPIDs(stdout)
@@ -521,6 +522,51 @@ enum ZmxListLexer {
         for line in stdout.split(whereSeparator: \.isNewline) {
             guard let values = fields(in: Substring(line)) else { continue }
             body(values)
+        }
+    }
+}
+
+/// Runs Macterm's local `zmx ls` calls one at a time, in the order that they
+/// arrive.
+///
+/// zmx counts the clients of a session as every connection to its socket
+/// except the connection that asks (`Daemon.handleInfo`:
+/// `clients.items.len - 1`), and `zmx ls` connects to each session in turn.
+/// Two listings at the same time can therefore count each other as a client.
+/// Macterm lists from many places: the poll of the foreground resolver,
+/// `session list` and `session info`, the reapers, and the restores of pinned
+/// tabs and widgets. A split starts a burst of polls. An e2e test read
+/// `clients:2` for a new session with one real client: the second client was
+/// the listing of the resolver. Measured with the bundled zmx: two listings
+/// at the same time showed a client that does not exist in 6 of 200 runs.
+/// Serial listings showed one in 0 of 200 runs.
+///
+/// Only listings go through the gate. A `zmx kill` connects only to the
+/// session that it ends. A `zmx ls` from a process outside Macterm can still
+/// add one to a count. An extra count only makes the reaper spare a session.
+actor ZmxListingGate {
+    private var busy = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func run<T: Sendable>(_ body: @Sendable () async -> T) async -> T {
+        await acquire()
+        defer { release() }
+        return await body()
+    }
+
+    private func acquire() async {
+        guard busy else {
+            busy = true
+            return
+        }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    private func release() {
+        if waiters.isEmpty {
+            busy = false
+        } else {
+            waiters.removeFirst().resume()
         }
     }
 }

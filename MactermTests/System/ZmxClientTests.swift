@@ -115,6 +115,59 @@ struct ZmxSocketBudgetTests {
     }
 }
 
+/// Two `zmx ls` at the same time count each other as a client, so Macterm's
+/// own listings must never overlap.
+struct ZmxListingGateTests {
+    private actor Overlap {
+        private var inFlight = 0
+        private(set) var peak = 0
+        private(set) var order: [Int] = []
+
+        func enter(_ index: Int) {
+            inFlight += 1
+            peak = max(peak, inFlight)
+            order.append(index)
+        }
+
+        func leave() {
+            inFlight -= 1
+        }
+    }
+
+    @Test
+    func listingsNeverOverlap() async {
+        let gate = ZmxListingGate()
+        let overlap = Overlap()
+        await withTaskGroup(of: Int.self) { group in
+            for index in 0 ..< 20 {
+                group.addTask {
+                    await gate.run {
+                        await overlap.enter(index)
+                        try? await Task.sleep(for: .milliseconds(2))
+                        await overlap.leave()
+                        return index
+                    }
+                }
+            }
+            var results: [Int] = []
+            for await result in group {
+                results.append(result)
+            }
+            #expect(results.sorted() == Array(0 ..< 20))
+        }
+        #expect(await overlap.peak == 1)
+        #expect(await overlap.order.count == 20)
+    }
+
+    @Test
+    func theGateOpensAgainAfterEachListing() async {
+        let gate = ZmxListingGate()
+        let first = await gate.run { 1 }
+        let second = await gate.run { 2 }
+        #expect([first, second] == [1, 2])
+    }
+}
+
 struct ZmxSessionNameTests {
     private let id = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
 
