@@ -332,14 +332,19 @@ private final class DividerShield: NSView {
 }
 
 /// The main window's titlebar chrome, applied to the settings window so the two
-/// match: transparent and separator-less, content extending underneath, and an
-/// empty unified toolbar. Having a toolbar at all is what makes AppKit lay out
-/// the taller titlebar and inset the traffic lights (~23pt, measured identical
-/// to the main window; without one they sit at ~16pt).
+/// match: separator-less, content extending underneath, and an empty unified
+/// toolbar. Having a toolbar at all is what makes AppKit lay out the taller
+/// titlebar and inset the traffic lights (~23pt, measured identical to the
+/// main window; without one they sit at ~16pt).
+///
+/// The titlebar is never set transparent. A transparent titlebar draws no
+/// scroll-edge band, so a scrolled pane's text ran under the pane title.
+/// The flag read false again each time the window became key, and this
+/// function set it to true again on the next SwiftUI update, so the band came
+/// and went (measured on macOS 27).
 @MainActor
 private enum SettingsWindowChrome {
     static func apply(to window: NSWindow) {
-        window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
         window.styleMask.insert(.fullSizeContentView)
         // `.unified`, not `.unifiedCompact` — compact shrinks the titlebar back
