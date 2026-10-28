@@ -468,7 +468,15 @@ Unlike Ghostty, Macterm does not declare scripts and executables. A script that 
 - **The script compiles its own copy of `AppIcon.icon`** (`actool`, into a temporary catalog). In it, the pane and the characters are drawn again for the page, in a region of the canvas with the page's shape, inside the frames, so no ring shows. The copy leaves out the cross, its shade and the screen's gradient (`leftOut`), and each group takes the fill of the first layer it keeps. The pane covers the whole page and more, so its edges are outside the page and it bends nothing in it. The helper renders the copy on the page's own background, and the script lays that region over the page.
 - **The page has the app icon's characters**: the same ramp, density gradient, dither, spacing and seed as `scripts/app-icon/characters.swift`, in 96 pt cells, turned 8° as the app icon's are. The page is the app icon's lid, the color of the top of its screen. Never hide a group of the copy: a hidden group drops out of the compiled icon, and the helper refuses a request whose count of groups differs. Hiding a group's only layer, or setting its opacity to 0, also drops the group.
 
-**Text files (Settings → General → Opening Text Files)** open in the terminal editor of the user (`AppState+TextFiles.swift`). Ghostty has no equivalent. Upstream declined the detection of `file:line` and a link that you can configure (discussions #11378 and #9546). This feature is therefore our own.
+**Text files (Settings → General → Opening Text Files)** open in the terminal editor of the user (`AppState+TextFiles.swift`).
+
+**Set Macterm as Default App… sets Macterm as the default app of every text file type in one click** (`TextFileDefaults`, Settings → General → Opening Text Files). It is Get Info → Change All, for each type.
+
+- Launch Services keeps a default for each content type. A default for `public.text` does not reach `public.python-script`, so the button sets each concrete type.
+- A type is in the list because an extension has it: `TextFileDefaults.commonExtensions` and the extensions of the third plist entry. It keeps a type that conforms to `public.text` or that is dynamic (an extension that macOS does not know). It drops HTML, RTF and images (`excludedTypes`). The filter is why `.ts` stays out: macOS types it as MPEG-2 video.
+- `NSWorkspace.setDefaultApplication(at:toOpen:)` runs one type at a time, because Launch Services can ask the user to agree to a change.
+- The section compares the default app of each type by bundle identifier and reads it again on activation. When every type opens with Macterm, the button is gone and the caption says so.
+- The docs list every extension that the button changes (`website/docs/pages/20-configuration.md`, "Text file types"). `TextFileDefaultsTests` compares that table with `TextFileDefaults.extensions()`. A new extension in the plist or in `commonExtensions` therefore fails a test until the docs list it. Ghostty has no equivalent. Upstream declined the detection of `file:line` and a link that you can configure (discussions #11378 and #9546). This feature is therefore our own.
 
 - **A ⌘-click goes to the pane first** (`GhosttyTerminalNSView.onOpenLink`). This is only for the `.unknown` kind of the link regex. It is never for OSC 8 or for opens by a keybind.
   - `FileLink` splits `:line[:col]` off. The regex of libghostty keeps it, and `foo.swift:42` even parses as a URL scheme. `FileLink` resolves the path against the cwd of the real pane.
@@ -791,7 +799,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
   - `FirstRunSeed`.
   - `Tutorial`.
   - `FinderServices` and `OpenFolder`.
-  - `AppState+TextFiles`.
+  - `AppState+TextFiles` and `TextFileDefaults`.
   - `DockMenu`.
   - `BellBadge` (with `AppState+BellBadge`).
   - `AdaptiveIcon`, `AdaptiveIconController`, `AdaptiveIconRenderer` and `AdaptiveIconRequest` (shared with the helper), with `AppIconPresenter`.

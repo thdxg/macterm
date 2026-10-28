@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The panes of the settings window, in sidebar order. Titles are the
 /// user-visible sidebar labels — Title Case, matching the macOS convention the
@@ -550,6 +551,14 @@ private struct GeneralSettings: View {
     @State private var textFilePlacement: TextFilePlacement = Preferences.shared.textFilePlacement
     @State private var appLanguage: String? = Preferences.shared.appLanguage
 
+    /// The text file types that Set Macterm as Default App sets, and the ones whose default
+    /// app is another app. Read again on activation, because Finder's Get Info
+    /// changes a default while this app is inactive.
+    @State private var textFileTypes: [UTType] = TextFileDefaults.contentTypes()
+    @State private var textFileTypesNotOpenedHere: [UTType] = []
+    @State private var isConfirmingTextFileDefaults = false
+    @State private var isSettingTextFileDefaults = false
+
     /// Why session persistence is inactive, or nil when there is nothing to
     /// report. Missing binary is a dev-build state; an over-budget socket path
     /// is an environment problem (very long home/TMPDIR paths push past
@@ -674,11 +683,15 @@ private struct GeneralSettings: View {
                 .onChange(of: textFilePlacement) { _, v in
                     Preferences.shared.textFilePlacement = v
                 }
-                Text("""
-                You can set Macterm as the default app to open text files from Finder. \
-                It opens them in the editor that $VISUAL or $EDITOR names in your shell.
-                """)
-                .settingsCaption()
+                HStack {
+                    Text(textFileDefaultsCaption)
+                        .settingsCaption()
+                    Spacer()
+                    if !textFileTypesNotOpenedHere.isEmpty {
+                        Button("Set Macterm as Default App…") { isConfirmingTextFileDefaults = true }
+                            .disabled(isSettingTextFileDefaults)
+                    }
+                }
             } header: {
                 DocsSectionHeader("Opening Text Files", docs: .textFiles)
             }
@@ -740,15 +753,55 @@ private struct GeneralSettings: View {
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
             hasFullDiskAccess = FullDiskAccess.isGranted()
+            refreshTextFileDefaults()
             // Default files are created and deleted in other apps, so
             // discovery can only have changed while we were inactive.
             defaultGhosttyConfigFiles = GhosttyConfigSource.defaultFileLocations()
             Task { await refreshNotificationBanner() }
         }
         .task { await refreshNotificationBanner() }
+        .onAppear { refreshTextFileDefaults() }
         .onChange(of: isCustomGhosttyConfigFieldFocused) { wasFocused, isFocused in
             guard wasFocused, !isFocused else { return }
             commitCustomGhosttyConfigEdit()
+        }
+        .alert("Make Macterm the default app for text files?", isPresented: $isConfirmingTextFileDefaults) {
+            Button("Cancel", role: .cancel) {}
+                .keyboardShortcut(.cancelAction)
+            Button("Set as Default") { makeTextFileDefaults() }
+                .keyboardShortcut(.defaultAction)
+        } message: {
+            Text("""
+            Finder opens \(textFileTypesNotOpenedHere.count) more text file types with Macterm. \
+            To change a type back, select a file in Finder, choose File → Get Info and change Open with.
+            """)
+        }
+    }
+
+    private var textFileDefaultsCaption: String {
+        if textFileTypesNotOpenedHere.isEmpty {
+            return String(localized: """
+            Finder opens text files with Macterm. Macterm opens them in the editor that \
+            $VISUAL or $EDITOR names in your shell.
+            """)
+        }
+        return String(localized: """
+        Set Macterm as the default app for text files. It opens them in the editor that \
+        $VISUAL or $EDITOR names in your shell.
+        """)
+    }
+
+    private func refreshTextFileDefaults() {
+        textFileTypesNotOpenedHere = TextFileDefaults.typesNotOpenedHere(textFileTypes)
+    }
+
+    private func makeTextFileDefaults() {
+        let types = textFileTypesNotOpenedHere
+        isSettingTextFileDefaults = true
+        Task {
+            _ = await TextFileDefaults.makeDefault(types)
+            isSettingTextFileDefaults = false
+            refreshTextFileDefaults()
         }
     }
 
