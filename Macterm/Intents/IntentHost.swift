@@ -105,9 +105,9 @@ enum IntentTargets {
         let pane: Pane
     }
 
-    /// A project by id, including the synthetic pinned workspace.
+    /// A project by id, including the synthetic pinned and scratch workspaces.
     static func project(_ id: UUID, in ctx: AppCommandContext) throws -> Project {
-        if id == PinnedTabs.projectID { return PinnedTabs.project }
+        if let synthetic = Project.synthetic(for: id) { return synthetic }
         guard let project = ctx.projectStore.projects.first(where: { $0.id == id }) else {
             throw MactermIntentError.notFound
         }
@@ -164,12 +164,14 @@ enum IntentTargets {
         }
     }
 
-    /// The pinned workspace first, then the projects in sidebar order — the
-    /// order the sidebar itself draws, so a picker reads the same way.
+    /// The pinned workspace first, then the projects in sidebar order, then
+    /// the scratch workspace — the order the sidebar itself draws, so a picker
+    /// reads the same way.
     static func orderedProjectIDs(in ctx: AppCommandContext) -> [UUID] {
         var ids: [UUID] = []
         if ctx.appState.workspaces[PinnedTabs.projectID] != nil { ids.append(PinnedTabs.projectID) }
         ids.append(contentsOf: ctx.projectStore.projects.map(\.id))
+        if ctx.appState.hasScratchTabs { ids.append(ScratchTabs.projectID) }
         return ids
     }
 
@@ -177,7 +179,7 @@ enum IntentTargets {
     /// and pane's subtitle in a picker, where a bare tab title ("nu") says
     /// nothing about which project it is in.
     static func projectName(_ projectID: UUID, in ctx: AppCommandContext) -> String? {
-        if projectID == PinnedTabs.projectID { return PinnedTabs.project.name }
+        if let synthetic = Project.synthetic(for: projectID) { return synthetic.name }
         return ctx.projectStore.projects.first(where: { $0.id == projectID })?.name
     }
 }

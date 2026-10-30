@@ -1024,22 +1024,6 @@
         }
       }
     },
-    "Add a project to move the tab into first" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "탭을 옮길 프로젝트를 먼저 추가하십시오"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请先添加一个项目以移入此标签页"
-          }
-        }
-      }
-    },
     "Add a widget at the center of the desktop" : {
       "localizations" : {
         "ko" : {
@@ -1904,22 +1888,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法卸载 %1$@：%2$@"
-          }
-        }
-      }
-    },
-    "Cannot unpin" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "고정 해제할 수 없음"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法取消固定"
           }
         }
       }
@@ -4913,6 +4881,22 @@
         }
       }
     },
+    "Move to Scratch Tabs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스크래치 탭으로 이동"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移到草稿标签页"
+          }
+        }
+      }
+    },
     "Name" : {
       "localizations" : {
         "ko" : {
@@ -5009,6 +4993,22 @@
         }
       }
     },
+    "New Scratch Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 스크래치 탭"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建草稿标签页"
+          }
+        }
+      }
+    },
     "New Tab" : {
       "localizations" : {
         "ko" : {
@@ -5069,6 +5069,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建窗口"
+          }
+        }
+      }
+    },
+    "New scratch tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 스크래치 탭"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建草稿标签页"
           }
         }
       }
@@ -11051,6 +11067,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@”是固定的标签页的保留名称。请选择其他名称。"
+          }
+        }
+      }
+    },
+    "“%@” is a reserved name for the tabs without a project. Select another name." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”은(는) 스크래치 탭에 예약된 이름입니다. 다른 이름을 선택하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”是草稿标签页的保留名称。请选择其他名称。"
           }
         }
       }

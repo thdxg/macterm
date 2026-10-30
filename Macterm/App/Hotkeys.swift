@@ -63,6 +63,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case separateCurrentPane = "separate_current_pane"
     case pinTab = "pin_tab"
     case unpinTab = "unpin_tab"
+    case newScratchTab = "new_scratch_tab"
     case autofillPassword = "autofill_password"
     case passwordManager = "password_manager"
     case files
@@ -199,6 +200,9 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         // which is disorienting from a stray chord.
         case .pinTab: "none"
         case .unpinTab: "none"
+        // Next to New Tab's cmd+t. Nothing in Macterm or in ghostty's
+        // defaults takes the chord.
+        case .newScratchTab: "cmd+shift+t"
         // iTerm2's Password Manager chord. It only acts while the focused
         // pane is at a prompt with a saved password; anywhere else it passes
         // through to the terminal.

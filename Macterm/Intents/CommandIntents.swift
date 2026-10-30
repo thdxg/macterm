@@ -72,6 +72,7 @@ enum MactermKeybind: String, AppEnum {
     case separateCurrentPane = "separate_current_pane"
     case pinTab = "pin_tab"
     case unpinTab = "unpin_tab"
+    case newScratchTab = "new_scratch_tab"
     case autofillPassword = "autofill_password"
     case passwordManager = "password_manager"
     case files
@@ -138,6 +139,7 @@ enum MactermKeybind: String, AppEnum {
         .separateCurrentPane: "Separate Current Pane",
         .pinTab: "Pin Tab",
         .unpinTab: "Unpin Tab",
+        .newScratchTab: "New Scratch Tab",
         .autofillPassword: "Autofill Password",
         .passwordManager: "Password Manager",
         .files: "Files",

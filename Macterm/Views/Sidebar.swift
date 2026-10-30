@@ -301,6 +301,32 @@ struct SidebarContent: View {
             ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { projectIndex, project in
                 projectSection(index: projectIndex, project: project)
             }
+            // Scratch tabs (#665) live below every project as flat rows, the
+            // mirror of the pinned rows above: no header, a separator line
+            // above them says where the projects end. Drawn only while there
+            // are scratch tabs, or while this window shows the workspace (the
+            // user closed the last scratch tab and is still there). Same
+            // headerless Section around the ForEach, for the same reason as
+            // the pinned one: its `.dropDestination` insertion line works
+            // only inside a container.
+            if showsScratchRows {
+                Section {
+                    ScratchTabsSeparator()
+                    ForEach(Array(scratchTabs.enumerated()), id: \.element.id) { tabIndex, tab in
+                        tabRow(tab: tab, index: tabIndex, project: ScratchTabs.project)
+                    }
+                    .dropDestination(for: TabSlotDropItem.self) { items, offset in
+                        for item in items {
+                            switch item {
+                            case let .tab(tab):
+                                receiveTabDrop([tab], into: ScratchTabs.project, at: offset)
+                            case let .pane(pane):
+                                receivePaneDrop([pane], into: ScratchTabs.project, at: offset)
+                            }
+                        }
+                    }
+                }
+            }
             // Project reordering is a `MovableProject` drag from one header
             // onto another (see `projectHeader`); the context menus' Move
             // Up/Down are the fallback for precision moves. There is NO
@@ -408,6 +434,9 @@ struct SidebarContent: View {
             case let .tab(PinnedTabs.projectID, tabID):
                 // Loaded → select; unloaded → restore from declaration.
                 appState.selectPinnedTab(tabID)
+            case let .tab(ScratchTabs.projectID, tabID):
+                appState.selectScratchTabs(in: windowState)
+                appState.selectTab(tabID, projectID: ScratchTabs.projectID, in: windowState)
             case let .tab(projectID, tabID):
                 if let project = projectStore.projects.first(where: { $0.id == projectID }) {
                     appState.selectProject(project, in: windowState)
@@ -657,7 +686,16 @@ struct SidebarContent: View {
                 .tab(projectID: project.id, tabID: $0.id)
             })
         }
+        items.append(contentsOf: scratchTabs.map { .tab(projectID: ScratchTabs.projectID, tabID: $0.id) })
         return items
+    }
+
+    /// The scratch rows, in order (#665).
+    private var scratchTabs: [TerminalTab] { appState.scratchWorkspace?.tabs ?? [] }
+
+    /// Whether the scratch rows and their separator are drawn: see `body`.
+    private var showsScratchRows: Bool {
+        !scratchTabs.isEmpty || windowState.activeProjectID == ScratchTabs.projectID
     }
 
     private var activeTabID: UUID? {
@@ -760,7 +798,10 @@ struct SidebarContent: View {
                     pinnedTabMenu(record: record)
                 }
             case let .tab(projectID, tabID):
-                if let project = projectStore.projects.first(where: { $0.id == projectID }),
+                // A scratch row gets the project tab's menu through the
+                // synthetic project: its Move to Project lists every project,
+                // and Pin Tab works as it does from a project.
+                if let project = Project.synthetic(for: projectID) ?? projectStore.projects.first(where: { $0.id == projectID }),
                    let tab = appState.workspaces[projectID]?.tabs.first(where: { $0.id == tabID })
                 {
                     tabMenu(project: project, tab: tab)
@@ -772,6 +813,7 @@ struct SidebarContent: View {
                 Button("Local Folder…") { openProject() }
                 Button("Remote Machine…") { windowState.isNewRemoteProjectSheetPresented = true }
             }
+            Button("New Scratch Tab") { appState.createScratchTab() }
         }
     }
 
@@ -947,6 +989,13 @@ struct SidebarContent: View {
         Button("Pin Tab") {
             appState.pinTab(tab.id, fromProject: project.id)
         }
+        if project.id != ScratchTabs.projectID {
+            // Out of the project, shells intact (#665). The tab keeps its own
+            // working directory; only its row moves below the projects.
+            Button("Move to Scratch Tabs") {
+                appState.moveTabToScratchTabs(tab.id, from: project.id)
+            }
+        }
         Divider()
         Button("Close Tab", role: .destructive) {
             appState.requestCloseTab(tab.id, projectID: project.id)
@@ -982,8 +1031,9 @@ struct SidebarContent: View {
         var tabRefs: [(tabID: UUID, projectID: UUID)] = []
         for item in items {
             switch item {
-            case .project(PinnedTabs.projectID):
-                // The pinned section can't be removed.
+            case .project(PinnedTabs.projectID),
+                 .project(ScratchTabs.projectID):
+                // The pinned and the scratch sections can't be removed.
                 break
             case let .project(id):
                 projectIDs.append(id)
@@ -1569,6 +1619,19 @@ private struct PinTabDropZone: View {
                 isTargeted = targeted
             }
         }
+    }
+}
+
+/// The line above the scratch rows (#665): where the projects end and the
+/// tabs without a project begin. A row of its own, so the List's insertion
+/// line for a drop among the scratch rows is unaffected. Not selectable: it
+/// carries no tag, so a click on it selects nothing.
+private struct ScratchTabsSeparator: View {
+    var body: some View {
+        Divider()
+            .padding(.vertical, 4)
+            .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
+            .selectionDisabled()
     }
 }
 

@@ -33,12 +33,12 @@ struct NewRemoteProjectSheet: View {
         return t.isEmpty ? nil : t
     }
 
-    /// A typed name the pinned workspace reserves: refused here like every
-    /// typed name (`PinnedTabs.reservesName`). An empty field falls back to
-    /// the host, which nobody typed as a name, so `ProjectStore.create`
+    /// A typed name a sentinel workspace reserves: refused here like every
+    /// typed name (`Project.reservedNameMessage`). An empty field falls back
+    /// to the host, which nobody typed as a name, so `ProjectStore.create`
     /// suffixes that one instead.
-    private var nameIsReserved: Bool {
-        PinnedTabs.reservesName(name)
+    private var reservedNameMessage: String? {
+        Project.reservedNameMessage(for: name)
     }
 
     var body: some View {
@@ -52,8 +52,8 @@ struct NewRemoteProjectSheet: View {
                 TextField("zmx path (optional)", text: $zmxPath, prompt: Text("find it in PATH"))
             }
             .textFieldStyle(.roundedBorder)
-            if nameIsReserved {
-                Text(PinnedTabs.reservedNameMessage)
+            if let reservedNameMessage {
+                Text(reservedNameMessage)
                     .font(.caption)
                     .foregroundStyle(MactermTheme.warning)
                     .fixedSize(horizontal: false, vertical: true)
@@ -72,7 +72,7 @@ struct NewRemoteProjectSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Add") { add() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(composedPath == nil || nameIsReserved)
+                    .disabled(composedPath == nil || reservedNameMessage != nil)
             }
         }
         .padding(20)
@@ -80,7 +80,7 @@ struct NewRemoteProjectSheet: View {
     }
 
     private func add() {
-        guard let path = composedPath, !nameIsReserved else { return }
+        guard let path = composedPath, reservedNameMessage == nil else { return }
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         // Always create: a directory can back several projects, so a repeat
         // host:dir here adds a distinct project rather than reusing the last.

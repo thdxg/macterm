@@ -73,12 +73,12 @@ final class ProjectStore {
         save()
     }
 
-    /// Rename a project, unless `PinnedTabs.reservesName` matches the new
+    /// Rename a project, unless `Project.reservesName` matches the new
     /// name: then the project keeps its old one. Every caller holds a name
     /// someone typed and says why first (the CLI's `bad_request`, the
     /// sidebar's notice); this only stops one that forgot to.
     func rename(id: UUID, to newName: String) {
-        guard !PinnedTabs.reservesName(newName) else {
+        guard !Project.reservesName(newName) else {
             logger.error("Refusing to rename project \(id, privacy: .public) to reserved name \(newName, privacy: .public)")
             return
         }
@@ -87,14 +87,14 @@ final class ProjectStore {
         save()
     }
 
-    /// `name`, or — when the pinned workspace reserves it — the name a second
+    /// `name`, or — when a sentinel workspace reserves it — the name a second
     /// one would get: `Pinned 2`, the suffix its layout file already takes
     /// (`pinned_2.yaml`, see `ProjectFileStore.write`). The case is kept; it
     /// is still the folder's name. Only the bare name is reserved, so the
     /// suffixed one is always reachable, and a second project from the same
     /// folder is a second `Pinned 2`, as a second `api` is a second `api`.
     private static func unreservedName(_ name: String) -> String {
-        guard PinnedTabs.reservesName(name) else { return name }
+        guard Project.reservesName(name) else { return name }
         let suffixed = "\(name.trimmingCharacters(in: .whitespacesAndNewlines)) 2"
         logger.info("Project name \(name, privacy: .public) is reserved; creating \(suffixed, privacy: .public)")
         return suffixed

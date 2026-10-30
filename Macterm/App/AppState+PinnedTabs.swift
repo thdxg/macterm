@@ -86,11 +86,13 @@ extension AppState {
             saveWorkspaces()
             return
         }
-        let dest = projects.first { $0.id == record.originProjectID } ?? projects.first
-        guard let dest else {
-            presentToast(String(localized: "Cannot unpin"), subtitle: String(localized: "Add a project to move the tab into first"))
-            return
-        }
+        // A tab pinned from the scratch workspace goes back there; one with no
+        // origin falls back to the first project, and with no project at all
+        // to the scratch workspace, which every tab can live in.
+        let dest = projects.first { $0.id == record.originProjectID }
+            ?? (record.originProjectID == ScratchTabs.projectID ? ScratchTabs.project : nil)
+            ?? projects.first
+            ?? ScratchTabs.project
         // moveTab removes the record (its unpin hook) and rewrites the file.
         moveTab(tabID, from: PinnedTabs.projectID, to: dest.id, destPath: dest.path)
     }

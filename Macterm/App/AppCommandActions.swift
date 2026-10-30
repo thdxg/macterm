@@ -23,6 +23,10 @@ extension AppCommand {
         case .newTab:
             guard let projectID else { return nil }
             return { ctx.appState.createTab(projectID: projectID, projects: ctx.projectStore.projects) }
+        case .newScratchTab:
+            // A tab that belongs to no project (#665). It applies with no
+            // project selected too: that is the one New Tab cannot serve.
+            return { ctx.appState.createScratchTab() }
         case .closePane:
             guard let projectID else { return nil }
             return {
@@ -111,14 +115,7 @@ extension AppCommand {
                   tab.splitRoot.allPanes().count > 1,
                   let paneID = tab.focusedPaneID
             else { return nil }
-            let destPath: String
-            if projectID == PinnedTabs.projectID {
-                destPath = PinnedTabs.fallbackRoot
-            } else if let current {
-                destPath = current.path
-            } else {
-                return nil
-            }
+            guard let destPath = Project.synthetic(for: projectID)?.path ?? current?.path else { return nil }
             let index = ws.tabs.firstIndex(where: { $0.id == tab.id }).map { $0 + 1 }
             return { ctx.appState.separatePane(paneID, toProject: projectID, destPath: destPath, at: index) }
         case .splitRight:
@@ -238,13 +235,14 @@ extension AppCommand {
             }
         case .unloadProject:
             // The pinned workspace can't be unloaded (its tabs unload one by
-            // one, only when their own sessions die).
-            guard let projectID, projectID != PinnedTabs.projectID,
+            // one, only when their own sessions die), and the scratch one has
+            // no row to dim.
+            guard let projectID, !Project.isSynthetic(projectID),
                   ctx.appState.isProjectLoaded(projectID)
             else { return nil }
             return { ctx.appState.requestUnloadProject(projectID) }
         case .removeProject:
-            guard let projectID, projectID != PinnedTabs.projectID else { return nil }
+            guard let projectID, !Project.isSynthetic(projectID) else { return nil }
             return {
                 ctx.appState.requestRemoveProject(projectID) {
                     ctx.appState.removeProject(projectID)
