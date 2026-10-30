@@ -20,6 +20,8 @@ docs/pages/*.md    Docs content: one Markdown file for each page
 build-images.mjs   Renders assets/ images → public/img/
 build-docs.mjs     Renders docs/pages/*.md → public/docs/<slug>.html, plus
                    sitemap.xml and robots.txt
+lastmod.mjs        The lastmod of each sitemap entry, from git; for an image
+                   build it writes docs/lastmod.json on the host first
 build-tokens.mjs   Compiles design-system/tokens.json → public/tokens.css and
                    copies bundle.css → public/components/bundle.css
 check-seo.mjs      Fails the build when a fact that index.html states twice
