@@ -123,8 +123,6 @@ jobs:
     runs-on: xcode-27
     permissions:
       contents: write
-      pages: write
-      id-token: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Job-level so both the version gate and the appcast step read the same
@@ -173,11 +171,10 @@ jobs:
 
       # ── Appcast generation ────────────────────────────────────────────
       # Sparkle's `sign_update` produces an EdDSA signature for each DMG.
-      # We then append a new <item> to the appcast on the gh-pages branch.
+      # We then append a new <item> to the appcast on the `appcast` branch.
       # That branch is the STORE, not a website: macterm.thdxg.dev proxies it
       # (website/Caddyfile), so the feed is live the moment this push lands
-      # rather than waiting on a site rebuild. GitHub Pages no longer serves
-      # it — see scripts/publish-appcast.sh for why the push is unchanged.
+      # rather than waiting on a site rebuild. See scripts/publish-appcast.sh.
       #
       # BOTH stable and prerelease publish here now — one feed, two channels.
       # A prerelease's <item> carries <sparkle:channel>beta</sparkle:channel>,

@@ -7,9 +7,9 @@ name: Download Badge
 # result in shields' endpoint schema for `img.shields.io/endpoint?url=…`.
 #
 # The file lives alone on an orphan `badges` branch, force-pushed as a single
-# commit: gh-pages is the appcast store, and publish-appcast.sh's clone-then-push
-# has no retry, so a badge commit landing between its clone and its push would
-# fail a release publish.
+# commit: the `appcast` branch is the feed's store, and publish-appcast.sh's
+# clone-then-push has no retry, so a badge commit landing between its clone and
+# its push would fail a release publish.
 on:
   schedule:
     - cron: "17 */6 * * *" # every 6 hours

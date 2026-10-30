@@ -1014,7 +1014,7 @@ The script has these rules. We learned each one with the real app:
 
 ## Releasing
 
-Macterm updates itself with Sparkle. `SUFeedURL` is `https://macterm.thdxg.dev/appcast.xml`. `website/Caddyfile` serves it straight from the `gh-pages` branch, which is a store and not a site. A build that a pushed tag starts releases through `release.yml`. `release.yml`, `release-tip.yml` and `Test / Release Build` share one build recipe, `.github/actions/build-release`.
+Macterm updates itself with Sparkle. `SUFeedURL` is `https://macterm.thdxg.dev/appcast.xml`. `website/Caddyfile` serves it straight from the `appcast` branch, an orphan branch that is a store and not a site. `FEED_BRANCH` in `scripts/publish-appcast.sh`, the fetch in `release-tip.yml` and the proxy rewrite in the Caddyfile name it, and `UpdaterChannelTests` pins the three. A build that a pushed tag starts releases through `release.yml`. `release.yml`, `release-tip.yml` and `Test / Release Build` share one build recipe, `.github/actions/build-release`.
 
 Secrets:
 
@@ -1038,9 +1038,11 @@ The release notes come from the generator of GitHub (`.github/release.yml`). A p
   - The build job is in one concurrency group with `cancel-in-progress: true`. A newer commit that passed the gate replaces an older build. The setting is at job level, so that a commit that is red, or that only changes docs, cannot cancel a good build. The gate skips a commit when a newer commit already passed Test and Checks, because Test runs finish out of order.
   - There is one tip item in the appcast. Macterm keeps the newest 3 DMGs.
   - The check for staleness asks if the `tip` tag is an ancestor of the built commit. It never compares against HEAD of main.
-  - **Macterm never builds a version again that is already in the appcast**. A run whose tag push failed has shipped everything else. A re-run for the same commit would `--clobber` the DMG with new bytes, while `publish-appcast.sh` keeps the old signature for the equal version. The build job therefore first reads `appcast.xml` from the gh-pages branch. If the version is there, it only moves the tag.
+  - **Macterm never builds a version again that is already in the appcast**. A run whose tag push failed has shipped everything else. A re-run for the same commit would `--clobber` the DMG with new bytes, while `publish-appcast.sh` keeps the old signature for the equal version. The build job therefore first reads `appcast.xml` from the `appcast` branch. If the version is there, it only moves the tag.
   - `build.sh` bakes `MactermUpdateChannel` into `Info.plist`. A tip build that you install by hand therefore uses the tip channel by default. Beta stamps `stable`.
-- `release.yml` skips itself for `ref_name == 'tip'`. Keep GitHub Pages enabled on `gh-pages` until the installs that are pinned to the old feed at `thdxg.github.io` have moved.
+- `release.yml` skips itself for `ref_name == 'tip'`.
+- **GitHub Pages is retired, and the `gh-pages` branch with it**. The feed was at `thdxg.github.io/macterm/appcast.xml` before 1.26.0. An install from before that version asks that URL for ever, gets a 404 and reports no update. Such an install updates only by hand.
+- **Never delete the `appcast` branch**. `publish-appcast.sh` creates a missing branch again as an empty orphan, and the feed then names only the one release that it publishes. Every other channel is empty until its next publish. The 2026-10-29 deletion of `gh-pages` lost every item in this way, and the branch was rebuilt from a local clone.
 
 ## Conventions
 
