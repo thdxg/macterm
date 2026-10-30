@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Sign each DMG with Sparkle's sign_update, then append a new <item> per DMG
-# to appcast.xml on the gh-pages branch.
+# to appcast.xml on the `appcast` branch.
 #
-# The gh-pages BRANCH is the store; it is no longer served by GitHub Pages.
-# macterm.thdxg.dev proxies /appcast.xml and /notes/* straight off the branch
-# (see the @updates block in website/Caddyfile), which is why this script still
-# does an ordinary git read-modify-write and why the feed is live the moment
-# this push lands — there is no site rebuild or deploy in the path. Reading a
-# branch needs no Pages site, so nothing here changed when Pages went away.
+# The `appcast` BRANCH is the store. It is an orphan branch with no commit in
+# common with main, and it is not a website: macterm.thdxg.dev proxies
+# /appcast.xml and /notes/* straight off the branch through
+# raw.githubusercontent.com (see the @updates block in website/Caddyfile).
+# That is why this script does an ordinary git read-modify-write, and why the
+# feed is live the moment this push lands — there is no site rebuild or deploy
+# in the path. The branch was named gh-pages until GitHub Pages was retired;
+# nothing about the store changed with the name.
 #
 # Required env:
 #   SPARKLE_ED_PRIVATE_KEY — EdDSA private key (Sparkle format)
@@ -78,6 +80,10 @@ REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
 # only the feed and its notes pages come from the site.)
 SITE_URL="https://macterm.thdxg.dev"
 NOTES_REL_PATH="notes/${TAG}.html"
+# The branch that holds appcast.xml and notes/. website/Caddyfile proxies it
+# by name and release-tip.yml reads it by name, so all three must agree.
+# UpdaterChannelTests pins them together.
+FEED_BRANCH="appcast"
 # The `.html` is load-bearing: website/Caddyfile exempts /notes/* from the
 # redirect that strips `.html` everywhere else, precisely so this URL resolves.
 NOTES_URL="${SITE_URL}/${NOTES_REL_PATH}"
@@ -171,12 +177,12 @@ for dmg in "${dmgs[@]}"; do
 ITEM
 done
 
-# Clone (or initialize) gh-pages.
+# Clone (or initialize) the feed branch.
 WORKDIR=$(mktemp -d)
 CLONE_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-if ! git clone --depth=1 --branch gh-pages "$CLONE_URL" "$WORKDIR" 2>/dev/null; then
+if ! git clone --depth=1 --branch "$FEED_BRANCH" "$CLONE_URL" "$WORKDIR" 2>/dev/null; then
   git clone "$CLONE_URL" "$WORKDIR"
-  git -C "$WORKDIR" checkout --orphan gh-pages
+  git -C "$WORKDIR" checkout --orphan "$FEED_BRANCH"
   git -C "$WORKDIR" rm -rf . >/dev/null 2>&1 || true
 fi
 
@@ -277,8 +283,9 @@ cp "$NOTES_HTML_FILE" "$NOTES_REL_PATH"
 
 git add appcast.xml "$NOTES_REL_PATH"
 # Name the VERSION as well as the tag: a rolling tag is the same string on every
-# publish, so `Publish appcast for tip` alone makes gh-pages history unreadable.
+# publish, so `Publish appcast for tip` alone makes the branch's history
+# unreadable.
 git commit -m "Publish appcast for ${TAG} (${VERSION})"
-git push origin gh-pages
+git push origin "$FEED_BRANCH"
 
 echo "Published appcast for ${TAG} (${VERSION})"

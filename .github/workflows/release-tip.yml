@@ -23,8 +23,8 @@ on:
     workflows: [Test]
     types: [completed]
     branches: [main]
-  # Manual re-run for a wedged tip (a cancelled publish, a transient gh-pages
-  # push failure, a failed tag push). Builds whatever main is at now — or, if
+  # Manual re-run for a wedged tip (a cancelled publish, a failed push to the
+  # appcast branch, a failed tag push). Builds whatever main is at now — or, if
   # that exact version is already in the feed, only moves the tag (see the
   # build job's "Check whether this version is already published").
   workflow_dispatch:
@@ -251,10 +251,10 @@ jobs:
       # an equal version and keeps the OLD edSignature and length. Every tip
       # follower's update then fails Sparkle's signature check.
       #
-      # Read from the gh-pages BRANCH, not the served feed: that is what
+      # Read from the appcast BRANCH, not the served feed: that is what
       # publish-appcast.sh itself reads and writes, and the CDNs in front of the
       # site can serve a stale copy. A version missing from it (the upload
-      # landed but the gh-pages push failed) is republished in full, which is
+      # landed but the branch push failed) is republished in full, which is
       # consistent: new DMG, new signature, one item.
       - name: Check whether this version is already published
         id: published
@@ -263,9 +263,9 @@ jobs:
         run: |
           source scripts/_lib.sh
           COMPARISON="$(sparkle_comparison_version "$VERSION")"
-          if ! git fetch --depth=1 origin gh-pages; then
+          if ! git fetch --depth=1 origin appcast; then
             echo "published=false" >> "$GITHUB_OUTPUT"
-            echo "No gh-pages branch to read; building."
+            echo "No appcast branch to read; building."
           elif git show FETCH_HEAD:appcast.xml 2>/dev/null \
             | grep -qF "<sparkle:version>${COMPARISON}</sparkle:version>"; then
             echo "published=true" >> "$GITHUB_OUTPUT"
@@ -312,7 +312,7 @@ jobs:
       # read through two CDNs (Cloudflare in front of the site, and raw
       # githubusercontent behind it), so reading it here could see a stale copy.
       # (publish-appcast.sh keeps its own version guard against the real
-      # gh-pages branch as the backstop.)
+      # appcast branch as the backstop.)
       #
       # `is-ancestor` is exact for main because PRs merge via squash only, so the
       # history is linear. A tip tag EQUAL to our commit passes (a commit is its
@@ -424,7 +424,7 @@ jobs:
       # else has landed. The tag is the ledger the gate job reads to skip an
       # already-built commit, so advancing it is the commit point of the whole
       # publish, and this order makes every failure self-heal on the next merge:
-      # a failed asset upload or a failed gh-pages push leaves the ledger at the
+      # a failed asset upload or a failed appcast push leaves the ledger at the
       # previous commit, so the next automatic run simply redoes this one. If it
       # was this push that failed, the next merge's build supersedes it, and a
       # re-run of the same commit finds its version already published and does

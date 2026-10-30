@@ -62,15 +62,12 @@
 	# time by scripts/publish-appcast.sh — long after the image was built — so
 	# baking them in would mean rebuilding and redeploying the site on every
 	# release and on every tip build, and the feed would lag each one by that
-	# whole cycle. The gh-pages BRANCH stays the store instead and is proxied
-	# from here: a branch is readable without a GitHub Pages site, so the
+	# whole cycle. The repository's `appcast` BRANCH is the store instead and
+	# is proxied from here: raw.githubusercontent.com serves any branch, so the
 	# publish script keeps its git read-modify-write untouched, and the feed is
-	# live the instant the workflow pushes.
-	#
-	# This is also what makes the migration off Pages free: while Pages is
-	# still enabled for the installs whose baked-in SUFeedURL points at
-	# thdxg.github.io, both URLs serve the same bytes from the same commit, so
-	# the old and new feeds cannot drift apart.
+	# live the instant the workflow pushes. The branch name is a contract with
+	# FEED_BRANCH in scripts/publish-appcast.sh and with the fetch in
+	# release-tip.yml; UpdaterChannelTests pins the three.
 	@updates path /appcast.xml /notes/*
 	handle @updates {
 		# raw.githubusercontent serves EVERY path as `text/plain` with its own
@@ -97,7 +94,7 @@
 		header >Cache-Control "public, max-age=900"
 
 		reverse_proxy https://raw.githubusercontent.com {
-			rewrite /thdxg/macterm/gh-pages{uri}
+			rewrite /thdxg/macterm/appcast{uri}
 			header_up Host raw.githubusercontent.com
 
 			# Where the bytes come from is not part of the contract with Sparkle,
