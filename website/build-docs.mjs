@@ -22,10 +22,11 @@
 //                            adds a filename caption row.
 //   > blockquote             a Note (ec-prose styles every blockquote as one).
 
-import { readFileSync, writeFileSync, readdirSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Marked } from "marked";
+import { lastModifiedDates, LASTMOD_FILE, LANDING_SOURCE, pageSource } from "./lastmod.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PAGES_DIR = join(here, "docs", "pages");
@@ -361,30 +362,47 @@ function main() {
   );
 }
 
+// The lastmod of each page source, see lastmod.mjs. Git answers in a checkout.
+// In the image build there is no git, so the host wrote docs/lastmod.json into
+// the build context first. Git comes first so that a stale file in a checkout
+// never wins. With neither, the sitemap gets no lastmod and check-seo.mjs
+// fails the build, because a sitemap without the dates is a silent regression.
+function loadLastModified() {
+  try {
+    return lastModifiedDates();
+  } catch (err) {
+    if (existsSync(LASTMOD_FILE)) {
+      return JSON.parse(readFileSync(LASTMOD_FILE, "utf8"));
+    }
+    console.warn(
+      `build-docs: no lastmod for the sitemap (${err.message}; ${LASTMOD_FILE} is absent)`
+    );
+    return {};
+  }
+}
+
 // Emit sitemap.xml (landing + every docs page) and robots.txt into public/.
 //
-// Two things deliberately absent:
+// `changefreq` is deliberately absent: Google has said for years that it
+// ignores the element outright, so emitting `weekly` on every URL was pure
+// noise.
 //
-// `changefreq` — Google has said for years that it ignores the element
-// outright, so emitting `weekly` on every URL was pure noise.
+// `lastmod` is the commit date of the page's source (lastmod.mjs says why a
+// file mtime cannot serve). The template and the build script do not count:
+// Google reads lastmod as "the content changed", and a template change moves
+// no content.
 //
-// `lastmod` — there is no honest value available here. Source mtimes are set
-// by `git checkout`, and the image build copies them from a fresh clone, so
-// every page would claim to have changed on every deploy. Google discounts a
-// lastmod that behaves that way, and a discounted lastmod is worth less than
-// none: it costs the signal on the pages that genuinely did change. Emitting
-// it properly needs a per-page commit date, which means git history inside the
-// build stage — the Containerfile copies only website/ and assets/.
-//
-// `priority` is likewise advisory-at-best, but unlike the other two it is
-// cheap, stable, and honest: it says the landing page and docs index matter
-// more than page 9 of the docs, which is true and does not change per build.
+// `priority` is advisory-at-best, but it is cheap, stable, and honest: it says
+// the landing page and docs index matter more than page 9 of the docs, which
+// is true and does not change per build.
 function writeSitemapAndRobots(pages) {
+  const lastmod = loadLastModified();
   const entries = [
-    { url: SITE_URL + "/", priority: "1.0" },
+    { url: SITE_URL + "/", priority: "1.0", lastmod: lastmod[LANDING_SOURCE] },
     ...pages.map((p) => ({
       url: SITE_URL + urlForSlug(p.meta.slug),
       priority: p.meta.slug === "index" ? "0.9" : "0.7",
+      lastmod: lastmod[pageSource(p.file)],
     })),
   ];
 
@@ -394,7 +412,9 @@ function writeSitemapAndRobots(pages) {
     entries
       .map(
         (e) =>
-          `  <url>\n    <loc>${e.url}</loc>\n    <priority>${e.priority}</priority>\n  </url>`
+          `  <url>\n    <loc>${e.url}</loc>\n` +
+          (e.lastmod ? `    <lastmod>${e.lastmod}</lastmod>\n` : "") +
+          `    <priority>${e.priority}</priority>\n  </url>`
       )
       .join("\n") +
     `\n</urlset>\n`;

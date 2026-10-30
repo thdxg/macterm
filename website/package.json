@@ -11,7 +11,7 @@
     "build": "bun run build:img && bun run build:docs && bun run build:css && bun run check:seo",
     "serve": "PORT=${PORT:-8765} SITE_ROOT=$PWD/public caddy run --config Caddyfile",
     "dev": "bun run build && bun run serve",
-    "podman:build": "podman build --format docker --platform linux/arm64 -f Containerfile -t macterm-website ..",
+    "podman:build": "bun lastmod.mjs && podman build --format docker --platform linux/arm64 -f Containerfile -t macterm-website ..",
     "podman:run": "podman run --rm -p 3000:3000 macterm-website"
   },
   "devDependencies": {

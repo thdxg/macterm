@@ -1,6 +1,6 @@
-// Build-time guard for the two SEO invariants nothing else can enforce.
+// Build-time guard for the SEO invariants nothing else can enforce.
 // Runs after build-docs.mjs; exits non-zero (failing `bun run build`, and so
-// the image build and CI) when either is broken.
+// the image build and CI) when one is broken.
 //
 // 1. THE FAQ IS WRITTEN TWICE. public/index.html is hand-authored and no build
 //    step rewrites it, so the visible <section id="faq"> markup and the
@@ -18,6 +18,12 @@
 //    canonical, og:url, and JSON-LD @ids. A domain change that updated only the
 //    constant would leave the landing page — the site's most important URL —
 //    pointing its canonical at the old origin.
+//
+// 4. EVERY SITEMAP ENTRY HAS A LASTMOD. build-docs.mjs takes the dates from
+//    git, or from docs/lastmod.json when there is no git (the image build).
+//    With neither it writes the sitemap without them and only warns, so a
+//    `podman build` that skipped `node lastmod.mjs` would ship a sitemap that
+//    tells Google nothing about what changed, and nobody would see it.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -27,6 +33,7 @@ import { readdirSync } from "node:fs";
 const here = dirname(fileURLToPath(import.meta.url));
 const INDEX = join(here, "public", "index.html");
 const DOCS_DIR = join(here, "public", "docs");
+const SITEMAP = join(here, "public", "sitemap.xml");
 
 // Kept in step with build-docs.mjs's own constant; invariant 2 is what makes a
 // disagreement between the two an error rather than a silent inconsistency.
@@ -179,10 +186,40 @@ function checkDocsPages() {
   }
 }
 
+// ---- 4. Every sitemap entry carries a lastmod -----------------------------
+function checkSitemapLastmod() {
+  let xml;
+  try {
+    xml = readFileSync(SITEMAP, "utf8");
+  } catch {
+    problems.push(`check-seo: ${SITEMAP} is missing — run build:docs first`);
+    return;
+  }
+  const entries = [...xml.matchAll(/<url>([\s\S]*?)<\/url>/g)].map((m) => m[1]);
+  if (!entries.length) {
+    problems.push("sitemap.xml: no <url> entries");
+    return;
+  }
+  for (const entry of entries) {
+    const loc = entry.match(/<loc>([^<]+)<\/loc>/)?.[1] ?? "(no loc)";
+    const lastmod = entry.match(/<lastmod>([^<]+)<\/lastmod>/)?.[1];
+    if (!lastmod) {
+      problems.push(
+        `sitemap.xml: ${loc} has no <lastmod>. In a checkout, git supplies it; ` +
+          "for an image build, run `node lastmod.mjs` on the host first so that " +
+          "docs/lastmod.json is in the build context."
+      );
+    } else if (Number.isNaN(Date.parse(lastmod))) {
+      problems.push(`sitemap.xml: ${loc} has an unreadable <lastmod> ${lastmod}`);
+    }
+  }
+}
+
 const index = readFileSync(INDEX, "utf8");
 checkFaqMirrorsMarkup(index);
 checkLandingOrigin(index);
 checkDocsPages();
+checkSitemapLastmod();
 
 if (problems.length) {
   console.error("check-seo: FAILED\n");
@@ -191,4 +228,6 @@ if (problems.length) {
   process.exit(1);
 }
 
-console.log("check-seo: ok (FAQ markup matches JSON-LD, origins agree, JSON-LD parses)");
+console.log(
+  "check-seo: ok (FAQ markup matches JSON-LD, origins agree, JSON-LD parses, sitemap has lastmod)"
+);

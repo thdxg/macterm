@@ -12,6 +12,12 @@
 # `--format docker` because the OCI image format has no HEALTHCHECK: podman's
 # default would build the image and silently drop the one below.
 #
+# Run `node website/lastmod.mjs` on the host before the build. The build stage
+# has no git history, and that script writes the commit date of every page to
+# website/docs/lastmod.json, which `bun run build` turns into the sitemap's
+# <lastmod>. Without the file, check-seo.mjs fails the build on purpose. The
+# `podman:build` script and the Website workflow both run it.
+#
 # Bun builds, Caddy serves. The site is static once `bun run build` has
 # rendered the docs and compiled the CSS, so the runtime stage carries no
 # JavaScript at all — no Bun, no node_modules, just Caddy and public/.

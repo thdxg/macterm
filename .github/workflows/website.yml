@@ -45,6 +45,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # The sitemap's <lastmod> is the commit date of each page. A clone
+          # with depth 1 has one commit for every file, and website/lastmod.mjs
+          # refuses a date from the edge of a shallow clone.
+          fetch-depth: 0
+
+      # The build stage has no git history (see website/Containerfile), so the
+      # page dates go into the build context as website/docs/lastmod.json.
+      - name: Sitemap dates
+        run: node website/lastmod.mjs
 
       # skopeo is only used after a push, so check it here, where a pull
       # request fails on it too.
