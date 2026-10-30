@@ -250,6 +250,10 @@ struct SidebarContent: View {
     private let paintsFallbackFooterBackground: Bool
     private let forcesScrollEdgeEffects: Bool
     private let topSafeAreaBarHeight: CGFloat
+    /// The first scratch row's frame in the window's coordinate space, while
+    /// that row is on screen: where the List draws the separator (#665).
+    @State
+    private var firstScratchRowFrame: CGRect?
 
     init(
         presentation: SidebarPresentationState,
@@ -311,9 +315,20 @@ struct SidebarContent: View {
             // only inside a container.
             if showsScratchRows {
                 Section {
-                    ScratchTabsSeparator()
                     ForEach(Array(scratchTabs.enumerated()), id: \.element.id) { tabIndex, tab in
                         tabRow(tab: tab, index: tabIndex, project: ScratchTabs.project)
+                            // The first row tells the List where it is, and
+                            // the List draws the separator above it (see
+                            // `ScratchTabsSeparator`). A row that scrolls out
+                            // of view reports nothing, so the line goes too.
+                            .onGeometryChange(for: CGRect.self) { proxy in
+                                proxy.frame(in: .global)
+                            } action: { frame in
+                                if tabIndex == 0 { firstScratchRowFrame = frame }
+                            }
+                            .onDisappear {
+                                if tabIndex == 0 { firstScratchRowFrame = nil }
+                            }
                     }
                     .dropDestination(for: TabSlotDropItem.self) { items, offset in
                         for item in items {
@@ -357,6 +372,24 @@ struct SidebarContent: View {
             contextMenu(for: items)
         }
         .listStyle(.sidebar)
+        // The separator above the scratch rows (#665). The first scratch row
+        // reports its frame in the window's space: each List row is hosted
+        // on its own, so a coordinate space named here does not reach it and
+        // a frame asked for in that space comes back global. The overlay
+        // takes its own global origin off, and draws in its local space.
+        .overlay {
+            GeometryReader { proxy in
+                let origin = proxy.frame(in: .global).origin
+                ZStack(alignment: .topLeading) {
+                    if let frame = firstScratchRowFrame {
+                        ScratchTabsSeparator(firstRowFrame: frame.offsetBy(dx: -origin.x, dy: -origin.y))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .clipped()
+            }
+            .allowsHitTesting(false)
+        }
         .scrollContentBackground(.hidden)
         .contentMargins(.top, SidebarLayoutMetrics.topContentMargin, for: .scrollContent)
         .sidebarTopSafeAreaBar(height: topSafeAreaBarHeight)
@@ -1623,15 +1656,43 @@ private struct PinTabDropZone: View {
 }
 
 /// The line above the scratch rows (#665): where the projects end and the
-/// tabs without a project begin. A row of its own, so the List's insertion
-/// line for a drop among the scratch rows is unaffected. Not selectable: it
-/// carries no tag, so a click on it selects nothing.
+/// tabs without a project begin. Drawn by the List's overlay in the Section
+/// gap above the first scratch row, from that row's frame in the overlay's
+/// coordinate space.
+///
+/// Every distance here is measured on a build. The Section boundary leaves a
+/// gap of about 13 pt between the last project row and the first scratch
+/// row, and nothing else, so the line sits in the middle of it. It is not a
+/// row: the sidebar list gives every row its row height as a minimum, about
+/// 31 pt, whatever its content, control size or row insets, and
+/// `defaultMinListRowHeight` changes nothing on macOS. That put 45 pt
+/// between the two regions. An overlay on the first scratch row, drawn up
+/// into the gap, is clipped by the row, and a Divider as the Section's
+/// header shows nothing.
 private struct ScratchTabsSeparator: View {
+    /// The first scratch row's CONTENT frame in the overlay's coordinate
+    /// space: the row centers its content, so the content's middle is the
+    /// row's middle, whatever the icon size makes of the content's height.
+    let firstRowFrame: CGRect
+
+    /// The sidebar list's row height, the row's minimum: the row's top is
+    /// half of it above the content's middle.
+    static let rowHeight: CGFloat = 32
+    /// The Section gap between the last project row and the first scratch
+    /// row. The line sits in its middle.
+    static let sectionGap: CGFloat = 13
+    /// As wide as a row's selection highlight: the sidebar list insets a
+    /// row's content 25 pt from the sidebar's edges, and the highlight 10 pt.
+    /// A shorter line read as part of the last project.
+    static let highlightOutset: CGFloat = 15
+
     var body: some View {
         Divider()
-            .padding(.vertical, 4)
-            .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
-            .selectionDisabled()
+            .frame(width: firstRowFrame.width + 2 * Self.highlightOutset)
+            .offset(
+                x: firstRowFrame.minX - Self.highlightOutset,
+                y: firstRowFrame.midY - Self.rowHeight / 2 - Self.sectionGap / 2
+            )
     }
 }
 
