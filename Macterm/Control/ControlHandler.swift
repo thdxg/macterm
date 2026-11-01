@@ -209,7 +209,7 @@ final class ControlHandler {
     /// What the window's titlebar and the macOS Window menu show for it.
     private func windowProjectName(_ projectID: UUID?) -> String? {
         guard let projectID else { return nil }
-        if projectID == PinnedTabs.projectID { return PinnedTabs.project.name }
+        if let synthetic = Project.synthetic(for: projectID) { return synthetic.name }
         return projectStore.projects.first { $0.id == projectID }?.name
     }
 
@@ -558,7 +558,7 @@ final class ControlHandler {
         let name = args.name?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let name {
             guard !name.isEmpty else { throw Self.emptyNameError }
-            guard !PinnedTabs.reservesName(name) else { throw Self.reservedNameError }
+            try Self.checkReservedName(name)
         }
 
         // Always create — `project create` is not idempotent: re-running adds a
@@ -586,6 +586,8 @@ final class ControlHandler {
             // would treat it as a project rooted at the home directory; it has
             // its own selection path.
             appState.selectPinnedProject()
+        } else if project.id == ScratchTabs.projectID {
+            try appState.selectScratchTabs(in: resolveWindow(args))
         } else {
             // `--window` targets a specific one; without it the key window,
             // which is what a person at the keyboard means.
@@ -620,17 +622,18 @@ final class ControlHandler {
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw Self.emptyNameError }
         let project = try resolveProject(selector)
-        // Unreachable through the app (the sentinel is not a `ProjectStore`
+        // Unreachable through the app (a sentinel is not a `ProjectStore`
         // row, so no sidebar row edits it) — but `resolveProject` accepts
-        // `pinned`, so the CLI is the one way in and has to say no here.
-        guard project.id != PinnedTabs.projectID else {
-            throw ControlError(code: .badRequest, message: "the pinned section cannot be renamed")
+        // `pinned` and `scratch`, so the CLI is the one way in and has to say
+        // no here.
+        if Project.isSynthetic(project.id) {
+            throw ControlError(code: .badRequest, message: "the \(project.name) section cannot be renamed")
         }
-        // `resolveProject` matches the sentinel's display name BEFORE any user
+        // `resolveProject` matches a sentinel's display name BEFORE any user
         // project's, so a project renamed to it becomes unreachable by name
         // (UUID and index still work, but `--project Pinned` would silently
         // target the pinned workspace instead). Refuse rather than strand it.
-        guard !PinnedTabs.reservesName(trimmed) else { throw Self.reservedNameError }
+        try Self.checkReservedName(trimmed)
         projectStore.rename(id: project.id, to: trimmed)
         guard let updated = projectStore.projects.first(where: { $0.id == project.id }) else {
             throw ControlError(code: .internalError, message: "project rename failed")
@@ -642,14 +645,21 @@ final class ControlHandler {
     /// once trimmed.
     private static let emptyNameError = ControlError(code: .badRequest, message: "project name cannot be empty")
 
-    /// What `project.create` and `project.rename` say to a name
-    /// `PinnedTabs.reservesName` matches — worded like the app's own refusal
-    /// (`PinnedTabs.reservedNameMessage`), in the CLI's quoting.
-    private static let reservedNameError = ControlError(
-        code: .badRequest,
-        message: "\"\(PinnedTabs.displayName)\" is a reserved name for the pinned tabs",
-        action: "select another name"
-    )
+    /// What `project.create` and `project.rename` say to a name a sentinel
+    /// workspace reserves (`Project.reservesName`) — worded like the app's
+    /// own refusal (`PinnedTabs.reservedNameMessage`,
+    /// `ScratchTabs.reservedNameMessage`), in the CLI's quoting.
+    private static func checkReservedName(_ name: String) throws {
+        let message: String
+        if PinnedTabs.reservesName(name) {
+            message = "\"\(PinnedTabs.displayName)\" is a reserved name for the pinned tabs"
+        } else if ScratchTabs.reservesName(name) {
+            message = "\"\(ScratchTabs.displayName)\" is a reserved name for the tabs without a project"
+        } else {
+            return
+        }
+        throw ControlError(code: .badRequest, message: message, action: "select another name")
+    }
 
     /// Drop a project's workspace and its `ProjectStore` entry — the same pair
     /// every in-app removal runs (sidebar row menu, bulk delete, palette,
@@ -668,10 +678,10 @@ final class ControlHandler {
             )
         }
         let project = try resolveProject(selector)
-        // See `projectRename` — the sentinel is reachable only through this
-        // selector, and tearing the pinned workspace down is never valid.
-        guard project.id != PinnedTabs.projectID else {
-            throw ControlError(code: .badRequest, message: "the pinned section cannot be removed")
+        // See `projectRename` — a sentinel is reachable only through this
+        // selector, and tearing its workspace down is never valid.
+        if Project.isSynthetic(project.id) {
+            throw ControlError(code: .badRequest, message: "the \(project.name) section cannot be removed")
         }
 
         // The same predicate `AppState.requestRemoveProject` evaluates before
@@ -1313,7 +1323,7 @@ final class ControlHandler {
 
     private func layoutApply(_ args: ControlArgs) throws -> ControlData {
         let project = try resolveProject(args.project)
-        try rejectPinned(project, verb: "layout apply")
+        try rejectSynthetic(project, verb: "layout apply")
         if let error = appState.applyLayout(project: project) {
             throw ControlError(code: .notFound, message: EnglishErrorText.describe(error))
         }
@@ -1344,24 +1354,31 @@ final class ControlHandler {
 
     private func layoutSave(_ args: ControlArgs) throws -> ControlData {
         let project = try resolveProject(args.project)
-        try rejectPinned(project, verb: "layout save")
+        try rejectSynthetic(project, verb: "layout save")
         if let error = appState.saveLayout(project: project, siblingProjects: projectStore.projects) {
             throw ControlError(code: .internalError, message: EnglishErrorText.describe(error))
         }
         return ControlData()
     }
 
-    /// The layout verbs must never treat the SYNTHETIC pinned project as a
-    /// real one: `layout save` would write a project file declaring the home
-    /// directory (which Apply Layout on any home-rooted project would then
-    /// pick up), and `layout apply --force` would swap the pinned
+    /// The layout verbs must never treat a SYNTHETIC project (pinned, scratch)
+    /// as a real one: `layout save` would write a project file declaring the
+    /// home directory (which Apply Layout on any home-rooted project would
+    /// then pick up), and `layout apply --force` would swap the pinned
     /// workspace's tabs out from under the records.
-    private func rejectPinned(_ project: Project, verb: String) throws {
-        guard project.id == PinnedTabs.projectID else { return }
+    private func rejectSynthetic(_ project: Project, verb: String) throws {
+        guard Project.isSynthetic(project.id) else { return }
+        if project.id == PinnedTabs.projectID {
+            throw ControlError(
+                code: .badRequest,
+                message: "\(verb) does not apply to the pinned workspace. Macterm manages its layout by itself",
+                action: "edit ~/.config/macterm/pinned.yaml instead"
+            )
+        }
         throw ControlError(
             code: .badRequest,
-            message: "\(verb) does not apply to the pinned workspace. Macterm manages its layout by itself",
-            action: "edit ~/.config/macterm/pinned.yaml instead"
+            message: "\(verb) does not apply to the scratch tabs. They have no layout file",
+            action: "pass --project with a project"
         )
     }
 
@@ -1380,6 +1397,10 @@ final class ControlHandler {
             return try workspace(holding: session)
         }
         let project = try resolveProject(args.project)
+        // The scratch workspace exists on demand (#665): `tab new --project
+        // scratch` is how a script makes the first scratch tab, and there is no
+        // row to select first. Empty, it draws nothing in the sidebar.
+        if project.id == ScratchTabs.projectID { appState.ensureScratchWorkspace() }
         guard let workspace = appState.workspaces[project.id] else {
             throw ControlError(
                 code: .notFound,
@@ -1397,16 +1418,15 @@ final class ControlHandler {
     private func workspace(holding session: String) throws -> (Project, Workspace) {
         let candidates = [appState.activeProjectID].compactMap(\.self)
             + projectStore.projects.map(\.id)
-            + [PinnedTabs.projectID]
+            + [PinnedTabs.projectID, ScratchTabs.projectID]
         for projectID in candidates {
             guard let workspace = appState.workspaces[projectID],
                   workspace.tabs.contains(where: { tab in
                       tab.splitRoot.allPanes().contains { $0.sessionName == session }
                   })
             else { continue }
-            let project = projectID == PinnedTabs.projectID
-                ? PinnedTabs.project
-                : projectStore.projects.first { $0.id == projectID }
+            let project = Project.synthetic(for: projectID)
+                ?? projectStore.projects.first { $0.id == projectID }
             if let project { return (project, workspace) }
         }
         throw ControlError(
@@ -1418,10 +1438,11 @@ final class ControlHandler {
 
     private func resolveProject(_ selector: String?) throws -> Project {
         guard let selector, !selector.isEmpty else {
-            // The pinned workspace resolves through its synthetic project so
-            // tab/pane verbs keep working while it's active.
-            if appState.activeProjectID == PinnedTabs.projectID {
-                return PinnedTabs.project
+            // The pinned and the scratch workspaces resolve through their
+            // synthetic projects so tab/pane verbs keep working while one is
+            // active.
+            if let active = appState.activeProjectID, let synthetic = Project.synthetic(for: active) {
+                return synthetic
             }
             guard let active = projectStore.projects.first(where: { $0.id == appState.activeProjectID }) else {
                 throw ControlError(
@@ -1442,6 +1463,11 @@ final class ControlHandler {
             || selector == PinnedTabs.projectID.uuidString
         {
             return PinnedTabs.project
+        }
+        // `--project scratch` (or `"Scratch Tabs"`, or the sentinel UUID) targets
+        // the scratch workspace (#665), by the same rule.
+        if ScratchTabs.reservesName(selector) || selector == ScratchTabs.projectID.uuidString {
+            return ScratchTabs.project
         }
         let projects = projectStore.projects
         if let id = UUID(uuidString: selector), let match = projects.first(where: { $0.id == id }) {

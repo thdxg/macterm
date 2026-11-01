@@ -907,9 +907,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         for ws in appState?.workspaces.values ?? [:].values {
             let project = projectsByID[ws.projectID]
-            let projectName = ws.projectID == PinnedTabs.projectID
-                ? PinnedTabs.displayName
-                : (project?.name ?? String(localized: "Project"))
+            let projectName = Project.synthetic(for: ws.projectID)?.name
+                ?? project?.name
+                ?? String(localized: "Project")
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() where pane.needsConfirmClose {
                     // The adaptive poll may be slow or fully paused here (e.g.

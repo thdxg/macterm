@@ -35,7 +35,8 @@ struct Project: Identifiable, Codable, Hashable {
         createdAt = Date()
     }
 
-    /// Explicit-id variant for SYNTHETIC projects only (`PinnedTabs.project`).
+    /// Explicit-id variant for SYNTHETIC projects only (`PinnedTabs.project`,
+    /// `ScratchTabs.project`).
     /// Real projects always mint a fresh id above — a directory is not an
     /// identity, and two projects may share a path.
     init(id: UUID, name: String, path: String) {
@@ -62,4 +63,41 @@ extension Project {
     /// panes over ssh (`RemoteSpawn`) and skip every local-cwd/local-pid
     /// feature (foreground poll, replace-path-with-cwd, live layout capture).
     var isRemote: Bool { ProjectPath.isRemote(path) }
+}
+
+/// The two workspaces that are not `ProjectStore` rows: the pinned tabs and
+/// the scratch tabs. Each has a synthetic `Project` for the call sites that
+/// render or route by a `Project`.
+extension Project {
+    /// The synthetic project behind a sentinel workspace id; nil for a real
+    /// project's id.
+    static func synthetic(for id: UUID) -> Project? {
+        switch id {
+        case PinnedTabs.projectID: PinnedTabs.project
+        case ScratchTabs.projectID: ScratchTabs.project
+        default: nil
+        }
+    }
+
+    /// Whether `id` is a sentinel workspace: it has no directory, no layout
+    /// file and no row in Settings → Projects, and it can be neither renamed,
+    /// unloaded nor removed.
+    static func isSynthetic(_ id: UUID) -> Bool {
+        synthetic(for: id) != nil
+    }
+
+    /// Why a typed project name is refused, or nil when it is free. A
+    /// sentinel workspace reserves its name, because `ControlHandler`
+    /// resolves it before any project (`PinnedTabs.reservesName`,
+    /// `ScratchTabs.reservesName`). The one test every naming path applies.
+    static func reservedNameMessage(for name: String) -> String? {
+        if PinnedTabs.reservesName(name) { return PinnedTabs.reservedNameMessage }
+        if ScratchTabs.reservesName(name) { return ScratchTabs.reservedNameMessage }
+        return nil
+    }
+
+    /// `reservedNameMessage(for:) != nil`.
+    static func reservesName(_ name: String) -> Bool {
+        reservedNameMessage(for: name) != nil
+    }
 }

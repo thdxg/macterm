@@ -40,12 +40,13 @@ struct MactermProjectQuery: EntityStringQuery, EnumerableEntityQuery {
     @MainActor
     private func all() async throws -> [MactermProjectEntity] {
         let ctx = try await MactermIntentHost.shared.context()
-        // The pinned workspace is offered only once it exists — before that
-        // there is nothing to address in it.
+        // The pinned and the scratch workspaces are offered only once they
+        // exist — before that there is nothing to address in them.
         let pinned = ctx.appState.workspaces[PinnedTabs.projectID] != nil
             ? [MactermProjectEntity(PinnedTabs.project)]
             : []
-        return pinned + ctx.projectStore.projects.map(MactermProjectEntity.init)
+        let scratch = ctx.appState.hasScratchTabs ? [MactermProjectEntity(ScratchTabs.project)] : []
+        return pinned + ctx.projectStore.projects.map(MactermProjectEntity.init) + scratch
     }
 
     @MainActor

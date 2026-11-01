@@ -839,9 +839,9 @@ struct MainWindow: View {
         // mirrors whichever window is KEY, so a background window would redraw
         // itself as whatever the frontmost one is showing (#345).
         guard let pid = windowState.activeProjectID else { return nil }
-        // The pinned workspace has no ProjectStore row; render it through the
-        // synthetic project.
-        if pid == PinnedTabs.projectID { return PinnedTabs.project }
+        // The pinned and the scratch workspaces have no ProjectStore row; render
+        // them through their synthetic projects.
+        if let synthetic = Project.synthetic(for: pid) { return synthetic }
         return projectStore.projects.first { $0.id == pid }
     }
 
@@ -856,8 +856,8 @@ struct MainWindow: View {
 
     private var activeTabTitle: String {
         guard let project = activeProject else { return "" }
-        // The pinned workspace has no project directory worth advertising.
-        if project.id == PinnedTabs.projectID { return "" }
+        // A sentinel workspace has no project directory worth advertising.
+        if Project.isSynthetic(project.id) { return "" }
         return project.path
     }
 }
@@ -877,6 +877,7 @@ struct WelcomeView: View {
     private var shortcuts: [(HotkeyAction, String)] {
         [
             (.openProject, String(localized: "Open a project")),
+            (.newScratchTab, String(localized: "New scratch tab")),
             (.toggleCommandPalette, String(localized: "Command palette")),
             (.toggleSidebar, String(localized: "Toggle sidebar")),
         ]
@@ -965,7 +966,9 @@ struct EmptyProjectView: View {
                 Text(project.name)
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(MactermTheme.fg)
-                Text(project.path)
+                // A sentinel workspace (the scratch tabs) has no project
+                // directory to show, as the window's subtitle has none.
+                Text(Project.isSynthetic(project.id) ? "" : project.path)
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(MactermTheme.fgMuted)
                     .textSelection(.enabled)

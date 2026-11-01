@@ -1761,7 +1761,10 @@ final class AppState {
         logger.info("restoreSelection: \(projects.count, privacy: .public) projects")
         hasRestoredSelection = true
         let loaded = workspaceStore.load()
-        let valid = Set(projects.map(\.id))
+        // The scratch workspace restores like a project's (#665): its only
+        // record is the snapshot, and its sessions must be claims before the
+        // orphan sweep below.
+        let valid = Set(projects.map(\.id)).union([ScratchTabs.projectID])
         // Restore every project's snapshot — including layout-file projects.
         // The snapshot carries each pane's persisted zmx session identity, so
         // panes REATTACH their still-running shells; applying the project
@@ -1791,6 +1794,15 @@ final class AppState {
                 if !pinnedRecords.isEmpty {
                     ensurePinnedWorkspace()
                     activeProjectID = id
+                }
+            } else if id == ScratchTabs.projectID {
+                // Only with tabs: an empty scratch workspace has no row in the
+                // sidebar, so a launch on it would show an empty detail view
+                // with nothing selected.
+                if hasScratchTabs {
+                    activeProjectID = id
+                    acknowledgeActiveTab(projectID: id)
+                    warmFocusedProject()
                 }
             } else if let project = projects.first(where: { $0.id == id }) {
                 activeProjectID = id
@@ -2523,11 +2535,11 @@ final class AppState {
     /// refuses it with a `bad_request`. The field has closed by the time the
     /// name arrives, so the notice is the one place left to say why.
     func renameProject(_ projectID: UUID, to name: String, store: ProjectStore) {
-        guard !PinnedTabs.reservesName(name) else {
+        if let message = Project.reservedNameMessage(for: name) {
             present(.notice(
                 .reservedProjectName,
                 title: String(localized: "Cannot rename project"),
-                message: PinnedTabs.reservedNameMessage,
+                message: message,
                 host: .mainWindow
             ))
             return
@@ -2574,7 +2586,9 @@ final class AppState {
     func unloadProject(_ projectID: UUID) {
         // The pinned workspace is never unloaded wholesale — pinned tabs are
         // the durable thing; a tab only unloads when its own sessions die.
-        guard projectID != PinnedTabs.projectID else { return }
+        // The scratch workspace has no row to dim (`unloadedProjectIDs` dims
+        // project rows), so it is not unloaded either.
+        guard !Project.isSynthetic(projectID) else { return }
         guard let ws = workspaces[projectID] else { return }
         logger.debug("unloadProject: \(projectID, privacy: .public)")
         let snapshot = WorkspaceSerializer.snapshot([projectID: ws])
@@ -2633,9 +2647,10 @@ final class AppState {
     /// a bulk removal can persist once for the whole batch instead of
     /// re-serializing the snapshot per item.
     private func removeProjectWithoutSaving(_ projectID: UUID) {
-        // Unreachable through the UI (the sentinel is not a Project) — hard
-        // guard so no future caller can tear the pinned workspace down.
-        guard projectID != PinnedTabs.projectID else { return }
+        // Unreachable through the UI (a sentinel is not a Project) — hard
+        // guard so no future caller can tear the pinned or the scratch
+        // workspace down.
+        guard !Project.isSynthetic(projectID) else { return }
         logger.debug("removeProject: \(projectID, privacy: .public)")
         if let ws = workspaces[projectID] {
             // Project removed for good → its sessions die with it, unless a
@@ -2827,9 +2842,10 @@ final class AppState {
         )
     }
 
-    /// Returns the configured project root, including the synthetic pinned workspace fallback.
+    /// Returns the configured project root. A sentinel workspace (pinned,
+    /// scratch) has none, and its synthetic project names home.
     func configuredProjectDirectory(projectID: UUID, projects: [Project]) -> String? {
-        if projectID == PinnedTabs.projectID { return PinnedTabs.fallbackRoot }
+        if let synthetic = Project.synthetic(for: projectID) { return synthetic.path }
         return projects.first(where: { $0.id == projectID })?.path
     }
 
@@ -3338,7 +3354,12 @@ final class AppState {
         let projectEntries: [(projectID: UUID, tabID: UUID)] = projects.flatMap { p in
             (workspaces[p.id]?.tabs ?? []).map { (p.id, $0.id) }
         }
-        let allTabs = pinnedEntries + projectEntries
+        // Scratch tabs cycle last: the sidebar draws their section below the
+        // projects.
+        let scratchEntries: [(projectID: UUID, tabID: UUID)] = (scratchWorkspace?.tabs ?? []).map {
+            (ScratchTabs.projectID, $0.id)
+        }
+        let allTabs = pinnedEntries + projectEntries + scratchEntries
         guard !allTabs.isEmpty else { return }
 
         let currentTabID = activeProjectID.flatMap { pid in workspaces[pid]?.activeTabID }
@@ -3353,6 +3374,10 @@ final class AppState {
         if entry.projectID == PinnedTabs.projectID {
             // Loads an unloaded record and persists on its own.
             selectPinnedTab(entry.tabID)
+            return
+        }
+        if entry.projectID == ScratchTabs.projectID {
+            selectScratchTab(entry.tabID)
             return
         }
         guard let project = projects.first(where: { $0.id == entry.projectID }) else { return }
@@ -4204,12 +4229,16 @@ final class AppState {
     }
 
     /// Project cycling treats the pinned workspace as a slot ABOVE the first
-    /// project (where the sidebar draws it) — without it, the keyboard could
-    /// enter the pinned section but never leave it.
+    /// project and the scratch workspace as a slot BELOW the last (where the
+    /// sidebar draws them) — without it, the keyboard could enter a section
+    /// but never leave it.
     private func stepProject(_ step: Int, projects: [Project]) {
         var slots = projects.map(\.id)
         if !pinnedRecords.isEmpty {
             slots.insert(PinnedTabs.projectID, at: 0)
+        }
+        if hasScratchTabs {
+            slots.append(ScratchTabs.projectID)
         }
         guard slots.count > 1, let current = activeProjectID,
               let i = slots.firstIndex(of: current)
@@ -4217,6 +4246,8 @@ final class AppState {
         let target = slots[(i + step + slots.count) % slots.count]
         if target == PinnedTabs.projectID {
             selectPinnedProject()
+        } else if target == ScratchTabs.projectID {
+            selectScratchTabs()
         } else if let project = projects.first(where: { $0.id == target }) {
             selectProject(project)
         }
@@ -4301,9 +4332,14 @@ final class AppState {
 
     private func ensureWorkspace(projectID: UUID, path: String) {
         // The pinned workspace starts EMPTY — the path-taking init spawns an
-        // initial tab, which nobody pinned.
+        // initial tab, which nobody pinned. The scratch workspace too: a tab
+        // there is one the user asked for.
         if projectID == PinnedTabs.projectID {
             ensurePinnedWorkspace()
+            return
+        }
+        if projectID == ScratchTabs.projectID {
+            ensureScratchWorkspace()
             return
         }
         if workspaces[projectID] == nil {

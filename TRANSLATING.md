@@ -74,6 +74,7 @@ Korean text follows the terms of macOS in Korean, so that the menus of Macterm a
 | window | 윈도우 | As in the **Window** menu of macOS. |
 | session | 세션 | |
 | pinned tab | 고정된 탭 | Pin is "고정", unpin is "고정 해제". |
+| scratch tab | 스크래치 탭 | A tab that belongs to no project. |
 | unload | 언로드 | Not 종료: the row stays. |
 | layout | 레이아웃 | |
 | remote project | 원격 프로젝트 | |
@@ -125,6 +126,7 @@ Simplified Chinese (`zh-Hans`) text follows the terms of macOS in Simplified Chi
 | window | 窗口 | |
 | session | 会话 | |
 | pinned tab | 固定的标签页 | Pin is "固定", unpin is "取消固定". |
+| scratch tab | 草稿标签页 | A tab that belongs to no project. |
 | unload | 停止 | Not 卸载: that is "uninstall". The row stays. |
 | layout | 布局 | |
 | remote project | 远程项目 | |

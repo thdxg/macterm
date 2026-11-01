@@ -301,6 +301,32 @@ struct SidebarContent: View {
             ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { projectIndex, project in
                 projectSection(index: projectIndex, project: project)
             }
+            // Scratch tabs (#665) live below every project as flat rows, the
+            // mirror of the pinned rows above: no header, and no separator.
+            // Their icon (`ScratchTabs.iconSymbol`) is what says which rows
+            // these are, as the pin does above. They follow the last project
+            // at the List's own row spacing: a Section around them added its
+            // gap, about 13 pt, above the first row. Drawn only while there
+            // are scratch tabs, or while this window shows the workspace (the
+            // user closed the last scratch tab and is still there). The
+            // `.dropDestination` insertion line works on this bare ForEach:
+            // its rows are flat, not the DisclosureGroups that crash the
+            // project ForEach's accept (see the notes below).
+            if showsScratchRows {
+                ForEach(Array(scratchTabs.enumerated()), id: \.element.id) { tabIndex, tab in
+                    tabRow(tab: tab, index: tabIndex, project: ScratchTabs.project)
+                }
+                .dropDestination(for: TabSlotDropItem.self) { items, offset in
+                    for item in items {
+                        switch item {
+                        case let .tab(tab):
+                            receiveTabDrop([tab], into: ScratchTabs.project, at: offset)
+                        case let .pane(pane):
+                            receivePaneDrop([pane], into: ScratchTabs.project, at: offset)
+                        }
+                    }
+                }
+            }
             // Project reordering is a `MovableProject` drag from one header
             // onto another (see `projectHeader`); the context menus' Move
             // Up/Down are the fallback for precision moves. There is NO
@@ -408,6 +434,9 @@ struct SidebarContent: View {
             case let .tab(PinnedTabs.projectID, tabID):
                 // Loaded → select; unloaded → restore from declaration.
                 appState.selectPinnedTab(tabID)
+            case let .tab(ScratchTabs.projectID, tabID):
+                appState.selectScratchTabs(in: windowState)
+                appState.selectTab(tabID, projectID: ScratchTabs.projectID, in: windowState)
             case let .tab(projectID, tabID):
                 if let project = projectStore.projects.first(where: { $0.id == projectID }) {
                     appState.selectProject(project, in: windowState)
@@ -566,6 +595,9 @@ struct SidebarContent: View {
         SidebarTabRow(
             tab: tab,
             index: tabIndex + 1,
+            // A scratch row has no project section around it, so its icon
+            // says which rows these are, as the pin does for pinned rows.
+            iconSymbolOverride: project.id == ScratchTabs.projectID ? ScratchTabs.iconSymbol : nil,
             selectionItem: .tab(projectID: project.id, tabID: tab.id),
             presentation: presentation,
             isInteractive: isInteractive,
@@ -657,7 +689,16 @@ struct SidebarContent: View {
                 .tab(projectID: project.id, tabID: $0.id)
             })
         }
+        items.append(contentsOf: scratchTabs.map { .tab(projectID: ScratchTabs.projectID, tabID: $0.id) })
         return items
+    }
+
+    /// The scratch rows, in order (#665).
+    private var scratchTabs: [TerminalTab] { appState.scratchWorkspace?.tabs ?? [] }
+
+    /// Whether the scratch rows are drawn: see `body`.
+    private var showsScratchRows: Bool {
+        !scratchTabs.isEmpty || windowState.activeProjectID == ScratchTabs.projectID
     }
 
     private var activeTabID: UUID? {
@@ -760,7 +801,10 @@ struct SidebarContent: View {
                     pinnedTabMenu(record: record)
                 }
             case let .tab(projectID, tabID):
-                if let project = projectStore.projects.first(where: { $0.id == projectID }),
+                // A scratch row gets the project tab's menu through the
+                // synthetic project: its Move to Project lists every project,
+                // and Pin Tab works as it does from a project.
+                if let project = Project.synthetic(for: projectID) ?? projectStore.projects.first(where: { $0.id == projectID }),
                    let tab = appState.workspaces[projectID]?.tabs.first(where: { $0.id == tabID })
                 {
                     tabMenu(project: project, tab: tab)
@@ -772,6 +816,7 @@ struct SidebarContent: View {
                 Button("Local Folder…") { openProject() }
                 Button("Remote Machine…") { windowState.isNewRemoteProjectSheetPresented = true }
             }
+            Button("New Scratch Tab") { appState.createScratchTab() }
         }
     }
 
@@ -947,6 +992,13 @@ struct SidebarContent: View {
         Button("Pin Tab") {
             appState.pinTab(tab.id, fromProject: project.id)
         }
+        if project.id != ScratchTabs.projectID {
+            // Out of the project, shells intact (#665). The tab keeps its own
+            // working directory; only its row moves below the projects.
+            Button("Move to Scratch Tabs") {
+                appState.moveTabToScratchTabs(tab.id, from: project.id)
+            }
+        }
         Divider()
         Button("Close Tab", role: .destructive) {
             appState.requestCloseTab(tab.id, projectID: project.id)
@@ -982,8 +1034,9 @@ struct SidebarContent: View {
         var tabRefs: [(tabID: UUID, projectID: UUID)] = []
         for item in items {
             switch item {
-            case .project(PinnedTabs.projectID):
-                // The pinned section can't be removed.
+            case .project(PinnedTabs.projectID),
+                 .project(ScratchTabs.projectID):
+                // The pinned and the scratch sections can't be removed.
                 break
             case let .project(id):
                 projectIDs.append(id)

@@ -91,6 +91,8 @@ struct FocusMactermTabIntent: AppIntent {
         // looking at.
         if projectID == PinnedTabs.projectID {
             ctx.appState.selectPinnedProject()
+        } else if projectID == ScratchTabs.projectID {
+            ctx.appState.selectScratchTabs()
         } else {
             ctx.appState.revealProject(projectID)
         }

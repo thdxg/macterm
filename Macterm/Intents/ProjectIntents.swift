@@ -48,8 +48,8 @@ struct NewMactermProjectIntent: AppIntent {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         // A typed name is refused like the CLI's `--name`; the folder's own
         // name is `ProjectStore.create`'s to disambiguate.
-        if let trimmed, PinnedTabs.reservesName(trimmed) {
-            throw MactermIntentError.badInput(PinnedTabs.reservedNameMessage)
+        if let trimmed, let message = Project.reservedNameMessage(for: trimmed) {
+            throw MactermIntentError.badInput(message)
         }
         logger.info("intent: new project at \(path, privacy: .public)")
         let project = ctx.projectStore.create(
@@ -97,6 +97,8 @@ struct FocusMactermProjectIntent: AppIntent {
             // own selection (`selectPinnedProject`), and `selectProject`
             // would treat it as a project rooted at the home directory.
             ctx.appState.selectPinnedProject()
+        } else if target.id == ScratchTabs.projectID {
+            ctx.appState.selectScratchTabs()
         } else {
             ctx.appState.revealProject(target.id)
         }
