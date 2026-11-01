@@ -29,9 +29,11 @@ enum ScratchTabs {
     /// The short selector the CLI also accepts: `--project scratch`.
     static let shortName = "scratch"
 
-    /// The header's icon. The project headers draw the user's project icon;
-    /// this one is fixed, so the section never reads as one more project.
-    static let iconSymbol = "tray"
+    /// The icon of every scratch row, in place of the user's tab icon, as
+    /// the pin is for a pinned row. The rows have no header and no separator
+    /// around them, so the icon is what says that these tabs belong to no
+    /// project. A scribble reads as "scratch" at row size.
+    static let iconSymbol = "scribble.variable"
 
     /// Whether `name` is this workspace's, which no project may carry.
     /// `ControlHandler.resolveProject` reads both spellings as the scratch
