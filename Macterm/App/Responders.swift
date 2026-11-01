@@ -138,6 +138,20 @@ final class QuickTerminalResponder: KeyResponder {
             state.tab.toggleZoom(paneID: paneID)
             return .handled
         }
+        // The pane modes act on the panel's focused pane, as in
+        // `AppCommandActions`. A chord that falls through reaches the
+        // main-app responder, which toggles the mode of the main window's
+        // pane, so these swallow it also when the panel's pane has no view.
+        if HotkeyRegistry.matches(event, action: .copyMode) {
+            state.tab.focusedPane?.nsView?.copyMode.toggle()
+            return .handled
+        }
+        if HotkeyRegistry.matches(event, action: .readOnlyMode) {
+            if let view = state.tab.focusedPane?.nsView, view.surface != nil {
+                view.sendBindingAction("toggle_readonly")
+            }
+            return .handled
+        }
         if let (_, dir) = Self.focusActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
             guard let focusedID = state.focusedPaneID else { return .passThrough }
             if let bestID = state.splitRoot.nearestPane(from: focusedID, direction: dir) {
