@@ -2253,6 +2253,11 @@ private struct KeymapSettings: View {
 /// the hover, which comes back only when the pointer leaves and re-enters.
 /// The hover is this view's own state, so moving the pointer down the table
 /// redraws one button and not the whole pane.
+///
+/// The hover comes from `RowHoverTracker`, never `.onHover` (see
+/// `SidebarProjectHeader`). The badge is always in the view, and only its
+/// opacity and hit testing change: a view that comes and goes in a row of the
+/// table changes the row's structure.
 private struct KeybindButton: View {
     let shortcut: String
     let isCapturing: Bool
@@ -2275,18 +2280,30 @@ private struct KeybindButton: View {
         .buttonStyle(.bordered)
         .help("Click, then press the keys. Press Delete to clear the keybind.")
         .overlay(alignment: .topTrailing) {
-            if isHovered || isCapturing, !isUnmapped {
-                Button(action: onClear) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                        .background(Circle().fill(.background))
-                }
-                .buttonStyle(.plain)
-                .offset(x: 5, y: -5)
-                .help("Clear the keybind")
+            Button(action: onClear) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .background(Circle().fill(.background))
             }
+            .buttonStyle(.plain)
+            .offset(x: Self.badgeOverhang, y: -Self.badgeOverhang)
+            .help("Clear the keybind")
+            .accessibilityLabel("Clear the keybind")
+            .opacity(showsBadge ? 1 : 0)
+            // Opacity alone still hit-tests: a click on the hidden badge
+            // would clear the keybind.
+            .allowsHitTesting(showsBadge)
+            .accessibilityHidden(isUnmapped)
         }
-        .onHover { isHovered = $0 }
+        // The tracked area reaches past the button by the badge's overhang,
+        // so the pointer on the badge's outer part keeps it shown.
+        .background(RowHoverTracker(isHovered: $isHovered).padding(-Self.badgeOverhang))
+    }
+
+    private static let badgeOverhang: CGFloat = 5
+
+    private var showsBadge: Bool {
+        (isHovered || isCapturing) && !isUnmapped
     }
 }
 
