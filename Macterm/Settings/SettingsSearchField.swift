@@ -1,46 +1,42 @@
+import AppKit
 import SwiftUI
 
-/// The search field of every Settings list (saved passwords, keybinds,
-/// extensions) — one view, so they read the same wherever they sit. Drawn in
-/// SwiftUI rather than `NSSearchField`, whose height is fixed by its control
-/// size and leaves no room for padding. Its height is that of a `.large`
-/// control, so a large picker beside it lines up.
-struct SettingsSearchField: View {
+/// AppKit's search field for a Settings list (saved passwords, keybinds,
+/// extensions) — SwiftUI has no standalone one on macOS outside
+/// `.searchable`, which would put it in the Settings window's toolbar.
+/// Every one is a `.large` control, for room around its text; a picker
+/// beside one takes `.large` too, so the two line up.
+struct SettingsSearchField: NSViewRepresentable {
     @Binding var text: String
     let prompt: LocalizedStringResource
 
-    @FocusState
-    private var isFocused: Bool
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = NSSearchField()
+        field.controlSize = .large
+        field.placeholderString = String(localized: prompt)
+        field.sendsSearchStringImmediately = true
+        field.delegate = context.coordinator
+        return field
+    }
 
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField(text: $text) { Text(prompt) }
-                .textFieldStyle(.plain)
-                .focused($isFocused)
-                .onExitCommand { text = "" }
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Clear the search")
-            }
+    func updateNSView(_ field: NSSearchField, context _: Context) {
+        if field.stringValue != text { field.stringValue = text }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
+        var text: Binding<String>
+
+        init(text: Binding<String>) {
+            self.text = text
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Capsule().fill(Color(nsColor: .textBackgroundColor)))
-        .overlay(
-            Capsule().strokeBorder(
-                isFocused ? AnyShapeStyle(.tint) : AnyShapeStyle(.separator),
-                lineWidth: isFocused ? 2 : 1
-            )
-        )
-        .contentShape(Capsule())
-        .onTapGesture { isFocused = true }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSSearchField else { return }
+            text.wrappedValue = field.stringValue
+        }
     }
 }
