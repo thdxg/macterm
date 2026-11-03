@@ -34,6 +34,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const INDEX = join(here, "public", "index.html");
 const DOCS_DIR = join(here, "public", "docs");
 const SITEMAP = join(here, "public", "sitemap.xml");
+const CHANGELOG = join(here, "public", "changelog.html");
 
 // Kept in step with build-docs.mjs's own constant; invariant 2 is what makes a
 // disagreement between the two an error rather than a silent inconsistency.
@@ -186,6 +187,26 @@ function checkDocsPages() {
   }
 }
 
+// ---- 3b. The changelog lists releases ----------------------------------------
+// A changelog with no releases still parses, and nothing else would say that
+// it shows nothing.
+function checkChangelog() {
+  let html;
+  try {
+    html = readFileSync(CHANGELOG, "utf8");
+  } catch {
+    problems.push(`check-seo: ${CHANGELOG} is missing — run build:docs first`);
+    return;
+  }
+  jsonLdBlocks(html, "changelog.html");
+  if (!html.includes(`<link rel="canonical" href="${SITE_URL}/changelog" />`)) {
+    problems.push(`changelog.html: canonical is not ${SITE_URL}/changelog`);
+  }
+  if (!/<h2 id="v\d/.test(html)) {
+    problems.push("changelog.html: lists no releases");
+  }
+}
+
 // ---- 4. Every sitemap entry carries a lastmod -----------------------------
 function checkSitemapLastmod() {
   let xml;
@@ -219,6 +240,7 @@ const index = readFileSync(INDEX, "utf8");
 checkFaqMirrorsMarkup(index);
 checkLandingOrigin(index);
 checkDocsPages();
+checkChangelog();
 checkSitemapLastmod();
 
 if (problems.length) {

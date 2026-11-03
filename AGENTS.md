@@ -1024,6 +1024,8 @@ Secrets:
 
 The release notes come from the generator of GitHub (`.github/release.yml`). A person chooses the version number. The `/release` skill walks through the ceremony. The recipe for the certificate is in the history of this file.
 
+- **The website's `/changelog` shows the notes of every stable release** (`website/releases.mjs`, rendered by `build-docs.mjs`). The GitHub release is the only copy of the notes. An edit there reaches the page at the next site build. `website.yml` starts that build on main for each release that a person publishes, edits or deletes. The page links `#123` and `@user` itself and drops HTML comments, so write the notes in the same Markdown as before.
+
 - **There are three Sparkle channels and one feed**. A prerelease item carries `<sparkle:channel>beta|tip</sparkle:channel>`. Settings → Updates → Channel opts in (`Preferences.updateChannel`, the raw values are the wire names). A channel on an item that is not a prerelease is a hard error in `publish-appcast.sh`. Homebrew stays stable-only.
 - **Read the prerelease flag live** (the job `flag`, through `gh release view`). Never read it from `github.event.release.prerelease`. The payload is frozen at dispatch, and an edit does not fire the event again. Job outputs are strings. Compare with `== 'false'`.
 - **Version ordering** (`sparkle_comparison_version` in `_lib.sh`):
