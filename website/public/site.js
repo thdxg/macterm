@@ -225,10 +225,12 @@ const smoothPane = (pane, home, endless, drift = 0) => {
   };
 };
 
-// --- Docs fades: mark where the reader is on the page. ---
+// --- Docs fades: mark where the reader is on the page and in the index. ---
 // The window scrolls natively. DocsLayout shows the top band once the page
 // leaves the top (data-scrolled on <html>) and hides the bottom band at the
-// end (data-end).
+// end (data-end). The index scrolls by itself when it is taller than the
+// window, and fades at its own edges from the same three marks on it
+// (data-overflow when it can scroll at all).
 (function docsFades() {
   if (!document.querySelector(".ec-docs")) return;
   const root = document.documentElement;
@@ -239,6 +241,18 @@ const smoothPane = (pane, home, endless, drift = 0) => {
   window.addEventListener("scroll", edge, { passive: true });
   window.addEventListener("resize", edge, { passive: true });
   edge();
+
+  const side = document.querySelector(".ec-docs-side");
+  if (!side) return;
+  const sideEdge = () => {
+    const room = side.scrollHeight - side.clientHeight;
+    side.toggleAttribute("data-overflow", room > 1);
+    side.toggleAttribute("data-scrolled", side.scrollTop > 1);
+    side.toggleAttribute("data-end", side.scrollTop >= room - 1);
+  };
+  side.addEventListener("scroll", sideEdge, { passive: true });
+  window.addEventListener("resize", sideEdge, { passive: true });
+  sideEdge();
 })();
 
 // --- Changelog index: mark the release that the reader is in. ---
