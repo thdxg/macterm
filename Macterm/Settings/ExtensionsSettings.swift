@@ -45,6 +45,7 @@ struct ExtensionsSettings: View {
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
+                    .controlSize(.large)
                     .fixedSize()
                 }
                 RegistryStatus(state: registry.state)

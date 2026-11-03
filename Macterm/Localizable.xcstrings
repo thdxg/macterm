@@ -2108,6 +2108,12 @@
         }
       }
     },
+    "Clear the keybind" : {
+
+    },
+    "Clear the search" : {
+
+    },
     "Click to work here" : {
       "localizations" : {
         "ko" : {

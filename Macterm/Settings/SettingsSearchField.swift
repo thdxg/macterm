@@ -1,39 +1,46 @@
-import AppKit
 import SwiftUI
 
-/// AppKit's search field for a Settings list (saved passwords, keybinds) —
-/// SwiftUI has no standalone one on macOS outside `.searchable`, which would
-/// put it in the Settings window's toolbar.
-struct SettingsSearchField: NSViewRepresentable {
+/// The search field of every Settings list (saved passwords, keybinds,
+/// extensions) — one view, so they read the same wherever they sit. Drawn in
+/// SwiftUI rather than `NSSearchField`, whose height is fixed by its control
+/// size and leaves no room for padding. Its height is that of a `.large`
+/// control, so a large picker beside it lines up.
+struct SettingsSearchField: View {
     @Binding var text: String
     let prompt: LocalizedStringResource
 
-    func makeNSView(context: Context) -> NSSearchField {
-        let field = NSSearchField()
-        field.placeholderString = String(localized: prompt)
-        field.sendsSearchStringImmediately = true
-        field.delegate = context.coordinator
-        return field
-    }
+    @FocusState
+    private var isFocused: Bool
 
-    func updateNSView(_ field: NSSearchField, context _: Context) {
-        if field.stringValue != text { field.stringValue = text }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
-    }
-
-    final class Coordinator: NSObject, NSSearchFieldDelegate {
-        var text: Binding<String>
-
-        init(text: Binding<String>) {
-            self.text = text
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(text: $text) { Text(prompt) }
+                .textFieldStyle(.plain)
+                .focused($isFocused)
+                .onExitCommand { text = "" }
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear the search")
+            }
         }
-
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSSearchField else { return }
-            text.wrappedValue = field.stringValue
-        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Capsule().fill(Color(nsColor: .textBackgroundColor)))
+        .overlay(
+            Capsule().strokeBorder(
+                isFocused ? AnyShapeStyle(.tint) : AnyShapeStyle(.separator),
+                lineWidth: isFocused ? 2 : 1
+            )
+        )
+        .contentShape(Capsule())
+        .onTapGesture { isFocused = true }
     }
 }

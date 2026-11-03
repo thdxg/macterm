@@ -92,6 +92,7 @@ struct ProjectsSettings: View {
                         revealLayoutFolder()
                     }
                     .buttonStyle(.link)
+                    .linkPointer()
                     .lineLimit(1)
                     .truncationMode(.middle)
                 }
