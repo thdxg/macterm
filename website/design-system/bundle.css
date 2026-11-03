@@ -266,10 +266,18 @@ a.ec-entry-title:hover { text-decoration: underline; text-decoration-thickness: 
 .ec-pagenav a[rel="next"] { margin-left: auto; text-align: right; }
 
 /* The page fades out under two bands that hold still at the top and bottom
-   of the window, right of the index (which never fades). The top band shows
-   once the page leaves its top (data-scrolled on <html>), and the bottom
-   band goes away at the end (data-end); the docs script sets both. */
+   of the window, right of the index. The top band shows once the page leaves
+   its top (data-scrolled on <html>), and the bottom band goes away at the end
+   (data-end); the docs script sets both. On desktops the brand and the foot
+   of the index hold still, and only its links scroll between them when they
+   do not fit. The links fade the same way at their own edges, through a mask
+   (data-scrolled and data-end on .ec-docs-nav, set by the same script), so
+   the bottom fade ends above the foot. Their fades are 64px, not 112px: the
+   links get less than the window's height. The fade heights are registered
+   lengths, so they ease like the bands. */
 .ec-docs-fade { display: none; }
+@property --ec-side-fade-top { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --ec-side-fade-bottom { syntax: "<length>"; inherits: false; initial-value: 0px; }
 @media (min-width: 961px) {
   :root:has(.ec-docs) { scroll-padding-top: var(--space-28); }
   .ec-docs-fade {
@@ -281,6 +289,26 @@ a.ec-entry-title:hover { text-decoration: underline; text-decoration-thickness: 
   .ec-docs-fade--bottom { bottom: 0; background: linear-gradient(transparent, var(--bg)); }
   :root[data-scrolled] .ec-docs-fade--top { opacity: 1; }
   :root[data-end] .ec-docs-fade--bottom { opacity: 0; }
+  .ec-docs-side { overflow: hidden; }
+  .ec-docs-nav {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none;
+    --ec-side-fade-top: 0px; --ec-side-fade-bottom: 0px;
+    -webkit-mask-image: linear-gradient(transparent, #000 var(--ec-side-fade-top), #000 calc(100% - var(--ec-side-fade-bottom)), transparent);
+    mask-image: linear-gradient(transparent, #000 var(--ec-side-fade-top), #000 calc(100% - var(--ec-side-fade-bottom)), transparent);
+    transition: --ec-side-fade-top 0.3s, --ec-side-fade-bottom 0.3s;
+  }
+  .ec-docs-nav[data-scrolled] { --ec-side-fade-top: var(--space-16); }
+  .ec-docs-nav[data-overflow]:not([data-end]) { --ec-side-fade-bottom: var(--space-16); }
+  .ec-docs-side-foot { flex: none; }
+  /* A rule in lid divides the index from the page, at the left edge of the
+     bands, the full height of the window. It is not the index's own border,
+     which the mask would fade, and it sits above the bands (z-index 2), which
+     would fade it with the page. */
+  .ec-docs::before {
+    content: ""; position: fixed; z-index: 2; top: 0; bottom: 0; width: 1px; pointer-events: none;
+    left: calc(var(--ec-side-x) + var(--width-sidebar) + var(--space-6));
+    background: var(--lid);
+  }
 }
 
 /* The bar and menu button exist only on phones. */

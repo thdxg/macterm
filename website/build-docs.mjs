@@ -1,5 +1,6 @@
 // Renders website/docs/pages/*.md into a multi-page docs site under
-// public/docs/ at build time.
+// public/docs/ at build time, and the notes of every stable release into
+// public/changelog.html (see releases.mjs).
 //
 // The site is plain static files, so the docs ship as plain HTML — no
 // client-side Markdown parser, no content flash. Each Markdown file is one
@@ -27,6 +28,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Marked } from "marked";
 import { lastModifiedDates, LASTMOD_FILE, LANDING_SOURCE, pageSource } from "./lastmod.mjs";
+import { fetchReleases, RELEASES_FILE, REPO } from "./releases.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PAGES_DIR = join(here, "docs", "pages");
@@ -54,6 +56,9 @@ const escapeHtml = (s) =>
 
 // The clean URL for a page's slug. The intro is the docs index.
 const urlForSlug = (slug) => (slug === "index" ? "/docs/" : `/docs/${slug}`);
+
+// The release notes page, written to public/changelog.html (try_files serves it).
+const CHANGELOG_PATH = "/changelog";
 
 // ---- Minimal YAML-ish syntax highlighting for the layout sample -----------
 // Works on the raw source and escapes each emitted piece itself (highlighting-
@@ -253,7 +258,181 @@ function renderPageNav(pages, index) {
   }${next ? link(next, "next", "Next") : ""}</nav>`;
 }
 
-function main() {
+// ---- Changelog --------------------------------------------------------------
+// /changelog: the notes of every stable release (releases.mjs), newest first,
+// in the docs shell. Each release is an h2, so the notes' own `## What's New`
+// and `## Fixes` move down one level to h3.
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+// The anchor of a release: `v1.33.2` becomes `v1-33-2`. A dot cannot simply be
+// dropped, because v1.33.2 and v1.3.32 would then share `v1332`.
+const anchorForTag = (tag) => tag.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+// Turn the references that GitHub links in a release into links here too: a
+// PR or compare URL gets GitHub's short label (`#229`, `v1.0.4...v1.0.5`), and
+// `(#666)` and `@user` link to the PR and the profile. Code spans are skipped,
+// so `@types/node` or `#1` in code stays literal.
+function linkReferences(markdown) {
+  const gh = `https://github.com/${REPO}`;
+  return markdown
+    .split(/(`[^`\n]*`)/)
+    .map((part, i) =>
+      i % 2
+        ? part
+        : part
+            .replace(
+              new RegExp(`(^|[^\\w(\\[</])${gh}/(pull|issues)/(\\d+)\\b`, "g"),
+              (_, pre, kind, n) => `${pre}[#${n}](${gh}/${kind}/${n})`
+            )
+            .replace(
+              new RegExp(`(^|[^\\w(\\[</])${gh}/compare/([\\w.-]+\\.\\.\\.[\\w.-]+)`, "g"),
+              (_, pre, range) => `${pre}[${range}](${gh}/compare/${range})`
+            )
+            .replace(/(^|[\s(])#(\d+)\b/g, (_, pre, n) => `${pre}[#${n}](${gh}/pull/${n})`)
+            .replace(
+              /(^|[^\w.\/@])@([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\b/g,
+              (_, pre, user) => `${pre}[@${user}](https://github.com/${user})`
+            )
+    )
+    .join("");
+}
+
+function renderChangelog(releases) {
+  let anchor = "";
+  const seenAnchors = new Map();
+  const base = buildRenderer(seenAnchors);
+  const marked = new Marked({ gfm: true });
+  marked.use({
+    renderer: {
+      code: base.code,
+      // Every release has a "What's New", so a heading's anchor starts with
+      // its release's: /changelog#v1-33-2-fixes.
+      heading({ tokens, depth, text }) {
+        const slug = slugifyHeading(text);
+        const count = (seenAnchors.get(slug) || 0) + 1;
+        seenAnchors.set(slug, count);
+        const id = `${anchor}-${count === 1 ? slug : `${slug}-${count}`}`;
+        const level = Math.min(depth + 1, 6);
+        return `<h${level} id="${id}">${this.parser.parseInline(tokens)}</h${level}>\n`;
+      },
+      // The notes are text, never markup. A PR title can contain `<`, and
+      // GitHub's generated notes copy PR titles in as they are.
+      html({ text }) {
+        return escapeHtml(text);
+      },
+    },
+  });
+
+  const intro = `<h1>Changelog</h1>\n`;
+
+  const sections = releases.map((release) => {
+    anchor = anchorForTag(release.tag);
+    seenAnchors.clear();
+    const date = new Date(release.publishedAt);
+    const day = `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
+    return (
+      `<h2 id="${anchor}">${escapeHtml(release.tag)}</h2>\n` +
+      `<p><time datetime="${date.toISOString().slice(0, 10)}">${day}</time> · ` +
+      `<a href="${escapeHtml(release.url)}">GitHub ↗</a></p>\n` +
+      // GitHub's generated notes open with an HTML comment that names their
+      // config. It is for the author, and escaped it would show as text.
+      marked.parse(linkReferences(release.body.replace(/<!--[\s\S]*?-->/g, "")))
+    );
+  });
+
+  return intro + sections.join("");
+}
+
+// The changelog's index: every release, grouped by the month it came out in,
+// in the markup of the docs sidebar. Each link goes to the release's h2 on
+// this page, so a click scrolls to it.
+function renderReleaseSidebar(releases) {
+  const groups = [];
+  for (const release of releases) {
+    const date = new Date(release.publishedAt);
+    const month = `${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+    if (groups.at(-1)?.name !== month) groups.push({ name: month, links: [] });
+    groups.at(-1).links.push(
+      `        <a href="#${anchorForTag(release.tag)}">${escapeHtml(release.tag)}</a>`
+    );
+  }
+  return groups
+    .map(
+      (g) =>
+        `      <div class="ec-sidebar-group">\n        <p class="ec-sidebar-label">${escapeHtml(
+          g.name
+        )}</p>\n${g.links.join("\n")}\n      </div>`
+    )
+    .join("\n");
+}
+
+function writeChangelog(template, releases) {
+  const title = "Changelog — Macterm";
+  const description =
+    "The new features and fixes in each release of Macterm, a native macOS terminal built on libghostty.";
+  const canonical = SITE_URL + CHANGELOG_PATH;
+
+  const jsonld = JSON.stringify({
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        name: title,
+        description,
+        url: canonical,
+        inLanguage: "en",
+        dateModified: releases[0].publishedAt,
+        isPartOf: { "@type": "WebSite", "@id": SITE_URL + "/#website", name: "Macterm", url: SITE_URL + "/" },
+        about: {
+          "@type": "SoftwareApplication",
+          "@id": SITE_URL + "/#app",
+          name: "Macterm",
+          applicationCategory: "DeveloperApplication",
+          operatingSystem: "macOS 14.0 or later",
+          softwareVersion: releases[0].tag.replace(/^v/, ""),
+          sameAs: ["https://github.com/thdxg/macterm"],
+        },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Macterm", item: SITE_URL + "/" },
+          { "@type": "ListItem", position: 2, name: "Changelog", item: canonical },
+        ],
+      },
+    ],
+  });
+
+  const out = template
+    .replaceAll("{{TITLE}}", () => escapeHtml(title))
+    .replaceAll("{{DESCRIPTION}}", () => escapeHtml(description))
+    .replaceAll("{{CANONICAL}}", () => canonical)
+    .replaceAll("{{SITE_URL}}", () => SITE_URL)
+    .replace("{{JSONLD}}", () => jsonld)
+    .replace("<!-- SIDEBAR -->", () => renderReleaseSidebar(releases))
+    // The sidebar lists releases here, not the docs, so the foot's link to
+    // this same page gives its place to the docs.
+    .replace('<a href="/changelog">Changelog</a>', () => '<a href="/docs/">Docs</a>')
+    .replace("<!-- CONTENT -->", () => renderChangelog(releases))
+    .replace("<!-- PAGENAV -->", () => "");
+
+  writeFileSync(join(PUBLIC_DIR, "changelog.html"), out);
+}
+
+// The file that the host wrote (releases.mjs says why), or GitHub when there
+// is none, as in a plain `bun run build` in a checkout.
+async function loadReleases() {
+  if (existsSync(RELEASES_FILE)) {
+    return JSON.parse(readFileSync(RELEASES_FILE, "utf8"));
+  }
+  return fetchReleases();
+}
+
+async function main() {
   const files = readdirSync(PAGES_DIR)
     .filter((f) => f.endsWith(".md"))
     .sort();
@@ -355,10 +534,14 @@ function main() {
     writeFileSync(join(OUT_DIR, `${page.meta.slug}.html`), out);
   }
 
-  writeSitemapAndRobots(pages);
+  const releases = await loadReleases();
+  writeChangelog(template, releases);
+
+  writeSitemapAndRobots(pages, releases);
 
   console.log(
-    `build-docs: wrote ${pages.length} pages to ${OUT_DIR} (${files.join(", ")})`
+    `build-docs: wrote ${pages.length} pages to ${OUT_DIR} (${files.join(", ")}), ` +
+      `and ${CHANGELOG_PATH} with ${releases.length} releases`
   );
 }
 
@@ -395,7 +578,10 @@ function loadLastModified() {
 // `priority` is advisory-at-best, but it is cheap, stable, and honest: it says
 // the landing page and docs index matter more than page 9 of the docs, which
 // is true and does not change per build.
-function writeSitemapAndRobots(pages) {
+//
+// The changelog's lastmod is the date of its newest release, because a release
+// is the only thing that changes it.
+function writeSitemapAndRobots(pages, releases) {
   const lastmod = loadLastModified();
   const entries = [
     { url: SITE_URL + "/", priority: "1.0", lastmod: lastmod[LANDING_SOURCE] },
@@ -404,6 +590,11 @@ function writeSitemapAndRobots(pages) {
       priority: p.meta.slug === "index" ? "0.9" : "0.7",
       lastmod: lastmod[pageSource(p.file)],
     })),
+    {
+      url: SITE_URL + CHANGELOG_PATH,
+      priority: "0.8",
+      lastmod: new Date(releases[0].publishedAt).toISOString(),
+    },
   ];
 
   const sitemap =
@@ -433,4 +624,4 @@ function writeSitemapAndRobots(pages) {
   writeFileSync(join(PUBLIC_DIR, "robots.txt"), robots);
 }
 
-main();
+await main();

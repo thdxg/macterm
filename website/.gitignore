@@ -8,7 +8,12 @@ public/components/
 public/sitemap.xml
 public/robots.txt
 public/img/
+public/changelog.html
 
 # Written by `node lastmod.mjs` on the host for an image build, which has no
 # git history to read the sitemap dates from. A checkout reads git directly.
 docs/lastmod.json
+
+# Written by `node releases.mjs` on the host, so that the image build does not
+# ask GitHub for the changelog itself.
+docs/releases.json

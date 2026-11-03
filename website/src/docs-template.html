@@ -42,7 +42,7 @@
 
   <!-- Phones only: the brand and the button that opens the index (site.js's docsMenu). -->
   <div class="ec-docs-bar">
-    <a class="ec-docs-brand" href="/">Macterm</a>
+    <a class="ec-docs-brand" href="/"><img src="/img/app-icon-64.png" srcset="/img/app-icon-64.png 1x, /img/app-icon-128.png 2x" width="24" height="24" style="width: 24px; height: 24px" alt="" />Macterm</a>
     <button type="button" class="ec-menu-btn" aria-controls="docs-index" aria-expanded="false" aria-label="Pages">
       <svg class="ec-menu-open" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7h14M3 13h14"/></svg>
       <svg class="ec-menu-close" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg>
@@ -51,14 +51,17 @@
 
   <!-- The index, pinned to the left edge (generated: links to every page, current one marked) -->
   <nav class="ec-docs-side" id="docs-index" aria-label="Docs">
-    <a class="ec-docs-brand" href="/">Macterm</a>
+    <!-- The app icon is decoration: the link's text names Macterm. The
+         design system draws a brand image at 40px, which is larger than the
+         title it sits next to, so the inline size makes it 24px. -->
+    <a class="ec-docs-brand" href="/"><img src="/img/app-icon-64.png" srcset="/img/app-icon-64.png 1x, /img/app-icon-128.png 2x" width="24" height="24" style="width: 24px; height: 24px" alt="" />Macterm</a>
     <div class="ec-docs-nav">
 <!-- SIDEBAR -->
     </div>
     <div class="ec-docs-side-foot">
       <a href="/">Home</a>
+      <a href="/changelog">Changelog</a>
       <a href="https://github.com/thdxg/macterm">GitHub ↗</a>
-      <a href="https://github.com/thdxg/macterm/releases">Releases ↗</a>
     </div>
   </nav>
 

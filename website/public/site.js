@@ -49,10 +49,16 @@
     const nav = document.getElementById(btn.getAttribute("aria-controls"));
     if (!nav) return;
     nav.dataset.menu = "closed";
-    btn.addEventListener("click", () => {
-      const open = nav.dataset.menu === "closed";
+    const setOpen = (open) => {
       nav.dataset.menu = open ? "open" : "closed";
       btn.setAttribute("aria-expanded", String(open));
+    };
+    btn.addEventListener("click", () => setOpen(nav.dataset.menu === "closed"));
+    // A link to a place on this page (the changelog's releases) loads no new
+    // page, so the menu would stay open over the place it went to.
+    nav.addEventListener("click", (e) => {
+      const link = e.target.closest("a[href^='#']");
+      if (link) setOpen(false);
     });
   });
 })();
@@ -219,10 +225,14 @@ const smoothPane = (pane, home, endless, drift = 0) => {
   };
 };
 
-// --- Docs fades: mark where the reader is on the page. ---
+// --- Docs fades: mark where the reader is on the page and in the index. ---
 // The window scrolls natively. DocsLayout shows the top band once the page
 // leaves the top (data-scrolled on <html>) and hides the bottom band at the
-// end (data-end).
+// end (data-end). On desktops the index's links scroll by themselves when
+// they do not fit between its brand and its foot, and fade at their own edges
+// from the same three marks on them (data-overflow when they can scroll at
+// all). On phones the whole menu scrolls instead, the links have no room to
+// scroll, and they never fade.
 (function docsFades() {
   if (!document.querySelector(".ec-docs")) return;
   const root = document.documentElement;
@@ -233,6 +243,106 @@ const smoothPane = (pane, home, endless, drift = 0) => {
   window.addEventListener("scroll", edge, { passive: true });
   window.addEventListener("resize", edge, { passive: true });
   edge();
+
+  const links = document.querySelector(".ec-docs-nav");
+  if (!links) return;
+  const linksEdge = () => {
+    const room = links.scrollHeight - links.clientHeight;
+    links.toggleAttribute("data-overflow", room > 1);
+    links.toggleAttribute("data-scrolled", links.scrollTop > 1);
+    links.toggleAttribute("data-end", links.scrollTop >= room - 1);
+  };
+  links.addEventListener("scroll", linksEdge, { passive: true });
+  window.addEventListener("resize", linksEdge, { passive: true });
+  linksEdge();
+})();
+
+// --- Changelog index: mark the release that the reader is in. ---
+// A docs page marks its own link in the build. The changelog's index links to
+// places on one page, so the place changes as the reader scrolls. The current
+// release is the last one whose heading is at or above the line where a jump
+// puts a heading (the page's scroll-padding-top). At the end of the page the
+// last releases cannot reach that line, so a release that the reader jumped
+// to (the hash) wins while its heading is on screen. The mark is
+// aria-current="page", the one state that the design system draws.
+(function changelogIndex() {
+  const links = [...document.querySelectorAll(".ec-docs-nav a[href^='#']")];
+  const heads = links.map((a) => document.getElementById(a.hash.slice(1)));
+  if (!links.length || heads.includes(null)) return;
+  const root = document.documentElement;
+  const side = document.querySelector(".ec-docs-side");
+  const nav = document.querySelector(".ec-docs-nav");
+  let current = -1;
+  let frame = 0;
+
+  const pick = () => {
+    const line = (parseFloat(getComputedStyle(root).scrollPaddingTop) || 0) + 8;
+    let i = 0;
+    for (let j = 0; j < heads.length && heads[j].getBoundingClientRect().top <= line; j++) i = j;
+    if (window.scrollY >= root.scrollHeight - window.innerHeight - 1) {
+      const target = heads.findIndex((h) => "#" + h.id === location.hash);
+      const top = target < 0 ? -1 : heads[target].getBoundingClientRect().top;
+      if (top >= 0 && top < window.innerHeight) i = target;
+    }
+    return i;
+  };
+
+  // Keep the marked link in the index's own view. The index scrolls by
+  // itself (it is fixed), so its scrollTop moves, never the window's: the
+  // links on desktops, the whole menu on phones. A closed phone menu has no
+  // boxes. (offsetParent cannot tell: a fixed element has none.) The margin
+  // clears the links' 64px fade.
+  const reveal = (link) => {
+    if (!side || !side.getClientRects().length) return;
+    const scroller = nav && nav.scrollHeight > nav.clientHeight + 1 ? nav : side;
+    const box = scroller.getBoundingClientRect();
+    const r = link.getBoundingClientRect();
+    const margin = 72;
+    if (r.top < box.top + margin) scroller.scrollTop -= box.top + margin - r.top;
+    else if (r.bottom > box.bottom - margin) scroller.scrollTop += r.bottom - (box.bottom - margin);
+  };
+
+  // A click glides to its release (Reduce Motion jumps). While the glide is
+  // on its way, the clicked release stays marked, so the index does not walk
+  // through every release in between and scroll under the pointer.
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let gliding = -1;
+  let glideEnd = 0;
+  const land = () => {
+    clearTimeout(glideEnd);
+    gliding = -1;
+    schedule();
+  };
+  links.forEach((link, i) => {
+    link.addEventListener("click", (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      history.pushState(null, "", link.hash);
+      gliding = still.matches ? -1 : i;
+      heads[i].scrollIntoView({ behavior: still.matches ? "auto" : "smooth", block: "start" });
+      clearTimeout(glideEnd);
+      glideEnd = setTimeout(land, 1500); // for a browser without scrollend
+      schedule();
+    });
+  });
+  window.addEventListener("scrollend", land);
+
+  const mark = () => {
+    frame = 0;
+    const i = gliding >= 0 ? gliding : pick();
+    if (i === current) return;
+    if (current >= 0) links[current].removeAttribute("aria-current");
+    links[i].setAttribute("aria-current", "page");
+    current = i;
+    reveal(links[i]);
+  };
+  const schedule = () => {
+    if (!frame) frame = requestAnimationFrame(mark);
+  };
+  window.addEventListener("scroll", schedule, { passive: true });
+  window.addEventListener("resize", schedule, { passive: true });
+  window.addEventListener("hashchange", schedule);
+  mark();
 })();
 
 // --- Landing feature reel. ---

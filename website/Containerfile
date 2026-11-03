@@ -18,6 +18,11 @@
 # <lastmod>. Without the file, check-seo.mjs fails the build on purpose. The
 # `podman:build` script and the Website workflow both run it.
 #
+# Run `node website/releases.mjs` on the host too. It writes the release notes
+# of the changelog page to website/docs/releases.json, with the host's token.
+# Without the file, the build stage asks GitHub anonymously, which a shared CI
+# address can be refused. The same two callers run it.
+#
 # Bun builds, Caddy serves. The site is static once `bun run build` has
 # rendered the docs and compiled the CSS, so the runtime stage carries no
 # JavaScript at all — no Bun, no node_modules, just Caddy and public/.

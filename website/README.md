@@ -18,8 +18,11 @@ src/
 design-system/     Vendored copy of the eyesclosed design system
 docs/pages/*.md    Docs content: one Markdown file for each page
 build-images.mjs   Renders assets/ images → public/img/
-build-docs.mjs     Renders docs/pages/*.md → public/docs/<slug>.html, plus
-                   sitemap.xml and robots.txt
+build-docs.mjs     Renders docs/pages/*.md → public/docs/<slug>.html, the
+                   release notes → public/changelog.html, plus sitemap.xml
+                   and robots.txt
+releases.mjs       The stable releases on GitHub for the changelog; for an
+                   image build it writes docs/releases.json on the host first
 lastmod.mjs        The lastmod of each sitemap entry, from git; for an image
                    build it writes docs/lastmod.json on the host first
 build-tokens.mjs   Compiles design-system/tokens.json → public/tokens.css and
