@@ -327,11 +327,7 @@ function renderChangelog(releases) {
     },
   });
 
-  const intro =
-    `<h1>Changelog</h1>\n` +
-    `<p>This page lists each stable release of Macterm, with the newest release first. ` +
-    `Macterm updates itself. To install an update now, select <strong>Macterm → Check for ` +
-    `Updates…</strong>.</p>\n`;
+  const intro = `<h1>Changelog</h1>\n`;
 
   const sections = releases.map((release) => {
     anchor = anchorForTag(release.tag);
@@ -351,7 +347,30 @@ function renderChangelog(releases) {
   return intro + sections.join("");
 }
 
-function writeChangelog(template, pages, releases) {
+// The changelog's index: every release, grouped by the month it came out in,
+// in the markup of the docs sidebar. Each link goes to the release's h2 on
+// this page, so a click scrolls to it.
+function renderReleaseSidebar(releases) {
+  const groups = [];
+  for (const release of releases) {
+    const date = new Date(release.publishedAt);
+    const month = `${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+    if (groups.at(-1)?.name !== month) groups.push({ name: month, links: [] });
+    groups.at(-1).links.push(
+      `        <a href="#${anchorForTag(release.tag)}">${escapeHtml(release.tag)}</a>`
+    );
+  }
+  return groups
+    .map(
+      (g) =>
+        `      <div class="ec-sidebar-group">\n        <p class="ec-sidebar-label">${escapeHtml(
+          g.name
+        )}</p>\n${g.links.join("\n")}\n      </div>`
+    )
+    .join("\n");
+}
+
+function writeChangelog(template, releases) {
   const title = "Changelog — Macterm";
   const description =
     "The new features and fixes in each release of Macterm, a native macOS terminal built on libghostty.";
@@ -394,7 +413,10 @@ function writeChangelog(template, pages, releases) {
     .replaceAll("{{CANONICAL}}", () => canonical)
     .replaceAll("{{SITE_URL}}", () => SITE_URL)
     .replace("{{JSONLD}}", () => jsonld)
-    .replace("<!-- SIDEBAR -->", () => renderSidebar(pages, null))
+    .replace("<!-- SIDEBAR -->", () => renderReleaseSidebar(releases))
+    // The sidebar lists releases here, not the docs, so the foot's link to
+    // this same page gives its place to the docs.
+    .replace('<a href="/changelog">Changelog</a>', () => '<a href="/docs/">Docs</a>')
     .replace("<!-- CONTENT -->", () => renderChangelog(releases))
     .replace("<!-- PAGENAV -->", () => "");
 
@@ -513,7 +535,7 @@ async function main() {
   }
 
   const releases = await loadReleases();
-  writeChangelog(template, pages, releases);
+  writeChangelog(template, releases);
 
   writeSitemapAndRobots(pages, releases);
 
