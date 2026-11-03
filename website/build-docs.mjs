@@ -337,7 +337,7 @@ function renderChangelog(releases) {
     return (
       `<h2 id="${anchor}">${escapeHtml(release.tag)}</h2>\n` +
       `<p><time datetime="${date.toISOString().slice(0, 10)}">${day}</time> · ` +
-      `<a href="${escapeHtml(release.url)}">Release on GitHub ↗</a></p>\n` +
+      `<a href="${escapeHtml(release.url)}">GitHub ↗</a></p>\n` +
       // GitHub's generated notes open with an HTML comment that names their
       // config. It is for the author, and escaped it would show as text.
       marked.parse(linkReferences(release.body.replace(/<!--[\s\S]*?-->/g, "")))
