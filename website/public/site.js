@@ -228,9 +228,11 @@ const smoothPane = (pane, home, endless, drift = 0) => {
 // --- Docs fades: mark where the reader is on the page and in the index. ---
 // The window scrolls natively. DocsLayout shows the top band once the page
 // leaves the top (data-scrolled on <html>) and hides the bottom band at the
-// end (data-end). The index scrolls by itself when it is taller than the
-// window, and fades at its own edges from the same three marks on it
-// (data-overflow when it can scroll at all).
+// end (data-end). On desktops the index's links scroll by themselves when
+// they do not fit between its brand and its foot, and fade at their own edges
+// from the same three marks on them (data-overflow when they can scroll at
+// all). On phones the whole menu scrolls instead, the links have no room to
+// scroll, and they never fade.
 (function docsFades() {
   if (!document.querySelector(".ec-docs")) return;
   const root = document.documentElement;
@@ -242,17 +244,17 @@ const smoothPane = (pane, home, endless, drift = 0) => {
   window.addEventListener("resize", edge, { passive: true });
   edge();
 
-  const side = document.querySelector(".ec-docs-side");
-  if (!side) return;
-  const sideEdge = () => {
-    const room = side.scrollHeight - side.clientHeight;
-    side.toggleAttribute("data-overflow", room > 1);
-    side.toggleAttribute("data-scrolled", side.scrollTop > 1);
-    side.toggleAttribute("data-end", side.scrollTop >= room - 1);
+  const links = document.querySelector(".ec-docs-nav");
+  if (!links) return;
+  const linksEdge = () => {
+    const room = links.scrollHeight - links.clientHeight;
+    links.toggleAttribute("data-overflow", room > 1);
+    links.toggleAttribute("data-scrolled", links.scrollTop > 1);
+    links.toggleAttribute("data-end", links.scrollTop >= room - 1);
   };
-  side.addEventListener("scroll", sideEdge, { passive: true });
-  window.addEventListener("resize", sideEdge, { passive: true });
-  sideEdge();
+  links.addEventListener("scroll", linksEdge, { passive: true });
+  window.addEventListener("resize", linksEdge, { passive: true });
+  linksEdge();
 })();
 
 // --- Changelog index: mark the release that the reader is in. ---
@@ -269,6 +271,7 @@ const smoothPane = (pane, home, endless, drift = 0) => {
   if (!links.length || heads.includes(null)) return;
   const root = document.documentElement;
   const side = document.querySelector(".ec-docs-side");
+  const nav = document.querySelector(".ec-docs-nav");
   let current = -1;
   let frame = 0;
 
@@ -285,16 +288,18 @@ const smoothPane = (pane, home, endless, drift = 0) => {
   };
 
   // Keep the marked link in the index's own view. The index scrolls by
-  // itself (it is fixed), so its scrollTop moves, never the window's. A closed
-  // phone menu has no boxes. (offsetParent cannot tell: a fixed element has
-  // none.)
+  // itself (it is fixed), so its scrollTop moves, never the window's: the
+  // links on desktops, the whole menu on phones. A closed phone menu has no
+  // boxes. (offsetParent cannot tell: a fixed element has none.) The margin
+  // clears the links' 64px fade.
   const reveal = (link) => {
     if (!side || !side.getClientRects().length) return;
-    const box = side.getBoundingClientRect();
+    const scroller = nav && nav.scrollHeight > nav.clientHeight + 1 ? nav : side;
+    const box = scroller.getBoundingClientRect();
     const r = link.getBoundingClientRect();
-    const margin = 48;
-    if (r.top < box.top + margin) side.scrollTop -= box.top + margin - r.top;
-    else if (r.bottom > box.bottom - margin) side.scrollTop += r.bottom - (box.bottom - margin);
+    const margin = 72;
+    if (r.top < box.top + margin) scroller.scrollTop -= box.top + margin - r.top;
+    else if (r.bottom > box.bottom - margin) scroller.scrollTop += r.bottom - (box.bottom - margin);
   };
 
   // A click glides to its release (Reduce Motion jumps). While the glide is
