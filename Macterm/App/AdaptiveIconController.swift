@@ -32,6 +32,8 @@ final class AdaptiveIconController {
     private var generation = 0
     /// Why the adaptive icon is off for this run, once a render failed.
     private var suspension: AdaptiveIconRenderer.Failure?
+    /// What the last refresh decided, for `note`.
+    private var lastOutcome: String?
     /// The images of this run, one for each appearance, so a light/dark
     /// switch back to a seen request installs at once.
     private var rendered: [AdaptiveIconRequest.Appearance: (request: AdaptiveIconRequest, image: NSImage)] = [:]
@@ -65,34 +67,69 @@ final class AdaptiveIconController {
     }
 
     func refresh() {
-        let iconStyle = CFPreferencesCopyAppValue(AdaptiveIcon.iconStyleKey as CFString, kCFPreferencesAnyApplication) as? String
-        let decision = AdaptiveIcon.decide(
-            enabled: Preferences.shared.adaptiveIcon,
-            supported: AdaptiveIcon.isSupported && suspension == nil,
-            configured: configured,
-            iconStyle: iconStyle,
-            systemScheme: { GhosttyApp.shared.systemScheme }
-        )
-        guard case let .adaptive(appearance) = decision, let theme = themeColors(),
-              let paint = AdaptiveIcon.paint(for: theme), let request = request(for: appearance, paint: paint)
-        else {
+        guard let request = adaptiveRequest() else {
             showConfigured()
             return
         }
+        note("on (\(request.appearance.rawValue))")
         guard request != current else { return }
         current = request
         generation += 1
 
-        if let seen = rendered[appearance], seen.request == request {
+        if let seen = rendered[request.appearance], seen.request == request {
             AppIconPresenter.applyAdaptive(seen.image)
             return
         }
         if let image = cache.image(for: request) {
             remember(image, for: request)
             AppIconPresenter.applyAdaptive(image)
+            logger.info("adaptive icon (\(request.appearance.rawValue, privacy: .public)) taken from the cache")
             return
         }
+        logger.info("rendering the adaptive icon (\(request.appearance.rawValue, privacy: .public))")
         render(request, generation: generation)
+    }
+
+    /// The request for the adaptive icon, or nil when the Dock shows the
+    /// configured icon. Each nil says why in the log.
+    private func adaptiveRequest() -> AdaptiveIconRequest? {
+        let iconStyle = CFPreferencesCopyAppValue(AdaptiveIcon.iconStyleKey as CFString, kCFPreferencesAnyApplication) as? String
+        let enabled = Preferences.shared.adaptiveIcon
+        let supported = AdaptiveIcon.isSupported
+        let decision = AdaptiveIcon.decide(
+            enabled: enabled,
+            supported: supported && suspension == nil,
+            configured: configured,
+            iconStyle: iconStyle,
+            systemScheme: { GhosttyApp.shared.systemScheme }
+        )
+        guard case let .adaptive(appearance) = decision else {
+            let suspended = suspension != nil
+            let style = iconStyle ?? "none"
+            note("off (enabled \(enabled), supported \(supported), suspended \(suspended), configured \(configured), icon style \(style))")
+            return nil
+        }
+        guard let theme = themeColors() else {
+            note("off (a theme color cannot be read)")
+            return nil
+        }
+        guard let paint = AdaptiveIcon.paint(for: theme) else {
+            note("off (the theme has no gray for the lid)")
+            return nil
+        }
+        guard let request = request(for: appearance, paint: paint) else {
+            note("off (the bundle has no Assets.car)")
+            return nil
+        }
+        return request
+    }
+
+    /// Logs what a refresh decided, once for each change: a refresh runs on
+    /// every config change and activation.
+    private func note(_ outcome: String) {
+        guard outcome != lastOutcome else { return }
+        lastOutcome = outcome
+        logger.info("adaptive icon \(outcome, privacy: .public)")
     }
 
     private func showConfigured() {

@@ -40,6 +40,7 @@ SOCKET="$ROOT/data/control.sock"
 ICONS="$ROOT/data/AdaptiveIcon"
 touch "$ROOT/started"   # crash reports newer than this are ours
 PID=""
+LOG_PID=""
 
 say() { printf '== %s\n' "$*"; }
 # Crash reports from this run: the app, zmx or the icon helper.
@@ -89,6 +90,7 @@ teardown() {
     for name in $names; do cli session kill "$name" >/dev/null 2>&1 || true; done
   fi
   if [ -n "$PID" ]; then kill -KILL "$PID" 2>/dev/null || true; fi
+  if [ -n "$LOG_PID" ]; then kill "$LOG_PID" 2>/dev/null || true; fi
 }
 trap teardown EXIT
 
@@ -105,7 +107,19 @@ wait_until() {
   return 1
 }
 
-say "macOS $VERSION, $(defaults read "$APP/Contents/Info.plist" CFBundleShortVersionString) ($(defaults read "$APP/Contents/Info.plist" CFBundleIdentifier))"
+BUNDLE_ID="$(defaults read "$APP/Contents/Info.plist" CFBundleIdentifier)"
+say "macOS $VERSION, $(defaults read "$APP/Contents/Info.plist" CFBundleShortVersionString) ($BUNDLE_ID)"
+
+# The app's adaptive icon log, from before the launch: its info lines are
+# kept only in memory, so `log show` after the fact can miss them. The stream
+# has every Macterm of this build; `icon_log` keeps only this run's.
+/usr/bin/log stream --style compact --level info --predicate \
+  "subsystem == \"$BUNDLE_ID\" AND (category BEGINSWITH \"AdaptiveIcon\" OR category == \"AppIconPresenter\")" \
+  > "$ROOT/icon.log" 2>&1 &
+LOG_PID=$!
+sleep 1
+icon_log() { grep -F -- "[$PID:" "$ROOT/icon.log" | sed 's/^/   /' || echo "   (no line)"; }
+
 before=" $(pids_of_app | tr '\n' ' ')"
 open -n \
   --env HOME="$ROOT/home" \
@@ -181,8 +195,16 @@ elif [ "$MAJOR" -ge 26 ]; then
     catalog="$APP/Contents/Resources/Assets.car"
     request='{"catalogPath":"'"$catalog"'","iconName":"AppIcon","appearance":"dark","backgroundTop":{"red":0.1,"green":0.1,"blue":0.12},"backgroundBottom":{"red":0.07,"green":0.07,"blue":0.08},"layers":[{"red":0.41,"green":0.43,"blue":0.49},{"red":0.6,"green":0.62,"blue":0.68},{"red":0.8,"green":0.81,"blue":0.82},{"red":0.8,"green":0.81,"blue":0.82}],"pixels":256}'
     "$APP/Contents/Helpers/macterm-icon-renderer" "$request" >/dev/null || echo "the helper exited with $?" >&2
+    # The app's own log says what it decided, or why the render failed.
+    echo "the app's adaptive icon log:" >&2
+    icon_log >&2
+    echo "the icon folder:" >&2
+    ls -la "$ICONS" >&2 2>/dev/null || echo "   (none)" >&2
     fail "macOS $VERSION: the app painted no adaptive icon in 60 s"
   fi
+  # On success too: the render time shows how near the helper's timeout is.
+  say "adaptive icon log:"
+  icon_log
   icon="$(find "$ICONS" -name '*.png' | head -1)"
   size="$(sips -g pixelWidth -g pixelHeight "$icon" | awk '/pixel/ { print $2 }' | paste -sd x -)"
   [ "$size" = "1024x1024" ] || fail "the adaptive icon is $size, not 1024x1024"
