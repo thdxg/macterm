@@ -24,7 +24,8 @@
 <p align="center">
   <a href="https://macterm.thdxg.dev"><b>Website</b></a> ·
   <a href="https://macterm.thdxg.dev/docs"><b>Docs</b></a> ·
-  <a href="https://github.com/thdxg/macterm/releases"><b>Releases</b></a>
+  <a href="https://github.com/thdxg/macterm/releases"><b>Releases</b></a> ·
+  <a href="https://www.reddit.com/r/macterm"><b>Reddit</b></a>
 </p>
 
 ![Macterm's vertical project sidebar beside an editor pane and a shell pane](./assets/hero.png)
