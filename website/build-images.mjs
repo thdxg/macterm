@@ -58,12 +58,12 @@ async function buildOgCard() {
 }
 
 // Built from the app icon itself, the same image the README leads with.
-// icons/icon.png is the full-bleed squircle with transparent corners and no
+// icon.png is the full-bleed squircle with transparent corners and no
 // padding or shadow, so it needs no cropping. The apple-touch-icon is flattened
 // onto the site's ground: iOS fills transparent pixels with black and applies
 // its own corner mask.
 async function buildIcons() {
-  const input = join(SRC_DIR, "icons", "icon.png");
+  const input = join(SRC_DIR, "icon.png");
   if (!existsSync(input)) {
     throw new Error(`build-images: ${input} is missing — no icons to build`);
   }
