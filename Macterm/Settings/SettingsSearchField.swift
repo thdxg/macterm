@@ -1,10 +1,24 @@
 import AppKit
 import SwiftUI
 
-/// AppKit's search field for a Settings list (saved passwords, keybinds) —
-/// SwiftUI has no standalone one on macOS outside `.searchable`, which would
-/// put it in the Settings window's toolbar.
-struct SettingsSearchField: NSViewRepresentable {
+/// AppKit's search field for a Settings list (saved passwords, keybinds,
+/// extensions) — SwiftUI has no standalone one on macOS outside
+/// `.searchable`, which would put it in the Settings window's toolbar.
+/// Every one is a `.large` control, for room around its text; a picker
+/// beside one takes `.large` too, so the two line up. The size goes through
+/// SwiftUI's environment: SwiftUI sets a hosted control's `controlSize` from
+/// it, over any size that `makeNSView` sets.
+struct SettingsSearchField: View {
+    @Binding var text: String
+    let prompt: LocalizedStringResource
+
+    var body: some View {
+        NativeSearchField(text: $text, prompt: prompt)
+            .controlSize(.large)
+    }
+}
+
+private struct NativeSearchField: NSViewRepresentable {
     @Binding var text: String
     let prompt: LocalizedStringResource
 

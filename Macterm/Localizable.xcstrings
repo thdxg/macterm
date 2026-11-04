@@ -2108,6 +2108,22 @@
         }
       }
     },
+    "Clear the keybind" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축키 지우기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除快捷键"
+          }
+        }
+      }
+    },
     "Click to work here" : {
       "localizations" : {
         "ko" : {

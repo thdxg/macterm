@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 /// Settings → Widgets: every widget on the desktop, each removable from here,
@@ -22,13 +21,17 @@ struct WidgetsSettings: View {
                     }
                 }
                 LabeledContent("Layout file") {
+                    let exists = FileManager.default.fileExists(atPath: appState.widgetLayoutStore.fileURL.path)
                     Button(WidgetsSettings.layoutFilePath(appState)) {
-                        NSWorkspace.shared.activateFileViewerSelecting([appState.widgetLayoutStore.fileURL])
+                        appState.appDelegate?.finderServices.openTextFiles([
+                            appState.widgetLayoutStore.fileURL.path(percentEncoded: false),
+                        ])
                     }
                     .buttonStyle(.link)
+                    .linkPointer(exists)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .disabled(!FileManager.default.fileExists(atPath: appState.widgetLayoutStore.fileURL.path))
+                    .disabled(!exists)
                 }
             } header: {
                 DocsSectionHeader("Widgets", docs: .desktopWidgets) {

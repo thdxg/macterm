@@ -1153,9 +1153,9 @@ private struct GhosttyConfigFileRow: View {
     }
 }
 
-private extension View {
-    /// The pointing hand over a path that a click opens. macOS 14 has no
-    /// link pointer and keeps the arrow.
+extension View {
+    /// The pointing hand over a path that a click opens — every file link in
+    /// Settings. macOS 14 has no link pointer and keeps the arrow.
     @ViewBuilder
     func linkPointer(_ isActive: Bool = true) -> some View {
         if #available(macOS 15.0, *), isActive {
@@ -2166,20 +2166,17 @@ private struct KeymapSettings: View {
                 flagGlyphs(global: global.wrappedValue, passthrough: passthrough.wrappedValue)
                 Spacer(minLength: 0)
 
-                Button {
-                    HotkeyCaptureState.shared.isCapturing = true
-                    capturingActionID = rowID
-                } label: {
-                    Text(verbatim: isCapturing
-                        ? String(localized: "Press keys...", comment: "Settings → Keymaps: the keybind button while it records a chord")
-                        : HotkeyRegistry.displayString(for: values[rowID] ?? "disabled"))
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle((isUnmapped && !isCapturing) ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.bordered)
+                KeybindButton(
+                    shortcut: values[rowID] ?? "disabled",
+                    isCapturing: isCapturing,
+                    isUnmapped: isUnmapped,
+                    onRecord: {
+                        HotkeyCaptureState.shared.isCapturing = true
+                        capturingActionID = rowID
+                    },
+                    onClear: { clearShortcut(binding) }
+                )
                 .frame(width: Self.keybindColumn)
-                .help("Click, then press the keys. Press Delete to clear the keybind.")
 
                 // The menu and the warning in ONE box of `trailingColumn`,
                 // spaced zero: as two siblings they added an extra
@@ -2250,10 +2247,70 @@ private struct KeymapSettings: View {
     }
 }
 
+/// The keybind of a Keymaps row: click to record a chord. A mapped one shows
+/// a clear badge on its top-trailing corner while hovered or recording. The
+/// recording case cannot ride on the hover: the click that starts it ends
+/// the hover, which comes back only when the pointer leaves and re-enters.
+/// The hover is this view's own state, so moving the pointer down the table
+/// redraws one button and not the whole pane.
+///
+/// The hover comes from `RowHoverTracker`, never `.onHover` (see
+/// `SidebarProjectHeader`). The badge is always in the view, and only its
+/// opacity and hit testing change: a view that comes and goes in a row of the
+/// table changes the row's structure.
+private struct KeybindButton: View {
+    let shortcut: String
+    let isCapturing: Bool
+    let isUnmapped: Bool
+    let onRecord: () -> Void
+    let onClear: () -> Void
+
+    @State
+    private var isHovered = false
+
+    var body: some View {
+        Button(action: onRecord) {
+            Text(verbatim: isCapturing
+                ? String(localized: "Press keys...", comment: "Settings → Keymaps: the keybind button while it records a chord")
+                : HotkeyRegistry.displayString(for: shortcut))
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle((isUnmapped && !isCapturing) ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .help("Click, then press the keys. Press Delete to clear the keybind.")
+        .overlay(alignment: .topTrailing) {
+            Button(action: onClear) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .background(Circle().fill(.background))
+            }
+            .buttonStyle(.plain)
+            .offset(x: Self.badgeOverhang, y: -Self.badgeOverhang)
+            .help("Clear the keybind")
+            .accessibilityLabel("Clear the keybind")
+            .opacity(showsBadge ? 1 : 0)
+            // Opacity alone still hit-tests: a click on the hidden badge
+            // would clear the keybind.
+            .allowsHitTesting(showsBadge)
+            .accessibilityHidden(isUnmapped)
+        }
+        // The tracked area reaches past the button by the badge's overhang,
+        // so the pointer on the badge's outer part keeps it shown.
+        .background(RowHoverTracker(isHovered: $isHovered).padding(-Self.badgeOverhang))
+    }
+
+    private static let badgeOverhang: CGFloat = 5
+
+    private var showsBadge: Bool {
+        (isHovered || isCapturing) && !isUnmapped
+    }
+}
+
 /// The ⋯ menu of a Keymaps row: Global and Pass to TUI. Clearing is a bare
-/// Delete while the row records (`HotkeyCaptureView`), not an item here: a
-/// menu indents every title to its checkmark column, so a Clear Keybind
-/// item could not sit flush left.
+/// Delete while the row records (`HotkeyCaptureView`) or the keybind's clear
+/// badge (`KeybindButton`), not an item here: a menu indents every title to
+/// its checkmark column, so a Clear Keybind item could not sit flush left.
 ///
 /// AppKit, not a SwiftUI `Menu`: on macOS 26 and later a menu drops its
 /// checkmark column while no item is checked, so the titles sat flush left
