@@ -394,7 +394,7 @@ function writeChangelog(template, releases) {
           applicationCategory: "DeveloperApplication",
           operatingSystem: "macOS 14.0 or later",
           softwareVersion: releases[0].tag.replace(/^v/, ""),
-          sameAs: ["https://github.com/thdxg/macterm"],
+          sameAs: ["https://github.com/thdxg/macterm", "https://www.reddit.com/r/macterm"],
         },
       },
       {
@@ -496,7 +496,7 @@ async function main() {
             name: "Macterm",
             applicationCategory: "DeveloperApplication",
             operatingSystem: "macOS 14.0 or later",
-            sameAs: ["https://github.com/thdxg/macterm"],
+            sameAs: ["https://github.com/thdxg/macterm", "https://www.reddit.com/r/macterm"],
           },
         },
         {
