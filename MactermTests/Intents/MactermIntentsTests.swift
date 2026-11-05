@@ -197,6 +197,64 @@ struct MactermIntentsTests {
         await #expect(throws: MactermIntentError.self) { try await intent.perform() }
     }
 
+    @Test
+    func the_spotlight_open_intent_shows_the_project_like_focus_project() async throws {
+        let (appState, projectStore) = makeHost()
+        defer { teardown() }
+        let first = seedProject(appState, projectStore, name: "first")
+        _ = seedProject(appState, projectStore, name: "second")
+
+        let intent = OpenMactermProjectIntent()
+        intent.target = MactermProjectEntity(first)
+        _ = try await intent.perform()
+
+        #expect(appState.activeProjectID == first.id)
+    }
+
+    @Test
+    func the_spotlight_open_intent_is_behind_the_permission_gate() async {
+        let (appState, projectStore) = makeHost()
+        defer { teardown() }
+        let first = seedProject(appState, projectStore, name: "first")
+        let second = seedProject(appState, projectStore, name: "second")
+        IntentPermissionGate.shared.access = { .deny }
+
+        let intent = OpenMactermProjectIntent()
+        intent.target = MactermProjectEntity(first)
+
+        await #expect(throws: MactermIntentError.self) { try await intent.perform() }
+        #expect(appState.activeProjectID == second.id)
+    }
+
+    @Test
+    func a_project_is_indexed_under_its_name_and_its_folder() {
+        guard #available(macOS 15.0, *) else { return }
+        let project = Project(name: "Website", path: "/Users/me/dev/acme-site", sortOrder: 0)
+        let set = MactermProjectEntity(project).attributeSet
+
+        #expect(set.title == "Website")
+        #expect(set.contentDescription == "/Users/me/dev/acme-site")
+        #expect(set.keywords == ["Website", "acme-site"])
+    }
+
+    @Test
+    func a_save_hands_the_saved_list_to_the_spotlight_hook() {
+        let projectStore = makeProjectStore()
+        var saved: [[String]] = []
+        projectStore.onSave = { saved.append($0.map(\.name)) }
+
+        let project = projectStore.create(name: "api", path: "/tmp")
+        projectStore.rename(id: project.id, to: "backend")
+        projectStore.remove(id: project.id)
+
+        #expect(saved == [["api"], ["backend"], []])
+    }
+
+    @Test
+    func a_test_run_never_writes_the_spotlight_index() {
+        #expect(ProjectSpotlightIndex.isHermetic)
+    }
+
     // MARK: - Tabs
 
     @Test
@@ -344,6 +402,36 @@ struct MactermIntentsTests {
         #expect(entity.id == pane.sessionName)
         #expect(entity.id != pane.id.uuidString)
         #expect(try IntentTargets.pane(session: entity.id, in: ctx).pane === pane)
+    }
+
+    @Test
+    func a_workspace_panes_view_names_its_pane_entity_for_siri() throws {
+        guard #available(macOS 15.4, *) else { return }
+        let (appState, projectStore) = makeHost()
+        defer { teardown() }
+        let project = seedProject(appState, projectStore)
+        let pane = try #require(appState.workspaces[project.id]?.tabs.first?.splitRoot.allPanes().first)
+        let view = NSView()
+
+        MactermPaneEntity.annotate(view, for: pane)
+
+        let identifier = try #require(view.appEntityIdentifier)
+        #expect(identifier == MactermPaneEntity.identifier(forSession: pane.sessionName))
+        // The identifier resolves through the same lookup as every pane intent.
+        let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
+        #expect(try IntentTargets.pane(session: identifier.identifier, in: ctx).pane === pane)
+    }
+
+    @Test
+    func quick_terminal_and_widget_panes_name_no_entity() {
+        guard #available(macOS 15.4, *) else { return }
+        for projectID in [QuickTerminalService.projectID, DesktopWidget.projectID] {
+            let view = NSView()
+            MactermPaneEntity.annotate(view, for: Pane(projectPath: "/tmp", projectID: projectID))
+            // `allPanes` walks the workspaces only, so an identifier here
+            // would name a pane that every pane intent reports as not found.
+            #expect(view.appEntityIdentifier == nil)
+        }
     }
 
     @Test

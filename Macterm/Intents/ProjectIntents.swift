@@ -85,23 +85,36 @@ struct FocusMactermProjectIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult {
         let ctx = try await MactermIntentHost.shared.authorizedContext()
-        let target = try IntentTargets.project(project.id, in: ctx)
-        // `revealProject` fronts a window ALREADY showing it rather than
-        // repointing whichever window happens to be key — the rule for
-        // something that happens *to* a project rather than being chosen in a
-        // window (a notification click, the CLI's `pane focus`), which is
-        // exactly the shape of an intent arriving from outside.
-        ctx.appState.appDelegate?.showWindow()
-        if target.id == PinnedTabs.projectID {
-            // The sentinel must not go through the project path: it has its
-            // own selection (`selectPinnedProject`), and `selectProject`
-            // would treat it as a project rooted at the home directory.
-            ctx.appState.selectPinnedProject()
-        } else if target.id == ScratchTabs.projectID {
-            ctx.appState.selectScratchTabs()
-        } else {
-            ctx.appState.revealProject(target.id)
-        }
+        try IntentTargets.focusProject(project.id, in: ctx)
+        return .result()
+    }
+}
+
+/// Open a project from a Spotlight result — Focus Project, as the
+/// `OpenIntent` that Spotlight runs for an indexed `MactermProjectEntity`.
+///
+/// A separate intent and not a conformance on `FocusMactermProjectIntent`:
+/// `OpenIntent` requires the parameter to be named `target`, and a saved
+/// shortcut stores its parameters by name, so renaming Focus Project's
+/// `project` would empty it in every shortcut that uses it. Hidden from the
+/// Shortcuts gallery, which already offers Focus Project.
+struct OpenMactermProjectIntent: OpenIntent {
+    static let title: LocalizedStringResource = "Open Project"
+    static let description = IntentDescription("Show a project and bring its window forward.")
+    static let isDiscoverable = false
+
+    #if compiler(>=6.2)
+    @available(macOS 26.0, *)
+    static let supportedModes: IntentModes = .background
+    #endif
+
+    @Parameter(title: "Project")
+    var target: MactermProjectEntity
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        let ctx = try await MactermIntentHost.shared.authorizedContext()
+        try IntentTargets.focusProject(target.id, in: ctx)
         return .result()
     }
 }

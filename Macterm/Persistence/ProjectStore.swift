@@ -16,6 +16,11 @@ final class ProjectStore {
     /// the shared preference — swift-testing runs suites in parallel.
     @ObservationIgnored
     var autoAssignsColors: () -> Bool = { Preferences.shared.autoAssignProjectColors }
+    /// Called with the list after each save that wrote it (the Spotlight
+    /// index, `ProjectSpotlightIndex`). Not called while `loadFailed` refuses
+    /// to save, because that list is not the user's.
+    @ObservationIgnored
+    var onSave: (([Project]) -> Void)?
 
     init(fileURL: URL = FileStorage.fileURL(filename: "projects.json")) {
         self.fileURL = fileURL
@@ -134,6 +139,7 @@ final class ProjectStore {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(projects)
             try data.write(to: fileURL, options: .atomic)
+            onSave?(projects)
         } catch {
             logger.error("Failed to save projects: \(error, privacy: .public)")
         }

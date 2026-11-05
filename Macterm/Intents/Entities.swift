@@ -1,4 +1,6 @@
 import AppIntents
+import AppKit
+import CoreSpotlight
 import Foundation
 
 // MARK: - Project
@@ -33,6 +35,21 @@ struct MactermProjectEntity: AppEntity {
         id = project.id
         name = project.name
         path = project.path
+    }
+}
+
+/// Projects are in Spotlight (`ProjectSpotlightIndex`). A click on a result
+/// runs `OpenMactermProjectIntent`.
+@available(macOS 15.0, *)
+extension MactermProjectEntity: IndexedEntity {
+    var attributeSet: CSSearchableItemAttributeSet {
+        let set = defaultAttributeSet
+        set.title = name
+        set.displayName = name
+        set.contentDescription = path
+        // The folder's own name finds a project that the user renamed.
+        set.keywords = [name, (path as NSString).lastPathComponent]
+        return set
     }
 }
 
@@ -178,6 +195,29 @@ struct MactermPaneEntity: AppEntity {
         project = IntentTargets.projectName(projectID, in: ctx)
         workingDirectory = pane.nsView?.currentPwd ?? pane.projectPath
         foregroundProcess = pane.foregroundProcessName
+    }
+}
+
+extension MactermPaneEntity {
+    /// The identifier of the pane entity for a session.
+    static func identifier(forSession session: String) -> EntityIdentifier {
+        EntityIdentifier(for: MactermPaneEntity.self, identifier: session)
+    }
+
+    /// Tag a pane's terminal view with its pane entity, so that Siri and
+    /// Apple Intelligence can resolve "this pane" to the pane on the screen.
+    ///
+    /// Only the identifier, never the pane's text: the entity does not adopt
+    /// `Transferable`, because the system would read the text without the
+    /// `macos-shortcuts` gate, and terminal text can hold secrets. Get Pane
+    /// Contents stays the one way to read it. A mirror carries the same
+    /// session, which `IntentTargets.pane` resolves to the leader.
+    @MainActor
+    static func annotate(_ view: NSView, for pane: Pane) {
+        guard #available(macOS 15.4, *) else { return }
+        view.appEntityIdentifier = IntentTargets.isAddressablePane(projectID: pane.projectID)
+            ? identifier(forSession: pane.sessionName)
+            : nil
     }
 }
 
