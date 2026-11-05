@@ -46,20 +46,20 @@ A command that you click runs in a new split next to the focused pane. Macterm t
 
 ## What Macterm records
 
-Macterm records a command when the shell reports that it finished (OSC 133). This needs [shell integration](/docs/configuration). Macterm reads the command from the prompt line when you press Return, so a command that clears the screen, such as `clear`, is recorded too. The output tail of a failed command comes from the screen after the next prompt shows. If Macterm cannot read the command, it records nothing.
+Macterm records a command when the shell reports that it finished (OSC 133). This needs [shell integration](/docs/configuration). Macterm reads the command from the prompt line when you press Return, up to the cursor, so a command that clears the screen, such as `clear`, is recorded too, and a right prompt or an autosuggestion after the cursor is not part of it. In bash and zsh, the shell integration sends no mark for the first prompt of a pane, so the first command of a new pane is read only when it finishes. The output tail of a failed command comes from the screen after the next prompt shows. If Macterm cannot read the command, it records nothing. A tab that two windows show records each command one time.
 
 Macterm does not record:
 
 - A command that starts with a space. This is the `HISTCONTROL=ignorespace` convention of shells.
 - The commands of the pinned tabs, the scratch tabs, the quick terminal and desktop widgets. These do not belong to a project.
 
-Before Macterm stores a command or its output, it replaces secrets with `•••`. These are values of names such as `TOKEN`, `SECRET`, `PASSWORD` and `API_KEY`, `Authorization` headers, `--password` options, passwords in URLs and keys with a known shape (GitHub, Slack, AWS). This filter cannot find every secret. To keep a command out of the records, start it with a space.
+Before Macterm stores a command or its output, it replaces secrets with `•••`. The panel does not run such a command again, because it would type the mask in place of the secret. These are values of names such as `TOKEN`, `SECRET`, `PASSWORD` and `API_KEY`, `Authorization` headers, `--password` options, passwords in URLs and keys with a known shape (GitHub, Slack, AWS). This filter cannot find every secret. To keep a command out of the records, start it with a space.
 
 Each project keeps its 500 latest commands, in `~/Library/Application Support/Macterm/Memory/`.
 
 ## Git
 
-Macterm reads the Git state of a local project when the panel shows it, after a command finishes, when Macterm becomes the active app, and every 15 seconds while the panel shows. Macterm does not fetch from the remote, so the number of commits behind the upstream changes only after a fetch, for example when you click **Pull**. Macterm uses the Git of Homebrew, or the Git of the Xcode Command Line Tools. If neither is installed, the panel shows no Git state. Macterm never opens the install dialog of the Command Line Tools.
+Macterm reads the Git state of a local project when the panel shows it, after a command finishes while a panel shows the project, when Macterm becomes the active app, and every 15 seconds while the panel shows and Macterm is active. Macterm does not fetch from the remote, so the number of commits behind the upstream changes only after a fetch, for example when you click **Pull**. Macterm uses the Git of Homebrew, or the Git of the Xcode Command Line Tools. If neither is installed, the panel shows no Git state. Macterm never opens the install dialog of the Command Line Tools.
 
 The panel does not show the Git state of a remote project yet.
 

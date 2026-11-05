@@ -78,6 +78,11 @@ enum QuickActionRanker {
         command.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
+    /// Whether redaction replaced a secret in `command`.
+    static func isMasked(_ command: String) -> Bool {
+        command.contains(MemoryRedaction.mask)
+    }
+
     static func isTrivial(_ command: String) -> Bool {
         guard let first = command.split(whereSeparator: \.isWhitespace).first else { return true }
         return trivialCommands.contains(String(first))
@@ -98,7 +103,11 @@ enum QuickActionRanker {
         var actions: [QuickAction] = []
         var taken: Set<String> = []
 
-        if let failure = ProjectMemorySummary.unresolvedFailure(in: entries), let command = failure.command {
+        // A command with a masked secret cannot run again: the mask would
+        // be typed in place of the secret.
+        if let failure = ProjectMemorySummary.unresolvedFailure(in: entries), let command = failure.command,
+           !isMasked(command)
+        {
             actions.append(QuickAction(
                 kind: .retry,
                 title: String(localized: "Run Again"),
@@ -140,7 +149,9 @@ enum QuickActionRanker {
             }
         }
 
-        for score in frecency(entries, now: now) where actions.count < limit && !taken.contains(score.command) {
+        for score in frecency(entries, now: now)
+            where actions.count < limit && !taken.contains(score.command) && !isMasked(score.command)
+        {
             actions.append(QuickAction(
                 kind: .frequent,
                 title: score.command,

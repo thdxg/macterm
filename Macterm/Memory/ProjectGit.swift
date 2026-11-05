@@ -15,6 +15,8 @@ private let logger = Logger(subsystem: appBundleID, category: "ProjectGit")
 /// off: a daemon that it starts could hold the output pipe open.
 enum ProjectGit {
     static let timeout: Duration = .seconds(5)
+    /// How long after git exits its output is still read.
+    static let drainTimeout: Duration = .seconds(1)
     static let recentCommitCount = 5
 
     /// The git state of the repository at `path`, or nil when it is not in
@@ -76,8 +78,17 @@ enum ProjectGit {
         let pipe = Pipe()
         process.standardOutput = pipe
         let collected = OutputBuffer()
+        // The handler reports EOF with no data once git's end of the pipe
+        // closes: every byte git wrote is in `collected` by then.
+        let eof = AsyncStream<Void>.makeStream()
         pipe.fileHandleForReading.readabilityHandler = { handle in
-            collected.append(handle.availableData)
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                eof.continuation.finish()
+            } else {
+                collected.append(data)
+            }
         }
         let exited = AsyncStream<Int32>.makeStream()
         process.terminationHandler = { process in
@@ -100,8 +111,14 @@ enum ProjectGit {
             status = code
         }
         timeout.cancel()
+        // Bounded: a child of git could keep the pipe open after git exited.
+        let drain = Task {
+            try? await Task.sleep(for: Self.drainTimeout)
+            eof.continuation.finish()
+        }
+        for await _ in eof.stream {}
+        drain.cancel()
         pipe.fileHandleForReading.readabilityHandler = nil
-        collected.append(pipe.fileHandleForReading.availableData)
         guard status == 0 else { return nil }
         return String(decoding: collected.data, as: UTF8.self)
     }

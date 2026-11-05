@@ -384,6 +384,10 @@ final class GhosttyApp {
     /// the scroll path, once per event.
     private(set) var mouseScrollMultiplier: MouseScrollMultiplier = .default
 
+    /// The user's `window-padding-x`, for the cursor column of the IME point.
+    /// See `WindowPadding`.
+    private(set) var windowPadding: WindowPadding = .default
+
     var effectiveBackgroundColor: NSColor {
         adaptiveBackgroundColor ?? backgroundColor
     }
@@ -600,9 +604,9 @@ final class GhosttyApp {
 
         // Raw-text values the C API can't answer, re-read with the config
         // they belong to.
-        mouseScrollMultiplier = MouseScrollMultiplier.resolve(
-            userConfigText: MactermConfig.userGhosttyConfigText()
-        )
+        let userConfigText = MactermConfig.userGhosttyConfigText()
+        mouseScrollMultiplier = MouseScrollMultiplier.resolve(userConfigText: userConfigText)
+        windowPadding = WindowPadding.resolve(userConfigText: userConfigText)
 
         return (cfg, result)
     }

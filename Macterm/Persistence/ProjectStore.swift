@@ -11,7 +11,7 @@ final class ProjectStore {
     /// set, `save()` refuses to overwrite — a transient read/decode failure
     /// must never let the next mutation wipe the user's entire project list.
     @ObservationIgnored
-    private var loadFailed = false
+    private(set) var loadFailed = false
     /// Whether `create` tags a new project. Injectable so tests don't mutate
     /// the shared preference — swift-testing runs suites in parallel.
     @ObservationIgnored

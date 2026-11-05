@@ -840,7 +840,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // before the launch restore has run).
         MactermIntentHost.shared.attach(appState: appState, projectStore: projectStore)
         // After the restore, so that the project list is the user's.
-        appState.performWhenRestored { ProjectMemory.shared.attach(projectStore: projectStore) }
+        appState.performWhenRestored { [weak appState] in
+            ProjectMemory.shared.attach(projectStore: projectStore) { [weak appState] projectID in
+                appState?.windows.contains { $0.projectMemoryPanelVisible && $0.activeProjectID == projectID } ?? false
+            }
+        }
         // Draws the restored widgets (the restore may land on either side of
         // this) and every one created from here on.
         DesktopWidgetWindows.shared.attach(appState: appState)

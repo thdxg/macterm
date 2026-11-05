@@ -48,13 +48,50 @@ struct ScreenCommandExtractor: CommandTextSource {
     /// after its prompt mark. This is the one moment that a command which
     /// clears the screen (`clear`) or prints more than a screen is still on
     /// it. nil when that line has no prompt mark and command.
-    static func typedCommand(onScreen screen: String) -> ExtractedCommand? {
-        guard let line = screen.split(separator: "\n").last(where: { !$0.allSatisfy(\.isWhitespace) }).map(String.init),
-              let mark = OutputExplanation.promptMark(in: line),
+    ///
+    /// The line ends at the cursor. What the shell draws after it is not the
+    /// command: a right prompt (zsh `RPROMPT`, nushell's time) past a gap,
+    /// or an autosuggestion (fish, zsh-autosuggestions) that Return does
+    /// not accept. libghostty unwraps a line that wraps, and the cursor is
+    /// on its last screen row, so `columns` turns the row's column into an
+    /// index in the line. A Return pressed with the cursor in the middle of
+    /// the command keeps the text before it only; `ProjectMemory.makeEntry`
+    /// takes the rest from the screen when the command finishes.
+    static func typedCommand(onScreen screen: String, cursorColumn: Int? = nil, columns: Int? = nil) -> ExtractedCommand? {
+        guard var line = screen.split(separator: "\n").last(where: { !$0.allSatisfy(\.isWhitespace) }).map(String.init)
+        else { return nil }
+        if let cursorColumn, let columns, columns > 0 {
+            let rowsAbove = max(0, (line.count - 1) / columns)
+            let cut = rowsAbove * columns + cursorColumn
+            if cut < line.count { line = String(line.prefix(cut)) }
+        }
+        guard let mark = OutputExplanation.promptMark(in: line),
               let command = OutputExplanation.command(in: line, after: mark)
         else { return nil }
         let isPrivate = line.contains(mark + "  ") || line.contains(mark + " \t")
         return ExtractedCommand(command: command, output: "", isPrivate: isPrivate)
+    }
+
+    /// Whether `screen`, the command as the screen shows it after the
+    /// command finished, is `submitted` with the rest of a command that the
+    /// cursor cut: a Return pressed in the middle of the line. A right
+    /// prompt also makes the screen's command longer, past a gap of two or
+    /// more spaces, and is not the command.
+    static func screenCommand(_ screen: String, extends submitted: String) -> Bool {
+        guard screen.count > submitted.count, screen.hasPrefix(submitted) else { return false }
+        let rest = screen.dropFirst(submitted.count)
+        return !rest.hasPrefix("  ") && !rest.hasPrefix(" \t")
+    }
+
+    /// Whether `screen`, the command as the screen shows it after the
+    /// command finished, shows `command`: the same text, or the same text
+    /// and a right prompt after a gap of two or more spaces. The output of
+    /// the screen's command is then this command's output.
+    static func screenCommand(_ screen: String, shows command: String) -> Bool {
+        if QuickActionRanker.normalized(screen) == QuickActionRanker.normalized(command) { return true }
+        guard screen.hasPrefix(command) else { return false }
+        let rest = screen.dropFirst(command.count)
+        return rest.hasPrefix("  ") || rest.hasPrefix(" \t")
     }
 
     /// The command in text that a program sent (`pane run`), without its

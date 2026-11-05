@@ -10252,6 +10252,22 @@
         }
       }
     },
+    "This command had a secret. Macterm cannot run it again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 명령에는 비밀 정보가 있었습니다. Macterm은 이 명령을 다시 실행할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此命令包含机密信息。Macterm 无法再次运行它。"
+          }
+        }
+      }
+    },
     "This file is not in your config files. Add it in Settings → General → Ghostty Config." : {
       "localizations" : {
         "ko" : {

@@ -34,6 +34,11 @@ final class Pane: Identifiable {
     /// scp-style spec and its session lives on the remote host. Cached at
     /// init: the poll and title paths read it every tick.
     let isRemote: Bool
+    /// A pane of a shadow tab (`init(mirroring:)`): a second window's view of
+    /// a session that a real pane owns. It renders the same output and
+    /// parses the same shell marks, so anything that counts a command (the
+    /// project memory) reads only the real pane.
+    let isMirror: Bool
     /// The remote host name for display fallback (`processTitle` shows it
     /// while no remote process name is known). nil for local panes.
     let remoteHost: String?
@@ -1185,8 +1190,10 @@ final class Pane: Identifiable {
         env: [String: String]? = nil,
         activityQuietPollDelay: TimeInterval = TerminalActivityTiming.quietPollDelay,
         titleReportInterval: TimeInterval = PollCadence.fastInterval,
-        remoteTitleRetryDelay: TimeInterval = Pane.defaultRemoteTitleRetryDelay
+        remoteTitleRetryDelay: TimeInterval = Pane.defaultRemoteTitleRetryDelay,
+        isMirror: Bool = false
     ) {
+        self.isMirror = isMirror
         titleReportThrottle = TitleReportThrottle(interval: titleReportInterval)
         self.projectPath = projectPath
         self.projectID = projectID
@@ -1258,7 +1265,8 @@ final class Pane: Identifiable {
             projectPath: source.projectPath,
             projectID: source.projectID,
             sessionID: source.sessionID,
-            sessionName: source.sessionName
+            sessionName: source.sessionName,
+            isMirror: true
         )
         // A host property, not pane identity — re-derived per open exactly as
         // AppState stamps it, so the mirror can tear down over ssh too.

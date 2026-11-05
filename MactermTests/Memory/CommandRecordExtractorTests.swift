@@ -80,6 +80,51 @@ struct CommandRecordExtractorTests {
     }
 
     @Test
+    func the_typed_line_ends_at_the_cursor() throws {
+        // A right prompt past a gap, and an autosuggestion right after the
+        // cursor: neither is the command.
+        let rightPrompt = "~/app> cargo test                       11:23:45 AM"
+        let typed = try #require(ScreenCommandExtractor.typedCommand(onScreen: rightPrompt, cursorColumn: 17, columns: 80))
+        #expect(typed.command == "cargo test")
+        let ghost = "❯ make test --verbose"
+        let accepted = try #require(ScreenCommandExtractor.typedCommand(onScreen: ghost, cursorColumn: 11, columns: 80))
+        #expect(accepted.command == "make test")
+        // Without a cursor, the whole line.
+        #expect(ScreenCommandExtractor.typedCommand(onScreen: ghost)?.command == "make test --verbose")
+    }
+
+    @Test
+    func a_wrapped_line_offsets_the_cursor_by_the_rows_above() throws {
+        // 20 columns: the prompt and command wrap onto a second row, where
+        // the cursor sits at column 8, after `build`.
+        let line = "$ rm -rf dist && cp -r build   right"
+        let typed = try #require(ScreenCommandExtractor.typedCommand(onScreen: line, cursorColumn: 8, columns: 20))
+        #expect(typed.command == "rm -rf dist && cp -r build")
+    }
+
+    @Test
+    func a_cursor_in_the_middle_keeps_the_text_before_it() throws {
+        let typed = try #require(ScreenCommandExtractor.typedCommand(onScreen: "$ rm -rf build dist", cursorColumn: 12, columns: 80))
+        #expect(typed.command == "rm -rf bui")
+    }
+
+    @Test
+    func the_screen_extends_a_cut_command_but_not_past_a_gap() {
+        #expect(ScreenCommandExtractor.screenCommand("rm -rf build dist", extends: "rm -rf bui"))
+        #expect(!ScreenCommandExtractor.screenCommand("make test        11:23", extends: "make test"))
+        #expect(!ScreenCommandExtractor.screenCommand("make test", extends: "make test"))
+        #expect(!ScreenCommandExtractor.screenCommand("make", extends: "make test"))
+    }
+
+    @Test
+    func the_screen_shows_a_command_with_or_without_its_right_prompt() {
+        #expect(ScreenCommandExtractor.screenCommand("make  test", shows: "make test"))
+        #expect(ScreenCommandExtractor.screenCommand("make test        11:23", shows: "make test"))
+        #expect(!ScreenCommandExtractor.screenCommand("make test --verbose", shows: "make test"))
+        #expect(!ScreenCommandExtractor.screenCommand("ls", shows: "make test"))
+    }
+
+    @Test
     func a_leading_space_marks_the_command_private() throws {
         let screen = """
         app %  export TOKEN=abc

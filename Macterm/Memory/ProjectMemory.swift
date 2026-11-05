@@ -56,9 +56,26 @@ final class ProjectMemory {
 
     // MARK: - Recording
 
+    /// A command line captured at submission, for the finish that follows.
+    struct Submission {
+        var line: ExtractedCommand?
+        var at: Date
+    }
+
     /// The command line of each pane's running command, captured when it
     /// was submitted (`commandSubmitted`), by pane id.
-    @ObservationIgnored private var submittedCommands: [UUID: ExtractedCommand] = [:]
+    @ObservationIgnored private var submittedCommands: [UUID: Submission] = [:]
+
+    /// How long after a submission its command must have started for the
+    /// two to be the same command. A shell sends OSC 133;C within
+    /// milliseconds of Return. A submission whose end mark never came (an
+    /// ssh that dropped, `exec zsh`) must not name the next command.
+    nonisolated static let submissionTolerance: TimeInterval = 2
+
+    /// Whether a window shows the memory panel for a project. Set by
+    /// `attach`; the git state is read after a command only where someone
+    /// looks at it.
+    @ObservationIgnored var panelShows: (UUID) -> Bool = { _ in false }
 
     /// The user pressed Return, or `pane run` sent a line, in `pane`. While
     /// the shell is at its prompt, that line is the command that is about to
@@ -71,22 +88,36 @@ final class ProjectMemory {
         let line: ExtractedCommand? = if let sent = view.submittedText {
             ScreenCommandExtractor.sentCommand(sent)
         } else {
-            view.readText(area: GHOSTTY_POINT_ACTIVE).flatMap(ScreenCommandExtractor.typedCommand(onScreen:))
+            view.readText(area: GHOSTTY_POINT_ACTIVE).flatMap {
+                ScreenCommandExtractor.typedCommand(
+                    onScreen: $0,
+                    cursorColumn: view.cursorColumn(),
+                    columns: view.surfaceSize.map { Int($0.columns) }
+                )
+            }
         }
-        submittedCommands[pane.id] = line
+        submittedCommands[pane.id] = Submission(line: line, at: Date())
+    }
+
+    /// Whether a submission at `submittedAt` is the command that started at
+    /// `startedAt`. Pure, for the tests.
+    nonisolated static func submission(at submittedAt: Date, matches startedAt: Date) -> Bool {
+        startedAt.timeIntervalSince(submittedAt) < submissionTolerance
     }
 
     /// A command finished in `pane` (OSC 133;D). Records it after the next
     /// prompt is on the screen.
     func commandFinished(pane: Pane, view: GhosttyTerminalNSView?, exitCode: Int16, durationNs: UInt64) {
         // Taken now: the next command's Return can come before the read.
-        let submitted = submittedCommands.removeValue(forKey: pane.id)
+        let submission = submittedCommands.removeValue(forKey: pane.id)
         guard Self.isRecording, Self.covers(pane.projectID) else { return }
         let projectID = pane.projectID
         let finishedAt = Date()
         let directory = view?.currentPwd
         let code: Int? = exitCode < 0 ? nil : Int(exitCode)
         let duration = Double(durationNs) / 1_000_000_000
+        let startedAt = finishedAt.addingTimeInterval(-duration)
+        let submitted = submission.flatMap { Self.submission(at: $0.at, matches: startedAt) ? $0.line : nil }
         Task { [weak self, weak view] in
             guard let self else { return }
             try? await Task.sleep(for: screenReadDelay)
@@ -99,7 +130,7 @@ final class ProjectMemory {
             else { return }
             store.append(entry, to: projectID)
             logger.debug("recorded a command in \(projectID, privacy: .public)")
-            refreshGit(projectID, after: .seconds(2))
+            if panelShows(projectID) { refreshGit(projectID, after: .seconds(2)) }
         }
     }
 
@@ -121,7 +152,9 @@ final class ProjectMemory {
     /// The line captured at submission wins over the screen: it is what was
     /// typed, and output that looks like a prompt line cannot replace it. The
     /// screen gives the output tail, and only when it shows that same
-    /// command. Pure, for the tests.
+    /// command. One exception: when the screen's command continues the
+    /// submitted line with no gap, the cursor cut the line in the middle of
+    /// the command, and the screen has the whole of it. Pure, for the tests.
     nonisolated static func makeEntry(
         submitted: ExtractedCommand? = nil,
         screen: String?,
@@ -129,11 +162,12 @@ final class ProjectMemory {
         finish: Finish
     ) -> MemoryEntry? {
         let extracted = screen.flatMap(source.extract(screen:))
-        guard let command = submitted ?? extracted, !command.isPrivate else { return nil }
+        guard var command = submitted ?? extracted, !command.isPrivate else { return nil }
+        if let submitted, let extracted, ScreenCommandExtractor.screenCommand(extracted.command, extends: submitted.command) {
+            command.command = extracted.command
+        }
         let output = extracted.flatMap { screenCommand in
-            QuickActionRanker.normalized(screenCommand.command) == QuickActionRanker.normalized(command.command)
-                ? screenCommand.output
-                : nil
+            ScreenCommandExtractor.screenCommand(screenCommand.command, shows: command.command) ? screenCommand.output : nil
         }
         var entry = MemoryEntry(
             command: MemoryRedaction.redact(command.command),
@@ -161,8 +195,9 @@ final class ProjectMemory {
             guard !Task.isCancelled, let self else { return }
             readingGit.insert(projectID)
             let status = await gitReader(path)
-            readingGit.remove(projectID)
+            // A read that a newer one replaced leaves the mark to that one.
             guard !Task.isCancelled else { return }
+            readingGit.remove(projectID)
             git[projectID] = status
             pendingGitReads[projectID] = nil
         }
@@ -183,10 +218,13 @@ final class ProjectMemory {
     @ObservationIgnored var projectLookup: (UUID) -> Project? = { _ in nil }
 
     /// Hand the feature the project list, and delete the memory of projects
-    /// that were removed while Macterm was not running.
-    func attach(projectStore: ProjectStore) {
+    /// that were removed while Macterm was not running. A project list that
+    /// did not load is not the user's: nothing is pruned against it, as the
+    /// reapers skip a workspace file that did not load.
+    func attach(projectStore: ProjectStore, panelShows: @escaping (UUID) -> Bool) {
         projectLookup = { [weak projectStore] id in projectStore?.projects.first { $0.id == id } }
-        guard Self.isSupported else { return }
+        self.panelShows = panelShows
+        guard Self.isSupported, !projectStore.loadFailed else { return }
         store.prune(keeping: Set(projectStore.projects.map(\.id)))
     }
 }

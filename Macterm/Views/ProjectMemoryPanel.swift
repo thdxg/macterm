@@ -338,8 +338,16 @@ struct ProjectMemoryPanel: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .disabled(entry.command == nil)
-        .help(entry.command.map { String(localized: "Run \($0) again in a new split") } ?? "")
+        .disabled(entry.command == nil || entry.command.map(QuickActionRanker.isMasked) == true)
+        .help(recentHelp(entry))
+    }
+
+    private func recentHelp(_ entry: MemoryEntry) -> String {
+        guard let command = entry.command else { return "" }
+        if QuickActionRanker.isMasked(command) {
+            return String(localized: "This command had a secret. Macterm cannot run it again.")
+        }
+        return String(localized: "Run \(command) again in a new split")
     }
 
     @ViewBuilder

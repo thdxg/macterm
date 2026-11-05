@@ -320,8 +320,9 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onCommandSubmitted = { [weak pane, weak view] hasContent in
             guard let pane else { return }
             // Before the tracker leaves the prompt: memory captures the line
-            // only while the shell is at its prompt.
-            ProjectMemory.shared.commandSubmitted(pane: pane, view: view)
+            // only while the shell is at its prompt. A mirror sees the same
+            // shell; the real pane records for both.
+            if !pane.isMirror { ProjectMemory.shared.commandSubmitted(pane: pane, view: view) }
             pane.recordCommandSubmission(hasContent: hasContent)
         }
         view.canCarryCommandInput = { [weak pane] in pane?.allowsInPlaceOutputStart ?? false }
@@ -490,8 +491,11 @@ private struct TerminalSurface: NSViewRepresentable {
             // program's name doesn't linger until the next scheduled probe
             // or user interaction.
             pane.noteRemoteCommandBoundary()
-            // Project memory: off unless the user turned it on, macOS 26+.
-            ProjectMemory.shared.commandFinished(pane: pane, view: view, exitCode: exitCode, durationNs: durationNs)
+            // Project memory: off unless the user turned it on, macOS 26+. A
+            // mirror parses the same OSC 133;D; only the real pane records.
+            if !pane.isMirror {
+                ProjectMemory.shared.commandFinished(pane: pane, view: view, exitCode: exitCode, durationNs: durationNs)
+            }
             if Preferences.shared.showTabStatusIndicator {
                 pane.markCommandFinished()
                 onCommandFinished()

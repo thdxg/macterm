@@ -88,7 +88,22 @@ def test_a_failed_command_is_recorded_with_its_secrets_masked(app, live_pane, re
     memory = _memory(app, recording["id"])
     assert memory["recording"] is True
     assert memory["unresolvedFailure"] == entry["command"]
-    assert {"kind": "retry", "title": memory["actions"][0]["title"], "command": entry["command"]} == memory["actions"][0]
+    # A masked command is never offered to run again: the mask would be typed
+    # in place of the secret.
+    assert not any("•••" in action["command"] for action in memory["actions"])
+
+    # A failure with no secret is offered to run again.
+    plain = _script(START + f"printf 'plain-{nonce}\\n'\nprintf '\\033]133;D;2\\007'\n")
+    try:
+        app.pane_run(f"/bin/sh {plain}", pane=live_pane["id"])
+        retry = wait_for(
+            lambda: next((a for a in _memory(app, recording["id"])["actions"] if a["kind"] == "retry"), None),
+            timeout=30,
+            message="a Run Again action",
+        )
+    finally:
+        os.unlink(plain)
+    assert retry["command"] == f"/bin/sh {plain}"
 
 
 def test_nothing_is_recorded_while_memory_is_off(app, live_pane, recording):
