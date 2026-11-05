@@ -209,9 +209,6 @@ struct ProjectMemoryPanel: View {
                  .streaming,
                  .done:
                 HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .foregroundStyle(MactermTheme.accent)
-                        .padding(.top, 2)
                     Text(verbatim: state.text)
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
