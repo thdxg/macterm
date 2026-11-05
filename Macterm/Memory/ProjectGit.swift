@@ -18,6 +18,7 @@ enum ProjectGit {
     /// How long after git exits its output is still read.
     static let drainTimeout: Duration = .seconds(1)
     static let recentCommitCount = 5
+    static let recentBranchCount = 6
 
     /// The git state of the repository at `path`, or nil when it is not in
     /// a repository or no usable git is installed.
@@ -27,7 +28,17 @@ enum ProjectGit {
             return nil
         }
         let logOutput = await run(git, ["log", "-\(recentCommitCount)", "--format=%h%x1f%s%x1f%ct"], in: path)
-        return GitStatusParser.status(statusOutput: statusOutput, logOutput: logOutput)
+        let branchesOutput = await run(git, [
+            "for-each-ref", "refs/heads", "--sort=-committerdate", "--count=\(recentBranchCount)",
+            "--format=%(refname:short)\u{1F}%(objectname:short)\u{1F}%(committerdate:unix)\u{1F}%(subject)",
+        ], in: path)
+        let worktreesOutput = await run(git, ["worktree", "list", "--porcelain"], in: path)
+        return GitStatusParser.status(
+            statusOutput: statusOutput,
+            logOutput: logOutput,
+            branchesOutput: branchesOutput,
+            worktreesOutput: worktreesOutput
+        )
     }
 
     /// `executable()`, found once for each run of the app.

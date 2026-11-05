@@ -138,6 +138,73 @@ struct ProjectMemoryTests {
         #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "export TOKEN=•••")
     }
 
+    private func makeBackgroundMemory(runs: @escaping @MainActor () -> Void) -> (ProjectMemory, ProjectMemorySummarizer, Project) {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-memory-bg-\(UUID().uuidString)", isDirectory: true)
+        let memory = ProjectMemory(store: ProjectMemoryStore(directory: directory))
+        let summarizer = ProjectMemorySummarizer()
+        summarizer.debounce = .milliseconds(10)
+        summarizer.loadStored = { _ in nil }
+        summarizer.storeSummary = { _, _ in }
+        summarizer.streamer = { _, _, _ in
+            runs()
+            return AsyncThrowingStream { continuation in
+                continuation.yield("You built the project.")
+                continuation.finish()
+            }
+        }
+        memory.summarizer = summarizer
+        memory.summaryAllowed = { true }
+        memory.gitReader = { _ in nil }
+        memory.summaryQuietPeriod = .milliseconds(40)
+        let project = Project(name: "acme", path: "/tmp", sortOrder: 0)
+        memory.projectLookup = { $0 == project.id ? project : nil }
+        return (memory, summarizer, project)
+    }
+
+    private func waitForSummary(_ summarizer: ProjectMemorySummarizer, _ project: UUID) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while summarizer.state(for: project).phase != .done, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(summarizer.state(for: project).phase == .done)
+    }
+
+    @Test
+    func a_quiet_project_gets_its_summary_in_the_background_once() async throws {
+        var runs = 0
+        let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        memory.store.append(entry("make build", exit: 0), to: project.id)
+
+        // Two commands close together: the second restarts the wait.
+        memory.scheduleBackgroundSummary(project.id)
+        try await Task.sleep(for: .milliseconds(20))
+        memory.scheduleBackgroundSummary(project.id)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(summarizer.state(for: project.id).phase == .idle)
+
+        try await waitForSummary(summarizer, project.id)
+        #expect(summarizer.state(for: project.id).text == "You built the project.")
+        #expect(runs == 1)
+    }
+
+    @Test
+    func the_button_writes_a_summary_now_and_again_for_the_same_records() async throws {
+        var runs = 0
+        let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        memory.store.append(entry("make build", exit: 0), to: project.id)
+
+        await memory.writeSummary(project.id, force: true)
+        try await waitForSummary(summarizer, project.id)
+        await memory.writeSummary(project.id, force: true)
+        try await waitForSummary(summarizer, project.id)
+        #expect(runs == 2)
+        // The quiet period, for records that have a summary, costs nothing.
+        await memory.writeSummary(project.id)
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(runs == 2)
+    }
+
     @Test
     func a_project_list_that_did_not_load_prunes_nothing() throws {
         let directory = FileManager.default.temporaryDirectory

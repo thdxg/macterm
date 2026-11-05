@@ -33,6 +33,14 @@ final class ProjectMemory {
     @ObservationIgnored var gitReader: (String) async -> GitStatus? = { await ProjectGit.status(at: $0) }
     @ObservationIgnored private var pendingGitReads: [UUID: Task<Void, Never>] = [:]
 
+    /// How long a project is quiet after its last command before its
+    /// summary is written in the background (`scheduleBackgroundSummary`),
+    /// so that a panel opened after a break shows it at once.
+    @ObservationIgnored var summaryQuietPeriod: Duration = .seconds(600)
+    @ObservationIgnored var summarizer: ProjectMemorySummarizer = .shared
+    @ObservationIgnored var summaryAllowed: () -> Bool = { ProjectMemorySummarizer.isEnabled }
+    @ObservationIgnored private var quietTimers: [UUID: Task<Void, Never>] = [:]
+
     init(store: ProjectMemoryStore = ProjectMemoryStore()) {
         self.store = store
     }
@@ -131,6 +139,7 @@ final class ProjectMemory {
             store.append(entry, to: projectID)
             logger.debug("recorded a command in \(projectID, privacy: .public)")
             if panelShows(projectID) { refreshGit(projectID, after: .seconds(2)) }
+            scheduleBackgroundSummary(projectID)
         }
     }
 
@@ -203,15 +212,63 @@ final class ProjectMemory {
         }
     }
 
-    /// Delete a project's memory and its cached git state.
+    // MARK: - Background summary
+
+    /// Write a project's summary once it has been quiet for `delay`
+    /// (`summaryQuietPeriod` when nil), panel or no panel. A new command
+    /// restarts the wait. This and the panel's button are the only ways a
+    /// summary is written: a panel that opens shows the stored one, and a
+    /// command that finishes only restarts the wait, so the model never runs
+    /// in the middle of work.
+    func scheduleBackgroundSummary(_ projectID: UUID, after delay: Duration? = nil) {
+        quietTimers[projectID]?.cancel()
+        let wait = delay ?? summaryQuietPeriod
+        quietTimers[projectID] = Task { [weak self] in
+            try? await Task.sleep(for: wait)
+            guard !Task.isCancelled, let self else { return }
+            quietTimers[projectID] = nil
+            await writeSummary(projectID)
+        }
+    }
+
+    /// Write a project's summary now. The git state is read fresh: the
+    /// panel's cached one may be old, or absent when no panel was up.
+    /// `force` writes it again for records that have one (the panel's
+    /// button); otherwise the same records cost nothing.
+    func writeSummary(_ projectID: UUID, force: Bool = false) async {
+        guard summaryAllowed(), let project = projectLookup(projectID) else { return }
+        if !project.isRemote, let status = await gitReader(project.path) {
+            git[projectID] = status
+        }
+        guard !Task.isCancelled else { return }
+        summarizer.refresh(
+            projectID: projectID,
+            digest: ProjectMemoryDigest(
+                projectName: project.name,
+                entries: store.entries(for: projectID),
+                git: git[projectID],
+                replyLanguage: OnDeviceModel.replyLanguage
+            ),
+            force: force
+        )
+    }
+
+    /// Delete a project's memory, its cached git state and its summary.
     func forget(_ projectID: UUID) {
+        quietTimers.removeValue(forKey: projectID)?.cancel()
         store.forget(projectID)
         git[projectID] = nil
+        summarizer.forget(projectID: projectID)
     }
 
     func forgetAll() {
+        for timer in quietTimers.values {
+            timer.cancel()
+        }
+        quietTimers.removeAll()
         store.forgetAll()
         git.removeAll()
+        summarizer.forgetAll()
     }
 
     /// Project lookup for the git read. Set by `attach`.

@@ -440,6 +440,13 @@ final class Preferences {
         didSet { Keys.projectMemory.write(projectMemory, to: defaults) }
     }
 
+    /// A paragraph at the top of the memory panel, by Apple's on-device
+    /// model (`ProjectMemorySummarizer`). On by default: it runs only where
+    /// memory is on and the model is available, and nothing leaves the Mac.
+    var projectMemorySummary: Bool {
+        didSet { Keys.projectMemorySummary.write(projectMemorySummary, to: defaults) }
+    }
+
     var showNewProjectButton: Bool {
         didSet { Keys.showNewProjectButton.write(showNewProjectButton, to: defaults) }
     }
@@ -1023,6 +1030,7 @@ final class Preferences {
         autoAssignProjectColors = Keys.autoAssignProjectColors.read(defaults)
         autoUpdateExtensions = Keys.autoUpdateExtensions.read(defaults)
         projectMemory = Keys.projectMemory.read(defaults)
+        projectMemorySummary = Keys.projectMemorySummary.read(defaults)
         showNewProjectButton = Keys.showNewProjectButton.read(defaults)
         showProjectNewTabButton = Keys.showProjectNewTabButton.read(defaults)
         backgroundSSHConnections = Keys.backgroundSSHConnections.read(defaults)
@@ -1205,6 +1213,7 @@ final class Preferences {
         static let autoAssignProjectColors = PreferenceStorageKey("macterm.projects.autoAssignColors", default: false)
         static let autoUpdateExtensions = PreferenceStorageKey("macterm.extensions.autoUpdate", default: true)
         static let projectMemory = PreferenceStorageKey("macterm.memory.enabled", default: false)
+        static let projectMemorySummary = PreferenceStorageKey("macterm.memory.summary", default: true)
         static let showNewProjectButton = PreferenceStorageKey("macterm.sidebar.showNewProjectButton", default: true)
         static let showProjectNewTabButton = PreferenceStorageKey("macterm.sidebar.showProjectNewTabButton", default: true)
         static let backgroundSSHConnections = PreferenceStorageKey("macterm.remote.backgroundSSHConnections", default: true)

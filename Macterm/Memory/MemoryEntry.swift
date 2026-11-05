@@ -66,4 +66,15 @@ struct MemoryFile: Codable, Equatable {
     var version = MemoryFile.currentVersion
     /// Oldest first.
     var entries: [MemoryEntry] = []
+    /// The last summary of the on-device model, kept with the records so
+    /// that a relaunch shows it at once. Absent in a file from before it.
+    var summary: StoredSummary?
+}
+
+/// A summary that the on-device model wrote (`ProjectMemorySummarizer`),
+/// with the key of the records it is for (`ProjectMemoryDigest.key`).
+struct StoredSummary: Codable, Equatable {
+    var key: String
+    var text: String
+    var writtenAt: Date
 }

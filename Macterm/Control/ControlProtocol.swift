@@ -138,6 +138,9 @@ struct ControlArgs: Codable, Equatable {
     /// Show or hide the key window's project memory panel (debug-only
     /// `project.memory`): `show` or `hide`.
     var panel: String?
+    /// Write the project's summary now (debug-only `project.memory`):
+    /// `write`, what the panel's button does.
+    var summarize: String?
     /// Destination pane selector for `pane.move` (same tab); nil = the
     /// workspace edge (a root-level move).
     var dest: String?
@@ -386,10 +389,18 @@ struct ControlMemoryState: Codable, Equatable {
         var command: String
     }
 
+    /// The paragraph of the on-device model: its phase (`idle`, `waiting`,
+    /// `streaming`, `done` or `failed`) and text. nil where it cannot run.
+    struct Summary: Codable, Equatable {
+        var phase: String
+        var text: String
+    }
+
     var recording: Bool
     var entries: [Entry]
     var unresolvedFailure: String?
     var actions: [Action]
+    var summary: Summary?
 }
 
 struct ControlPasswordState: Codable, Equatable {

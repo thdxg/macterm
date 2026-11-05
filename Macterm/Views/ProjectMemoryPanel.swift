@@ -32,6 +32,7 @@ struct ProjectMemoryPanel: View {
     static let gitRefreshInterval: Duration = .seconds(15)
 
     private var memory: ProjectMemory { .shared }
+    private var summarizer: ProjectMemorySummarizer { .shared }
     private var entries: [MemoryEntry] { memory.store.loadedEntries(for: project.id) }
     private var git: GitStatus? { memory.git[project.id] }
 
@@ -54,6 +55,10 @@ struct ProjectMemoryPanel: View {
         .padding(Self.inset)
         .task(id: project.id) {
             memory.store.prepare(project.id)
+            // The stored summary, for the paragraph. Nothing is written
+            // here: a summary is written after a quiet period, or by the
+            // button.
+            summarizer.prepare(projectID: project.id)
             // Git changes that no command in this project makes (another
             // app, an editor in a pane) show up with no button: the panel
             // reads the state while it is up, and the task ends with it.
@@ -158,6 +163,7 @@ struct ProjectMemoryPanel: View {
     private func leftOff(_ summary: ProjectMemorySummary) -> some View {
         section(String(localized: "Where You Left Off")) {
             VStack(alignment: .leading, spacing: 10) {
+                summaryParagraph
                 if let last = summary.lastActivity {
                     Text("Last command \(last.formatted(.relative(presentation: .named)))")
                         .font(.callout)
@@ -180,6 +186,57 @@ struct ProjectMemoryPanel: View {
                 }
             }
         }
+    }
+
+    /// The model's paragraph, only where it can run, with the button that
+    /// writes it again. With no summary yet, the button writes the first.
+    @ViewBuilder
+    private var summaryParagraph: some View {
+        if preferences.projectMemorySummary, ProjectMemorySummarizer.isEnabled, !entries.isEmpty {
+            let state = summarizer.state(for: project.id)
+            switch state.phase {
+            case .idle,
+                 .failed:
+                summarizeButton(String(localized: "Summarize"))
+            case .waiting where state.text.isEmpty:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text("Summarizing…")
+                        .font(.callout)
+                        .foregroundStyle(MactermTheme.fgMuted)
+                }
+            case .waiting,
+                 .streaming,
+                 .done:
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(MactermTheme.accent)
+                        .padding(.top, 2)
+                    Text(verbatim: state.text)
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                    Spacer(minLength: 0)
+                    if state.phase == .done {
+                        Button(String(localized: "Summarize Again"), systemImage: "arrow.clockwise") { writeSummary() }
+                            .labelStyle(.iconOnly)
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(MactermTheme.fgMuted)
+                            .help(String(localized: "Summarize Again"))
+                    }
+                }
+            }
+        }
+    }
+
+    private func summarizeButton(_ title: String) -> some View {
+        Button(title, systemImage: "sparkles") { writeSummary() }
+            .buttonStyle(.glass)
+            .help(String(localized: "Write a summary of where you left off with Apple Intelligence"))
+    }
+
+    private func writeSummary() {
+        Task { await memory.writeSummary(project.id, force: true) }
     }
 
     private func failureCard(_ entry: MemoryEntry) -> some View {
@@ -286,7 +343,55 @@ struct ProjectMemoryPanel: View {
                         .lineLimit(1)
                 }
             }
+            if git.branches.contains(where: { $0.name != git.branch }) {
+                Text("Branches")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(MactermTheme.fgMuted)
+                    .padding(.top, 4)
+                ForEach(git.branches, id: \.name) { branch in
+                    branchRow(branch, isCurrent: branch.name == git.branch)
+                }
+            }
         }
+    }
+
+    /// A branch with its latest commit's age and, when a worktree has it
+    /// checked out, that worktree's folder. A click on such a branch opens a
+    /// shell in the worktree; the panel never switches a branch.
+    private func branchRow(_ branch: GitStatus.Branch, isCurrent: Bool) -> some View {
+        Button {
+            guard let worktree = branch.worktree else { return }
+            ProjectMemoryActions.openShell(in: worktree, project: project, appState: appState, projects: projectStore.projects)
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch")
+                    .font(.caption)
+                    .foregroundStyle(isCurrent ? MactermTheme.accent : MactermTheme.fgDim)
+                Text(verbatim: branch.name)
+                    .font(.caption.monospaced().weight(isCurrent ? .semibold : .regular))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let worktree = branch.worktree {
+                    Label {
+                        Text(verbatim: (worktree as NSString).lastPathComponent)
+                    } icon: {
+                        Image(systemName: "folder")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(MactermTheme.fgMuted)
+                    .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Text(branch.lastCommit.formatted(.relative(presentation: .named)))
+                    .font(.caption2)
+                    .foregroundStyle(MactermTheme.fgDim)
+                    .lineLimit(1)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(branch.worktree == nil)
+        .help(branch.worktree.map { String(localized: "Open a shell in the worktree at \($0)") } ?? branch.subject)
     }
 
     private func countLabel(_ count: Int, symbol: String) -> some View {

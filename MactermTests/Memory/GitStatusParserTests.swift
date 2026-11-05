@@ -62,6 +62,34 @@ struct GitStatusParserTests {
     }
 
     @Test
+    func branches_come_with_the_worktree_that_has_them_checked_out() {
+        let branches = "main\u{1F}abc1234\u{1F}1700000000\u{1F}Add the Makefile\nfeature/tax\u{1F}def5678\u{1F}1700003600\u{1F}Apply tax\n"
+        let worktrees = """
+        worktree /Users/me/dev/app
+        HEAD abc1234abc1234
+        branch refs/heads/main
+
+        worktree /Users/me/dev/app-tax
+        HEAD def5678def5678
+        branch refs/heads/feature/tax
+
+        worktree /Users/me/dev/app-old
+        HEAD 0000000
+        detached
+
+        """
+        let status = GitStatusParser.status(
+            statusOutput: "# branch.head main\n", logOutput: nil, branchesOutput: branches, worktreesOutput: worktrees
+        )
+        #expect(status.branches.map(\.name) == ["main", "feature/tax"])
+        #expect(status.branches[0].worktree == "/Users/me/dev/app")
+        #expect(status.branches[1].worktree == "/Users/me/dev/app-tax")
+        #expect(status.branches[1].subject == "Apply tax")
+        #expect(status.branches[1].lastCommit == Date(timeIntervalSince1970: 1_700_003_600))
+        #expect(GitStatusParser.parseWorktrees(worktrees).count == 2)
+    }
+
+    @Test
     func the_log_is_hash_subject_and_time() {
         let log = "a1b2c3d\u{1F}Fix the thing\u{1F}1700000000\ne4f5a6b\u{1F}Add a feature\u{1F}1699990000\n"
         let commits = GitStatusParser.parseLog(log)
