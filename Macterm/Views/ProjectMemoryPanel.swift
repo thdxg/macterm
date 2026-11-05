@@ -161,7 +161,7 @@ struct ProjectMemoryPanel: View {
     }
 
     private func leftOff(_ summary: ProjectMemorySummary) -> some View {
-        section(String(localized: "Where You Left Off")) {
+        section(String(localized: "Summary")) {
             VStack(alignment: .leading, spacing: 10) {
                 summaryParagraph
                 if let last = summary.lastActivity {

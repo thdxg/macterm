@@ -9785,6 +9785,22 @@
         }
       }
     },
+    "Summary" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "摘要"
+          }
+        }
+      }
+    },
     "Switch to project: %@" : {
       "localizations" : {
         "ko" : {
@@ -11308,22 +11324,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当此标签页顶部列出的某个程序正在聚焦的窗格中运行时，将此快捷键发送给该程序，而不执行操作。在其他地方，操作仍会执行。"
-          }
-        }
-      }
-    },
-    "Where You Left Off" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "마지막 작업"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上次进行到哪里"
           }
         }
       }
