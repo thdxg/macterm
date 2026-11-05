@@ -48,4 +48,4 @@ The keybind is <kbd>⌘</kbd><kbd>⇧</kbd><kbd>E</kbd>. To change it, go to **S
 
 ## Long output
 
-Apple Intelligence reads at most about 2,800 tokens of text. For a longer output, it reads the start and the end.
+Apple Intelligence reads at most about 7,000 tokens of text on macOS 27, and about 3,000 tokens on macOS 26. For a longer output, it reads the start and the end.
