@@ -317,8 +317,12 @@ private struct TerminalSurface: NSViewRepresentable {
         // Order matters: `onInteraction` clears the tracker's in-place start
         // arming that `onCommandSubmitted` sets, and the view calls them in
         // that order. See `GhosttyTerminalNSView.onCommandSubmitted`.
-        view.onCommandSubmitted = { [weak pane] hasContent in
-            pane?.recordCommandSubmission(hasContent: hasContent)
+        view.onCommandSubmitted = { [weak pane, weak view] hasContent in
+            guard let pane else { return }
+            // Before the tracker leaves the prompt: memory captures the line
+            // only while the shell is at its prompt.
+            ProjectMemory.shared.commandSubmitted(pane: pane, view: view)
+            pane.recordCommandSubmission(hasContent: hasContent)
         }
         view.canCarryCommandInput = { [weak pane] in pane?.allowsInPlaceOutputStart ?? false }
         // The surface half of the passthrough gate. The key responders decline

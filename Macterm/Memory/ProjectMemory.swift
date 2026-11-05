@@ -56,9 +56,31 @@ final class ProjectMemory {
 
     // MARK: - Recording
 
+    /// The command line of each pane's running command, captured when it
+    /// was submitted (`commandSubmitted`), by pane id.
+    @ObservationIgnored private var submittedCommands: [UUID: ExtractedCommand] = [:]
+
+    /// The user pressed Return, or `pane run` sent a line, in `pane`. While
+    /// the shell is at its prompt, that line is the command that is about to
+    /// run: keep it for `commandFinished`. Read now, because a command that
+    /// clears the screen or prints more than a screen takes it away. A Return
+    /// inside a program (an editor, a REPL) is not at the prompt and is
+    /// ignored.
+    func commandSubmitted(pane: Pane, view: GhosttyTerminalNSView?) {
+        guard Self.isRecording, Self.covers(pane.projectID), pane.isShellAtPrompt, let view else { return }
+        let line: ExtractedCommand? = if let sent = view.submittedText {
+            ScreenCommandExtractor.sentCommand(sent)
+        } else {
+            view.readText(area: GHOSTTY_POINT_ACTIVE).flatMap(ScreenCommandExtractor.typedCommand(onScreen:))
+        }
+        submittedCommands[pane.id] = line
+    }
+
     /// A command finished in `pane` (OSC 133;D). Records it after the next
     /// prompt is on the screen.
     func commandFinished(pane: Pane, view: GhosttyTerminalNSView?, exitCode: Int16, durationNs: UInt64) {
+        // Taken now: the next command's Return can come before the read.
+        let submitted = submittedCommands.removeValue(forKey: pane.id)
         guard Self.isRecording, Self.covers(pane.projectID) else { return }
         let projectID = pane.projectID
         let finishedAt = Date()
@@ -73,7 +95,8 @@ final class ProjectMemory {
             let promptUp = view.map { ["sighted", "prompting"].contains(PasswordPromptMonitor.shared.state(for: $0).phase) } ?? false
             let screen = promptUp ? nil : view?.readText(area: GHOSTTY_POINT_ACTIVE)
             let finish = Finish(directory: directory, exitCode: code, finishedAt: finishedAt, duration: duration)
-            guard let entry = Self.makeEntry(screen: screen, source: textSource, finish: finish) else { return }
+            guard let entry = Self.makeEntry(submitted: submitted, screen: screen, source: textSource, finish: finish)
+            else { return }
             store.append(entry, to: projectID)
             logger.debug("recorded a command in \(projectID, privacy: .public)")
             refreshGit(projectID, after: .seconds(2))
@@ -90,19 +113,36 @@ final class ProjectMemory {
         var duration: TimeInterval
     }
 
-    /// The entry for a finished command, or nil when the user asked the
-    /// shell not to remember it. Pure, for the tests.
-    nonisolated static func makeEntry(screen: String?, source: any CommandTextSource, finish: Finish) -> MemoryEntry? {
+    /// The entry for a finished command, or nil when there is nothing to
+    /// remember: the user asked the shell not to (a leading space), or
+    /// neither the submitted line nor the screen says what the command was.
+    /// A record with no command is noise in every list that shows it.
+    ///
+    /// The line captured at submission wins over the screen: it is what was
+    /// typed, and output that looks like a prompt line cannot replace it. The
+    /// screen gives the output tail, and only when it shows that same
+    /// command. Pure, for the tests.
+    nonisolated static func makeEntry(
+        submitted: ExtractedCommand? = nil,
+        screen: String?,
+        source: any CommandTextSource,
+        finish: Finish
+    ) -> MemoryEntry? {
         let extracted = screen.flatMap(source.extract(screen:))
-        if extracted?.isPrivate == true { return nil }
+        guard let command = submitted ?? extracted, !command.isPrivate else { return nil }
+        let output = extracted.flatMap { screenCommand in
+            QuickActionRanker.normalized(screenCommand.command) == QuickActionRanker.normalized(command.command)
+                ? screenCommand.output
+                : nil
+        }
         var entry = MemoryEntry(
-            command: extracted.map { MemoryRedaction.redact($0.command) },
+            command: MemoryRedaction.redact(command.command),
             directory: finish.directory,
             exitCode: finish.exitCode,
             finishedAt: finish.finishedAt,
             duration: finish.duration
         )
-        if entry.outcome == .failure, let output = extracted?.output, let tail = MemoryEntry.tail(of: output) {
+        if entry.outcome == .failure, let output, let tail = MemoryEntry.tail(of: output) {
             entry.failureTail = MemoryRedaction.redact(tail)
         }
         return entry

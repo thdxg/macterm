@@ -42,4 +42,27 @@ struct ScreenCommandExtractor: CommandTextSource {
         }
         return ExtractedCommand(command: command, output: last.output, isPrivate: isPrivate)
     }
+
+    /// The command on the prompt line where the cursor sits, read when the
+    /// user presses Return: the last line of `screen` that is not empty,
+    /// after its prompt mark. This is the one moment that a command which
+    /// clears the screen (`clear`) or prints more than a screen is still on
+    /// it. nil when that line has no prompt mark and command.
+    static func typedCommand(onScreen screen: String) -> ExtractedCommand? {
+        guard let line = screen.split(separator: "\n").last(where: { !$0.allSatisfy(\.isWhitespace) }).map(String.init),
+              let mark = OutputExplanation.promptMark(in: line),
+              let command = OutputExplanation.command(in: line, after: mark)
+        else { return nil }
+        let isPrivate = line.contains(mark + "  ") || line.contains(mark + " \t")
+        return ExtractedCommand(command: command, output: "", isPrivate: isPrivate)
+    }
+
+    /// The command in text that a program sent (`pane run`), without its
+    /// line end.
+    static func sentCommand(_ text: String) -> ExtractedCommand? {
+        let line = text.trimmingCharacters(in: .newlines)
+        let command = line.trimmingCharacters(in: .whitespaces)
+        guard !command.isEmpty else { return nil }
+        return ExtractedCommand(command: command, output: "", isPrivate: MemoryRedaction.isPrivate(line))
+    }
 }

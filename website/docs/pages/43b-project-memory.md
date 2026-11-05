@@ -46,7 +46,7 @@ A command that you click runs in a new split next to the focused pane. Macterm t
 
 ## What Macterm records
 
-Macterm records a command when the shell reports that it finished (OSC 133). This needs [shell integration](/docs/configuration). Macterm reads the command from the screen after the next prompt shows. When the screen does not show the command, for example after `clear` or when the output is longer than the screen, Macterm records only the time and the exit code.
+Macterm records a command when the shell reports that it finished (OSC 133). This needs [shell integration](/docs/configuration). Macterm reads the command from the prompt line when you press Return, so a command that clears the screen, such as `clear`, is recorded too. The output tail of a failed command comes from the screen after the next prompt shows. If Macterm cannot read the command, it records nothing.
 
 Macterm does not record:
 

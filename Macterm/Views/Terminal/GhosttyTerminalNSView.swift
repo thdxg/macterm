@@ -395,6 +395,11 @@ final class GhosttyTerminalNSView: NSView {
     /// arming that `recordCommandSubmission` then sets, so the reverse order
     /// silently disarms the agent path. Keep the two calls in this order.
     var onCommandSubmitted: ((Bool) -> Void)?
+    /// The text that `sendText` submitted, for the length of its
+    /// `onCommandSubmitted` call; nil for a Return that the user typed. Its
+    /// echo may not be on the screen yet, so project memory reads the
+    /// command from here, and from the screen only for a typed Return.
+    private(set) var submittedText: String?
     /// Whether a programmatic payload's content evidence may be carried past
     /// the submission that consumed it — true only for a raw-mode agent
     /// foreground, where a bracketed paste can leave it unsubmitted. See
@@ -2114,7 +2119,9 @@ extension GhosttyTerminalNSView {
         }
         if TerminalCommandSubmission.textContainsNewline(text) {
             let hasContent = consumeCommandSubmissionEvidence()
+            submittedText = text
             onCommandSubmitted?(hasContent)
+            submittedText = nil
             if hasContent { preserveProgrammaticCommandInput(text) }
         }
         return true

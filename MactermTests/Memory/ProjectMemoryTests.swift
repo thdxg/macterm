@@ -48,12 +48,69 @@ struct ProjectMemoryTests {
     }
 
     @Test
-    func an_unreadable_screen_still_records_how_the_command_ended() throws {
+    func a_command_that_nothing_names_is_not_recorded() {
+        #expect(ProjectMemory.makeEntry(
+            screen: "app %", source: ScreenCommandExtractor(), finish: .init(directory: "/app", exitCode: 0, finishedAt: now, duration: 1)
+        ) == nil)
+    }
+
+    @Test
+    func clear_is_recorded_from_the_line_captured_at_submission() throws {
+        // `clear` wipes the screen, so after it only the new prompt is left.
+        let submitted = try #require(ScreenCommandExtractor.typedCommand(onScreen: "~/app on main\n❯ clear"))
         let entry = try #require(ProjectMemory.makeEntry(
-            screen: nil, source: ScreenCommandExtractor(), finish: .init(directory: "/app", exitCode: nil, finishedAt: now, duration: 1)
+            submitted: submitted,
+            screen: "~/app on main\n❯",
+            source: ScreenCommandExtractor(),
+            finish: .init(directory: "/app", exitCode: 0, finishedAt: now, duration: 0.01)
         ))
-        #expect(entry.command == nil)
-        #expect(entry.outcome == .unknown)
+        #expect(entry.command == "clear")
+    }
+
+    @Test
+    func the_submitted_line_wins_and_the_screen_gives_only_its_own_output() throws {
+        // A log line that looks like a prompt line (`% make`) fools the screen.
+        let screen = """
+        app % ./ci.sh
+        % make
+        error: 1 failed
+        app %
+        """
+        let entry = try #require(ProjectMemory.makeEntry(
+            submitted: ScreenCommandExtractor.sentCommand("./ci.sh\n"),
+            screen: screen,
+            source: ScreenCommandExtractor(),
+            finish: .init(directory: nil, exitCode: 2, finishedAt: now, duration: 1)
+        ))
+        #expect(entry.command == "./ci.sh")
+        // The screen's guess is `make`, not this command, so its output is not kept.
+        #expect(entry.failureTail == nil)
+
+        let matching = try #require(ProjectMemory.makeEntry(
+            submitted: ScreenCommandExtractor.sentCommand("make test\n"),
+            screen: "app % make test\nerror: 1 failed\napp %",
+            source: ScreenCommandExtractor(),
+            finish: .init(directory: nil, exitCode: 2, finishedAt: now, duration: 1)
+        ))
+        #expect(matching.failureTail == "error: 1 failed")
+    }
+
+    @Test
+    func a_submitted_line_with_a_leading_space_is_private() {
+        #expect(ScreenCommandExtractor.sentCommand(" export TOKEN=x\n")?.isPrivate == true)
+        #expect(ScreenCommandExtractor.typedCommand(onScreen: "app %  export TOKEN=x")?.isPrivate == true)
+        #expect(ProjectMemory.makeEntry(
+            submitted: ScreenCommandExtractor.sentCommand(" export TOKEN=x\n"),
+            screen: nil,
+            source: ScreenCommandExtractor(),
+            finish: .init(directory: nil, exitCode: 0, finishedAt: now, duration: 1)
+        ) == nil)
+    }
+
+    @Test
+    func a_prompt_line_with_no_command_captures_nothing() {
+        #expect(ScreenCommandExtractor.typedCommand(onScreen: "output\napp %") == nil)
+        #expect(ScreenCommandExtractor.typedCommand(onScreen: "plain text with no mark") == nil)
     }
 
     @Test
