@@ -31,7 +31,7 @@ You can also open the panel and click **Turn On Project Memory**.
 
 Press <kbd>⌥</kbd><kbd>⌘</kbd><kbd>0</kbd>, or click the panel button in the toolbar. You can also run **Toggle Project Memory** from the command palette or from the **View** menu. Each window has its own panel, and the panel shows the project of its window.
 
-The panel floats over the right side of the terminal. It does not make your panes smaller. Click the close button to hide it.
+The panel floats over the right side of the terminal. It does not make your panes smaller. To hide it, press <kbd>⌥</kbd><kbd>⌘</kbd><kbd>0</kbd> again or click the panel button in the toolbar. The project icon in the panel is the icon that you chose in **Settings → Appearance → Project icon**, with the color of the project.
 
 The panel has these sections:
 
@@ -59,13 +59,10 @@ Each project keeps its 500 latest commands, in `~/Library/Application Support/Ma
 
 ## Git
 
-Macterm reads the Git state of a local project when the panel shows it, and again after a command finishes. Macterm uses the Git of Homebrew, or the Git of the Xcode Command Line Tools. If neither is installed, the panel shows no Git state. Macterm never opens the install dialog of the Command Line Tools.
+Macterm reads the Git state of a local project when the panel shows it, after a command finishes, when Macterm becomes the active app, and every 15 seconds while the panel shows. Macterm does not fetch from the remote, so the number of commits behind the upstream changes only after a fetch, for example when you click **Pull**. Macterm uses the Git of Homebrew, or the Git of the Xcode Command Line Tools. If neither is installed, the panel shows no Git state. Macterm never opens the install dialog of the Command Line Tools.
 
 The panel does not show the Git state of a remote project yet.
 
 ## Forget the records
 
-- To forget one project, click the **…** button in the panel, then click **Forget This Project…**.
-- To forget all projects, open **Settings → Intelligence**, then click **Forget All…**.
-
-When you remove a project, Macterm deletes its records too.
+To forget all projects, open **Settings → Intelligence**, then click **Forget All…**. When you remove a project, Macterm deletes its records too.

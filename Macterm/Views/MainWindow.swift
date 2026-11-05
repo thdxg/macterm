@@ -187,10 +187,8 @@ struct MainWindow: View {
                 if #available(macOS 26.0, *), windowState.projectMemoryPanelVisible,
                    let project = activeProject, ProjectMemory.covers(project.id)
                 {
-                    ProjectMemoryPanel(project: project) {
-                        windowState.projectMemoryPanelVisible = false
-                    }
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    ProjectMemoryPanel(project: project)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
             .animation(
@@ -218,7 +216,11 @@ struct MainWindow: View {
                 }
                 if ProjectMemory.isSupported {
                     ToolbarItem(placement: .primaryAction) {
-                        Button(String(localized: "Project Memory"), systemImage: "sidebar.trailing") {
+                        // Filled while the panel is up, as a toggle's state.
+                        Button(
+                            String(localized: "Project Memory"),
+                            systemImage: windowState.projectMemoryPanelVisible ? "info.circle.fill" : "info.circle"
+                        ) {
                             windowState.projectMemoryPanelVisible.toggle()
                         }
                         .help(String(localized: "Show or hide the project memory panel"))

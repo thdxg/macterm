@@ -3636,22 +3636,6 @@
         }
       }
     },
-    "Forget" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "지우기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "清除"
-          }
-        }
-      }
-    },
     "Forget All" : {
       "localizations" : {
         "ko" : {
@@ -3680,38 +3664,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全部清除…"
-          }
-        }
-      }
-    },
-    "Forget This Project…" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 프로젝트 지우기…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "清除此项目…"
-          }
-        }
-      }
-    },
-    "Forget the memory of %@?" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@의 메모리를 지우시겠습니까?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要清除“%@”的记忆吗？"
           }
         }
       }
@@ -4909,22 +4861,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 会删除它记录的所有命令。此操作无法撤销。"
-          }
-        }
-      }
-    },
-    "Macterm deletes the commands that it recorded in this project. You cannot undo this." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm이 이 프로젝트에서 기록한 명령을 삭제합니다. 이 작업은 취소할 수 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm 会删除它在此项目中记录的命令。此操作无法撤销。"
           }
         }
       }
@@ -7511,22 +7447,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要退出 %@ 吗？"
-          }
-        }
-      }
-    },
-    "Read Git Status Again" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Git 상태 다시 읽기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重新读取 Git 状态"
           }
         }
       }

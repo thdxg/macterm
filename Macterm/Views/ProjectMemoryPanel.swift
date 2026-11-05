@@ -10,7 +10,6 @@ import SwiftUI
 @available(macOS 26.0, *)
 struct ProjectMemoryPanel: View {
     let project: Project
-    let onClose: () -> Void
 
     @Environment(AppState.self)
     private var appState
@@ -18,13 +17,19 @@ struct ProjectMemoryPanel: View {
     private var projectStore
     @State
     private var preferences = Preferences.shared
-    @State
-    private var isConfirmingForget = false
+    /// The sidebar's project icon (Settings → Appearance → Project icon), so
+    /// the header shows the same glyph as the project's row.
+    @AppStorage(Preferences.Keys.projectIconSymbol)
+    private var projectIconSymbol: String
 
     static let width: CGFloat = 320
     static let inset: CGFloat = 10
     static let cornerRadius: CGFloat = 22
     static let recentLimit = 8
+    /// How often the git state is read again while the panel is up and
+    /// Macterm is active: a file saved in an editor inside a pane is no
+    /// finished command.
+    static let gitRefreshInterval: Duration = .seconds(15)
 
     private var memory: ProjectMemory { .shared }
     private var entries: [MemoryEntry] { memory.store.loadedEntries(for: project.id) }
@@ -49,15 +54,18 @@ struct ProjectMemoryPanel: View {
         .padding(Self.inset)
         .task(id: project.id) {
             memory.store.prepare(project.id)
-            memory.refreshGit(project.id)
+            // Git changes that no command in this project makes (another
+            // app, an editor in a pane) show up with no button: the panel
+            // reads the state while it is up, and the task ends with it.
+            while !Task.isCancelled {
+                if NSApp.isActive { memory.refreshGit(project.id) }
+                try? await Task.sleep(for: Self.gitRefreshInterval)
+            }
         }
-        .confirmationDialog(
-            String(localized: "Forget the memory of \(project.name)?"),
-            isPresented: $isConfirmingForget
-        ) {
-            Button(String(localized: "Forget"), role: .destructive) { memory.forget(project.id) }
-        } message: {
-            Text("Macterm deletes the commands that it recorded in this project. You cannot undo this.")
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Back from another app, where the user may have committed or
+            // saved files.
+            memory.refreshGit(project.id)
         }
     }
 
@@ -65,36 +73,28 @@ struct ProjectMemoryPanel: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: project.isRemote ? "network" : "folder.fill")
-                .foregroundStyle(project.color.map { MactermTheme.color(for: $0) } ?? MactermTheme.fgMuted)
+            projectIcon
             Text(verbatim: project.name)
                 .font(.title2.weight(.semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 0)
-            if preferences.projectMemory {
-                Menu {
-                    Button(String(localized: "Read Git Status Again"), systemImage: "arrow.clockwise") {
-                        memory.refreshGit(project.id)
-                    }
-                    .disabled(project.isRemote)
-                    Divider()
-                    Button(String(localized: "Forget This Project…"), systemImage: "trash", role: .destructive) {
-                        isConfirmingForget = true
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                }
-                .menuStyle(.button)
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .menuIndicator(.hidden)
-                .fixedSize()
+        }
+    }
+
+    /// The project's row icon in the sidebar: the same symbol, number and
+    /// color tag. Nothing when the setting is no icon.
+    @ViewBuilder
+    private var projectIcon: some View {
+        if projectIconSymbol != Preferences.noIcon {
+            let index = (projectStore.projects.firstIndex { $0.id == project.id } ?? 0) + 1
+            if let color = project.color {
+                TabRowIcon(symbol: projectIconSymbol, index: index)
+                    .foregroundStyle(MactermTheme.color(for: color))
+            } else {
+                TabRowIcon(symbol: projectIconSymbol, index: index)
+                    .foregroundStyle(MactermTheme.fgMuted)
             }
-            Button(String(localized: "Close"), systemImage: "xmark", action: onClose)
-                .labelStyle(.iconOnly)
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
         }
     }
 
