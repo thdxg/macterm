@@ -10,14 +10,62 @@ menu item are not reachable from here without an Accessibility grant.
 """
 
 import re
+import subprocess
 import time
 import uuid
+from pathlib import Path
 
-from _harness import wait_for
+from _harness import MactermHarness, wait_for
+
+DIAG_ROOT = Path(__file__).resolve().parents[2] / "build" / "e2e" / "diagnostics"
+
+# Prints one line for each on-screen window of the process `argv[0]` at the
+# normal window level: "<alpha>|<width>|<height>". JXA reads the window list
+# without a compiled helper and without a Screen Recording grant (only titles
+# need one).
+_ONSCREEN_WINDOWS_JXA = """
+ObjC.import("CoreGraphics");
+function run(argv) {
+    const pid = Number(argv[0]);
+    const list = ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, 0));
+    const rows = [];
+    for (let i = 0; i < list.count; i++) {
+        const w = list.objectAtIndex(i);
+        if (w.objectForKey("kCGWindowOwnerPID").intValue !== pid) continue;
+        if (w.objectForKey("kCGWindowLayer").intValue !== 0) continue;
+        const b = w.objectForKey("kCGWindowBounds");
+        rows.push([
+            w.objectForKey("kCGWindowAlpha").doubleValue,
+            b.objectForKey("Width").doubleValue,
+            b.objectForKey("Height").doubleValue,
+        ].join("|"));
+    }
+    return rows.join("\\n");
+}
+"""
 
 
 def _windows(app):
     return app.cli_json("window", "list")["windows"]
+
+
+def _onscreen_terminal_windows(app):
+    """The app's visible windows at the normal level, from the window server.
+
+    This is the count that the user sees. `window list` reads `AppState`, so
+    a window that never registered is on screen and absent from it. The
+    quick terminal and the surface incubator are not at this level, or not
+    visible."""
+    result = subprocess.run(
+        ["osascript", "-l", "JavaScript", "-", str(app.pid)],
+        input=_ONSCREEN_WINDOWS_JXA,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, f"cannot read the window list: {result.stderr.strip()}"
+    rows = [line.split("|") for line in result.stdout.split("\n") if line.strip()]
+    return [row for row in rows if float(row[0]) > 0 and float(row[1]) > 200 and float(row[2]) > 200]
 
 
 def _close_extra_windows(app, target):
@@ -58,6 +106,50 @@ def test_launch_opens_exactly_one_window(app):
         assert seen[-1] == 1, f"a spare window appeared at launch: counts={seen}"
         time.sleep(0.5)
     assert _windows(app)[0]["focused"]
+
+
+def test_windows_opened_during_launch_all_register(request):
+    """Every window on screen is in `window list`, also when `window new`
+    arrives while the app is still launching.
+
+    SwiftUI can make a window's views before the window exists. The window
+    used to look for its window for 30 main-queue turns only, which an idle
+    queue runs in a few milliseconds, so a window that `window new` opened
+    right after the control socket answered sometimes never registered: on
+    screen with a sidebar and no terminal, and absent from `window list`.
+    That happened in about one launch in ten, and more requests in the same
+    launch did not change it. So this test finds a regression only some of
+    the time; `WindowAttachmentViewTests` is the test that always finds it.
+    This one checks what the user sees. Its own instance, since the shared
+    one has long finished its launch."""
+    harness = MactermHarness(request.config.getoption("--app"), home_prefix="macterm-e2e-launch-window-home-")
+    try:
+        harness.launch()
+        harness.wait_for_socket()
+        harness.cli("window", "new")
+        wait_for(
+            lambda: len(_onscreen_terminal_windows(harness)) >= 2,
+            timeout=30,
+            message="the new window to come on screen",
+        )
+        # A window registers a beat after it is on screen, so give it a few
+        # seconds before the counts must agree.
+        deadline = time.time() + 5
+        while True:
+            onscreen = len(_onscreen_terminal_windows(harness))
+            registered = len(_windows(harness))
+            if onscreen == registered or time.time() >= deadline:
+                break
+            time.sleep(0.5)
+        assert registered == onscreen == 2, (
+            f"{onscreen} terminal windows on screen, {registered} in `window list`: "
+            "a window that never registered renders no terminal"
+        )
+    except Exception:
+        harness.dump_diagnostics(DIAG_ROOT / request.node.name)
+        raise
+    finally:
+        harness.cleanup()
 
 
 def test_new_window_opens_another_and_close_removes_it(app):

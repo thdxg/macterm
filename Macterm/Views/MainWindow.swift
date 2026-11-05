@@ -1266,57 +1266,48 @@ private struct WindowStyler: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        // Retry across run-loop ticks until the view is attached to its window.
-        // A single fire-and-forget async that ran before attachment used to
-        // silently skip `interceptClose`, leaving the red close button to
-        // actually close the window (killing surfaces) — the exact invariant
-        // this styler enforces. Bounded so a never-attached view can't spin.
-        styleWhenAttached(view: view, coordinator: context.coordinator, attempts: 0)
+        // Style the window when AppKit puts this view in it, never on a
+        // poll with a limit (see `WindowAttachmentView`). A window that is
+        // not styled never registers with `AppState`, and its red close
+        // button really closes it, which kills its surfaces.
+        let view = WindowAttachmentView()
+        let coordinator = context.coordinator
+        view.onAttach = { window in style(window: window, coordinator: coordinator) }
         return view
     }
 
-    private func styleWhenAttached(view: NSView, coordinator: Coordinator, attempts: Int) {
-        DispatchQueue.main.async {
-            guard let window = view.window else {
-                guard attempts < 30 else {
-                    styleLogger.error("WindowStyler: view never attached to a window; close interception not installed")
-                    return
-                }
-                styleWhenAttached(view: view, coordinator: coordinator, attempts: attempts + 1)
-                return
-            }
-            window.titlebarAppearsTransparent = true
-            window.titlebarSeparatorStyle = .none
-            window.tabbingMode = .disallowed
-            // Let the content view extend under the titlebar so the sidebar
-            // and terminal paint continuously up to the top of the window.
-            // Without this the titlebar floats above the sidebar with a
-            // visible boundary, which is jarring when both are translucent.
-            window.styleMask.insert(.fullSizeContentView)
-            window.titleVisibility = hideTitle ? .hidden : .visible
-            // Before `onWindowAttached`, which restores the saved frame: from
-            // here on the frame is ours to persist, not SwiftUI's autosave.
-            WindowAppearance.disownFrameAutosave(window: window)
-            WindowAppearance.sync(window: window)
-            coordinator.syncWindowCornerRadius(window: window)
-            coordinator.syncWindowTopSafeAreaInset(window: window)
-            coordinator.syncInitialSidebarVisibility(window: window)
-            coordinator.observe(window: window)
-            coordinator.onWindowBecameKey = onWindowBecameKey
-            coordinator.shouldHideOnClose = shouldHideOnClose
-            coordinator.onWindowFrameChanged = onWindowFrameChanged
-            onWindowAttached(window)
-            // Record the frame it attached at (or was just restored to), so a
-            // window that is never moved still reopens where it was.
-            onWindowFrameChanged(window)
-            // A window that opens already key never posts didBecomeKey, so
-            // seed the app's notion of the frontmost project from it.
-            if window.isKeyWindow { onWindowBecameKey(window) }
-            // Intercept the close button to hide instead of close,
-            // preserving terminal surfaces and running processes.
-            coordinator.interceptClose(window: window)
-        }
+    private func style(window: NSWindow, coordinator: Coordinator) {
+        styleLogger.debug("WindowStyler: attached to window \(window.windowNumber, privacy: .public)")
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+        window.tabbingMode = .disallowed
+        // Let the content view extend under the titlebar so the sidebar
+        // and terminal paint continuously up to the top of the window.
+        // Without this the titlebar floats above the sidebar with a
+        // visible boundary, which is jarring when both are translucent.
+        window.styleMask.insert(.fullSizeContentView)
+        window.titleVisibility = hideTitle ? .hidden : .visible
+        // Before `onWindowAttached`, which restores the saved frame: from
+        // here on the frame is ours to persist, not SwiftUI's autosave.
+        WindowAppearance.disownFrameAutosave(window: window)
+        WindowAppearance.sync(window: window)
+        coordinator.syncWindowCornerRadius(window: window)
+        coordinator.syncWindowTopSafeAreaInset(window: window)
+        coordinator.syncInitialSidebarVisibility(window: window)
+        coordinator.observe(window: window)
+        coordinator.onWindowBecameKey = onWindowBecameKey
+        coordinator.shouldHideOnClose = shouldHideOnClose
+        coordinator.onWindowFrameChanged = onWindowFrameChanged
+        onWindowAttached(window)
+        // Record the frame it attached at (or was just restored to), so a
+        // window that is never moved still reopens where it was.
+        onWindowFrameChanged(window)
+        // A window that opens already key never posts didBecomeKey, so
+        // seed the app's notion of the frontmost project from it.
+        if window.isKeyWindow { onWindowBecameKey(window) }
+        // Intercept the close button to hide instead of close,
+        // preserving terminal surfaces and running processes.
+        coordinator.interceptClose(window: window)
     }
 
     func updateNSView(_ view: NSView, context: Context) {
