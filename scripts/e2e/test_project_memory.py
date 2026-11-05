@@ -4,7 +4,9 @@ fails. The panel's quick actions offer to run the failure again.
 
 Recording starts at OSC 133;D (`GHOSTTY_ACTION_COMMAND_FINISHED`). CI's
 bash 3.2 login shell gets no shell integration, so the script prints the
-mark itself, the same bytes that shell integration sends. Where the shell
+marks itself, the same bytes that shell integration sends: 133;C when the
+command starts, then 133;D. libghostty drops a D that no C started
+(`Surface.zig`, `stop_command` with no `command_timer`). Where the shell
 does have integration, it sends a second mark for the script's own exit; the
 assertions look for the script's run, so they hold in both cases.
 
@@ -22,6 +24,8 @@ import pytest
 from _harness import wait_for
 
 SECRET = "hunter2-" + uuid.uuid4().hex[:8]
+# The command-start mark, as a script's first line (see the module doc).
+START = "printf '\\033]133;C\\007'\n"
 
 
 def _active_project(app):
@@ -57,7 +61,8 @@ def _script(body):
 def test_a_failed_command_is_recorded_with_its_secrets_masked(app, live_pane, recording):
     nonce = uuid.uuid4().hex[:12]
     script = _script(
-        "printf 'connecting with %s\\n' \"$1\"\n"
+        START
+        + "printf 'connecting with %s\\n' \"$1\"\n"
         f"printf 'fail-{nonce}: rejected\\n'\n"
         "printf '\\033]133;D;1\\007'\n"
     )
@@ -92,8 +97,8 @@ def test_nothing_is_recorded_while_memory_is_off(app, live_pane, recording):
     past, so a missing entry for it is a real refusal, not a slow write."""
     app.cli("project", "memory", recording["id"], "--set", "off")
     nonce = uuid.uuid4().hex[:12]
-    off = _script(f"printf 'off-{nonce}\\n'\nprintf '\\033]133;D;0\\007'\n")
-    on = _script(f"printf 'on-{nonce}\\n'\nprintf '\\033]133;D;0\\007'\n")
+    off = _script(START + f"printf 'off-{nonce}\\n'\nprintf '\\033]133;D;0\\007'\n")
+    on = _script(START + f"printf 'on-{nonce}\\n'\nprintf '\\033]133;D;0\\007'\n")
     try:
         app.pane_run(f"/bin/sh {off}", pane=live_pane["id"])
         wait_for(
