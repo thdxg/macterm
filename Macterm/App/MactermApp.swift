@@ -142,6 +142,14 @@ struct MactermApp: App {
             }
             CommandGroup(replacing: .sidebar) {
                 AppCommandMenuItem(command: .toggleSidebar, appState: appState, projectStore: projectStore, titleOverride: "Toggle Sidebar")
+                if ProjectMemory.isSupported {
+                    AppCommandMenuItem(
+                        command: .toggleProjectMemory,
+                        appState: appState,
+                        projectStore: projectStore,
+                        titleOverride: "Toggle Project Memory"
+                    )
+                }
                 AppCommandMenuItem(
                     command: .toggleCommandPalette,
                     appState: appState,
@@ -831,6 +839,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // same reason (a shortcut can launch us, and its `perform()` arrives
         // before the launch restore has run).
         MactermIntentHost.shared.attach(appState: appState, projectStore: projectStore)
+        // After the restore, so that the project list is the user's.
+        appState.performWhenRestored { ProjectMemory.shared.attach(projectStore: projectStore) }
         // Draws the restored widgets (the restore may land on either side of
         // this) and every one created from here on.
         DesktopWidgetWindows.shared.attach(appState: appState)
@@ -864,6 +874,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_: Notification) {
         controlServer.stop()
         onTerminate?()
+        // A command recorded in the last half second is still waiting for
+        // its debounced write.
+        if ProjectMemory.isSupported { ProjectMemory.shared.store.flush() }
         // Quit is always a DETACH: every pane's session survives and reattaches
         // on relaunch — the quick terminal's included, since the snapshot saved
         // by onTerminate carries its tab alongside the workspaces. Nothing is

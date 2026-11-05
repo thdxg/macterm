@@ -101,6 +101,7 @@ final class ControlHandler {
         case "pane.copy-mode": return try paneCopyMode(args)
         case "pane.read-only": return try paneReadOnly(args)
         case "pane.explain": return try paneExplain(args)
+        case "project.memory": return try projectMemory(args)
         case "tab.merge": return try tabMerge(args)
         #endif
         case "grid": return try grid(args)
@@ -1124,6 +1125,42 @@ final class ControlHandler {
             }
         }
         return ControlData(password: monitor.state(for: target.pane.nsView))
+    }
+
+    /// DEBUG-ONLY: a project's memory as a verb, so the e2e suite can turn
+    /// recording on and check what the panel would show with nobody at the
+    /// screen. The commands are the redacted records, as the panel shows
+    /// them.
+    private func projectMemory(_ args: ControlArgs) throws -> ControlData {
+        guard ProjectMemory.isSupported else {
+            throw ControlError(code: .badRequest, message: "project memory needs macOS 26 or later")
+        }
+        let project = try resolveProject(args.project)
+        let memory = ProjectMemory.shared
+        switch args.memory {
+        case nil: break
+        case "on": Preferences.shared.projectMemory = true
+        case "off": Preferences.shared.projectMemory = false
+        case "forget": memory.forget(project.id)
+        default: throw ControlError(code: .badRequest, message: "memory must be on, off or forget")
+        }
+        switch args.panel {
+        case nil: break
+        case "show": appState.projectMemoryPanelVisible = true
+        case "hide": appState.projectMemoryPanelVisible = false
+        default: throw ControlError(code: .badRequest, message: "panel must be show or hide")
+        }
+        let entries = memory.store.entries(for: project.id)
+        let summary = ProjectMemorySummary(entries: entries)
+        let actions = QuickActionRanker.actions(entries: entries, git: memory.git[project.id])
+        return ControlData(memory: ControlMemoryState(
+            recording: ProjectMemory.isRecording,
+            entries: entries.map {
+                ControlMemoryState.Entry(command: $0.command, directory: $0.directory, exitCode: $0.exitCode, failureTail: $0.failureTail)
+            },
+            unresolvedFailure: summary.unresolvedFailure?.command,
+            actions: actions.map { ControlMemoryState.Action(kind: "\($0.kind)", title: $0.title, command: $0.command) }
+        ))
     }
 
     /// DEBUG-ONLY: a pane's copy mode as a verb, so the e2e suite can enter

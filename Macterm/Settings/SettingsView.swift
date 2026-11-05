@@ -12,6 +12,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case projects = "Projects"
     case appearance = "Appearance"
     case animations = "Animations"
+    case intelligence = "Intelligence"
     case quickTerminal = "Quick Terminal"
     case widgets = "Widgets"
     case passwords = "Password Manager"
@@ -21,12 +22,19 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// The panes this Mac lists. Intelligence is macOS 26 and later only:
+    /// every feature in it needs that system.
+    static var visible: [SettingsPane] {
+        allCases.filter { $0 != .intelligence || ProjectMemory.isSupported }
+    }
+
     var title: String {
         switch self {
         case .general: String(localized: "General", comment: "Settings pane")
         case .projects: String(localized: "Projects")
         case .appearance: String(localized: "Appearance", comment: "Settings pane")
         case .animations: String(localized: "Animations", comment: "Settings pane")
+        case .intelligence: String(localized: "Intelligence", comment: "Settings pane")
         case .quickTerminal: String(localized: "Quick Terminal", comment: "Settings pane")
         case .widgets: String(localized: "Widgets", comment: "Settings pane")
         case .passwords: String(localized: "Password Manager", comment: "Settings pane")
@@ -42,6 +50,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .projects: "folder"
         case .appearance: "paintpalette"
         case .animations: "wand.and.sparkles"
+        case .intelligence: "apple.intelligence"
         case .quickTerminal: "rectangle.bottomthird.inset.filled"
         case .widgets: "widget.small"
         case .keymaps: "keyboard"
@@ -79,7 +88,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
             List(selection: $selection) {
-                ForEach(SettingsPane.allCases) { pane in
+                ForEach(SettingsPane.visible) { pane in
                     NavigationLink(value: pane) {
                         Label(pane.title, systemImage: pane.symbol)
                     }
@@ -108,6 +117,7 @@ struct SettingsView: View {
         case .projects: ProjectsSettings()
         case .appearance: AppearanceSettings()
         case .animations: AnimationsSettings()
+        case .intelligence: IntelligenceSettings()
         case .quickTerminal: QuickTerminalSettings()
         case .widgets: WidgetsSettings()
         case .keymaps: KeymapSettings()

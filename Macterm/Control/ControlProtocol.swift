@@ -131,6 +131,13 @@ struct ControlArgs: Codable, Equatable {
     /// Start Explain Output in the pane (debug-only `pane.explain`): `start`
     /// or `close`. Nil just reads the state.
     var explain: String?
+    /// Change a project's memory (debug-only `project.memory`): `on` or `off`
+    /// sets the master switch, `forget` deletes the project's records. Nil
+    /// just reads the state.
+    var memory: String?
+    /// Show or hide the key window's project memory panel (debug-only
+    /// `project.memory`): `show` or `hide`.
+    var panel: String?
     /// Destination pane selector for `pane.move` (same tab); nil = the
     /// workspace edge (a root-level move).
     var dest: String?
@@ -294,6 +301,8 @@ struct ControlData: Codable {
     var copyMode: ControlCopyModeState?
     /// The pane's Explain Output popover (debug-only `pane.explain`).
     var explain: ControlExplainState?
+    /// A project's memory (debug-only `project.memory`).
+    var memory: ControlMemoryState?
     /// Desktop widgets (`widget.*`).
     var widgets: [ControlWidgetInfo]?
     /// The palettes of the installed extensions (`palette.list`).
@@ -312,6 +321,7 @@ struct ControlData: Codable {
         password: ControlPasswordState? = nil,
         copyMode: ControlCopyModeState? = nil,
         explain: ControlExplainState? = nil,
+        memory: ControlMemoryState? = nil,
         widgets: [ControlWidgetInfo]? = nil,
         palettes: [ControlPaletteInfo]? = nil
     ) {
@@ -327,6 +337,7 @@ struct ControlData: Codable {
         self.password = password
         self.copyMode = copyMode
         self.explain = explain
+        self.memory = memory
         self.palettes = palettes
         self.widgets = widgets
     }
@@ -356,6 +367,29 @@ struct ControlExplainState: Codable, Equatable {
     /// that Explain selected.
     var selection: String?
     var text: String
+}
+
+/// A project's memory (debug-only `project.memory`): whether recording is
+/// on, the recorded commands (oldest first), the unresolved failure and the
+/// panel's quick actions, so the e2e suite checks what the panel would show.
+struct ControlMemoryState: Codable, Equatable {
+    struct Entry: Codable, Equatable {
+        var command: String?
+        var directory: String?
+        var exitCode: Int?
+        var failureTail: String?
+    }
+
+    struct Action: Codable, Equatable {
+        var kind: String
+        var title: String
+        var command: String
+    }
+
+    var recording: Bool
+    var entries: [Entry]
+    var unresolvedFailure: String?
+    var actions: [Action]
 }
 
 struct ControlPasswordState: Codable, Equatable {

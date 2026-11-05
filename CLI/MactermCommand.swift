@@ -128,9 +128,48 @@ struct ProjectCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "project",
         abstract: "List, create, select, rename, and remove projects.",
-        subcommands: [List.self, Create.self, Select.self, Rename.self, Remove.self],
+        subcommands: projectSubcommands,
         defaultSubcommand: List.self
     )
+
+    /// The debug-only `memory` verb is in debug builds of the CLI only. The
+    /// app gates its handler behind `#if DEBUG` too.
+    private static var projectSubcommands: [ParsableCommand.Type] {
+        var subs: [ParsableCommand.Type] = [List.self, Create.self, Select.self, Rename.self, Remove.self]
+        #if DEBUG
+        subs.append(Memory.self)
+        #endif
+        return subs
+    }
+
+    #if DEBUG
+    /// DEBUG-only: a project's memory — the recorded commands, the
+    /// unresolved failure and the quick actions — and a way to turn
+    /// recording on or off and forget the records.
+    struct Memory: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "[debug] Read a project's memory, or change it."
+        )
+
+        @Argument(help: "Project name, UUID, or index.")
+        var project: String
+
+        @Option(help: "on or off (the setting), or forget (delete this project's records).")
+        var set: String?
+
+        @Option(help: "show or hide the key window's project memory panel.")
+        var panel: String?
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = ControlArgs(project: project)
+            args.memory = set
+            args.panel = panel
+            try runControlCommand(command: "project.memory", args: args, options: options)
+        }
+    }
+    #endif
 
     struct List: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "List all projects.")

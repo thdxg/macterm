@@ -26,6 +26,7 @@ enum MactermKeybind: String, AppEnum {
     case splitDown = "split_down"
     case splitAuto = "split_auto"
     case toggleSidebar = "toggle_sidebar"
+    case toggleProjectMemory = "toggle_project_memory"
     case toggleToolbar = "toggle_toolbar"
     case recentTab = "recent_tab"
     case nextProject = "next_project"
@@ -93,6 +94,7 @@ enum MactermKeybind: String, AppEnum {
         .splitDown: "Split Down",
         .splitAuto: "Split Automatically",
         .toggleSidebar: "Toggle Sidebar",
+        .toggleProjectMemory: "Toggle Project Memory",
         .toggleToolbar: "Toggle Toolbar",
         .recentTab: "Recent Tab",
         .nextProject: "Next Project",

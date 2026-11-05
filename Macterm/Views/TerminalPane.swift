@@ -486,6 +486,8 @@ private struct TerminalSurface: NSViewRepresentable {
             // program's name doesn't linger until the next scheduled probe
             // or user interaction.
             pane.noteRemoteCommandBoundary()
+            // Project memory: off unless the user turned it on, macOS 26+.
+            ProjectMemory.shared.commandFinished(pane: pane, view: view, exitCode: exitCode, durationNs: durationNs)
             if Preferences.shared.showTabStatusIndicator {
                 pane.markCommandFinished()
                 onCommandFinished()

@@ -68,6 +68,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case previousProject
     // Window
     case toggleSidebar
+    case toggleProjectMemory
     case toggleToolbar
     case newWindow
     case newDesktopWidget
@@ -157,6 +158,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .nextProject: "Next Project"
         case .previousProject: "Previous Project"
         case .toggleSidebar: "Toggle Sidebar"
+        case .toggleProjectMemory: "Toggle Project Memory"
         case .toggleToolbar: "Toggle Toolbar"
         case .newWindow: "New Window"
         case .newDesktopWidget: "New Desktop Widget"
@@ -227,6 +229,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .nextProject,
              .previousProject: .projects
         case .toggleSidebar,
+             .toggleProjectMemory,
              .toggleToolbar,
              .newWindow,
              .newDesktopWidget,
@@ -281,6 +284,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .nextProject: .nextProject
         case .previousProject: .previousProject
         case .toggleSidebar: .toggleSidebar
+        case .toggleProjectMemory: .toggleProjectMemory
         case .toggleToolbar: .toggleToolbar
         case .newWindow: .newWindow
         case .closeWindow: .closeWindow

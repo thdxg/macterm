@@ -95,6 +95,10 @@ final class WindowState: Identifiable {
     /// commands, the CLI) that mean "the window the user is in".
     var sidebarVisible = true
 
+    /// Whether this window shows the project memory panel
+    /// (`ProjectMemoryPanel`) over its terminal. Per window, like the sidebar.
+    var projectMemoryPanelVisible = false
+
     /// This window's frame, as AppKit's `frameDescriptor` — what the next
     /// launch reopens it at (`WindowSnapshot.frame`). Written on every move
     /// and resize outside full screen, so it holds the windowed frame while

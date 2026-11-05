@@ -27,6 +27,7 @@ enum Output {
         if let password = data.password { renderPassword(password) }
         if let copyMode = data.copyMode { renderCopyMode(copyMode) }
         if let explain = data.explain { renderExplain(explain) }
+        if let memory = data.memory { renderMemory(memory) }
         if let widgets = data.widgets { renderWidgets(widgets) }
         if let palettes = data.palettes { renderPalettes(palettes) }
     }
@@ -42,6 +43,17 @@ enum Output {
         var line = "active=\(state.active) select=\(state.selectMode)"
         if let selection = state.selection { line += " selection=\(selection)" }
         print(line)
+    }
+
+    private static func renderMemory(_ state: ControlMemoryState) {
+        print("recording=\(state.recording) entries=\(state.entries.count)")
+        for entry in state.entries {
+            print("\(entry.exitCode.map(String.init) ?? "?")\t\(entry.command ?? "-")")
+        }
+        if let failure = state.unresolvedFailure { print("unresolved: \(failure)") }
+        for action in state.actions {
+            print("action[\(action.kind)]: \(action.command)")
+        }
     }
 
     private static func renderExplain(_ state: ControlExplainState) {
