@@ -266,6 +266,82 @@ struct OutputExplanationTests {
         #expect(counter.calls == 2)
     }
 
+    /// A count that answers the prompts from a script: a number, or nil to
+    /// throw. The instructions count as 100.
+    @MainActor
+    private final class ScriptedCounter {
+        struct Failure: Error {}
+        var answers: [Int?]
+        var prompts: [String] = []
+        init(_ answers: [Int?]) {
+            self.answers = answers
+        }
+
+        func count(_ text: String) throws -> Int {
+            if text == OutputExplanation.instructions { return 100 }
+            prompts.append(text)
+            guard !answers.isEmpty, let answer = answers.removeFirst() else { throw Failure() }
+            return answer
+        }
+    }
+
+    @Test @MainActor
+    func fit_keeps_the_last_fitting_text_when_a_later_count_fails() async {
+        let text = traceback(frames: 400)
+        let first = OutputExplanation(source: .output, text: text, contextSize: 8192)
+        // It fits with room, so it grows; the growth does not fit, so it
+        // shrinks; then the count fails.
+        let counter = ScriptedCounter([3000, 99999, nil])
+        var explanation = OutputExplanation(source: .output, text: text)
+        await explanation.fit(contextSize: 8192) { try counter.count($0) }
+        #expect(counter.prompts.count == 3)
+        #expect(counter.prompts[1].count > counter.prompts[0].count)
+        #expect(counter.prompts[2].count < counter.prompts[0].count)
+        #expect(explanation.text == first.text)
+    }
+
+    @Test @MainActor
+    func fit_goes_back_to_the_last_fitting_text_when_a_grown_text_does_not_fit() async {
+        let text = traceback(frames: 400)
+        let first = OutputExplanation(source: .output, text: text, contextSize: 8192)
+        let counter = ScriptedCounter([3000] + Array(repeating: 99999, count: 10))
+        var explanation = OutputExplanation(source: .output, text: text)
+        await explanation.fit(contextSize: 8192) { try counter.count($0) }
+        #expect(counter.prompts.count <= OutputExplanation.maximumFitPasses)
+        #expect(counter.prompts[1].count > counter.prompts[0].count)
+        #expect(explanation.text == first.text)
+    }
+
+    @Test @MainActor
+    func fit_counts_each_text_once() async {
+        // Each line is longer than the gap between two near budgets, so
+        // they cut to the same lines.
+        let text = (1 ... 400).map { "\($0) " + String(repeating: "빌", count: 60) }.joined(separator: "\n")
+        let counter = Counter(charactersPerToken: 1.0 / 3.0)
+        var explanation = OutputExplanation(source: .output, text: text)
+        var prompts: [String] = []
+        await explanation.fit(contextSize: 4096) { prompt in
+            if prompt != OutputExplanation.instructions { prompts.append(prompt) }
+            return counter.count(prompt)
+        }
+        #expect(Set(prompts).count == prompts.count)
+    }
+
+    @Test @MainActor
+    func fit_stops_counting_when_cancelled() async {
+        let counter = Counter(charactersPerToken: 2)
+        let task = Task { @MainActor in
+            var explanation = OutputExplanation(source: .output, text: traceback(frames: 400))
+            await explanation.fit(contextSize: 8192) { prompt in
+                if prompt != OutputExplanation.instructions { withUnsafeCurrentTask { $0?.cancel() } }
+                return counter.count(prompt)
+            }
+        }
+        await task.value
+        // The instructions, then one prompt; the cancel stops the rest.
+        #expect(counter.calls == 2)
+    }
+
     @Test @MainActor
     func fit_without_a_count_uses_the_estimate_for_the_context_size() async {
         let text = traceback(frames: 400)

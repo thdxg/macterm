@@ -103,12 +103,9 @@ enum OnDeviceModel {
                 continuation.finish()
             } catch is CancellationError {
                 continuation.finish(throwing: CancellationError())
-            } catch let error as LanguageModelSession.GenerationError {
-                logger.info("generation failed: \(EnglishErrorText.describe(error), privacy: .public)")
-                continuation.finish(throwing: failure(for: error))
             } catch {
                 logger.info("generation failed: \(EnglishErrorText.describe(error), privacy: .public)")
-                continuation.finish(throwing: Failure.other)
+                continuation.finish(throwing: failure(for: error))
             }
         }
         continuation.onTermination = { _ in task.cancel() }
@@ -119,14 +116,25 @@ enum OnDeviceModel {
     }
 
     #if canImport(FoundationModels)
+    /// macOS 27 throws `LanguageModelError` where macOS 26 threw
+    /// `LanguageModelSession.GenerationError`, which macOS 27 deprecates.
     @available(macOS 26.0, *)
-    private static func failure(for error: LanguageModelSession.GenerationError) -> Failure {
+    private static func failure(for error: Error) -> Failure {
+        if #available(macOS 27.0, *), let error = error as? LanguageModelError {
+            switch error {
+            case .contextSizeExceeded: return .tooLong
+            case .guardrailViolation,
+                 .refusal: return .refused
+            default: return .other
+            }
+        }
+        guard let error = error as? LanguageModelSession.GenerationError else { return .other }
         switch error {
-        case .exceededContextWindowSize: .tooLong
+        case .exceededContextWindowSize: return .tooLong
         case .guardrailViolation,
-             .refusal: .refused
-        case .assetsUnavailable: .unavailable
-        default: .other
+             .refusal: return .refused
+        case .assetsUnavailable: return .unavailable
+        default: return .other
         }
     }
     #endif

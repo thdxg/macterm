@@ -340,9 +340,12 @@ struct OutputExplanation: Equatable {
         else { return }
         let limit = contextSize - Self.maximumReplyTokens - Self.chatFormatTokens - instructionTokens
         var best: String?
-        var tried: Set<Int> = []
+        // Two budgets can cut to the same lines: count each text once.
+        var counted: Set<String> = []
         for _ in 0 ..< Self.maximumFitPasses {
-            tried.insert(budget)
+            // A closed popover cancels: stop sending counts.
+            if Task.isCancelled { break }
+            counted.insert(text)
             guard let tokens = try? await countTokens(prompt) else { break }
             let fits = tokens <= limit
             if fits, best.map({ Self.estimatedTokens($0) < Self.estimatedTokens(text) }) ?? true {
@@ -352,12 +355,14 @@ struct OutputExplanation: Equatable {
             if fits, text == whole || tokens * 20 >= limit * 19 { break }
             let scale = Double(limit) / Double(max(1, tokens))
             let next = Int(Double(budget) * scale * (fits ? 0.97 : 0.95))
-            guard next > 0, !tried.contains(next) else { break }
+            guard next > 0 else { break }
+            let nextText = Self.excerpt(of: fullText, tokenBudget: next)
+            guard !counted.contains(nextText) else { break }
             budget = next
-            text = Self.excerpt(of: fullText, tokenBudget: budget)
+            text = nextText
         }
-        // Nothing fit: the smallest cut is the last one. The model says
-        // when it is still too long.
+        // The largest text that a count said fits. With none, the last cut
+        // stays, and the model says when it is still too long.
         if let best { text = best }
     }
 }
