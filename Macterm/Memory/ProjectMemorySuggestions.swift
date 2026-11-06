@@ -7,8 +7,9 @@ import Foundation
 /// panel will run.** A click types the command into a shell, so a
 /// suggestion is kept only when it is a command that ran in this project
 /// (`candidates`), or one of `safeGitCommands`. Anything else the model
-/// proposes is dropped. Without suggestions, the panel shows
-/// `QuickActionRanker.actions` instead.
+/// proposes is dropped. Without suggestions the panel shows no Suggested
+/// section, as it shows no summary: a command is never suggested only
+/// because it ran recently.
 enum ProjectMemorySuggestions {
     static let limit = 5
     /// How many of the project's commands the model chooses from.
@@ -25,8 +26,8 @@ enum ProjectMemorySuggestions {
         var result: [String] = []
         for entry in entries.reversed() {
             guard let command = entry.command else { continue }
-            let normalized = QuickActionRanker.normalized(command)
-            guard !QuickActionRanker.isTrivial(normalized), !QuickActionRanker.isMasked(normalized), !seen.contains(normalized)
+            let normalized = MemoryCommand.normalized(command)
+            guard !MemoryCommand.isTrivial(normalized), !MemoryCommand.isMasked(normalized), !seen.contains(normalized)
             else { continue }
             seen.insert(normalized)
             result.append(normalized)
@@ -46,12 +47,11 @@ enum ProjectMemorySuggestions {
         var taken: Set<String> = []
         var actions: [QuickAction] = []
         for suggestion in suggestions {
-            let command = QuickActionRanker.normalized(suggestion.command)
+            let command = MemoryCommand.normalized(suggestion.command)
             guard known.contains(command), !taken.contains(command), gitStateSupports(command, git: git) else { continue }
             taken.insert(command)
-            let last = entries.last { $0.command.map(QuickActionRanker.normalized) == command }
+            let last = entries.last { $0.command.map(MemoryCommand.normalized) == command }
             actions.append(QuickAction(
-                kind: .suggested,
                 title: command,
                 subtitle: suggestion.reason.trimmingCharacters(in: .whitespacesAndNewlines),
                 command: command,
