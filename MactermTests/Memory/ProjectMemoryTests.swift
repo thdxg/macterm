@@ -146,6 +146,7 @@ struct ProjectMemoryTests {
         summarizer.debounce = .milliseconds(10)
         summarizer.loadStored = { _ in nil }
         summarizer.storeSummary = { _, _ in }
+        summarizer.suggester = { _, _ in [] }
         summarizer.streamer = { _, _, _ in
             runs()
             return AsyncThrowingStream { continuation in

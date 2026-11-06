@@ -1162,7 +1162,7 @@ final class ControlHandler {
         }
         let entries = memory.store.entries(for: project.id)
         let summary = ProjectMemorySummary(entries: entries)
-        let actions = QuickActionRanker.actions(entries: entries, git: memory.git[project.id])
+        let actions = memory.suggestedActions(projectID: project.id, entries: entries)
         return ControlData(memory: ControlMemoryState(
             recording: ProjectMemory.isRecording,
             entries: entries.map {

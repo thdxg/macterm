@@ -77,4 +77,11 @@ struct StoredSummary: Codable, Equatable {
     var key: String
     var text: String
     var writtenAt: Date
+    /// What the model suggested with the text. Absent in a file from before.
+    var suggestions: [StoredSuggestion]?
+}
+
+struct StoredSuggestion: Codable, Equatable {
+    var command: String
+    var reason: String
 }

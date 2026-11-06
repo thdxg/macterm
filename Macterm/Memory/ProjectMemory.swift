@@ -212,6 +212,13 @@ final class ProjectMemory {
         }
     }
 
+    /// The rows of the panel's Suggested section: the model's suggestions
+    /// when it gave some (`ProjectMemorySuggestions`), else the ranker's.
+    func suggestedActions(projectID: UUID, entries: [MemoryEntry]) -> [QuickAction] {
+        let suggested = ProjectMemorySuggestions.actions(from: summarizer.state(for: projectID).suggestions, entries: entries)
+        return suggested.isEmpty ? QuickActionRanker.actions(entries: entries, git: git[projectID]) : suggested
+    }
+
     // MARK: - Background summary
 
     /// Write a project's summary once it has been quiet for `delay`

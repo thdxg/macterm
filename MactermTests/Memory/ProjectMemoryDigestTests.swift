@@ -64,6 +64,18 @@ struct ProjectMemoryDigestTests {
     }
 
     @Test
+    func the_suggestion_prompt_lists_the_candidates_and_the_allowed_git_commands() throws {
+        let entries = [entry("make build", exit: 0, minutesAgo: 5), entry("make test", exit: 2, minutesAgo: 1)]
+        let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: entries, git: nil, now: now))
+        #expect(digest.candidates == ["make test", "make build"])
+        let lines = digest.suggestionPrompt.split(separator: "\n").map(String.init)
+        #expect(lines[1] == "Commands that ran in this project, newest first:")
+        #expect(lines[2] == "- make test")
+        #expect(lines[3] == "- make build")
+        #expect(lines[4].hasPrefix("Allowed git commands: git status, git pull"))
+    }
+
+    @Test
     func the_reply_language_goes_in_the_prompt() throws {
         let digest = try #require(ProjectMemoryDigest(
             projectName: "x", entries: [entry("ls", exit: 0, minutesAgo: 1)], git: nil, now: now, replyLanguage: "Korean"

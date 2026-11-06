@@ -37,23 +37,14 @@ enum ProjectMemoryActions {
         }
     }
 
-    /// A shell in `directory`, in a new split beside the project's focused
-    /// pane: a worktree of the project, from the panel's branch list.
-    static func openShell(in directory: String, project: Project, appState: AppState, projects: [Project]) {
+    /// A tab in `directory`: a worktree of the project, from the panel's
+    /// branch list. The same as the sidebar's Worktrees menu.
+    static func openTab(in directory: String, project: Project, appState: AppState, projects: [Project]) {
         guard !project.isRemote, let directory = existingDirectory(directory) else {
             appState.presentToast(String(localized: "There is no folder at \(directory)"))
             return
         }
-        if let pane = appState.focusedPane(for: project.id) {
-            appState.splitPane(
-                pane.id,
-                direction: .auto(for: pane.nsView?.bounds.size ?? .zero),
-                projectID: project.id,
-                newPaneWorkingDirectory: directory
-            )
-        } else {
-            appState.createTab(projectID: project.id, projects: projects, workingDirectory: directory)
-        }
+        appState.createTab(projectID: project.id, projects: projects, workingDirectory: directory)
     }
 
     private static func existingDirectory(_ path: String?) -> String? {

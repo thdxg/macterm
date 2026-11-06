@@ -33,6 +33,9 @@ final class ProjectMemorySummarizer {
         var text = ""
         /// The `ProjectMemoryDigest.key` that the run is for.
         var key: String?
+        /// What the model suggested, raw; `ProjectMemorySuggestions.actions`
+        /// keeps the known ones.
+        var suggestions: [OnDeviceModel.Suggestion] = []
     }
 
     private(set) var states: [UUID: State] = [:]
@@ -42,6 +45,11 @@ final class ProjectMemorySummarizer {
         -> AsyncThrowingStream<String, Error> = { instructions, prompt, tokens in
             OnDeviceModel.stream(instructions: instructions, prompt: prompt, maximumResponseTokens: tokens)
         }
+
+    /// The model's typed suggestions, as a seam for the tests.
+    @ObservationIgnored var suggester: (_ instructions: String, _ prompt: String) async throws -> [OnDeviceModel.Suggestion] = {
+        try await OnDeviceModel.suggestCommands(instructions: $0, prompt: $1)
+    }
 
     @ObservationIgnored var debounce: Duration = .milliseconds(1500)
     @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
@@ -69,7 +77,8 @@ final class ProjectMemorySummarizer {
     private func currentState(for projectID: UUID) -> State? {
         if let state = states[projectID] { return state }
         guard let stored = loadStored(projectID) else { return nil }
-        let state = State(phase: .done, text: stored.text, key: stored.key)
+        let suggestions = (stored.suggestions ?? []).map { OnDeviceModel.Suggestion(command: $0.command, reason: $0.reason) }
+        let state = State(phase: .done, text: stored.text, key: stored.key, suggestions: suggestions)
         states[projectID] = state
         return state
     }
@@ -93,7 +102,9 @@ final class ProjectMemorySummarizer {
             return
         }
         tasks[projectID]?.cancel()
-        states[projectID] = State(phase: .waiting, text: states[projectID]?.text ?? "", key: digest.key)
+        states[projectID] = State(
+            phase: .waiting, text: states[projectID]?.text ?? "", key: digest.key, suggestions: states[projectID]?.suggestions ?? []
+        )
         tasks[projectID] = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: debounce)
@@ -102,13 +113,31 @@ final class ProjectMemorySummarizer {
             do {
                 for try await partial in stream {
                     guard !Task.isCancelled else { return }
-                    states[projectID] = State(phase: .streaming, text: partial, key: digest.key)
+                    states[projectID] = State(
+                        phase: .streaming,
+                        text: partial,
+                        key: digest.key,
+                        suggestions: states[projectID]?.suggestions ?? []
+                    )
                 }
                 // A cancelled loop ends with no error.
                 guard !Task.isCancelled else { return }
                 let text = states[projectID]?.text ?? ""
-                states[projectID] = State(phase: text.isEmpty ? .failed : .done, text: text, key: digest.key)
-                if !text.isEmpty { storeSummary(projectID, StoredSummary(key: digest.key, text: text, writtenAt: Date())) }
+                guard !text.isEmpty else {
+                    states[projectID] = State(phase: .failed, text: "", key: digest.key)
+                    return
+                }
+                // The suggestions, after the text: a second request. A failure
+                // here keeps the text; the panel then shows its own rows.
+                let suggestions = await (try? suggester(ProjectMemoryDigest.suggestionInstructions, digest.suggestionPrompt)) ?? []
+                guard !Task.isCancelled else { return }
+                states[projectID] = State(phase: .done, text: text, key: digest.key, suggestions: suggestions)
+                storeSummary(projectID, StoredSummary(
+                    key: digest.key,
+                    text: text,
+                    writtenAt: Date(),
+                    suggestions: suggestions.map { StoredSuggestion(command: $0.command, reason: $0.reason) }
+                ))
             } catch is CancellationError {
                 return
             } catch {

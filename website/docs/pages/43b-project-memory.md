@@ -38,8 +38,8 @@ The panel has these sections:
 | Section | What it shows |
 | --- | --- |
 | **Summary** | On a Mac with Apple Intelligence, a short paragraph that says where you left off (see [Summary](#summary)). If the latest run of a command failed and you did not run it again with success, the panel shows that command, its exit code and the last lines of its output. |
-| **Next** | Up to six commands to run: the failed command again, Git actions, and the commands that you run most often in this project. Recent runs count more. |
-| **Git** | The branch, the commits ahead of and behind the upstream, the changed files, the stashes and the five latest commits. Below them, the branches with the latest commits, each with the folder of the worktree that has it checked out. Click such a branch to open a shell in its worktree. The panel never switches a branch. |
+| **Suggested** | Up to five commands to run next. On a Mac with Apple Intelligence, the model chooses them from the commands that ran in this project and a few Git commands, with a reason for each. It never makes up a command: a suggestion that is not a command of this project, or `git status`, `git pull`, `git fetch`, `git diff`, `git log` or `git stash list`, is dropped. Without the model, or before it answers, the panel offers the failed command again, Git actions, and the commands that you run most often. |
+| **Git** | The branch, the commits ahead of and behind the upstream, the changed files and the stashes. Below them, the branches with the latest commits, each with the folder of the worktree that has it checked out. Click a branch to switch to it: a branch in a worktree opens a tab in that worktree, as the Worktrees menu of the sidebar does; a branch with no worktree runs `git switch` in a new split. |
 | **Recent** | The latest commands. Click one to run it again. |
 
 A command that you click runs in a new split next to the focused pane. Macterm types it into your shell, so it runs in the same shell language as before and goes into your shell history.
@@ -48,7 +48,7 @@ A command that you click runs in a new split next to the focused pane. Macterm t
 
 On a Mac with Apple Intelligence turned on, a paragraph at the top of the **Summary** section says what you were doing, whether it worked, and what probably comes next. Apple's on-device model writes it from the recorded commands and the Git state. Nothing leaves your Mac.
 
-Macterm writes the summary ten minutes after the last command in a project, panel or no panel, so that a panel you open after a break shows it at once. It does not write it while you work: a command that finishes only starts the ten minutes again. Macterm keeps the summary with the records, so it is there after you start Macterm again. To write it now, click **Summarize** in the panel, or the refresh button next to a summary. While the model writes, the panel shows **Summarizing…** until the first words arrive, and the facts below it do not wait.
+Macterm writes the summary ten minutes after the last command in a project, panel or no panel, so that a panel you open after a break shows it at once. It does not write it while you work: a command that finishes only starts the ten minutes again. Macterm keeps the summary with the records, so it is there after you start Macterm again. To write it now, click the reload button in the header of the **Summary** section. While the model writes, the panel shows **Summarizing…** until the first words arrive, and the facts below it do not wait.
 
 To turn the summary off, open **Settings → Intelligence** and turn off **Summarize with Apple Intelligence**. The facts stay.
 

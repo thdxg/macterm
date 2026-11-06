@@ -47,6 +47,8 @@ struct QuickAction: Equatable, Identifiable {
         case frequent
         /// Derived from the git state.
         case git
+        /// Chosen by the on-device model (`ProjectMemorySuggestions`).
+        case suggested
     }
 
     var kind: Kind

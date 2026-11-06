@@ -99,6 +99,41 @@ enum OnDeviceModel {
     }
     #endif
 
+    /// A command the model suggests, with its reason.
+    struct Suggestion: Equatable {
+        var command: String
+        var reason: String
+    }
+
+    /// Ask the model for commands to run next, as a typed list (guided
+    /// generation, so there is no text to parse). Every request has a new
+    /// session, as `stream` does. The caller decides what to do with a
+    /// command: `ProjectMemorySuggestions` keeps only the ones it knows.
+    static func suggestCommands(instructions: String, prompt: String) async throws -> [Suggestion] {
+        #if canImport(FoundationModels)
+        guard #available(macOS 26.0, *), availability == .available else { throw Failure.unavailable }
+        let session = LanguageModelSession(instructions: instructions)
+        do {
+            let response = try await session.respond(
+                to: prompt,
+                generating: CommandSuggestions.self,
+                options: GenerationOptions(temperature: 0.3)
+            )
+            return response.content.suggestions.map { Suggestion(command: $0.command, reason: $0.reason) }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as LanguageModelSession.GenerationError {
+            logger.info("suggestions failed: \(EnglishErrorText.describe(error), privacy: .public)")
+            throw failure(for: error)
+        } catch {
+            logger.info("suggestions failed: \(EnglishErrorText.describe(error), privacy: .public)")
+            throw Failure.other
+        }
+        #else
+        throw Failure.unavailable
+        #endif
+    }
+
     /// The English name of the app's language for a reply, or nil for
     /// English. The model writes English when the prompt does not say.
     static var replyLanguage: String? {
@@ -106,3 +141,22 @@ enum OnDeviceModel {
         return Locale(identifier: "en").localizedString(forIdentifier: code)
     }
 }
+
+#if canImport(FoundationModels)
+/// The shape the model fills for `suggestCommands`.
+@available(macOS 26.0, *)
+@Generable(description: "Commands to run next in a software project")
+private struct CommandSuggestions {
+    @Guide(description: "At most five commands, the most useful first", .maximumCount(5))
+    var suggestions: [CommandSuggestion]
+}
+
+@available(macOS 26.0, *)
+@Generable
+private struct CommandSuggestion {
+    @Guide(description: "A command exactly as it is in the list of commands that ran, or one of the allowed git commands")
+    var command: String
+    @Guide(description: "Why to run it now, in at most twelve words")
+    var reason: String
+}
+#endif

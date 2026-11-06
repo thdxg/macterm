@@ -13,6 +13,15 @@ struct ProjectMemorySummarizerTests {
         var prompts: [String] = []
         var reply = "You were fixing the checkout tests."
         var fails = false
+        var suggestions: [OnDeviceModel.Suggestion] = [OnDeviceModel.Suggestion(command: "make build", reason: "Build first.")]
+        var suggestionRuns = 0
+        var suggestionsFail = false
+
+        func suggest(_: String, _: String) async throws -> [OnDeviceModel.Suggestion] {
+            suggestionRuns += 1
+            if suggestionsFail { throw OnDeviceModel.Failure.other }
+            return suggestions
+        }
 
         func stream(_: String, prompt: String, _: Int) -> AsyncThrowingStream<String, Error> {
             runs += 1
@@ -43,6 +52,7 @@ struct ProjectMemorySummarizerTests {
         summarizer.streamer = { instructions, prompt, tokens in model.stream(instructions, prompt: prompt, tokens) }
         summarizer.loadStored = { storage.stored[$0] }
         summarizer.storeSummary = { storage.stored[$0] = $1 }
+        summarizer.suggester = { instructions, prompt in try await model.suggest(instructions, prompt) }
         return summarizer
     }
 
@@ -150,7 +160,9 @@ struct ProjectMemorySummarizerTests {
         // A new summarizer (a relaunch) shows the stored text with no run.
         let second = makeSummarizer(model, storage: storage)
         second.refresh(projectID: project, digest: digest(["make build"]))
-        #expect(second.state(for: project) == .init(phase: .done, text: model.reply, key: digest(["make build"]).key))
+        #expect(second.state(for: project) == .init(
+            phase: .done, text: model.reply, key: digest(["make build"]).key, suggestions: model.suggestions
+        ))
         try await Task.sleep(for: .milliseconds(50))
         #expect(model.runs == 1)
 
@@ -158,6 +170,36 @@ struct ProjectMemorySummarizerTests {
         second.refresh(projectID: project, digest: digest(["make build", "make test"]))
         try await wait(for: second, project, phase: .done)
         #expect(model.runs == 2)
+    }
+
+    @Test
+    func suggestions_follow_the_text_and_are_stored_with_it() async throws {
+        let model = FakeModel()
+        let storage = FakeStorage()
+        let summarizer = makeSummarizer(model, storage: storage)
+        let project = UUID()
+        summarizer.refresh(projectID: project, digest: digest(["make build"]))
+        try await wait(for: summarizer, project, phase: .done)
+        #expect(summarizer.state(for: project).suggestions == model.suggestions)
+        #expect(model.suggestionRuns == 1)
+        #expect(storage.stored[project]?.suggestions == [StoredSuggestion(command: "make build", reason: "Build first.")])
+
+        // A relaunch has them with the text.
+        let second = makeSummarizer(model, storage: storage)
+        second.refresh(projectID: project, digest: digest(["make build"]))
+        #expect(second.state(for: project).suggestions == model.suggestions)
+    }
+
+    @Test
+    func a_failed_suggestion_request_keeps_the_text() async throws {
+        let model = FakeModel()
+        model.suggestionsFail = true
+        let summarizer = makeSummarizer(model)
+        let project = UUID()
+        summarizer.refresh(projectID: project, digest: digest(["make build"]))
+        try await wait(for: summarizer, project, phase: .done)
+        #expect(summarizer.state(for: project).text == model.reply)
+        #expect(summarizer.state(for: project).suggestions.isEmpty)
     }
 
     @Test

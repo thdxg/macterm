@@ -5594,22 +5594,6 @@
         }
       }
     },
-    "Next" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다음"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下一步"
-          }
-        }
-      }
-    },
     "Next Pane" : {
       "localizations" : {
         "ko" : {
@@ -6573,22 +6557,6 @@
         }
       }
     },
-    "Open a shell in the worktree at %@" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@의 워크트리에서 셸 열기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在位于 %@ 的工作树中打开 Shell"
-          }
-        }
-      }
-    },
     "Open a tab in a project. You can run a command in it." : {
       "localizations" : {
         "ko" : {
@@ -6601,6 +6569,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在项目中打开标签页。你可以在其中运行命令。"
+          }
+        }
+      }
+    },
+    "Open a tab in the worktree at %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 워크트리에서 탭 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在位于 %@ 的工作树中打开标签页"
           }
         }
       }
@@ -9705,6 +9689,22 @@
         }
       }
     },
+    "Suggested" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추천"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议"
+          }
+        }
+      }
+    },
     "Summarize" : {
       "localizations" : {
         "ko" : {
@@ -9781,6 +9781,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "摘要"
+          }
+        }
+      }
+    },
+    "Switch to %@ in a new split" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 분할에서 %@(으)로 전환"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在新的拆分中切换到 %@"
           }
         }
       }
@@ -11439,22 +11455,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "工作树"
-          }
-        }
-      }
-    },
-    "Write a summary of where you left off with Apple Intelligence" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Intelligence로 마지막 작업의 요약 작성"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用 Apple 智能撰写上次进行到哪里的摘要"
           }
         }
       }
