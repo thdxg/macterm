@@ -389,45 +389,30 @@ struct ProjectMemoryPanel: View {
         .help(branchHelp(branch, isCurrent: isCurrent))
     }
 
-    /// A branch that a worktree has checked out opens a tab there. On a
-    /// remote project the worktree is on the host, so a new split goes
-    /// there with a typed `cd`, as `git switch` is typed: the shell is the
-    /// host's. The project's own path is a local fallback for the current
-    /// branch when the worktree list did not name it.
-    private func switchTo(_ branch: GitStatus.Branch, isCurrent: Bool) {
-        if project.isRemote, let worktree = branch.worktree {
+    /// A branch row types into the current pane: `cd` to the worktree that
+    /// has the branch checked out, or `git switch` for a branch with none.
+    /// Local and remote alike, because the line goes to the shell that is
+    /// up, wherever it runs. The branch name is typed as git reported it;
+    /// a worktree path with a quote or a newline cannot be typed safely.
+    private func switchTo(_ branch: GitStatus.Branch, isCurrent _: Bool) {
+        let line: String
+        if let worktree = branch.worktree {
             guard !worktree.contains("\""), !worktree.contains("\n") else {
                 appState.presentToast(String(localized: "Macterm cannot type the path of that worktree."))
                 return
             }
-            ProjectMemoryActions.run(
-                command: "cd \"\(worktree)\"",
-                directory: nil,
-                in: project,
-                appState: appState,
-                projects: projectStore.projects
-            )
-        } else if !project.isRemote, let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
-            ProjectMemoryActions.openTab(in: worktree, project: project, appState: appState, projects: projectStore.projects)
+            line = "cd \"\(worktree)\""
         } else {
-            ProjectMemoryActions.run(
-                command: "git switch \(branch.name)",
-                directory: nil,
-                in: project,
-                appState: appState,
-                projects: projectStore.projects
-            )
+            line = "git switch \(branch.name)"
         }
+        ProjectMemoryActions.type(line, in: project, appState: appState)
     }
 
-    private func branchHelp(_ branch: GitStatus.Branch, isCurrent: Bool) -> String {
-        if project.isRemote, let worktree = branch.worktree {
-            return String(localized: "Go to the worktree at \(worktree) in a new split")
+    private func branchHelp(_ branch: GitStatus.Branch, isCurrent _: Bool) -> String {
+        if let worktree = branch.worktree {
+            return String(localized: "Go to the worktree at \(worktree) in this pane")
         }
-        if !project.isRemote, let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
-            return String(localized: "Open a tab in the worktree at \(worktree)")
-        }
-        return String(localized: "Switch to \(branch.name) in a new split")
+        return String(localized: "Switch to \(branch.name) in this pane")
     }
 
     // MARK: - Recent

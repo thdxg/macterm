@@ -37,14 +37,26 @@ enum ProjectMemoryActions {
         }
     }
 
-    /// A tab in `directory`: a worktree of the project, from the panel's
-    /// branch list. The same as the sidebar's Worktrees menu.
-    static func openTab(in directory: String, project: Project, appState: AppState, projects: [Project]) {
-        guard !project.isRemote, let directory = existingDirectory(directory) else {
-            appState.presentToast(String(localized: "There is no folder at \(directory)"))
+    /// Type a line into the project's focused pane, as the user would: the
+    /// panel's branch rows (`git switch`, or `cd` to a worktree) act on the
+    /// shell that is up, not on a new one. The pane must be a terminal that
+    /// is not running a command; a toast says so otherwise. The line goes
+    /// through the paste path (`sendText`) like `pane run`, so it is in
+    /// the shell's language and history.
+    static func type(_ line: String, in project: Project, appState: AppState) {
+        guard let pane = appState.focusedPane(for: project.id), let view = pane.nsView else {
+            appState.presentToast(String(localized: "Open a terminal in the project first."))
             return
         }
-        appState.createTab(projectID: project.id, projects: projects, workingDirectory: directory)
+        guard pane.executionState != .running else {
+            appState.presentToast(String(localized: "The pane is running a command. Finish or stop it first."))
+            return
+        }
+        guard view.sendText(line + "\n") else {
+            appState.presentToast(String(localized: "The terminal of that pane is not live yet."))
+            return
+        }
+        appState.noteSessionLeader(pane)
     }
 
     private static func existingDirectory(_ path: String?) -> String? {
