@@ -716,7 +716,7 @@ private struct GeneralSettings: View {
                     .onChange(of: backgroundSSHConnections) { _, v in
                         Preferences.shared.backgroundSSHConnections = v
                     }
-                Text("Enable for live tab names and close warnings.")
+                Text("Enable for live tab names, close warnings and the Git state of remote projects.")
                     .settingsCaption()
                 Toggle("Reconnect panes after a dropped connection", isOn: $reconnectRemotePanes)
                     .onChange(of: reconnectRemotePanes) { _, v in

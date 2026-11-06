@@ -396,4 +396,36 @@ struct RemoteSpawnTests {
         #expect(RemoteSpawn.destination(user: nil, host: "devbox") == "devbox")
         #expect(RemoteSpawn.destination(user: "me", host: "devbox") == "me@devbox")
     }
+
+    // MARK: - Git probe
+
+    @Test
+    func git_probe_runs_the_four_reads_in_one_connection() throws {
+        let argv = try #require(RemoteSpawn.gitProbeArgv(remote: remote))
+        #expect(argv.contains("BatchMode=yes"))
+        #expect(argv.contains("devbox"))
+        let command = try #require(argv.last)
+        #expect(command.hasPrefix("sh -c '"))
+        let script = String(command.dropFirst("sh -c '".count).dropLast())
+        // The wire-format invariant: no single quote inside the script.
+        #expect(!script.contains("'"))
+        #expect(script.contains("cd ~/\"dev/api\" 2>/dev/null || exit 2"))
+        #expect(script.contains("command -v git >/dev/null 2>&1 || exit 3"))
+        #expect(script.contains("status --porcelain=v2 --branch --show-stash 2>/dev/null || exit 4"))
+        #expect(script.contains("log -5 --format=%h%x1f%s%x1f%ct"))
+        #expect(script.contains("for-each-ref refs/heads --sort=-committerdate --count=6"))
+        #expect(script.contains("worktree list --porcelain"))
+        #expect(script.contains("GIT_OPTIONAL_LOCKS=0"))
+        #expect(script.components(separatedBy: "printf \"\\036\"").count == 4)
+        // A git on the host's PATH only; profiles are never sourced.
+        #expect(!script.contains("profile"))
+    }
+
+    @Test
+    func git_probe_is_nil_for_a_local_path_and_fails_closed_on_a_single_quote() throws {
+        #expect(RemoteSpawn.gitProbeArgv(remote: .local("/tmp")) == nil)
+        let argv = try #require(RemoteSpawn.gitProbeArgv(remote: .remote(user: nil, host: "devbox", directory: "/it's")))
+        #expect(argv.last?.contains("exit 1") == true)
+        #expect(argv.last?.contains("git") == false)
+    }
 }

@@ -305,20 +305,31 @@ struct ProjectMemoryPanel: View {
 
     private var gitSection: some View {
         section(String(localized: "Git")) {
-            if project.isRemote {
-                Text("Git status is not available for remote projects yet.")
-                    .font(.callout)
-                    .foregroundStyle(MactermTheme.fgMuted)
-            } else if let git {
-                gitDetails(git)
-            } else if memory.readingGit.contains(project.id) {
-                ProgressView().controlSize(.small)
-            } else {
-                Text("This folder is not in a Git repository, or Git is not installed.")
-                    .font(.callout)
-                    .foregroundStyle(MactermTheme.fgMuted)
+            switch memory.gitUnavailability(for: project) {
+            case .backgroundSSHOff:
+                gitNote(
+                    String(localized: "Turn on Background SSH connections in Settings → General to read the Git state of a remote project.")
+                )
+            case let .refused(host):
+                gitNote(String(localized: "\(host) refused the background login, so Macterm does not read its Git state in this run."))
+            case nil:
+                if let git {
+                    gitDetails(git)
+                } else if memory.readingGit.contains(project.id) {
+                    ProgressView().controlSize(.small)
+                } else if project.isRemote {
+                    gitNote(String(localized: "This folder is not in a Git repository, or Git is not installed on the host."))
+                } else {
+                    gitNote(String(localized: "This folder is not in a Git repository, or Git is not installed."))
+                }
             }
         }
+    }
+
+    private func gitNote(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(MactermTheme.fgMuted)
     }
 
     private func gitDetails(_ git: GitStatus) -> some View {
@@ -372,8 +383,25 @@ struct ProjectMemoryPanel: View {
         .help(branchHelp(branch, isCurrent: isCurrent))
     }
 
+    /// A branch that a worktree has checked out opens a tab there. On a
+    /// remote project the worktree is on the host, so a new split goes
+    /// there with a typed `cd`, as `git switch` is typed: the shell is the
+    /// host's. The project's own path is a local fallback for the current
+    /// branch when the worktree list did not name it.
     private func switchTo(_ branch: GitStatus.Branch, isCurrent: Bool) {
-        if let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
+        if project.isRemote, let worktree = branch.worktree {
+            guard !worktree.contains("\""), !worktree.contains("\n") else {
+                appState.presentToast(String(localized: "Macterm cannot type the path of that worktree."))
+                return
+            }
+            ProjectMemoryActions.run(
+                command: "cd \"\(worktree)\"",
+                directory: nil,
+                in: project,
+                appState: appState,
+                projects: projectStore.projects
+            )
+        } else if !project.isRemote, let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
             ProjectMemoryActions.openTab(in: worktree, project: project, appState: appState, projects: projectStore.projects)
         } else {
             ProjectMemoryActions.run(
@@ -387,7 +415,10 @@ struct ProjectMemoryPanel: View {
     }
 
     private func branchHelp(_ branch: GitStatus.Branch, isCurrent: Bool) -> String {
-        if let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
+        if project.isRemote, let worktree = branch.worktree {
+            return String(localized: "Go to the worktree at \(worktree) in a new split")
+        }
+        if !project.isRemote, let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
             return String(localized: "Open a tab in the worktree at \(worktree)")
         }
         return String(localized: "Switch to \(branch.name) in a new split")

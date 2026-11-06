@@ -313,6 +313,22 @@
         }
       }
     },
+    "%@ refused the background login, so Macterm does not read its Git state in this run." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) 백그라운드 로그인을 거부했으므로, Macterm은 이번 실행에서 해당 호스트의 Git 상태를 읽지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 拒绝了后台登录，因此 Macterm 在本次运行中不再读取它的 Git 状态。"
+          }
+        }
+      }
+    },
     "%@ share this folder and the layout file “%@” with this project. Your save replaced their layout. Each save replaces the one before. Give the projects different names to keep separate layout files." : {
       "localizations" : {
         "en" : {
@@ -3046,18 +3062,18 @@
         }
       }
     },
-    "Enable for live tab names and close warnings." : {
+    "Enable for live tab names, close warnings and the Git state of remote projects." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "실시간 탭 이름과 닫기 경고를 사용하려면 켜십시오."
+            "value" : "실시간 탭 이름, 닫기 경고, 원격 프로젝트의 Git 상태를 사용하려면 켜십시오."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "启用后可实时显示标签页名称并在关闭时发出警告。"
+            "value" : "打开后可获得实时标签页名称、关闭警告和远程项目的 Git 状态。"
           }
         }
       }
@@ -3889,22 +3905,6 @@
         }
       }
     },
-    "Git status is not available for remote projects yet." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "원격 프로젝트에서는 아직 Git 상태를 사용할 수 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "远程项目暂不支持 Git 状态。"
-          }
-        }
-      }
-    },
     "GitHub answered %lld." : {
       "comment" : "The value is the HTTP status code of the answer from GitHub",
       "localizations" : {
@@ -3951,6 +3951,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全局"
+          }
+        }
+      }
+    },
+    "Go to the worktree at %@ in a new split" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 분할에서 %@의 워크트리로 이동"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在新的分栏中前往位于 %@ 的工作树"
           }
         }
       }
@@ -4745,6 +4761,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 无法捕捉面板所在的显示器。"
+          }
+        }
+      }
+    },
+    "Macterm cannot type the path of that worktree." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 해당 워크트리의 경로를 입력할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 无法输入该工作树的路径。"
           }
         }
       }
@@ -10538,6 +10570,22 @@
         }
       }
     },
+    "This folder is not in a Git repository, or Git is not installed on the host." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 폴더는 Git 저장소에 없거나, 호스트에 Git이 설치되어 있지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件夹不在 Git 仓库中，或者主机上未安装 Git。"
+          }
+        }
+      }
+    },
     "This folder is not in a Git repository, or Git is not installed." : {
       "localizations" : {
         "ko" : {
@@ -10895,6 +10943,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要解释输出，请在系统设置中打开 Apple 智能"
+          }
+        }
+      }
+    },
+    "Turn on Background SSH connections in Settings → General to read the Git state of a remote project." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 프로젝트의 Git 상태를 읽으려면 설정 → 일반에서 백그라운드 SSH 연결을 켜십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要读取远程项目的 Git 状态，请在“设置 → 通用”中打开后台 SSH 连接。"
           }
         }
       }
