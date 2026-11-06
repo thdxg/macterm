@@ -172,7 +172,9 @@ struct RemoteZmxInstallTests {
             .secret("Enter passphrase for key '/Users/me/.ssh/id_ed25519':"))
         #expect(SSHPrompt.detect(in: "(demo@devbox) Password:") == .secret("(demo@devbox) Password:"))
         #expect(SSHPrompt.detect(in: "Verification code:") == .secret("Verification code:"))
-        let hostKey = "The authenticity of host 'devbox (10.0.0.5)' can't be established.\r\nED25519 key fingerprint is SHA256:abc.\r\nAre you sure you want to continue connecting (yes/no/[fingerprint])?"
+        let hostKey = "The authenticity of host 'devbox (10.0.0.5)' can't be established.\r\n"
+            + "ED25519 key fingerprint is SHA256:abc.\r\n"
+            + "Are you sure you want to continue connecting (yes/no/[fingerprint])?"
         #expect(SSHPrompt.detect(in: hostKey) == .yesNo("Are you sure you want to continue connecting (yes/no/[fingerprint])?"))
     }
 

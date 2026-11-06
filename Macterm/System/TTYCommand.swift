@@ -11,19 +11,19 @@ private let logger = Logger(subsystem: appBundleID, category: "TTYCommand")
 /// The background operations of a remote project run ssh with `BatchMode`,
 /// which turns every prompt into a refusal: right for a poll that nobody
 /// watches, wrong for an install the user just clicked (#699). This runs
-/// the command with the slave side of a pty as its controlling terminal,
-/// reads the master on the main queue, and hands each chunk to `onOutput`;
+/// the command with one end of a pty as its controlling terminal,
+/// reads the other end on the main queue, and hands each chunk to `onOutput`;
 /// the owner looks for a prompt at the tail (`SSHPrompt.detect`) and
 /// answers with `write`. A Touch ID key needs nothing here: its dialog is
 /// the key provider's own.
 ///
 /// `posix_spawn`, never `fork`, because the app has threads. `SETSID` makes
 /// the child a session leader, and the first tty a session leader opens is
-/// its controlling terminal, so the slave is opened in the child by a file
-/// action, without `O_NOCTTY`.
+/// its controlling terminal, so the program's end is opened in the child by
+/// a file action, without `O_NOCTTY`.
 @MainActor
 final class TTYCommand {
-    private var master: Int32 = -1
+    private var ptyFD: Int32 = -1
     private(set) var pid: pid_t = 0
     private var readSource: DispatchSourceRead?
     private var exitSource: DispatchSourceProcess?
@@ -41,7 +41,7 @@ final class TTYCommand {
     }
 
     deinit {
-        if master >= 0 { close(master) }
+        if ptyFD >= 0 { close(ptyFD) }
     }
 
     /// Starts `argv`, resolved through `/usr/bin/env` like every background
@@ -50,26 +50,26 @@ final class TTYCommand {
     /// appended to `output`.
     func start(argv: [String], onOutput: @escaping @MainActor (String) -> Void) throws {
         precondition(pid == 0, "a TTYCommand runs once")
-        master = posix_openpt(O_RDWR | O_NOCTTY)
-        guard master >= 0, grantpt(master) == 0, unlockpt(master) == 0,
-              let slavePath = ptsname(master).map({ String(cString: $0) })
+        ptyFD = posix_openpt(O_RDWR | O_NOCTTY)
+        guard ptyFD >= 0, grantpt(ptyFD) == 0, unlockpt(ptyFD) == 0,
+              let terminalPath = ptsname(ptyFD).map({ String(cString: $0) })
         else {
-            if master >= 0 { close(master)
-                master = -1
+            if ptyFD >= 0 { close(ptyFD)
+                ptyFD = -1
             }
             throw Failure.noTerminal
         }
         // A size, so a program that asks gets one instead of 0×0.
         var size = winsize(ws_row: 24, ws_col: 100, ws_xpixel: 0, ws_ypixel: 0)
-        _ = ioctl(master, TIOCSWINSZ, &size)
+        _ = ioctl(ptyFD, TIOCSWINSZ, &size)
 
         var actions: posix_spawn_file_actions_t?
         posix_spawn_file_actions_init(&actions)
         defer { posix_spawn_file_actions_destroy(&actions) }
-        posix_spawn_file_actions_addopen(&actions, 0, slavePath, O_RDWR, 0)
+        posix_spawn_file_actions_addopen(&actions, 0, terminalPath, O_RDWR, 0)
         posix_spawn_file_actions_adddup2(&actions, 0, 1)
         posix_spawn_file_actions_adddup2(&actions, 0, 2)
-        posix_spawn_file_actions_addclose(&actions, master)
+        posix_spawn_file_actions_addclose(&actions, ptyFD)
 
         var attributes: posix_spawnattr_t?
         posix_spawnattr_init(&attributes)
@@ -84,25 +84,25 @@ final class TTYCommand {
         var child: pid_t = 0
         let rc = posix_spawn(&child, "/usr/bin/env", &actions, &attributes, &cArgv, environ)
         guard rc == 0 else {
-            close(master)
-            master = -1
+            close(ptyFD)
+            ptyFD = -1
             throw Failure.spawn(rc)
         }
         pid = child
         logger.info("started pid \(child, privacy: .public): \(argv.first ?? "", privacy: .public)")
 
-        let source = DispatchSource.makeReadSource(fileDescriptor: master, queue: .main)
+        let source = DispatchSource.makeReadSource(fileDescriptor: ptyFD, queue: .main)
         source.setEventHandler { [weak self] in
             guard let self else { return }
             var buffer = [UInt8](repeating: 0, count: 4096)
-            let n = read(master, &buffer, buffer.count)
+            let n = read(ptyFD, &buffer, buffer.count)
             if n > 0 {
                 pendingBytes.append(contentsOf: buffer[0 ..< n])
                 flushBytes(final: false)
                 let text = output
                 onOutput(text)
             } else if n == 0 || errno != EAGAIN {
-                // EOF, or EIO when the slave closed: the program is done
+                // EOF, or EIO when the program's end closed: the program is done
                 // with its terminal.
                 readSource?.cancel()
             }
@@ -110,8 +110,8 @@ final class TTYCommand {
         source.setCancelHandler { [weak self] in
             guard let self else { return }
             flushBytes(final: true)
-            if master >= 0 { close(master) }
-            master = -1
+            if ptyFD >= 0 { close(ptyFD) }
+            ptyFD = -1
         }
         readSource = source
         source.resume()
@@ -163,12 +163,15 @@ final class TTYCommand {
 
     /// Answers a prompt: `text` and a newline go to the program's tty.
     func write(_ text: String) {
-        guard master >= 0 else { return }
+        guard ptyFD >= 0 else { return }
         let line = text + "\n"
-        var data = Array(line.utf8)
+        let data = Array(line.utf8)
         var offset = 0
         while offset < data.count {
-            let n = data.withUnsafeMutableBufferPointer { Darwin.write(master, $0.baseAddress! + offset, $0.count - offset) }
+            let n = data.withUnsafeBufferPointer { buffer -> Int in
+                guard let base = buffer.baseAddress else { return -1 }
+                return Darwin.write(ptyFD, base + offset, buffer.count - offset)
+            }
             if n <= 0 { break }
             offset += n
         }

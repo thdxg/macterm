@@ -93,10 +93,10 @@ struct ZmxBinaryProvider {
         }
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         guard digest == expected else {
-            logger
-                .error(
-                    "zmx asset \(target.assetName, privacy: .public) hashed \(digest, privacy: .public), release says \(expected, privacy: .public)"
-                )
+            logger.error("""
+            zmx asset \(target.assetName, privacy: .public) hashed \(digest, privacy: .public), \
+            release says \(expected, privacy: .public)
+            """)
             throw ZmxInstallError.checksumMismatch
         }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -282,7 +282,10 @@ final class RemoteZmxInstallFlow {
         phase = .done
         logger
             .info(
-                "installed zmx \(self.installedVersion?.forkTag ?? "?", privacy: .public) at \(installed, privacy: .public) on \(self.request.hostName, privacy: .public)"
+                """
+                installed zmx \(self.installedVersion?.forkTag ?? "?", privacy: .public) \
+                at \(installed, privacy: .public) on \(self.request.hostName, privacy: .public)
+                """
             )
     }
 
