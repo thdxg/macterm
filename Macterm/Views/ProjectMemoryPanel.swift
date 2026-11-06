@@ -109,7 +109,7 @@ struct ProjectMemoryPanel: View {
 
     private var turnedOff: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(String(localized: "Project Memory Is Off"), systemImage: "brain")
+            Label(String(localized: "Project Insights Is Off"), systemImage: "brain")
                 .font(.headline)
             VStack(alignment: .leading, spacing: 6) {
                 Text("Turn it on to see where you left off in each project and the commands to run next.")
@@ -119,7 +119,7 @@ struct ProjectMemoryPanel: View {
             .font(.callout)
             .foregroundStyle(MactermTheme.fgMuted)
             .fixedSize(horizontal: false, vertical: true)
-            Button(String(localized: "Turn On Project Memory")) {
+            Button(String(localized: "Turn On Project Insights")) {
                 preferences.projectMemory = true
             }
             .buttonStyle(.glassProminent)

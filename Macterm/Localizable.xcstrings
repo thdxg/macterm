@@ -188,18 +188,18 @@
         }
       }
     },
-    "%@ is not a project, so it has no memory." : {
+    "%@ is not a project, so it has no insights." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@은(는) 프로젝트가 아니므로 메모리가 없습니다."
+            "value" : "%@은(는) 프로젝트가 아니므로 인사이트가 없습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ 不是项目，因此没有记忆。"
+            "value" : "%@ 不是项目，因此没有洞察。"
           }
         }
       }
@@ -3680,18 +3680,18 @@
         }
       }
     },
-    "Forget the memory of all projects?" : {
+    "Forget the insights of all projects?" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "모든 프로젝트의 메모리를 지우시겠습니까?"
+            "value" : "모든 프로젝트의 인사이트를 지우시겠습니까?"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要清除所有项目的记忆吗？"
+            "value" : "要清除所有项目的洞察吗？"
           }
         }
       }
@@ -7284,34 +7284,66 @@
         }
       }
     },
-    "Project Memory" : {
+    "Project Insights" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "프로젝트 메모리"
+            "value" : "프로젝트 인사이트"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "项目记忆"
+            "value" : "项目洞察"
           }
         }
       }
     },
-    "Project Memory Is Off" : {
+    "Project Insights Is Off" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "프로젝트 메모리가 꺼져 있음"
+            "value" : "프로젝트 인사이트가 꺼져 있음"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "项目记忆已关闭"
+            "value" : "项目洞察已关闭"
+          }
+        }
+      }
+    },
+    "Project Insights is off. Turn it on in Settings → Intelligence." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 인사이트가 꺼져 있습니다. 설정 → 인텔리전스에서 켜십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目洞察已关闭。请在“设置 → 智能”中打开。"
+          }
+        }
+      }
+    },
+    "Project Insights needs macOS 26 or later." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 인사이트에는 macOS 26 이상이 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目洞察需要 macOS 26 或更高版本。"
           }
         }
       }
@@ -7328,38 +7360,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "项目图标"
-          }
-        }
-      }
-    },
-    "Project memory is off. Turn it on in Settings → Intelligence." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "프로젝트 메모리가 꺼져 있습니다. 설정 → 인텔리전스에서 켜십시오."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "项目记忆已关闭。请在“设置 → 智能”中打开。"
-          }
-        }
-      }
-    },
-    "Project memory needs macOS 26 or later." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "프로젝트 메모리에는 macOS 26 이상이 필요합니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "项目记忆需要 macOS 26 或更高版本。"
           }
         }
       }
@@ -7656,18 +7656,18 @@
         }
       }
     },
-    "Record commands for project memory" : {
+    "Record commands for Project Insights" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "프로젝트 메모리용 명령 기록"
+            "value" : "프로젝트 인사이트용 명령 기록"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "为项目记忆记录命令"
+            "value" : "为项目洞察记录命令"
           }
         }
       }
@@ -8571,18 +8571,18 @@
         }
       }
     },
-    "Say where you left off in a project: the summary of its project memory, or the latest command and a failure that is not fixed yet." : {
+    "Say where you left off in a project: its Project Insights summary, or the latest command and a failure that is not fixed yet." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "프로젝트에서 어디까지 했는지 말합니다. 프로젝트 메모리의 요약, 또는 마지막 명령과 아직 해결되지 않은 실패를 알려 줍니다."
+            "value" : "프로젝트에서 어디까지 했는지 말합니다. 프로젝트 인사이트 요약, 또는 마지막 명령과 아직 해결되지 않은 실패를 알려 줍니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "说出你在项目中进行到哪里：项目记忆的摘要，或最后一条命令与尚未修复的失败。"
+            "value" : "说出你在项目中进行到哪里：项目洞察摘要，或最后一条命令与尚未修复的失败。"
           }
         }
       }
@@ -9347,18 +9347,18 @@
         }
       }
     },
-    "Show or hide the project memory panel" : {
+    "Show or hide the Project Insights panel" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "프로젝트 메모리 패널 보기 또는 가리기"
+            "value" : "프로젝트 인사이트 패널 보기 또는 가리기"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "显示或隐藏项目记忆面板"
+            "value" : "显示或隐藏项目洞察面板"
           }
         }
       }
@@ -10754,18 +10754,18 @@
         }
       }
     },
-    "Toggle Project Memory" : {
+    "Toggle Project Insights" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "프로젝트 메모리 전환"
+            "value" : "프로젝트 인사이트 전환"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "切换项目记忆"
+            "value" : "切换项目洞察"
           }
         }
       }
@@ -10867,18 +10867,18 @@
         }
       }
     },
-    "Turn On Project Memory" : {
+    "Turn On Project Insights" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "프로젝트 메모리 켜기"
+            "value" : "프로젝트 인사이트 켜기"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开项目记忆"
+            "value" : "打开项目洞察"
           }
         }
       }

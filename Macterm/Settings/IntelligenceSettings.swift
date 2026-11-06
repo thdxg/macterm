@@ -14,7 +14,7 @@ struct IntelligenceSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Record commands for project memory", isOn: $preferences.projectMemory)
+                Toggle("Record commands for Project Insights", isOn: $preferences.projectMemory)
                 Group {
                     Toggle(isOn: $preferences.projectMemorySummary) {
                         Text("Summarize with Apple Intelligence").dimsWhenDisabled()
@@ -38,7 +38,7 @@ struct IntelligenceSettings: View {
                     Button("Forget All…", role: .destructive) { isConfirmingForgetAll = true }
                 }
             } header: {
-                DocsSectionHeader("Project Memory", docs: .projectMemory)
+                DocsSectionHeader("Project Insights", docs: .projectInsights)
             }
 
             Section("Apple Intelligence") {
@@ -50,7 +50,7 @@ struct IntelligenceSettings: View {
             }
         }
         .formStyle(.grouped)
-        .confirmationDialog("Forget the memory of all projects?", isPresented: $isConfirmingForgetAll) {
+        .confirmationDialog("Forget the insights of all projects?", isPresented: $isConfirmingForgetAll) {
             Button("Forget All", role: .destructive) { ProjectMemory.shared.forgetAll() }
         } message: {
             Text("Macterm deletes every command that it recorded. You cannot undo this.")

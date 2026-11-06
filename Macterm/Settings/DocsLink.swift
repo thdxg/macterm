@@ -25,7 +25,7 @@ enum DocsSection: String, CaseIterable {
     case savedPasswords = "passwords#settings-password-manager"
     case extensionsSettings = "command-palette#settings-extensions"
     case extensions
-    case projectMemory = "project-memory"
+    case projectInsights = "project-insights"
 
     static let base = URL(string: "https://macterm.thdxg.dev/docs/")!
 

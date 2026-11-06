@@ -130,7 +130,7 @@ struct OpenMactermProjectIntent: OpenIntent {
 struct GetMactermProjectMemoryIntent: AppIntent {
     static let title: LocalizedStringResource = "Where Did I Leave Off"
     static let description = IntentDescription(
-        "Say where you left off in a project: the summary of its project memory, or the latest command and a failure that is not fixed yet."
+        "Say where you left off in a project: its Project Insights summary, or the latest command and a failure that is not fixed yet."
     )
 
     #if compiler(>=6.2)
@@ -149,14 +149,14 @@ struct GetMactermProjectMemoryIntent: AppIntent {
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         let ctx = try await MactermIntentHost.shared.authorizedContext()
         guard ProjectMemory.isSupported else {
-            throw MactermIntentError.unavailable(String(localized: "Project memory needs macOS 26 or later."))
+            throw MactermIntentError.unavailable(String(localized: "Project Insights needs macOS 26 or later."))
         }
         guard Preferences.shared.projectMemory else {
-            throw MactermIntentError.unavailable(String(localized: "Project memory is off. Turn it on in Settings → Intelligence."))
+            throw MactermIntentError.unavailable(String(localized: "Project Insights is off. Turn it on in Settings → Intelligence."))
         }
         let target = try IntentTargets.project(project.id, in: ctx)
         guard ProjectMemory.covers(target.id) else {
-            throw MactermIntentError.unavailable(String(localized: "\(target.name) is not a project, so it has no memory."))
+            throw MactermIntentError.unavailable(String(localized: "\(target.name) is not a project, so it has no insights."))
         }
         let memory = MactermIntentHost.shared.projectMemory()
         let text = ProjectMemoryAnswer.text(
