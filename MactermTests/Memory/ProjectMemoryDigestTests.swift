@@ -84,6 +84,11 @@ struct ProjectMemoryDigestTests {
     }
 
     @Test
+    func the_instructions_cover_a_log_with_no_commands() {
+        #expect(ProjectMemoryDigest.instructions.contains("When the log has no commands"))
+    }
+
+    @Test
     func an_empty_log_with_no_git_state_has_nothing_to_say() {
         #expect(ProjectMemoryDigest(projectName: "x", entries: [], git: nil, now: now) == nil)
         #expect(ProjectMemoryDigest(projectName: "x", entries: [], git: GitStatus(branch: "main"), now: now) != nil)

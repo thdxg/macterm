@@ -300,6 +300,31 @@ struct ZmxReaperTests {
     }
 
     @Test
+    func unstamped_names_claimed_sessions_that_lack_our_label() {
+        // A zmx older than 0.7.0 has no `zmx set` and lists no labels, so
+        // every claimed session comes back with no owner.
+        let entries = [
+            entry("macterm-a", clients: 1, owner: "us"), // stamp took → fine
+            entry("macterm-b", clients: 1, owner: nil), // old zmx → unstamped
+            entry("macterm-c", clients: 0, owner: "them"), // claimed, wrong owner → unstamped
+            entry("macterm-d", clients: nil, owner: nil), // err line → no verdict
+            entry("macterm-e", clients: 0, owner: nil), // not claimed → not ours to judge
+        ]
+        let unstamped = ZmxReaper.unstamped(
+            in: entries,
+            claimed: ["macterm-a", "macterm-b", "macterm-c", "macterm-d", "macterm-gone"],
+            owner: "us"
+        )
+        #expect(unstamped == ["macterm-b", "macterm-c"])
+    }
+
+    @Test
+    func unstamped_is_empty_when_nothing_is_claimed() {
+        let entries = [entry("macterm-a", clients: 0, owner: nil)]
+        #expect(ZmxReaper.unstamped(in: entries, claimed: [], owner: "us").isEmpty)
+    }
+
+    @Test
     func remote_empty_listing_reaps_nothing() {
         #expect(ZmxReaper.orphans(in: [], known: [], owner: "us").isEmpty)
     }

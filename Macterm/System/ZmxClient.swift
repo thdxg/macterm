@@ -637,6 +637,29 @@ enum ZmxReaper {
             entries.first { $0.name == name }?.owner == owner
         }
     }
+
+    /// The claimed sessions that the listing shows WITHOUT our owner label,
+    /// although the same sweep stamped them just before it listed. The stamp
+    /// is `|| true`-guarded (`RemoteSpawn.orphanSweepScript`), so this is the
+    /// only sign that it failed: the host's zmx is older than 0.7.0 (no `zmx
+    /// set`, no labels in `zmx ls`), or the session's daemon is. The reaper
+    /// spares such a session for ever. Only healthy lines count
+    /// (`clients != nil`): an `err=` line carries no labels, and its daemon
+    /// did not answer the stamp either.
+    static func unstamped(
+        in entries: [ZmxSessionListParser.Entry],
+        claimed: [String],
+        owner: String
+    ) -> [String] {
+        let claimedSet = Set(claimed)
+        return entries.compactMap { entry in
+            guard claimedSet.contains(entry.name),
+                  entry.clients != nil,
+                  entry.owner != owner
+            else { return nil }
+            return entry.name
+        }
+    }
 }
 
 /// Why new panes start as plain shells, without `zmx attach`

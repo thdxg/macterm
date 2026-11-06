@@ -218,12 +218,12 @@ struct MainWindow: View {
                     ToolbarItem(placement: .primaryAction) {
                         // Filled while the panel is up, as a toggle's state.
                         Button(
-                            String(localized: "Project Memory"),
+                            String(localized: "Project Insights"),
                             systemImage: windowState.projectMemoryPanelVisible ? "info.circle.fill" : "info.circle"
                         ) {
                             windowState.projectMemoryPanelVisible.toggle()
                         }
-                        .help(String(localized: "Show or hide the project memory panel"))
+                        .help(String(localized: "Show or hide the Project Insights panel"))
                     }
                 }
                 // Structural branch, not a placement ternary: each side is its
