@@ -25,7 +25,8 @@ struct ProjectMemoryPanel: View {
     static let width: CGFloat = 320
     static let inset: CGFloat = 10
     static let cornerRadius: CGFloat = 22
-    static let rowCornerRadius: CGFloat = 14
+    /// The failure card's corner: the rows are cards like it.
+    static let rowCornerRadius: CGFloat = 12
     static let recentLimit = 8
     /// How often the git state is read again while the panel is up and
     /// Macterm is active: a file saved in an editor inside a pane is no
@@ -134,11 +135,9 @@ struct ProjectMemoryPanel: View {
         leftOff(summary)
         if !actions.isEmpty {
             section(String(localized: "Suggested")) {
-                GlassEffectContainer(spacing: 6) {
-                    VStack(spacing: 6) {
-                        ForEach(actions) { action in
-                            actionRow(action)
-                        }
+                VStack(spacing: 6) {
+                    ForEach(actions) { action in
+                        actionRow(action)
                     }
                 }
             }
@@ -294,9 +293,9 @@ struct ProjectMemoryPanel: View {
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassRow(cornerRadius: Self.rowCornerRadius)
+            .cardRow(cornerRadius: Self.rowCornerRadius)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(RowButtonStyle())
         .help(action.command)
     }
 
@@ -329,20 +328,18 @@ struct ProjectMemoryPanel: View {
                     .font(.callout)
                     .foregroundStyle(MactermTheme.fgMuted)
             } else {
-                GlassEffectContainer(spacing: 6) {
-                    VStack(spacing: 6) {
-                        ForEach(git.branches, id: \.name) { branch in
-                            branchRow(branch, isCurrent: branch.name == git.branch)
-                        }
+                VStack(spacing: 6) {
+                    ForEach(git.branches, id: \.name) { branch in
+                        branchRow(branch, isCurrent: branch.name == git.branch)
                     }
                 }
             }
         }
     }
 
-    /// A branch with its latest commit's age, as a glass row like the
+    /// A branch with its latest commit's age, as a card row like the
     /// Suggested ones. The current branch is a row like the others, with the
-    /// accent on its glass, the filled check and a bold name; one style for
+    /// accent as its fill, the filled check and a bold name; one style for
     /// every row keeps the ages in line. A click switches to the branch: a
     /// tab in its worktree, as the sidebar's Worktrees menu opens (the
     /// current branch's worktree is the project itself), or `git switch`
@@ -367,9 +364,9 @@ struct ProjectMemoryPanel: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassRow(cornerRadius: Self.rowCornerRadius, tint: isCurrent ? MactermTheme.accent.opacity(0.35) : nil)
+            .cardRow(cornerRadius: Self.rowCornerRadius, fill: isCurrent ? MactermTheme.accent.opacity(0.2) : nil)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(RowButtonStyle())
         .help(branchHelp(branch, isCurrent: isCurrent))
     }
 
@@ -448,17 +445,21 @@ struct ProjectMemoryPanel: View {
     }
 }
 
-@available(macOS 26.0, *)
 private extension View {
-    /// A row of the panel as a glass button body: the button style's own
-    /// glass ignores `buttonBorderShape`, so the row draws its glass itself,
-    /// at the panel's row corner, with the press feedback of interactive
-    /// glass.
-    func glassRow(cornerRadius: CGFloat, tint: Color? = nil) -> some View {
-        let glass: Glass = tint.map { Glass.regular.tint($0) } ?? .regular
-        return padding(.horizontal, 12)
+    /// A row of the panel as a button body: a flat card like the failure
+    /// card, in the theme's surface color, or `fill`.
+    func cardRow(cornerRadius: CGFloat, fill: Color? = nil) -> some View {
+        padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .background(fill ?? MactermTheme.surface, in: .rect(cornerRadius: cornerRadius))
             .contentShape(.rect(cornerRadius: cornerRadius))
-            .glassEffect(glass.interactive(), in: .rect(cornerRadius: cornerRadius))
+    }
+}
+
+/// A card row dims while pressed; the plain style gives no sign of a press.
+private struct RowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1)
     }
 }
