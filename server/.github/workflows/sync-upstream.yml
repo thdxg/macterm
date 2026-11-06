@@ -69,6 +69,7 @@ env:
     .github/downstream/0008-fix-scroll-the-replayed-scrollback-off-the-screen-befo.patch
     .github/downstream/0009-fix-replay-the-visible-screen-as-logical-lines-too.patch
     .github/downstream/0010-feat-report-the-foreground-process-group-to-a-subscribed-client.patch
+    .github/downstream/0011-fix-build-on-linux-again.patch
 
 jobs:
   sync:
