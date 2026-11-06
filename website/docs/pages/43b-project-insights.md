@@ -29,7 +29,7 @@ You can also open the panel and click **Turn On Project Insights**.
 
 ## Open the panel
 
-Press <kbd>⌥</kbd><kbd>⌘</kbd><kbd>0</kbd>, or click the panel button in the toolbar. You can also run **Toggle Project Insights** from the command palette or from the **View** menu. Each window has its own panel, and the panel shows the project of its window.
+Press <kbd>⌥</kbd><kbd>⌘</kbd><kbd>0</kbd>, or click the panel button in the toolbar. You can also run **Toggle Project Insights** from the command palette or from the **View** menu. The panel is one setting for all windows: when it is on, every window shows the panel of its own project.
 
 The panel floats over the right side of the terminal. It does not make your panes smaller. To hide it, press <kbd>⌥</kbd><kbd>⌘</kbd><kbd>0</kbd> again or click the panel button in the toolbar. The project icon in the panel is the icon that you chose in **Settings → Appearance → Project icon**, with the color of the project.
 

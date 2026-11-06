@@ -447,6 +447,15 @@ final class Preferences {
         didSet { Keys.projectMemorySummary.write(projectMemorySummary, to: defaults) }
     }
 
+    /// Whether the Project Insights panel (`ProjectMemoryPanel`) is shown.
+    /// One toggle for the app: every window shows the panel of its own
+    /// project, or none does. It was per window before, kept in each
+    /// window's snapshot; a window that opened without the panel, or a
+    /// second window, then had to be toggled on its own.
+    var projectMemoryPanelVisible: Bool {
+        didSet { Keys.projectMemoryPanelVisible.write(projectMemoryPanelVisible, to: defaults) }
+    }
+
     var showNewProjectButton: Bool {
         didSet { Keys.showNewProjectButton.write(showNewProjectButton, to: defaults) }
     }
@@ -1031,6 +1040,7 @@ final class Preferences {
         autoUpdateExtensions = Keys.autoUpdateExtensions.read(defaults)
         projectMemory = Keys.projectMemory.read(defaults)
         projectMemorySummary = Keys.projectMemorySummary.read(defaults)
+        projectMemoryPanelVisible = Keys.projectMemoryPanelVisible.read(defaults)
         showNewProjectButton = Keys.showNewProjectButton.read(defaults)
         showProjectNewTabButton = Keys.showProjectNewTabButton.read(defaults)
         backgroundSSHConnections = Keys.backgroundSSHConnections.read(defaults)
@@ -1214,6 +1224,7 @@ final class Preferences {
         static let autoUpdateExtensions = PreferenceStorageKey("macterm.extensions.autoUpdate", default: true)
         static let projectMemory = PreferenceStorageKey("macterm.memory.enabled", default: false)
         static let projectMemorySummary = PreferenceStorageKey("macterm.memory.summary", default: true)
+        static let projectMemoryPanelVisible = PreferenceStorageKey("macterm.memory.panelVisible", default: false)
         static let showNewProjectButton = PreferenceStorageKey("macterm.sidebar.showNewProjectButton", default: true)
         static let showProjectNewTabButton = PreferenceStorageKey("macterm.sidebar.showProjectNewTabButton", default: true)
         static let backgroundSSHConnections = PreferenceStorageKey("macterm.remote.backgroundSSHConnections", default: true)

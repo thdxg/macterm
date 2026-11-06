@@ -196,7 +196,7 @@ final class AppState {
         first.activeProjectID = saved[0].activeProjectID ?? first.activeProjectID
         if let width = saved[0].sidebarWidth { first.sidebarWidth = width }
         if let visible = saved[0].sidebarVisible { first.sidebarVisible = visible }
-        if let visible = saved[0].projectMemoryPanelVisible { first.projectMemoryPanelVisible = visible }
+        adoptPanelVisibility(from: saved[0])
         // After the project: making a project active opens its section, and
         // the saved set must win over that.
         if let expanded = saved[0].expandedProjectIDs { first.expandedProjects = Set(expanded) }
@@ -406,7 +406,7 @@ final class AppState {
             }
             if let width = restoring.sidebarWidth { window.sidebarWidth = width }
             if let visible = restoring.sidebarVisible { window.sidebarVisible = visible }
-            if let visible = restoring.projectMemoryPanelVisible { window.projectMemoryPanelVisible = visible }
+            adoptPanelVisibility(from: restoring)
             if let expanded = restoring.expandedProjectIDs { window.expandedProjects = Set(expanded) }
             if let frame = restoring.frame { window.frame = frame }
         } else if hasRestoredWindows {
@@ -986,10 +986,19 @@ final class AppState {
         set { keyOrFirstWindow?.sidebarVisible = newValue }
     }
 
-    /// The key window's project memory panel (Toggle Project Memory).
+    /// The Project Insights panel (Toggle Project Insights). One toggle for
+    /// the app (`Preferences.projectMemoryPanelVisible`): every window shows
+    /// the panel of its own project.
     var projectMemoryPanelVisible: Bool {
-        get { keyOrFirstWindow?.projectMemoryPanelVisible ?? false }
-        set { keyOrFirstWindow?.projectMemoryPanelVisible = newValue }
+        get { Preferences.shared.projectMemoryPanelVisible }
+        set { Preferences.shared.projectMemoryPanelVisible = newValue }
+    }
+
+    /// A snapshot from before the panel was one toggle kept it per window.
+    /// A window that showed it turns the toggle on, once: the next save
+    /// writes no per-window value, so this never fires again.
+    private func adoptPanelVisibility(from snapshot: WindowSnapshot) {
+        if snapshot.projectMemoryPanelVisible == true { Preferences.shared.projectMemoryPanelVisible = true }
     }
 
     var isCommandPaletteVisible: Bool {
@@ -1882,7 +1891,7 @@ final class AppState {
                         isKey: window.id == keyWindowID,
                         activeTabID: window.activeProjectID.flatMap { selectedTab(for: $0, in: window)?.id },
                         sidebarVisible: window.sidebarVisible,
-                        projectMemoryPanelVisible: window.projectMemoryPanelVisible ? true : nil,
+                        projectMemoryPanelVisible: nil,
                         frame: window.frame,
                         expandedProjectIDs: window.expandedProjects.sorted { $0.uuidString < $1.uuidString }
                     )

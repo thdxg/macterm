@@ -184,7 +184,7 @@ struct MainWindow: View {
             // Project memory: a floating glass panel over the terminal, on
             // the trailing side. It covers the panes; it never resizes them.
             .overlay(alignment: .trailing) {
-                if #available(macOS 26.0, *), windowState.projectMemoryPanelVisible,
+                if #available(macOS 26.0, *), preferences.projectMemoryPanelVisible,
                    let project = activeProject, ProjectMemory.covers(project.id)
                 {
                     ProjectMemoryPanel(project: project)
@@ -193,13 +193,8 @@ struct MainWindow: View {
             }
             .animation(
                 NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .smooth(duration: 0.25),
-                value: windowState.projectMemoryPanelVisible
+                value: preferences.projectMemoryPanelVisible
             )
-            // Every way to show or hide it (toolbar, close button, the
-            // command) lands here, so the snapshot keeps it per window.
-            .onChange(of: windowState.projectMemoryPanelVisible) { _, _ in
-                appState.noteSidebarChanged()
-            }
             // Same safe-area reclaim as the sidebar: without it the terminal
             // keeps a blank strip where the hidden titlebar used to be.
             .ignoresSafeArea(chromeHidden ? .container : [], edges: .top)
@@ -219,9 +214,9 @@ struct MainWindow: View {
                         // Filled while the panel is up, as a toggle's state.
                         Button(
                             String(localized: "Project Insights"),
-                            systemImage: windowState.projectMemoryPanelVisible ? "info.circle.fill" : "info.circle"
+                            systemImage: preferences.projectMemoryPanelVisible ? "info.circle.fill" : "info.circle"
                         ) {
-                            windowState.projectMemoryPanelVisible.toggle()
+                            preferences.projectMemoryPanelVisible.toggle()
                         }
                         .help(String(localized: "Show or hide the Project Insights panel"))
                     }
