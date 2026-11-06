@@ -220,8 +220,10 @@ enum SSHPrompt: Equatable {
     /// prints a prompt without a newline and waits, so only the tail
     /// counts; a line that ended is history.
     static func detect(in output: String) -> SSHPrompt? {
-        guard !output.hasSuffix("\n"), !output.hasSuffix("\r") else { return nil }
-        let tail = output.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r" }).last
+        // `Character`, not bytes: "\r\n" is one character, which neither
+        // `hasSuffix("\n")` nor a comparison with "\n" sees.
+        guard output.last?.isNewline != true else { return nil }
+        let tail = output.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).last
         guard let line = tail.map({ $0.trimmingCharacters(in: .whitespaces) }), !line.isEmpty else { return nil }
         let lower = line.lowercased()
         if lower.hasSuffix("(yes/no)?") || lower.hasSuffix("(yes/no/[fingerprint])?") || lower.hasSuffix("(yes/no/[fingerprint])? ") {

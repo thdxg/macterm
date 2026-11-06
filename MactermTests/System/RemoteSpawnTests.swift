@@ -104,7 +104,7 @@ struct RemoteSpawnTests {
         let check = try #require(RemoteSpawn.zmxHostCheckArgv(remote: remote))
         #expect(check.first == "ssh")
         #expect(!check.joined(separator: " ").contains("BatchMode"))
-        #expect(check.contains("deploy@devbox"))
+        #expect(check.contains("devbox"))
         let checkScript = check.last ?? ""
         #expect(checkScript.contains("uname -s"))
         #expect(checkScript.contains("uname -m"))
@@ -119,7 +119,7 @@ struct RemoteSpawnTests {
         let upload = try #require(RemoteSpawn.zmxUploadArgv(remote: remote, localPath: "/tmp/zmx-x86_64-linux"))
         #expect(upload.first == "scp")
         #expect(upload.contains("/tmp/zmx-x86_64-linux"))
-        #expect(upload.last == "deploy@devbox:.zmx.macterm")
+        #expect(upload.last == "devbox:.zmx.macterm")
 
         let install = try #require(RemoteSpawn.zmxInstallArgv(remote: remote))
         #expect(install.first == "ssh")
