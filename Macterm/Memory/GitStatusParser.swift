@@ -23,6 +23,20 @@ struct GitStatus: Equatable {
     /// Newest first.
     var recentCommits: [Commit] = []
 
+    /// A local branch, with the worktree that has it checked out.
+    struct Branch: Equatable {
+        var name: String
+        var hash: String
+        var subject: String
+        var lastCommit: Date
+        /// The path of the worktree that has the branch checked out, or nil.
+        var worktree: String?
+    }
+
+    /// The local branches with the latest commits, newest first, at most
+    /// `ProjectGit.recentBranchCount`. The current branch is among them.
+    var branches: [Branch] = []
+
     /// Files with changes of any kind.
     var changedFiles: Int { staged + unstaged + untracked + conflicted }
     var isClean: Bool { changedFiles == 0 }
@@ -96,11 +110,54 @@ enum GitStatusParser {
         }
     }
 
-    /// Both outputs together. `detachedAt` is kept only on a detached HEAD.
-    static func status(statusOutput: String, logOutput: String?) -> GitStatus {
+    /// `git for-each-ref refs/heads --sort=-committerdate
+    /// --format=%(refname:short)%1f%(objectname:short)%1f%(committerdate:unix)%1f%(subject)`.
+    static func parseBranches(_ text: String) -> [GitStatus.Branch] {
+        text.split(separator: "\n").compactMap { line in
+            let fields = line.split(separator: "\u{1F}", maxSplits: 3, omittingEmptySubsequences: false)
+            guard fields.count == 4, let seconds = TimeInterval(fields[2]) else { return nil }
+            return GitStatus.Branch(
+                name: String(fields[0]),
+                hash: String(fields[1]),
+                subject: String(fields[3]),
+                lastCommit: Date(timeIntervalSince1970: seconds)
+            )
+        }
+    }
+
+    /// `git worktree list --porcelain`: the worktree path of each branch that
+    /// a worktree has checked out.
+    static func parseWorktrees(_ text: String) -> [String: String] {
+        var result: [String: String] = [:]
+        var path: String?
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.hasPrefix("worktree ") {
+                path = String(line.dropFirst("worktree ".count))
+            } else if line.hasPrefix("branch refs/heads/"), let path {
+                result[String(line.dropFirst("branch refs/heads/".count))] = path
+            } else if line.isEmpty {
+                path = nil
+            }
+        }
+        return result
+    }
+
+    /// Every output together. `detachedAt` is kept only on a detached HEAD.
+    static func status(
+        statusOutput: String,
+        logOutput: String?,
+        branchesOutput: String? = nil,
+        worktreesOutput: String? = nil
+    ) -> GitStatus {
         var status = parseStatus(statusOutput)
         if status.branch != nil { status.detachedAt = nil }
         status.recentCommits = logOutput.map(parseLog) ?? []
+        let worktrees = worktreesOutput.map(parseWorktrees) ?? [:]
+        status.branches = (branchesOutput.map(parseBranches) ?? []).map { branch in
+            var branch = branch
+            branch.worktree = worktrees[branch.name]
+            return branch
+        }
         return status
     }
 }

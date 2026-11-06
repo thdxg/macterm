@@ -18,6 +18,8 @@ final class ProjectMemoryStore {
 
     /// Entries by project, for the projects read so far.
     private(set) var entries: [UUID: [MemoryEntry]] = [:]
+    /// The stored summary of each project read so far.
+    private(set) var summaries: [UUID: StoredSummary] = [:]
 
     @ObservationIgnored private let directory: URL
     @ObservationIgnored private var loadFailed: Set<UUID> = []
@@ -47,9 +49,22 @@ final class ProjectMemoryStore {
     /// The project's entries, oldest first, read from disk the first time.
     func entries(for projectID: UUID) -> [MemoryEntry] {
         if let cached = entries[projectID] { return cached }
-        let loaded = load(projectID)
-        entries[projectID] = loaded
-        return loaded
+        let file = load(projectID)
+        entries[projectID] = file.entries
+        summaries[projectID] = file.summary
+        return file.entries
+    }
+
+    /// The project's stored summary, read from disk the first time.
+    func summary(for projectID: UUID) -> StoredSummary? {
+        _ = entries(for: projectID)
+        return summaries[projectID]
+    }
+
+    func setSummary(_ summary: StoredSummary?, for projectID: UUID) {
+        _ = entries(for: projectID)
+        summaries[projectID] = summary
+        scheduleSave(projectID)
     }
 
     func append(_ entry: MemoryEntry, to projectID: UUID) {
@@ -64,6 +79,7 @@ final class ProjectMemoryStore {
     func forget(_ projectID: UUID) {
         pendingSaves.removeValue(forKey: projectID)?.cancel()
         entries[projectID] = []
+        summaries[projectID] = nil
         loadFailed.remove(projectID)
         try? FileManager.default.removeItem(at: fileURL(for: projectID))
     }
@@ -78,6 +94,7 @@ final class ProjectMemoryStore {
         for key in entries.keys {
             entries[key] = []
         }
+        summaries.removeAll()
         try? FileManager.default.removeItem(at: directory)
     }
 
@@ -110,21 +127,21 @@ final class ProjectMemoryStore {
         }
     }
 
-    private func load(_ projectID: UUID) -> [MemoryEntry] {
+    private func load(_ projectID: UUID) -> MemoryFile {
         let url = fileURL(for: projectID)
-        guard let data = try? Data(contentsOf: url) else { return [] }
+        guard let data = try? Data(contentsOf: url) else { return MemoryFile() }
         do {
             let file = try Self.decoder.decode(MemoryFile.self, from: data)
             guard file.version <= MemoryFile.currentVersion else {
                 logger.error("memory of \(projectID, privacy: .public) is a newer version; not writing it")
                 loadFailed.insert(projectID)
-                return []
+                return MemoryFile()
             }
-            return file.entries
+            return file
         } catch {
             logger.error("memory of \(projectID, privacy: .public) does not decode: \(EnglishErrorText.describe(error), privacy: .public)")
             loadFailed.insert(projectID)
-            return []
+            return MemoryFile()
         }
     }
 
@@ -136,7 +153,7 @@ final class ProjectMemoryStore {
                 withIntermediateDirectories: true,
                 attributes: [.posixPermissions: 0o700]
             )
-            let data = try Self.encoder.encode(MemoryFile(entries: entries[projectID] ?? []))
+            let data = try Self.encoder.encode(MemoryFile(entries: entries[projectID] ?? [], summary: summaries[projectID]))
             try data.write(to: fileURL(for: projectID), options: .atomic)
         } catch {
             logger.error("cannot write memory of \(projectID, privacy: .public): \(EnglishErrorText.describe(error), privacy: .public)")

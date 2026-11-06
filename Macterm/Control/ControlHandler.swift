@@ -1150,16 +1150,32 @@ final class ControlHandler {
         case "hide": appState.projectMemoryPanelVisible = false
         default: throw ControlError(code: .badRequest, message: "panel must be show or hide")
         }
+        switch args.summarize {
+        case nil: break
+        case "write":
+            guard ProjectMemorySummarizer.isEnabled else {
+                throw ControlError(code: .badRequest, message: "the summary is off, or Apple Intelligence is not available")
+            }
+            let projectID = project.id
+            Task { await memory.writeSummary(projectID, force: true) }
+        default: throw ControlError(code: .badRequest, message: "summary must be write")
+        }
         let entries = memory.store.entries(for: project.id)
         let summary = ProjectMemorySummary(entries: entries)
-        let actions = QuickActionRanker.actions(entries: entries, git: memory.git[project.id])
+        let actions = memory.suggestedActions(projectID: project.id, entries: entries)
         return ControlData(memory: ControlMemoryState(
             recording: ProjectMemory.isRecording,
             entries: entries.map {
                 ControlMemoryState.Entry(command: $0.command, directory: $0.directory, exitCode: $0.exitCode, failureTail: $0.failureTail)
             },
             unresolvedFailure: summary.unresolvedFailure?.command,
-            actions: actions.map { ControlMemoryState.Action(kind: "\($0.kind)", title: $0.title, command: $0.command) }
+            actions: actions.map { ControlMemoryState.Action(kind: "\($0.kind)", title: $0.title, command: $0.command) },
+            summary: ProjectMemorySummarizer.isEnabled
+                ? ControlMemoryState.Summary(
+                    phase: ProjectMemorySummarizer.shared.state(for: project.id).phase.rawValue,
+                    text: ProjectMemorySummarizer.shared.state(for: project.id).text
+                )
+                : nil
         ))
     }
 

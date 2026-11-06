@@ -160,12 +160,16 @@ struct ProjectCommand: ParsableCommand {
         @Option(help: "show or hide the key window's project memory panel.")
         var panel: String?
 
+        @Option(help: "write: write the summary now, as the panel's button does.")
+        var summary: String?
+
         @OptionGroup var options: ConnectionOptions
 
         func run() throws {
             var args = ControlArgs(project: project)
             args.memory = set
             args.panel = panel
+            args.summarize = summary
             try runControlCommand(command: "project.memory", args: args, options: options)
         }
     }

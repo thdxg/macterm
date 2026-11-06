@@ -25,6 +25,8 @@ struct ProjectMemoryPanel: View {
     static let width: CGFloat = 320
     static let inset: CGFloat = 10
     static let cornerRadius: CGFloat = 22
+    /// The failure card's corner: the rows are cards like it.
+    static let rowCornerRadius: CGFloat = 12
     static let recentLimit = 8
     /// How often the git state is read again while the panel is up and
     /// Macterm is active: a file saved in an editor inside a pane is no
@@ -32,6 +34,7 @@ struct ProjectMemoryPanel: View {
     static let gitRefreshInterval: Duration = .seconds(15)
 
     private var memory: ProjectMemory { .shared }
+    private var summarizer: ProjectMemorySummarizer { .shared }
     private var entries: [MemoryEntry] { memory.store.loadedEntries(for: project.id) }
     private var git: GitStatus? { memory.git[project.id] }
 
@@ -54,6 +57,10 @@ struct ProjectMemoryPanel: View {
         .padding(Self.inset)
         .task(id: project.id) {
             memory.store.prepare(project.id)
+            // The stored summary, for the paragraph. Nothing is written
+            // here: a summary is written after a quiet period, or by the
+            // button.
+            summarizer.prepare(projectID: project.id)
             // Git changes that no command in this project makes (another
             // app, an editor in a pane) show up with no button: the panel
             // reads the state while it is up, and the task ends with it.
@@ -124,10 +131,10 @@ struct ProjectMemoryPanel: View {
     @ViewBuilder
     private var content: some View {
         let summary = ProjectMemorySummary(entries: entries)
-        let actions = QuickActionRanker.actions(entries: entries, git: git)
+        let actions = memory.suggestedActions(projectID: project.id, entries: entries)
         leftOff(summary)
         if !actions.isEmpty {
-            section(String(localized: "Next")) {
+            section(String(localized: "Suggested")) {
                 VStack(spacing: 6) {
                     ForEach(actions) { action in
                         actionRow(action)
@@ -156,30 +163,81 @@ struct ProjectMemoryPanel: View {
     }
 
     private func leftOff(_ summary: ProjectMemorySummary) -> some View {
-        section(String(localized: "Where You Left Off")) {
+        VStack(alignment: .leading, spacing: 8) {
+            // The header row carries the reload button, so the body is the
+            // paragraph alone.
+            HStack(alignment: .firstTextBaseline) {
+                Text("Summary")
+                    .font(.headline)
+                Spacer(minLength: 0)
+                summaryButton
+            }
             VStack(alignment: .leading, spacing: 10) {
-                if let last = summary.lastActivity {
-                    Text("Last command \(last.formatted(.relative(presentation: .named)))")
-                        .font(.callout)
-                        .foregroundStyle(MactermTheme.fgMuted)
-                } else {
+                summaryParagraph
+                if summary.lastActivity == nil {
                     Text("No commands recorded yet. Run something in this project.")
                         .font(.callout)
                         .foregroundStyle(MactermTheme.fgMuted)
                 }
                 if let failure = summary.unresolvedFailure {
                     failureCard(failure)
-                } else if let last = summary.lastCommand, let command = last.command {
-                    HStack(spacing: 6) {
-                        outcomeGlyph(last.outcome)
-                        Text(verbatim: command)
-                            .font(.callout.monospaced())
-                            .lineLimit(2)
-                            .truncationMode(.middle)
-                    }
                 }
             }
         }
+    }
+
+    /// The model's paragraph, only where it can run, with the button that
+    /// writes it again. With no summary yet, the button writes the first.
+    @ViewBuilder
+    private var summaryParagraph: some View {
+        if summaryEnabled {
+            let state = summarizer.state(for: project.id)
+            switch state.phase {
+            case .idle,
+                 .failed:
+                EmptyView()
+            case .waiting where state.text.isEmpty:
+                Text("Summarizing…")
+                    .font(.callout)
+                    .foregroundStyle(MactermTheme.fgMuted)
+            case .waiting,
+                 .streaming,
+                 .done:
+                // The model writes inline Markdown: backticks round commands
+                // and files. Drawn, as Explain Output draws its reply.
+                Text(ExplainPopoverView.rendered(state.text))
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private var summaryEnabled: Bool {
+        preferences.projectMemorySummary && ProjectMemorySummarizer.isEnabled && !entries.isEmpty
+    }
+
+    /// The reload button of the Summary header: a spinner while the model
+    /// writes, else the button, which writes the first summary too.
+    @ViewBuilder
+    private var summaryButton: some View {
+        if summaryEnabled {
+            let state = summarizer.state(for: project.id)
+            if state.phase == .waiting || state.phase == .streaming {
+                ProgressView().controlSize(.mini)
+            } else {
+                let title = state.phase == .done ? String(localized: "Summarize Again") : String(localized: "Summarize")
+                Button(title, systemImage: "arrow.clockwise") { writeSummary() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(MactermTheme.fgMuted)
+                    .help(title)
+            }
+        }
+    }
+
+    private func writeSummary() {
+        Task { await memory.writeSummary(project.id, force: true) }
     }
 
     private func failureCard(_ entry: MemoryEntry) -> some View {
@@ -215,27 +273,31 @@ struct ProjectMemoryPanel: View {
             ProjectMemoryActions.run(action, in: project, appState: appState, projects: projectStore.projects)
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: action.symbol)
+                // One glyph for every row: the rows are commands, and the
+                // Summary says which one failed.
+                Image(systemName: "terminal")
                     .frame(width: 18)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(verbatim: action.title)
-                        .font(action.kind == .frequent ? .callout.monospaced() : .callout.weight(.medium))
+                        .font(action.kind == .frequent || action.kind == .suggested ? .callout.monospaced() : .callout.weight(.medium))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if let subtitle = action.subtitle {
-                        Text(verbatim: subtitle)
+                        // A command's middle is its distinctive part; a
+                        // sentence reads from its start.
+                        Text(action.kind == .suggested ? ExplainPopoverView.rendered(subtitle) : AttributedString(subtitle))
                             .font(action.kind == .retry ? .caption.monospaced() : .caption)
                             .foregroundStyle(MactermTheme.fgMuted)
                             .lineLimit(1)
-                            .truncationMode(.middle)
+                            .truncationMode(action.kind == .retry ? .middle : .tail)
                     }
                 }
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 2)
+            .cardRow(cornerRadius: Self.rowCornerRadius)
         }
-        .buttonStyle(.glass)
+        .buttonStyle(RowButtonStyle())
         .help(action.command)
     }
 
@@ -260,53 +322,75 @@ struct ProjectMemoryPanel: View {
     }
 
     private func gitDetails(_ git: GitStatus) -> some View {
+        // The card is the branches, with the current one highlighted: no
+        // branch line and no counts line above them.
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.triangle.branch")
-                Text(verbatim: git.branch ?? git.detachedAt.map { "(\($0))" } ?? "—")
-                    .font(.callout.monospaced().weight(.medium))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 0)
-                if git.ahead > 0 { countLabel(git.ahead, symbol: "arrow.up") }
-                if git.behind > 0 { countLabel(git.behind, symbol: "arrow.down") }
-            }
-            Text(gitHeadline(git))
-                .font(.caption)
-                .foregroundStyle(MactermTheme.fgMuted)
-            ForEach(git.recentCommits, id: \.hash) { commit in
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(verbatim: commit.subject)
-                        .font(.caption)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text(commit.date.formatted(.relative(presentation: .named)))
-                        .font(.caption2)
-                        .foregroundStyle(MactermTheme.fgDim)
-                        .lineLimit(1)
+            if git.branches.isEmpty {
+                Text("No branches yet.")
+                    .font(.callout)
+                    .foregroundStyle(MactermTheme.fgMuted)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(git.branches, id: \.name) { branch in
+                        branchRow(branch, isCurrent: branch.name == git.branch)
+                    }
                 }
             }
         }
     }
 
-    private func countLabel(_ count: Int, symbol: String) -> some View {
-        Label {
-            Text(verbatim: "\(count)")
-        } icon: {
-            Image(systemName: symbol)
+    /// A branch with its latest commit's age, as a card row like the
+    /// Suggested ones. The current branch is a row like the others, with the
+    /// accent as its fill, the filled check and a bold name; one style for
+    /// every row keeps the ages in line. A click switches to the branch: a
+    /// tab in its worktree, as the sidebar's Worktrees menu opens (the
+    /// current branch's worktree is the project itself), or `git switch`
+    /// typed into a new split for a branch with no worktree, so the switch
+    /// is on the screen and in the shell's history.
+    private func branchRow(_ branch: GitStatus.Branch, isCurrent: Bool) -> some View {
+        Button {
+            switchTo(branch, isCurrent: isCurrent)
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch")
+                    .font(.caption)
+                    .foregroundStyle(isCurrent ? MactermTheme.accent : MactermTheme.fgMuted)
+                Text(verbatim: branch.name)
+                    .font(.caption.monospaced().weight(isCurrent ? .semibold : .regular))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+                Text(branch.lastCommit.formatted(.relative(presentation: .named)))
+                    .font(.caption2)
+                    .foregroundStyle(MactermTheme.fgMuted)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardRow(cornerRadius: Self.rowCornerRadius, fill: isCurrent ? MactermTheme.accent.opacity(0.2) : nil)
         }
-        .font(.caption)
+        .buttonStyle(RowButtonStyle())
+        .help(branchHelp(branch, isCurrent: isCurrent))
     }
 
-    private func gitHeadline(_ git: GitStatus) -> String {
-        var parts: [String] = []
-        if git.isClean { parts.append(String(localized: "No changes")) }
-        if git.staged > 0 { parts.append(String(localized: "\(git.staged) staged")) }
-        if git.unstaged > 0 { parts.append(String(localized: "\(git.unstaged) modified")) }
-        if git.untracked > 0 { parts.append(String(localized: "\(git.untracked) untracked")) }
-        if git.conflicted > 0 { parts.append(String(localized: "\(git.conflicted) conflicted")) }
-        if git.stashes > 0 { parts.append(String(localized: "\(git.stashes) stashed")) }
-        return parts.joined(separator: " · ")
+    private func switchTo(_ branch: GitStatus.Branch, isCurrent: Bool) {
+        if let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
+            ProjectMemoryActions.openTab(in: worktree, project: project, appState: appState, projects: projectStore.projects)
+        } else {
+            ProjectMemoryActions.run(
+                command: "git switch \(branch.name)",
+                directory: nil,
+                in: project,
+                appState: appState,
+                projects: projectStore.projects
+            )
+        }
+    }
+
+    private func branchHelp(_ branch: GitStatus.Branch, isCurrent: Bool) -> String {
+        if let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
+            return String(localized: "Open a tab in the worktree at \(worktree)")
+        }
+        return String(localized: "Switch to \(branch.name) in a new split")
     }
 
     // MARK: - Recent
@@ -360,5 +444,24 @@ struct ProjectMemoryPanel: View {
         case .unknown:
             Image(systemName: "circle").foregroundStyle(MactermTheme.fgDim)
         }
+    }
+}
+
+private extension View {
+    /// A row of the panel as a button body: a flat card like the failure
+    /// card, in the theme's surface color, or `fill`.
+    func cardRow(cornerRadius: CGFloat, fill: Color? = nil) -> some View {
+        padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(fill ?? MactermTheme.surface, in: .rect(cornerRadius: cornerRadius))
+            .contentShape(.rect(cornerRadius: cornerRadius))
+    }
+}
+
+/// A card row dims while pressed; the plain style gives no sign of a press.
+private struct RowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1)
     }
 }

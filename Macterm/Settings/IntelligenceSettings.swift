@@ -15,6 +15,18 @@ struct IntelligenceSettings: View {
         Form {
             Section {
                 Toggle("Record commands for project memory", isOn: $preferences.projectMemory)
+                Group {
+                    Toggle(isOn: $preferences.projectMemorySummary) {
+                        Text("Summarize with Apple Intelligence").dimsWhenDisabled()
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("A short paragraph at the top of the panel says where you left off.")
+                        Text("Apple's on-device model writes it. Nothing leaves this Mac.")
+                    }
+                    .settingsCaption()
+                }
+                .disabled(!preferences.projectMemory)
+                .padding(.leading, 16)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Macterm records each command that finishes in a project: the command, its folder, its exit code and its time.")
                     Text("For a command that fails, it also records the last lines of its output.")

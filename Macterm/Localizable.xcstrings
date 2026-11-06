@@ -486,38 +486,6 @@
         }
       }
     },
-    "%lld conflicted" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "충돌 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个冲突"
-          }
-        }
-      }
-    },
-    "%lld modified" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "수정됨 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个已修改"
-          }
-        }
-      }
-    },
     "%lld panes" : {
       "comment" : "Sidebar title of a tab with four or more panes",
       "localizations" : {
@@ -551,38 +519,6 @@
         }
       }
     },
-    "%lld staged" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "스테이징됨 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个已暂存"
-          }
-        }
-      }
-    },
-    "%lld stashed" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "스태시 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个储藏"
-          }
-        }
-      }
-    },
     "%lld stashes" : {
       "localizations" : {
         "ko" : {
@@ -595,22 +531,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个储藏"
-          }
-        }
-      }
-    },
-    "%lld untracked" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "추적되지 않음 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个未跟踪"
           }
         }
       }
@@ -897,6 +817,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "远程项目无法打开这台 Mac 上的目录"
+          }
+        }
+      }
+    },
+    "A short paragraph at the top of the panel says where you left off." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "패널 맨 위의 짧은 문단이 마지막으로 하던 작업을 알려 줍니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "面板顶部的一小段文字会说明你上次进行到哪里。"
           }
         }
       }
@@ -1462,6 +1398,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Apple 智能不可用。请在系统设置中打开它。"
+          }
+        }
+      }
+    },
+    "Apple's on-device model writes it. Nothing leaves this Mac." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple의 기기 내 모델이 작성합니다. 아무것도 이 Mac 밖으로 나가지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由 Apple 的设备端模型撰写。任何内容都不会离开这台 Mac。"
           }
         }
       }
@@ -4496,22 +4448,6 @@
         }
       }
     },
-    "Last command %@" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "마지막 명령: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上一条命令：%@"
-          }
-        }
-      }
-    },
     "Layout" : {
       "localizations" : {
         "ko" : {
@@ -5562,22 +5498,6 @@
         }
       }
     },
-    "Next" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다음"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下一步"
-          }
-        }
-      }
-    },
     "Next Pane" : {
       "localizations" : {
         "ko" : {
@@ -5674,18 +5594,18 @@
         }
       }
     },
-    "No changes" : {
+    "No branches yet." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "변경 사항 없음"
+            "value" : "아직 브랜치가 없습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有更改"
+            "value" : "还没有分支。"
           }
         }
       }
@@ -6553,6 +6473,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在项目中打开标签页。你可以在其中运行命令。"
+          }
+        }
+      }
+    },
+    "Open a tab in the worktree at %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 워크트리에서 탭 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在位于 %@ 的工作树中打开标签页"
           }
         }
       }
@@ -9657,6 +9593,118 @@
         }
       }
     },
+    "Suggested" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추천"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议"
+          }
+        }
+      }
+    },
+    "Summarize" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成摘要"
+          }
+        }
+      }
+    },
+    "Summarize Again" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新生成摘要"
+          }
+        }
+      }
+    },
+    "Summarize with Apple Intelligence" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence로 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Apple 智能生成摘要"
+          }
+        }
+      }
+    },
+    "Summarizing…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成摘要…"
+          }
+        }
+      }
+    },
+    "Summary" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "摘要"
+          }
+        }
+      }
+    },
+    "Switch to %@ in a new split" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 분할에서 %@(으)로 전환"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在新的拆分中切换到 %@"
+          }
+        }
+      }
+    },
     "Switch to project: %@" : {
       "localizations" : {
         "ko" : {
@@ -10216,6 +10264,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "网页目标不包含有效的主机。"
+          }
+        }
+      }
+    },
+    "There is no folder at %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 폴더가 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 处没有文件夹"
           }
         }
       }
@@ -11164,22 +11228,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当此标签页顶部列出的某个程序正在聚焦的窗格中运行时，将此快捷键发送给该程序，而不执行操作。在其他地方，操作仍会执行。"
-          }
-        }
-      }
-    },
-    "Where You Left Off" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "마지막 작업"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上次进行到哪里"
           }
         }
       }

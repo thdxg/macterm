@@ -37,6 +37,16 @@ enum ProjectMemoryActions {
         }
     }
 
+    /// A tab in `directory`: a worktree of the project, from the panel's
+    /// branch list. The same as the sidebar's Worktrees menu.
+    static func openTab(in directory: String, project: Project, appState: AppState, projects: [Project]) {
+        guard !project.isRemote, let directory = existingDirectory(directory) else {
+            appState.presentToast(String(localized: "There is no folder at \(directory)"))
+            return
+        }
+        appState.createTab(projectID: project.id, projects: projects, workingDirectory: directory)
+    }
+
     private static func existingDirectory(_ path: String?) -> String? {
         guard let path else { return nil }
         var isDirectory: ObjCBool = false
