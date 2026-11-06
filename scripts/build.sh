@@ -122,6 +122,14 @@ if ! grep -q "^Identifier=com.thdxg.macterm$" <<<"$ZMX_SIGNATURE"; then
   echo "ERROR: $ZMX_BINARY is not signed as com.thdxg.macterm. Pane programs would ask for permission as a second app" >&2
   exit 1
 fi
+# The zmx installer (#699) reads the release this build pins from this file.
+# Without it the install sheet offers nothing, and nothing else notices: the
+# release build of 1.33.2-tip.27 shipped that way.
+ZMX_RELEASE_JSON="$APP_BUNDLE/Contents/Resources/zmx-release.json"
+if ! python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d.get("tag")' "$ZMX_RELEASE_JSON" 2>/dev/null; then
+  echo "ERROR: $ZMX_RELEASE_JSON is missing or names no release. Run scripts/setup.sh" >&2
+  exit 1
+fi
 # The adaptive icon's renderer is copied into Contents/Helpers with the
 # signature that its own target gave it. When a stable identity was requested,
 # an ad-hoc helper means that target was signed apart from the app, so refuse
