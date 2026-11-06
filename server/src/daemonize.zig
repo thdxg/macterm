@@ -391,11 +391,17 @@ pub fn daemonize(sesh_name: []const u8, cmd: Cmd, keep_fds_open: []i32, reexec: 
         }
     }
 
-    if (reexec) |spec| {
-        reexecDisclaimed(spec, term_size) catch |err| {
-            std.log.warn("daemon re-exec failed, continuing in the forked image: {s}", .{@errorName(err)});
-            unsetReexecEnv();
-        };
+    // Comptime, not only the runtime optional: `reexecDisclaimed` names
+    // Darwin's posix_spawn, which a Linux build must never analyze. The
+    // caller passes null off macOS, so the runtime check alone looked
+    // enough, and the Linux build failed in `std.c.darwin` for weeks.
+    if (comptime builtin.os.tag.isDarwin()) {
+        if (reexec) |spec| {
+            reexecDisclaimed(spec, term_size) catch |err| {
+                std.log.warn("daemon re-exec failed, continuing in the forked image: {s}", .{@errorName(err)});
+                unsetReexecEnv();
+            };
+        }
     }
 
     return spawnPty(sesh_name, cmd, term_size);
