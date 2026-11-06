@@ -233,14 +233,6 @@ extension AppCommand {
                 // See .renameTab: defer so the sidebar row exists first.
                 DispatchQueue.main.async { ctx.appState.renamingProjectID = projectID }
             }
-        case .unloadProject:
-            // The pinned workspace can't be unloaded (its tabs unload one by
-            // one, only when their own sessions die), and the scratch one has
-            // no row to dim.
-            guard let projectID, !Project.isSynthetic(projectID),
-                  ctx.appState.isProjectLoaded(projectID)
-            else { return nil }
-            return { ctx.appState.requestUnloadProject(projectID) }
         case .removeProject:
             guard let projectID, !Project.isSynthetic(projectID) else { return nil }
             return {

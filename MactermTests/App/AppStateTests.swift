@@ -551,10 +551,6 @@ struct AppStateTests {
         state.paneNeedsConfirmClose = { _ in true }
         let p = seedProject(state)
 
-        state.requestUnloadProject(p.id)
-        #expect(state.pendingDialog?.kind == .unloadProject(p.id))
-        state.dismissPendingDialog()
-
         var removed = false
         state.requestRemoveProject(p.id) { removed = true }
         #expect(!removed)
@@ -1360,123 +1356,6 @@ struct AppStateTests {
         #expect(!background.completionFailed)
         let restored = WorkspaceSerializer.restore(from: store.load().workspaces, validIDs: [project.id])
         #expect(restored.first?.tabs.first { $0.id == background.id }?.completionFailed == false)
-    }
-
-    // MARK: - Unload project
-
-    @Test
-    func unloadProject_keeps_tab_structure_with_fresh_panes() throws {
-        let state = makeAppState()
-        let p = seedProject(state)
-        let ws = try #require(state.workspaces[p.id])
-        state.splitPane(direction: .horizontal, projectID: p.id, projects: [p])
-        ws.createTab(projectPath: "/tmp")
-        ws.tabs[1].customTitle = "build"
-        let beforePaneIDs = Set(ws.tabs.flatMap { $0.splitRoot.allPanes().map(\.id) })
-        let beforeTabIDs = ws.tabs.map(\.id)
-
-        state.unloadProject(p.id)
-
-        let after = try #require(state.workspaces[p.id])
-        #expect(after.tabs.map(\.id) == beforeTabIDs)
-        #expect(after.tabs[0].splitRoot.allPanes().count == 2)
-        #expect(after.tabs[1].customTitle == "build")
-        // Panes are rebuilt fresh (no surfaces), like a launch restore.
-        let afterPaneIDs = Set(after.tabs.flatMap { $0.splitRoot.allPanes().map(\.id) })
-        #expect(afterPaneIDs.isDisjoint(with: beforePaneIDs))
-    }
-
-    @Test
-    func unloadProject_destroys_pane_views() throws {
-        let state = makeAppState()
-        let p = seedProject(state)
-        let pane = try #require(state.workspaces[p.id]?.activeTab?.splitRoot.allPanes().first)
-        _ = pane.ensureNSView()
-        #expect(state.isProjectLoaded(p.id))
-
-        state.unloadProject(p.id)
-
-        #expect(pane.nsView == nil)
-        #expect(!state.isProjectLoaded(p.id))
-    }
-
-    @Test
-    func unloadProject_active_project_is_deselected_but_kept() {
-        let state = makeAppState()
-        let p = seedProject(state)
-        #expect(state.activeProjectID == p.id)
-        state.unloadProject(p.id)
-        #expect(state.activeProjectID == nil)
-        #expect(state.workspaces[p.id] != nil)
-    }
-
-    @Test
-    func unloadProject_other_project_keeps_active() {
-        let state = makeAppState()
-        let p1 = seedProject(state, name: "p1", path: "/tmp1")
-        let p2 = seedProject(state, name: "p2", path: "/tmp2")
-        state.unloadProject(p1.id)
-        #expect(state.activeProjectID == p2.id)
-        #expect(state.workspaces[p1.id] != nil)
-    }
-
-    @Test
-    func unloadProject_unknown_project_is_noop() {
-        let state = makeAppState()
-        let p = seedProject(state)
-        state.unloadProject(UUID())
-        #expect(state.activeProjectID == p.id)
-        #expect(state.workspaces.count == 1)
-    }
-
-    @Test
-    func unloadProject_marks_the_project_unloaded() {
-        let state = makeAppState()
-        let p = seedProject(state)
-        #expect(!state.isProjectUnloaded(p.id))
-        state.unloadProject(p.id)
-        // The sidebar reads this to dim the project's tab rows, the same way
-        // a closed pinned tab's row is dimmed.
-        #expect(state.isProjectUnloaded(p.id))
-    }
-
-    @Test
-    func selecting_an_unloaded_project_clears_the_mark() {
-        let state = makeAppState()
-        let p = seedProject(state)
-        state.unloadProject(p.id)
-        state.selectProject(p)
-        #expect(!state.isProjectUnloaded(p.id))
-    }
-
-    @Test
-    func becoming_active_clears_the_mark_without_selectProject() {
-        let state = makeAppState()
-        let p = seedProject(state, name: "p1", path: "/tmp1")
-        _ = seedProject(state, name: "p2", path: "/tmp2")
-        state.unloadProject(p.id)
-        // Every load path makes the project active — a cross-project tab
-        // move or a global tab cycle sets the id directly.
-        state.activeProjectID = p.id
-        #expect(!state.isProjectUnloaded(p.id))
-    }
-
-    @Test
-    func removing_an_unloaded_project_forgets_the_mark() {
-        let state = makeAppState()
-        let p = seedProject(state)
-        state.unloadProject(p.id)
-        state.removeProject(p.id)
-        #expect(!state.isProjectUnloaded(p.id))
-    }
-
-    @Test
-    func isProjectLoaded_false_without_views_or_workspace() {
-        let state = makeAppState()
-        #expect(!state.isProjectLoaded(UUID()))
-        let p = seedProject(state)
-        // Workspace exists but no pane has a view yet (nothing ever rendered).
-        #expect(!state.isProjectLoaded(p.id))
     }
 
     // MARK: - Rename state
@@ -2379,7 +2258,7 @@ struct AppStateTests {
         let mirrorTab = ws.createTab(projectPath: "/tmp")
         mirrorTab.splitRoot = .pane(mirrorPane(of: shared, projectID: p.id))
 
-        state.unloadProject(p.id)
+        state.removeProject(p.id)
 
         await killed.settle(expecting: 1)
         #expect(await killed.names == [shared])
@@ -2611,31 +2490,6 @@ struct AppStateTests {
 
         await killed.settle(expecting: 1)
         #expect(await killed.names == [targetName])
-    }
-
-    @Test
-    func unloadProject_kills_every_session_but_keeps_layout() async throws {
-        let killed = KilledSessions()
-        let state = makeAppState()
-        state.zmx = recordingZmx(into: killed)
-        let p = seedProject(state)
-        state.splitPane(direction: .horizontal, projectID: p.id, projects: [p])
-        let names = try Set(
-            #require(state.workspaces[p.id]).tabs
-                .flatMap { $0.splitRoot.allPanes() }
-                .map(\.sessionName)
-        )
-        #expect(names.count == 2)
-
-        state.unloadProject(p.id)
-
-        await killed.settle(expecting: names.count)
-        // Sessions die (unload = stop the project's shells)…
-        #expect(await killed.names == names)
-        // …but the layout survives for the next open.
-        let ws = try #require(state.workspaces[p.id])
-        #expect(ws.tabs.count == 1)
-        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
     }
 
     @Test

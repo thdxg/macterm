@@ -839,61 +839,8 @@ struct ControlHandlerTests {
         }
     }
 
-    @Test(arguments: ["tab.new", "pane.split"])
-    func background_creation_only_undims_the_started_tab_in_an_unloaded_project(command: String) async throws {
-        let (handler, appState, projectStore) = makeHandler()
-        appState.zmx = .noop
-        let project = seedProject(appState, projectStore)
-        for _ in 0 ..< 2 {
-            appState.createTab(projectID: project.id, projects: [project])
-        }
-        // The target tab has several stopped panes, not just the split source.
-        for _ in 0 ..< 2 {
-            appState.splitPane(direction: .horizontal, projectID: project.id, projects: [project])
-        }
-        appState.unloadProject(project.id)
-        let workspace = try #require(appState.workspaces[project.id])
-        let target = try #require(workspace.activeTab)
-        let focused = try #require(target.focusedPaneID)
-        target.toggleZoom(paneID: focused)
-        let history = target.paneFocusHistory.items
-        #expect(workspace.tabs.count == 3)
-        #expect(workspace.tabs.allSatisfy { appState.isTabUnloaded($0, projectID: project.id) })
-        _ = seedProject(appState, projectStore, name: "elsewhere")
-        let selected = appState.activeProjectID
-        var warmed: [UUID] = []
-        appState.incubatePane = {
-            warmed.append($0.id)
-            _ = $0.ensureNSView()
-        }
-
-        let response = await handler.handle(request(command, args: ControlArgs(
-            project: project.id.uuidString, focus: false
-        )))
-
-        #expect(response.ok)
-        #expect(appState.isProjectUnloaded(project.id))
-        #expect(appState.isProjectLoaded(project.id))
-        let started = workspace.tabs.filter { !appState.isTabUnloaded($0, projectID: project.id) }
-        #expect(started.count == 1)
-        // An undimmed tab must have shells behind ALL its panes, including
-        // the original source and its siblings when this was a split.
-        let livePanes = started.flatMap { $0.splitRoot.allPanes() }
-        #expect(livePanes.allSatisfy { $0.nsView != nil })
-        #expect(Set(warmed) == Set(livePanes.map(\.id)))
-        #expect(warmed.count == (command == "tab.new" ? 1 : 4))
-        #expect(workspace.activeTabID == target.id)
-        #expect(target.focusedPaneID == focused)
-        #expect(target.paneFocusHistory.items == history)
-        #expect(target.zoomedPaneID == focused)
-        let stopped = workspace.tabs.filter { appState.isTabUnloaded($0, projectID: project.id) }
-        #expect(stopped.count == (command == "tab.new" ? 3 : 2))
-        #expect(stopped.flatMap { $0.splitRoot.allPanes() }.allSatisfy { $0.nsView == nil })
-        #expect(appState.activeProjectID == selected)
-    }
-
     @Test
-    func background_split_stamps_every_revived_remote_pane_before_incubation() async throws {
+    func background_split_stamps_the_remote_tab_before_incubation() async throws {
         let (handler, appState, projectStore) = makeHandler()
         appState.zmx = .noop
         let remote = Project(name: "remote", path: "host:~/repo", zmxPath: "/opt/custom/bin/zmx")
@@ -903,9 +850,7 @@ struct ControlHandlerTests {
         let tab = try #require(workspace.activeTab)
         let sourceID = try #require(tab.focusedPaneID)
         _ = tab.split(paneID: sourceID, direction: .horizontal)
-        appState.unloadProject(remote.id)
-        let restored = try #require(appState.workspaces[remote.id]?.activeTab)
-        #expect(restored.splitRoot.allPanes().allSatisfy { $0.remoteZmxPath == nil })
+        #expect(tab.splitRoot.allPanes().allSatisfy { $0.remoteZmxPath == nil })
         var warmed: [UUID] = []
         appState.incubatePane = {
             #expect($0.remoteZmxPath == remote.zmxPath)
@@ -917,8 +862,11 @@ struct ControlHandlerTests {
         )))
 
         #expect(response.ok)
-        #expect(warmed.count == 3)
-        #expect(Set(warmed) == Set(restored.splitRoot.allPanes().map(\.id)))
+        // Only the new pane starts. Every pane of the tab carries the path,
+        // so the others start with it when the project is selected.
+        #expect(warmed.count == 1)
+        #expect(tab.splitRoot.allPanes().count == 3)
+        #expect(tab.splitRoot.allPanes().allSatisfy { $0.remoteZmxPath == remote.zmxPath })
         #expect(appState.activeProjectID == nil)
     }
 

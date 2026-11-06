@@ -392,7 +392,7 @@ Pinned tabs belong to no project. The sidebar shows them above the projects. The
 - Pin and Unpin are `moveTab`s. They never kill anything. `syncPinnedRecordsWithWorkspace` pins a tab that was born in the pinned workspace.
 - **Closing a pinned tab is an unload. It is never a removal**. The sessions end. The record stays as a dimmed row. When Macterm starts again, it starts the tab again at once. Unpin is the path for removal.
   - The same unload happens when the own sessions of a tab die (`paneProcessExited`).
-  - `unloadProject` uses the same dimmed row through `AppState.unloadedProjectIDs` (only in memory, cleared in the `didSet` of `activeProjectID`).
+  - The code calls this state "unloaded" (`unloadPinnedTab`). The GUI never does: the dimmed row's tooltip says "Not running".
 - The persistence has two layers.
   - The live state is in the `pinned` section of `workspaces_v3.json`.
   - The declaration is in `~/.config/macterm/pinned.yaml`. It is next to `widgets.yaml`. The location comes from `ProjectFileStore.configDirectoryURL`, and the custom store of a test keeps it inside its own directory.
@@ -667,10 +667,9 @@ Rules:
   - Creation skips the selection at the mutation of the model. It never selects and then restores. The history of tabs and panes and the selections of windows stay untouched. A split with no focus keeps the zoom. An empty workspace adopts its first tab with no history, because there is no selection to keep.
   - `AppState.createTab` and `splitPane` incubate only children that no window renders (this includes panes that zoom hides). Visible splits then start at their real size.
   - Every warm goes through `warmPane`: project selection, the restore of pinned tabs and the creation by the CLI. The `incubatePane` that you can inject supplies the surface. One exit closure reads `pane.projectID` at the time of the exit, so that moving a tab cannot strand it.
-  - A creation in the background keeps the marker of a project that is unloaded. `isTabUnloaded` dims only the tabs that still have no surface views. It does not dim the tab that just started.
-  - If you split a tab that you unloaded explicitly, Macterm starts its existing panes too. A row that is not dimmed therefore never hides a source that stopped. Other tabs stay stopped.
+  - A background split starts only the new pane. The other panes of a project that no window showed yet start when the project is selected.
   - The view slot is not observed, so the warm stays synchronous with the structural redraw. A window that is ordered out still mounts new children (E2E pins this). Children that zoom hides do need incubation.
-  - Remote tabs get `project.zmxPath` before the warm. A split stamps the whole target tab before any panes that are unloaded revive. The new sibling inherits the path of the source.
+  - Remote tabs get `project.zmxPath` before the warm. A split stamps the whole target tab, so the new sibling inherits the path of the source.
   - The start is asynchronous. It is not a promise that the shell prompt is ready when the CLI returns.
 - `pane run` types through the paste path (`sendText`). `--no-submit` withholds the newline and keeps the evidence of a submission armed. `pane key <chord>` uses the key-encoding path (`sendKey`) and **bypasses `keyDown`**, so the interceptions of `keyDown` do not apply. A bare printable key must carry `.text`, or it encodes to nothing. `pane resize` exists only under `#if DEBUG`.
 
@@ -1137,6 +1136,7 @@ The GUI text is in three String Catalogs: `Macterm/Localizable.xcstrings` (the a
 
 ### UI principles
 
+- **The GUI never shows the concept of unloading.** Macterm starts the shells of a project when a window selects it, so the user never loads or unloads a project. There is no action that stops a whole project and keeps its layout: no Unload command, menu item or Settings badge. Remove ends the sessions of a project for good. The CLI keeps the `loaded` field of `project list` (`not loaded` means that no workspace exists yet), because scripts read it.
 - **Use native SwiftUI and AppKit components only**. Accept a native limitation. Do not mimic the behavior.
 - All colors come from `MactermTheme`. Fixed system colors are allowed only for identity labels (`ProjectColor`, `AgentIcon.brandColor`).
 - Put APIs that exist only on Tahoe behind `#available(macOS 26.0, *)`. For controls, also use `WindowAppearance.glassSupported`.
@@ -1177,7 +1177,7 @@ The GUI text is in three String Catalogs: `Macterm/Localizable.xcstrings` (the a
   - `AppState` adopts `QuickTerminalService.shared.splitState` one time (`adoptQuickTerminal`, which you can inject at init for tests). It takes a snapshot of it in every `saveWorkspaces`. It hands the tab back in `restoreSelection` before the sweep for orphans. It counts the sessions of the tab as claims for the reaper. The panes connect only when the panel is shown for the first time, so until then they have zero clients.
   - `QuickTerminalSplitState` reports its own splits and closes through `onStructureChange`, because it owns no `AppState`. Macterm refuses a restore after the panel was shown in this run.
   - Results: a quit kills nothing and confirms nothing while zmx is bundled. The confirmation returns, with the quick terminal included, only when zmx is not available. A close of a pane in the panel is still the one permanent kill.
-- Settings → Projects duplicates the alerts for layout, unload and remove. Keep them gated on `AppState.DialogHost`, so that a confirmation that the palette raises does not also open Settings.
+- Settings → Projects duplicates the alerts for layout and remove. Keep them gated on `AppState.DialogHost`, so that a confirmation that the palette raises does not also open Settings.
 
 ### Adding a new feature
 
