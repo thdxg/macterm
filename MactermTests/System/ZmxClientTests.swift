@@ -404,3 +404,44 @@ struct ZmxLeadershipTests {
         #expect(ZmxLeadership.claimSequence.hasSuffix("\u{1b}\\"))
     }
 }
+
+@MainActor
+struct ZmxForegroundEventsTests {
+    @Test
+    func theVariableAndThePrefixMatchTheZmxWireContract() {
+        // `foreground.env_var` and `foreground.prefix` in the fork: the
+        // client reads the one and the daemon writes the other.
+        #expect(ZmxForegroundEvents.environmentVariable == "ZMX_FOREGROUND_EVENTS")
+        #expect(ZmxForegroundEvents.reportPrefix == "zmx;foreground;")
+    }
+
+    @Test
+    func aReportParsesIntoTheSameShapeAsAProbeLine() {
+        let report = ZmxForegroundEvents.parse("zmx;foreground;0;0;/usr/bin/hx;hx --vsplit README.md")
+        #expect(report == RemoteForeground(comm: "/usr/bin/hx", isIdle: false, isShell: false, command: "hx --vsplit README.md"))
+    }
+
+    @Test
+    func theCommandLineIsTheLastFieldAndKeepsItsSemicolons() {
+        let report = ZmxForegroundEvents.parse("zmx;foreground;0;0;bash;bash -c echo a; echo b")
+        #expect(report?.command == "bash -c echo a; echo b")
+    }
+
+    @Test
+    func anIdleShellWithNoShellVerdictAndNoCommandLine() {
+        let report = ZmxForegroundEvents.parse("zmx;foreground;1;;-zsh;")
+        #expect(report == RemoteForeground(comm: "-zsh", isIdle: true, isShell: nil, command: nil))
+    }
+
+    @Test
+    func anythingElseIsNotAReport() {
+        // Another program's APC, a report with a field missing, and one
+        // with no name: none may become a sample.
+        #expect(ZmxForegroundEvents.parse("Gi=31,s=1,v=1;AAAA") == nil)
+        #expect(ZmxForegroundEvents.parse("zmx;claim") == nil)
+        #expect(ZmxForegroundEvents.parse("zmx;foreground;0;0;hx") == nil)
+        #expect(ZmxForegroundEvents.parse("zmx;foreground;x;0;hx;hx") == nil)
+        #expect(ZmxForegroundEvents.parse("zmx;foreground;0;0;;hx") == nil)
+        #expect(ZmxForegroundEvents.parse("") == nil)
+    }
+}

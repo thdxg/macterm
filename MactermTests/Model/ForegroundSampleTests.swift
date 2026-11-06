@@ -95,6 +95,22 @@ struct ForegroundSampleTests {
     // MARK: - The background-connections toggle
 
     @Test
+    func a_sample_the_host_pushed_counts_whatever_the_toggle_says() {
+        // A pushed report rides the pane's own connection: never a relic,
+        // never a prompt, so it warns (or not) with probing off too.
+        #expect(ForegroundPolicy.needsConfirmClose(
+            sample: sample(name: "btop", isIdleShell: false, origin: .remoteEvent),
+            executionState: .idle, isRemote: true,
+            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: false
+        ))
+        #expect(!ForegroundPolicy.needsConfirmClose(
+            sample: sample(name: "zsh", isIdleShell: true, origin: .remoteEvent),
+            executionState: .idle, isRemote: true,
+            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: true
+        ))
+    }
+
+    @Test
     func remote_with_probing_disabled_warns_only_on_running_execution() {
         // Positive knowledge still warns: OSC 133 execution state rides the
         // pane's own connection, so it costs nothing to trust.

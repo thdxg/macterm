@@ -62,6 +62,13 @@ Macterm connects a pane again when the Mac wakes, when you return to the app, an
 
 A pane that lost its connection shows `Process exited. Press any key to close the terminal.` Press a key to close the pane. This is the same as **Close Pane**: Macterm asks you first if a program is running in the session.
 
+### Tab names and busy panes
+
+Macterm names a remote tab after the program that runs in it, shows the logo of a coding agent, and asks before it closes a pane whose program still runs. How it learns what runs depends on the zmx on the host:
+
+- With [Macterm's zmx build](https://github.com/thdxg/zmx/releases) on the host, the session tells the pane about each change of its foreground process, through the connection of the pane itself. The name follows the host at once, and it works with **Background SSH connections** off.
+- With the upstream zmx, Macterm asks the host over a separate ssh connection about every 3 seconds. The name can be a few seconds late, and the questions stop when you turn **Background SSH connections** off.
+
 ## Layouts
 
 [Declarative layouts](/docs/declarative-layouts) work with no change. The `cwd` of each pane and `~` resolve on the remote side.
@@ -85,7 +92,7 @@ tabs:
 | Tabs or splits open slowly | Add `ControlMaster` to your ssh config (see the example above). |
 | Touch ID asks again and again | Add `ControlMaster`. Then background polls use the authenticated connection of the pane. If you cancel one time, Macterm stops polling that host. It starts again when you open a new pane on that host. |
 | An agent shows its logo but never its busy or done dot | The session of the tab started before Macterm began to tell the host that it runs in Ghostty. Agents need this before they report progress. Open a new tab or pane for the agent. |
-| Any background prompt at all | Turn off **Settings → General → Remote Projects → Background SSH connections**. You lose live tab names and agent logos, remote `run:` capture in Save Layout, and cleanup of orphan sessions. On a host with no [shell integration](https://ghostty.org/docs/features/shell-integration), you also lose busy-close warnings. |
+| Any background prompt at all | Turn off **Settings → General → Remote Projects → Background SSH connections**. You lose remote `run:` capture in Save Layout and cleanup of orphan sessions. On a host with the upstream zmx, you also lose live tab names and agent logos, and, with no [shell integration](https://ghostty.org/docs/features/shell-integration), busy-close warnings. A host with Macterm's zmx build keeps all three (see "Tab names and busy panes"). |
 
 ## Limitations
 

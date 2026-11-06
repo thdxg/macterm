@@ -463,6 +463,9 @@ private struct TerminalSurface: NSViewRepresentable {
             pane.refreshForegroundProcess()
             pane.markOutputActivity(totalRows: total)
         }
+        view.onUnknownAPC = { [weak pane] payload in
+            pane?.receiveUnknownAPC(payload)
+        }
         view.onBackgroundColorChange = { [weak view] color in
             guard let view else { return }
             AdaptiveTerminalChrome.shared.terminalBackgroundDidChange(color, in: view)

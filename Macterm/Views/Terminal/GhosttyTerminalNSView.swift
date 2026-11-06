@@ -307,6 +307,10 @@ final class GhosttyTerminalNSView: NSView {
         onOutputActivity?(total)
     }
 
+    func surfaceDidReceiveUnknownAPC(_ payload: String) {
+        onUnknownAPC?(payload)
+    }
+
     /// Apply the pointer shape libghostty computed for the current mouse
     /// position. Unknown shapes are ignored (keep the last cursor) — same
     /// policy as Ghostty.app.
@@ -455,6 +459,10 @@ final class GhosttyTerminalNSView: NSView {
     /// current total row count. Occlusion-independent — see
     /// `surfaceDidOutputActivity`.
     var onOutputActivity: ((UInt64) -> Void)?
+    /// An APC that no protocol of libghostty knows (`GHOSTTY_ACTION_UNKNOWN_APC`,
+    /// fork patch 0020), without its framing: a foreground report of the zmx
+    /// fork (`ZmxForegroundEvents`).
+    var onUnknownAPC: ((String) -> Void)?
     /// The link URL under the mouse (`GHOSTTY_ACTION_MOUSE_OVER_LINK`), nil
     /// when the pointer leaves it. Drives the pane's hover-URL banner.
     var onLinkHover: ((String?) -> Void)?
