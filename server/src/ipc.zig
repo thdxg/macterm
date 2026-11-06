@@ -36,6 +36,11 @@ pub const Tag = enum(u8) {
     /// It was 22 until upstream took that for Capture; a daemon receiving the
     /// old value sees a Capture with no payload and drops it.
     Claim = 23,
+    /// Foreground reports (see foreground.zig). From a client with no
+    /// payload: subscribe. From the daemon: one report, the payload is the
+    /// text the client writes as an APC. Downstream, numbered after Claim
+    /// for the same reason.
+    Foreground = 24,
     // Non-exhaustive: this enum comes off the wire via bytesToValue and
     // @enumFromInt, so out-of-range values are representable
     // rather than UB. Switches must handle `_` (unknown tag).
