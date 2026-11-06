@@ -161,15 +161,30 @@ struct ProjectMemoryTests {
     }
 
     @Test
-    func a_masked_command_is_never_offered_to_run_again() {
+    func nothing_is_suggested_without_the_model_however_much_ran() {
+        // The Suggested section used to fall back to the failed command, git
+        // actions and the commands run most often. A command is never
+        // suggested only because it ran recently: without the model's
+        // suggestions the section is empty, as the summary is.
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-memory-suggested-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let memory = ProjectMemory(store: ProjectMemoryStore(directory: directory))
+        let projectID = UUID()
         let entries = [
-            entry("export TOKEN=•••", exit: 1, minutesAgo: 5),
-            entry("curl -u me:••• https://x", exit: 0, minutesAgo: 3),
-            entry("curl -u me:••• https://x", exit: 0, minutesAgo: 1),
+            entry("npm run dev", exit: 0, minutesAgo: 900),
+            entry("npm run dev", exit: 0, minutesAgo: 600),
+            entry("cargo build", exit: 0, minutesAgo: 20),
+            entry("make test", exit: 1, minutesAgo: 1),
         ]
-        let actions = QuickActionRanker.actions(entries: entries, git: nil, now: now)
-        #expect(actions.isEmpty)
-        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "export TOKEN=•••")
+        #expect(memory.suggestedActions(projectID: projectID, entries: entries).isEmpty)
+        // A Git state that calls for a pull and a status adds nothing either.
+        var git = GitStatus(branch: "main", upstream: "origin/main")
+        git.behind = 3
+        git.unstaged = 2
+        #expect(ProjectMemorySuggestions.actions(from: [], entries: entries, git: git).isEmpty)
+        // The failure is still the summary's to show.
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "make test")
     }
 
     private func makeBackgroundMemory(runs: @escaping @MainActor () -> Void) -> (ProjectMemory, ProjectMemorySummarizer, Project) {
@@ -376,54 +391,6 @@ struct ProjectMemoryTests {
     }
 
     // MARK: - Quick actions
-
-    @Test
-    func the_unresolved_failure_comes_first_then_git_then_frecency() {
-        let entries = [
-            entry("npm run dev", exit: 0, minutesAgo: 900),
-            entry("npm run dev", exit: 0, minutesAgo: 600),
-            entry("npm run dev", exit: 0, minutesAgo: 300),
-            entry("cargo build", exit: 0, minutesAgo: 20),
-            entry("ls -la", exit: 0, minutesAgo: 2),
-            entry("make test", exit: 1, minutesAgo: 1),
-        ]
-        var git = GitStatus(branch: "main", upstream: "origin/main")
-        git.behind = 3
-        git.unstaged = 2
-        let actions = QuickActionRanker.actions(entries: entries, git: git, now: now)
-
-        #expect(actions.map(\.kind) == [.retry, .git, .git, .frequent, .frequent])
-        #expect(actions[0].command == "make test")
-        #expect(actions[1].command == "git pull")
-        #expect(actions[2].command == "git status")
-        // Three runs within a day outweigh one run in the last hour.
-        #expect(actions[3].command == "npm run dev")
-        #expect(actions[4].command == "cargo build")
-        // Moving around is not worth a button.
-        #expect(!actions.contains { $0.command == "ls -la" })
-    }
-
-    @Test
-    func two_spellings_of_one_command_rank_as_one() {
-        let entries = [
-            entry("swift  build", exit: 0, minutesAgo: 5),
-            entry("swift build", exit: 0, minutesAgo: 1),
-        ]
-        let actions = QuickActionRanker.actions(entries: entries, git: nil, now: now)
-        #expect(actions.map(\.command) == ["swift build"])
-    }
-
-    @Test
-    func there_are_at_most_six_actions() {
-        let entries = (0 ..< 20).map { entry("task \($0)", exit: 0, minutesAgo: Double($0)) }
-        #expect(QuickActionRanker.actions(entries: entries, git: nil, now: now).count == QuickActionRanker.limit)
-    }
-
-    @Test
-    func a_clean_branch_in_step_with_its_upstream_adds_no_git_action() {
-        let git = GitStatus(branch: "main", upstream: "origin/main")
-        #expect(QuickActionRanker.actions(entries: [], git: git, now: now).isEmpty)
-    }
 
     // MARK: - Remote git
 

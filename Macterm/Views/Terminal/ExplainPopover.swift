@@ -136,8 +136,8 @@ final class ExplainPopover: NSObject, NSPopoverDelegate {
         anchorView = view
     }
 
-    /// Whether the popover held key as it began to close. Escape, Copy, or
-    /// a click in its own text: key goes back to the terminal. A click in
+    /// Whether the popover held key as it began to close. Escape or a click
+    /// in its own text: key goes back to the terminal. A click in
     /// another window has made that window key already: it keeps key.
     private var closingWithKey = false
 
@@ -240,7 +240,6 @@ struct ExplainPopoverView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             content
-            footer
         }
         .padding(14)
         .frame(width: Self.width, alignment: .leading)
@@ -280,20 +279,6 @@ struct ExplainPopoverView: View {
             Text(verbatim: model.text)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    @ViewBuilder
-    private var footer: some View {
-        if model.phase == .done {
-            HStack {
-                Spacer()
-                Button("Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(model.text, forType: .string)
-                }
-                .controlSize(.small)
-            }
         }
     }
 

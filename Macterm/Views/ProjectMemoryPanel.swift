@@ -299,18 +299,18 @@ struct ProjectMemoryPanel: View {
                 Image(systemName: "terminal")
                     .frame(width: 18)
                 VStack(alignment: .leading, spacing: 1) {
+                    // A command's middle is its distinctive part; the
+                    // reason is a sentence and reads from its start.
                     Text(verbatim: action.title)
-                        .font(action.kind == .frequent || action.kind == .suggested ? .callout.monospaced() : .callout.weight(.medium))
+                        .font(.callout.monospaced())
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if let subtitle = action.subtitle {
-                        // A command's middle is its distinctive part; a
-                        // sentence reads from its start.
-                        Text(action.kind == .suggested ? ExplainPopoverView.rendered(subtitle) : AttributedString(subtitle))
-                            .font(action.kind == .retry ? .caption.monospaced() : .caption)
+                        Text(ExplainPopoverView.rendered(subtitle))
+                            .font(.caption)
                             .foregroundStyle(MactermTheme.fgMuted)
                             .lineLimit(1)
-                            .truncationMode(action.kind == .retry ? .middle : .tail)
+                            .truncationMode(.tail)
                     }
                 }
                 Spacer(minLength: 0)
@@ -462,13 +462,13 @@ struct ProjectMemoryPanel: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .disabled(entry.command == nil || entry.command.map(QuickActionRanker.isMasked) == true)
+        .disabled(entry.command == nil || entry.command.map(MemoryCommand.isMasked) == true)
         .help(recentHelp(entry))
     }
 
     private func recentHelp(_ entry: MemoryEntry) -> String {
         guard let command = entry.command else { return "" }
-        if QuickActionRanker.isMasked(command) {
+        if MemoryCommand.isMasked(command) {
             return String(localized: "This command had a secret. Macterm cannot run it again.")
         }
         return String(localized: "Run \(command) again in a new split")
