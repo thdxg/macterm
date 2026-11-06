@@ -40,7 +40,9 @@
       }
     },
     "%@" : {
-      "localizations" : {},
+      "localizations" : {
+
+      },
       "shouldTranslate" : false
     },
     "%@\n\nPinned-tab auto-save is paused so your edits are not overwritten. Fix the file, or delete it, to start auto-save again." : {
@@ -4118,7 +4120,9 @@
       }
     },
     "ID" : {
-      "localizations" : {},
+      "localizations" : {
+
+      },
       "shouldTranslate" : false
     },
     "Icon size" : {
@@ -12106,11 +12110,15 @@
       }
     },
     "X" : {
-      "localizations" : {},
+      "localizations" : {
+
+      },
       "shouldTranslate" : false
     },
     "Y" : {
-      "localizations" : {},
+      "localizations" : {
+
+      },
       "shouldTranslate" : false
     },
     "Yellow" : {
