@@ -19,6 +19,40 @@ struct ProjectMemoryTests {
     // MARK: - Recording
 
     @Test
+    func the_reported_command_wins_and_the_screen_gives_only_a_matching_tail() throws {
+        let screen = """
+        app % make test
+        FAIL checkout
+        app %
+        """
+        let finish = ProjectMemory.Finish(directory: "/app", exitCode: 1, finishedAt: now, duration: 3)
+        let reported = try #require(ProjectMemory.reportedCommand("make test  "))
+        #expect(reported == ExtractedCommand(command: "make test", output: ""))
+
+        // The screen shows the same command: its tail is kept.
+        let entry = try #require(ProjectMemory.makeEntry(
+            reported: reported, submitted: ExtractedCommand(command: "make", output: ""),
+            screen: screen, source: ScreenCommandExtractor(), finish: finish
+        ))
+        #expect(entry.command == "make test")
+        #expect(entry.failureTail == "FAIL checkout")
+
+        // Another command on the screen: the reported one stays, with no tail.
+        let other = try #require(ProjectMemory.makeEntry(
+            reported: ProjectMemory.reportedCommand("make lint"), screen: screen, source: ScreenCommandExtractor(), finish: finish
+        ))
+        #expect(other.command == "make lint")
+        #expect(other.failureTail == nil)
+
+        // A leading space is private, and text with no command is nothing.
+        #expect(ProjectMemory.reportedCommand(" secret")?.isPrivate == true)
+        #expect(ProjectMemory.makeEntry(
+            reported: ProjectMemory.reportedCommand(" secret"), screen: screen, source: ScreenCommandExtractor(), finish: finish
+        ) == nil)
+        #expect(ProjectMemory.reportedCommand("   ") == nil)
+    }
+
+    @Test
     func a_failure_keeps_a_redacted_tail_of_its_output() throws {
         let screen = """
         app % API_TOKEN=abc ./deploy

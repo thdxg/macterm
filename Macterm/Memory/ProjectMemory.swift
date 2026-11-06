@@ -125,7 +125,13 @@ final class ProjectMemory {
 
     /// A command finished in `pane` (OSC 133;D). Records it after the next
     /// prompt is on the screen.
-    func commandFinished(pane: Pane, view: GhosttyTerminalNSView?, exitCode: Int16, durationNs: UInt64) {
+    /// `reportedCommand` is the command as libghostty read it from the
+    /// prompt's input cells at the start of the output (fork patch 0019).
+    /// It wins over the submission and the screen. nil when the shell
+    /// marked no input: the submission and the screen then answer.
+    func commandFinished(
+        pane: Pane, view: GhosttyTerminalNSView?, exitCode: Int16, durationNs: UInt64, reportedCommand: String? = nil
+    ) {
         // Taken now: the next command's Return can come before the read.
         let submission = submittedCommands.removeValue(forKey: pane.id)
         guard Self.isRecording, Self.covers(pane.projectID) else { return }
@@ -136,6 +142,7 @@ final class ProjectMemory {
         let duration = Double(durationNs) / 1_000_000_000
         let startedAt = finishedAt.addingTimeInterval(-duration)
         let submitted = submission.flatMap { Self.submission(at: $0.at, matches: startedAt) ? $0.line : nil }
+        let reported = reportedCommand.flatMap(Self.reportedCommand)
         Task { [weak self, weak view] in
             guard let self else { return }
             try? await Task.sleep(for: screenReadDelay)
@@ -144,7 +151,9 @@ final class ProjectMemory {
             let promptUp = view.map { ["sighted", "prompting"].contains(PasswordPromptMonitor.shared.state(for: $0).phase) } ?? false
             let screen = promptUp ? nil : view?.readText(area: GHOSTTY_POINT_ACTIVE)
             let finish = Finish(directory: directory, exitCode: code, finishedAt: finishedAt, duration: duration)
-            guard let entry = Self.makeEntry(submitted: submitted, screen: screen, source: textSource, finish: finish)
+            guard let entry = Self.makeEntry(
+                reported: reported, submitted: submitted, screen: screen, source: textSource, finish: finish
+            )
             else { return }
             store.append(entry, to: projectID)
             logger.debug("recorded a command in \(projectID, privacy: .public)")
@@ -163,26 +172,41 @@ final class ProjectMemory {
         var duration: TimeInterval
     }
 
+    /// The command that libghostty reported, as a command: the typed text
+    /// with its trailing spaces dropped, private when it starts with a
+    /// space (`HISTCONTROL=ignorespace`). nil for text with no command.
+    nonisolated static func reportedCommand(_ text: String) -> ExtractedCommand? {
+        let isPrivate = text.hasPrefix(" ")
+        let command = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !command.isEmpty else { return nil }
+        return ExtractedCommand(command: command, output: "", isPrivate: isPrivate)
+    }
+
     /// The entry for a finished command, or nil when there is nothing to
     /// remember: the user asked the shell not to (a leading space), or
-    /// neither the submitted line nor the screen says what the command was.
-    /// A record with no command is noise in every list that shows it.
+    /// nothing says what the command was. A record with no command is
+    /// noise in every list that shows it.
     ///
-    /// The line captured at submission wins over the screen: it is what was
-    /// typed, and output that looks like a prompt line cannot replace it. The
-    /// screen gives the output tail, and only when it shows that same
-    /// command. One exception: when the screen's command continues the
-    /// submitted line with no gap, the cursor cut the line in the middle of
-    /// the command, and the screen has the whole of it. Pure, for the tests.
+    /// The command libghostty reported wins: it is the input cells of the
+    /// prompt, read before any output. Else the line captured at submission
+    /// wins over the screen: it is what was typed, and output that looks
+    /// like a prompt line cannot replace it. The screen gives the output
+    /// tail, and only when it shows that same command. One exception: when
+    /// the screen's command continues the submitted line with no gap, the
+    /// cursor cut the line in the middle of the command, and the screen has
+    /// the whole of it. Pure, for the tests.
     nonisolated static func makeEntry(
+        reported: ExtractedCommand? = nil,
         submitted: ExtractedCommand? = nil,
         screen: String?,
         source: any CommandTextSource,
         finish: Finish
     ) -> MemoryEntry? {
         let extracted = screen.flatMap(source.extract(screen:))
-        guard var command = submitted ?? extracted, !command.isPrivate else { return nil }
-        if let submitted, let extracted, ScreenCommandExtractor.screenCommand(extracted.command, extends: submitted.command) {
+        guard var command = reported ?? submitted ?? extracted, !command.isPrivate else { return nil }
+        if reported == nil, let submitted, let extracted,
+           ScreenCommandExtractor.screenCommand(extracted.command, extends: submitted.command)
+        {
             command.command = extracted.command
         }
         let output = extracted.flatMap { screenCommand in

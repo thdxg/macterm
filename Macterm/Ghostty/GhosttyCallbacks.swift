@@ -20,12 +20,12 @@ final class GhosttyCallbacks: @unchecked Sendable {
             // arrival is also a command-boundary signal that refreshes the
             // foreground-process name.
             guard let view = surfaceView(from: target) else { return true }
-            let title = action.action.set_title.title.flatMap { String(cString: $0) } ?? ""
+            let title = String(cString: action.action.set_title.title)
             DispatchQueue.main.async { view.surfaceDidReportTitle(title) }
             return true
         case GHOSTTY_ACTION_START_SEARCH:
             guard let view = surfaceView(from: target) else { return true }
-            let needle = action.action.start_search.needle.flatMap { String(cString: $0) }
+            let needle = String(cString: action.action.start_search.needle)
             DispatchQueue.main.async { view.onSearchStart?(needle) }
             return true
         case GHOSTTY_ACTION_END_SEARCH:
@@ -45,23 +45,30 @@ final class GhosttyCallbacks: @unchecked Sendable {
             DispatchQueue.main.async { view.onSearchSelected?(value) }
             return true
         case GHOSTTY_ACTION_PWD:
-            guard let view = surfaceView(from: target), let ptr = action.action.pwd.pwd else { return true }
-            let pwd = String(cString: ptr)
+            guard let view = surfaceView(from: target) else { return true }
+            let pwd = String(cString: action.action.pwd.pwd)
             DispatchQueue.main.async { view.currentPwd = pwd }
             return true
         case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
             guard let view = surfaceView(from: target) else { return true }
-            let title = action.action.desktop_notification.title.flatMap { String(cString: $0) } ?? ""
-            let body = action.action.desktop_notification.body.flatMap { String(cString: $0) } ?? ""
+            let title = String(cString: action.action.desktop_notification.title)
+            let body = String(cString: action.action.desktop_notification.body)
             DispatchQueue.main.async { view.onDesktopNotification?(title, body) }
             return true
         case GHOSTTY_ACTION_COMMAND_FINISHED:
             guard let view = surfaceView(from: target) else { return true }
             let exitCode = action.action.command_finished.exit_code
             let duration = action.action.command_finished.duration
+            // Fork patch 0019: the command as typed at the prompt, or NULL
+            // when the shell marked no input. Valid for the action only, so
+            // it is copied here, before the hop to the main queue. The field
+            // is read as a nullable pointer whatever the header says: the
+            // build of thdxg/ghostty#40 imports it non-null under the
+            // header's assume_nonnull region, and #41 marks it nullable.
+            let command = Self.reportedCommand(action.action.command_finished)
             DispatchQueue.main.async {
                 PasswordPromptMonitor.shared.viewDidFinishCommand(view, exitCode: Int32(exitCode))
-                view.onCommandFinished?(exitCode, duration)
+                view.onCommandFinished?(exitCode, duration, command)
             }
             return true
         case GHOSTTY_ACTION_PROGRESS_REPORT:
@@ -143,9 +150,9 @@ final class GhosttyCallbacks: @unchecked Sendable {
             // plain values to the main actor. App-target changes carry no
             // surface conditional state, so only surface targets are useful.
             guard target.tag == GHOSTTY_TARGET_SURFACE,
-                  let view = surfaceView(from: target),
-                  let cfg = action.action.config_change.config
+                  let view = surfaceView(from: target)
             else { return false }
+            let cfg = action.action.config_change.config
             let snapshot = GhosttyApp.readColors(from: cfg)
             let background = snapshot.background.map {
                 NSColor(
@@ -176,9 +183,9 @@ final class GhosttyCallbacks: @unchecked Sendable {
             // (`UntrustedURLAlert`). Every kind still answers true — false
             // makes libghostty retry with its own unrestricted opener.
             let payload = action.action.open_url
-            guard let ptr = payload.url, payload.len > 0 else { return true }
+            guard payload.len > 0 else { return true }
             let urlString = String(
-                decoding: UnsafeRawBufferPointer(start: ptr, count: Int(payload.len)),
+                decoding: UnsafeRawBufferPointer(start: payload.url, count: Int(payload.len)),
                 as: UTF8.self
             )
             let kind = payload.kind
@@ -216,9 +223,9 @@ final class GhosttyCallbacks: @unchecked Sendable {
             guard let view = surfaceView(from: target) else { return true }
             let link = action.action.mouse_over_link
             var url: String?
-            if let ptr = link.url, link.len > 0 {
+            if link.len > 0 {
                 url = String(
-                    decoding: UnsafeRawBufferPointer(start: ptr, count: Int(link.len)),
+                    decoding: UnsafeRawBufferPointer(start: link.url, count: Int(link.len)),
                     as: UTF8.self
                 )
             }
@@ -313,7 +320,7 @@ final class GhosttyCallbacks: @unchecked Sendable {
             // it maps to the tab's customTitle (what rename-tab sets). Empty
             // restores the automatic title, same contract as Ghostty.app.
             guard let view = surfaceView(from: target) else { return true }
-            let title = action.action.set_tab_title.title.flatMap { String(cString: $0) } ?? ""
+            let title = String(cString: action.action.set_tab_title.title)
             DispatchQueue.main.async { view.onSetTabTitle?(title.isEmpty ? nil : title) }
             return true
         case GHOSTTY_ACTION_TOGGLE_FULLSCREEN:
@@ -507,10 +514,20 @@ final class GhosttyCallbacks: @unchecked Sendable {
     /// The C callback's `location` is not taken: macOS has no X11-style
     /// selection/primary clipboard, so every location reads the general
     /// pasteboard — the same deliberate choice as `writeClipboard`.
+    /// The `command` of a command-finished action as a string, or nil for
+    /// NULL. Read through its offset, so a header that imports the field as
+    /// non-null still gives nil for NULL in place of a crash.
+    nonisolated static func reportedCommand(_ finished: ghostty_action_command_finished_s) -> String? {
+        guard let offset = MemoryLayout<ghostty_action_command_finished_s>.offset(of: \.command) else { return nil }
+        return withUnsafeBytes(of: finished) { raw in
+            raw.load(fromByteOffset: offset, as: UnsafePointer<CChar>?.self).map { String(cString: $0) }
+        }
+    }
+
     func readClipboard(
         ud: UnsafeMutableRawPointer?,
-        state: UnsafeMutableRawPointer?,
-        mimes: UnsafePointer<UnsafePointer<CChar>?>?,
+        state: UnsafeMutableRawPointer,
+        mimes: UnsafePointer<UnsafePointer<CChar>>,
         mimesLen: Int,
         list: Bool
     ) -> ghostty_clipboard_read_result_e {
@@ -521,16 +538,7 @@ final class GhosttyCallbacks: @unchecked Sendable {
             return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED
         }
 
-        var wantsText = false
-        if let mimes {
-            for i in 0 ..< mimesLen {
-                guard let ptr = mimes[i] else { continue }
-                if String(cString: ptr).hasPrefix("text/") {
-                    wantsText = true
-                    break
-                }
-            }
-        }
+        let wantsText = (0 ..< mimesLen).contains { String(cString: mimes[$0]).hasPrefix("text/") }
         let text: String? = wantsText ? Self.readPasteboardText() : nil
 
         if wantsText {
@@ -572,12 +580,12 @@ final class GhosttyCallbacks: @unchecked Sendable {
         _ surface: ghostty_surface_t,
         text: String?,
         listsTextPlain: Bool,
-        state: UnsafeMutableRawPointer?,
+        state: UnsafeMutableRawPointer,
         confirmed: Bool = false
     ) {
         "text/plain".withCString { mimePtr in
             func finish(_ contents: UnsafePointer<ghostty_clipboard_content_s>?, _ count: Int) {
-                var availableEntry: UnsafePointer<CChar>? = mimePtr
+                var availableEntry: UnsafePointer<CChar> = mimePtr
                 withUnsafePointer(to: &availableEntry) { availableBase in
                     var complete = ghostty_clipboard_complete_s(
                         contents: contents,
@@ -728,7 +736,7 @@ final class GhosttyCallbacks: @unchecked Sendable {
     func confirmReadClipboard(
         ud: UnsafeMutableRawPointer?,
         confirm: UnsafePointer<ghostty_clipboard_confirm_s>?,
-        state: UnsafeMutableRawPointer?
+        state: UnsafeMutableRawPointer
     ) {
         guard let surface = surface(from: ud) else { return }
         guard let confirm else {
@@ -759,13 +767,11 @@ final class GhosttyCallbacks: @unchecked Sendable {
         // upstream Ghostty on macOS) — hence `location` is intentionally
         // ignored here.
         for item in UnsafeBufferPointer(start: content, count: Int(len)) {
-            guard let data = item.data, let mime = item.mime, item.len > 0,
-                  String(cString: mime).hasPrefix("text/plain")
-            else { continue }
+            guard item.len > 0, String(cString: item.mime).hasPrefix("text/plain") else { continue }
             // The wire data is length-delimited and not necessarily
             // NUL-terminated (binary-safe since the clipboard API rework).
             guard let string = String(
-                data: Data(bytes: data, count: item.len),
+                data: Data(bytes: item.data, count: item.len),
                 encoding: .utf8
             )
             else { continue }
