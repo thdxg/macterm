@@ -448,6 +448,76 @@
         }
       }
     },
+    "%lld changed files" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경된 파일 %lld개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个文件有更改"
+          }
+        }
+      }
+    },
+    "%lld commits behind %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld commits behind %2$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$@보다 커밋 %1$lld개 뒤처짐"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "落后 %2$@ %1$lld 个提交"
+          }
+        }
+      }
+    },
+    "%lld conflicted" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "충돌 %lld개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个冲突"
+          }
+        }
+      }
+    },
+    "%lld modified" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "수정됨 %lld개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个已修改"
+          }
+        }
+      }
+    },
     "%lld panes" : {
       "comment" : "Sidebar title of a tab with four or more panes",
       "localizations" : {
@@ -477,6 +547,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仍有 %lld 个进程在运行。仍要退出吗？"
+          }
+        }
+      }
+    },
+    "%lld staged" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스테이징됨 %lld개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个已暂存"
+          }
+        }
+      }
+    },
+    "%lld stashed" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스태시 %lld개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个储藏"
+          }
+        }
+      }
+    },
+    "%lld stashes" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스태시 %lld개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个储藏"
+          }
+        }
+      }
+    },
+    "%lld untracked" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추적되지 않음 %lld개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个未跟踪"
           }
         }
       }
@@ -1284,6 +1418,22 @@
         }
       }
     },
+    "Apple Intelligence" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple 智能"
+          }
+        }
+      }
+    },
     "Apple Intelligence did not explain this text." : {
       "localizations" : {
         "ko" : {
@@ -1473,6 +1623,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自动更新"
+          }
+        }
+      }
+    },
+    "Available" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용 가능"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可用"
           }
         }
       }
@@ -2986,6 +3152,22 @@
         }
       }
     },
+    "Explain Output uses Apple's on-device model. Nothing leaves this Mac." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "출력 설명은 Apple의 기기 내 모델을 사용합니다. 아무것도 이 Mac 밖으로 나가지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“解释输出”使用 Apple 的设备端模型。任何内容都不会离开这台 Mac。"
+          }
+        }
+      }
+    },
     "Explain Selection" : {
       "localizations" : {
         "ko" : {
@@ -3096,6 +3278,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "失败"
+          }
+        }
+      }
+    },
+    "Failed with exit code %lld" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "종료 코드 %lld(으)로 실패함"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失败，退出代码 %lld"
           }
         }
       }
@@ -3406,6 +3604,22 @@
         }
       }
     },
+    "For a command that fails, it also records the last lines of its output." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실패한 명령은 출력의 마지막 줄도 기록합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对于失败的命令，还会记录其输出的最后几行。"
+          }
+        }
+      }
+    },
     "Foreground Process" : {
       "localizations" : {
         "ko" : {
@@ -3418,6 +3632,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "前台进程"
+          }
+        }
+      }
+    },
+    "Forget All" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모두 지우기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部清除"
+          }
+        }
+      }
+    },
+    "Forget All…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모두 지우기…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部清除…"
+          }
+        }
+      }
+    },
+    "Forget the memory of all projects?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 프로젝트의 메모리를 지우시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要清除所有项目的记忆吗？"
           }
         }
       }
@@ -3595,6 +3857,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ghostty 默认"
+          }
+        }
+      }
+    },
+    "Git" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git"
+          }
+        }
+      }
+    },
+    "Git status is not available for remote projects yet." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 프로젝트에서는 아직 Git 상태를 사용할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程项目暂不支持 Git 状态。"
           }
         }
       }
@@ -3910,6 +4204,23 @@
         }
       }
     },
+    "Intelligence" : {
+      "comment" : "Settings pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인텔리전스"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能"
+          }
+        }
+      }
+    },
     "Invalid file. Fix it in an editor to use it." : {
       "localizations" : {
         "ko" : {
@@ -3970,6 +4281,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的 Ghostty 配置存在问题"
+          }
+        }
+      }
+    },
+    "It removes secrets first and keeps the records on this Mac only." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비밀 정보를 먼저 제거하고, 기록은 이 Mac에만 보관합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它会先移除机密信息，并且只在这台 Mac 上保存记录。"
+          }
+        }
+      }
+    },
+    "It removes secrets first and keeps the records on this Mac only. The project memory panel shows them." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비밀 정보를 먼저 제거하고, 기록은 이 Mac에만 보관합니다. 프로젝트 메모리 패널에 기록이 표시됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它会先移除机密信息，并且只在这台 Mac 上保存记录。项目记忆面板会显示这些记录。"
           }
         }
       }
@@ -4149,6 +4492,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "大"
+          }
+        }
+      }
+    },
+    "Last command %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마지막 명령: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一条命令：%@"
           }
         }
       }
@@ -4490,6 +4849,22 @@
         }
       }
     },
+    "Macterm deletes every command that it recorded. You cannot undo this." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 기록한 모든 명령을 삭제합니다. 이 작업은 취소할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 会删除它记录的所有命令。此操作无法撤销。"
+          }
+        }
+      }
+    },
     "Macterm deletes “%@”. The projects that use it stay, but they lose their saved layout." : {
       "localizations" : {
         "ko" : {
@@ -4566,6 +4941,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当命令和提示符都匹配时，Macterm 会提供自动填充。没有提示符时，Macterm 不会在提示符处提供此密码。请在命令面板的密码管理器中选择它。"
+          }
+        }
+      }
+    },
+    "Macterm records each command that finishes in a project: the command, its folder, its exit code and its time." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm은 프로젝트에서 끝난 각 명령의 명령, 폴더, 종료 코드, 시간을 기록합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 会记录项目中每条已结束的命令：命令本身、文件夹、退出代码和时间。"
+          }
+        }
+      }
+    },
+    "Macterm records the commands that finish in your projects." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm은 프로젝트에서 끝난 명령을 기록합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 会记录项目中已结束的命令。"
           }
         }
       }
@@ -5155,6 +5562,22 @@
         }
       }
     },
+    "Next" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一步"
+          }
+        }
+      }
+    },
     "Next Pane" : {
       "localizations" : {
         "ko" : {
@@ -5247,6 +5670,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有其他配置文件。"
+          }
+        }
+      }
+    },
+    "No changes" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경 사항 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有更改"
+          }
+        }
+      }
+    },
+    "No commands recorded yet. Run something in this project." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 기록된 명령이 없습니다. 이 프로젝트에서 명령을 실행하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有记录任何命令。请在此项目中运行命令。"
           }
         }
       }
@@ -5637,6 +6092,22 @@
         }
       }
     },
+    "Not available on this Mac" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac에서는 사용할 수 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 Mac 不支持"
+          }
+        }
+      }
+    },
     "Not global: a system-wide keybind needs a modifier key." : {
       "localizations" : {
         "ko" : {
@@ -5889,6 +6360,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你在密码提示符处输入的密码生效后，提供存储它的选项，并在下次出现该提示符时填充它。"
+          }
+        }
+      }
+    },
+    "On-device model" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기기 내 모델"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备端模型"
           }
         }
       }
@@ -6785,6 +7272,38 @@
         }
       }
     },
+    "Project Memory" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 메모리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目记忆"
+          }
+        }
+      }
+    },
+    "Project Memory Is Off" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 메모리가 꺼져 있음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目记忆已关闭"
+          }
+        }
+      }
+    },
     "Project icon" : {
       "localizations" : {
         "ko" : {
@@ -6830,6 +7349,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "提示符"
+          }
+        }
+      }
+    },
+    "Pull" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "풀"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拉取"
           }
         }
       }
@@ -7073,6 +7608,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接断开后重新连接窗格"
+          }
+        }
+      }
+    },
+    "Record commands for project memory" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 메모리용 명령 기록"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为项目记忆记录命令"
+          }
+        }
+      }
+    },
+    "Recorded commands" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기록된 명령"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已记录的命令"
           }
         }
       }
@@ -7716,6 +8283,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 ${pane} 中运行 ${command}"
+          }
+        }
+      }
+    },
+    "Run %@ again in a new split" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 분할에서 %@ 다시 실행"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在新的拆分中再次运行 %@"
+          }
+        }
+      }
+    },
+    "Run Again" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시 실행"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再次运行"
           }
         }
       }
@@ -8528,6 +9127,38 @@
         }
       }
     },
+    "Show Changes" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경 사항 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示更改"
+          }
+        }
+      }
+    },
+    "Show Stashes" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스태시 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示储藏"
+          }
+        }
+      }
+    },
     "Show Toolbar" : {
       "localizations" : {
         "ko" : {
@@ -8636,6 +9267,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在项目上显示新建标签页按钮"
+          }
+        }
+      }
+    },
+    "Show or hide the project memory panel" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 메모리 패널 보기 또는 가리기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示或隐藏项目记忆面板"
           }
         }
       }
@@ -9605,6 +10252,22 @@
         }
       }
     },
+    "This command had a secret. Macterm cannot run it again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 명령에는 비밀 정보가 있었습니다. Macterm은 이 명령을 다시 실행할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此命令包含机密信息。Macterm 无法再次运行它。"
+          }
+        }
+      }
+    },
     "This file is not in your config files. Add it in Settings → General → Ghostty Config." : {
       "localizations" : {
         "ko" : {
@@ -9617,6 +10280,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此文件不在你的配置文件中。请在“设置”→“通用”→“Ghostty 配置”中添加。"
+          }
+        }
+      }
+    },
+    "This folder is not in a Git repository, or Git is not installed." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 폴더는 Git 저장소에 없거나 Git이 설치되어 있지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件夹不在 Git 仓库中，或者没有安装 Git。"
           }
         }
       }
@@ -9773,6 +10452,22 @@
         }
       }
     },
+    "Toggle Project Memory" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 메모리 전환"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换项目记忆"
+          }
+        }
+      }
+    },
     "Toggle Quick Terminal" : {
       "localizations" : {
         "ko" : {
@@ -9870,6 +10565,38 @@
         }
       }
     },
+    "Turn On Project Memory" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 메모리 켜기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开项目记忆"
+          }
+        }
+      }
+    },
+    "Turn it on to see where you left off in each project and the commands to run next." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "켜면 각 프로젝트에서 마지막으로 하던 작업과 다음에 실행할 명령을 볼 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开后，可以看到每个项目上次进行到哪里，以及接下来要运行的命令。"
+          }
+        }
+      }
+    },
     "Turn off read-only" : {
       "localizations" : {
         "ko" : {
@@ -9882,6 +10609,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭只读"
+          }
+        }
+      }
+    },
+    "Turn on Apple Intelligence in System Settings" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템 설정에서 Apple Intelligence를 켜십시오"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在系统设置中打开 Apple 智能"
           }
         }
       }
@@ -10011,6 +10754,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "卸载"
+          }
+        }
+      }
+    },
+    "Unknown command" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "알 수 없는 명령"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知命令"
           }
         }
       }
@@ -10405,6 +11164,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当此标签页顶部列出的某个程序正在聚焦的窗格中运行时，将此快捷键发送给该程序，而不执行操作。在其他地方，操作仍会执行。"
+          }
+        }
+      }
+    },
+    "Where You Left Off" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마지막 작업"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次进行到哪里"
           }
         }
       }

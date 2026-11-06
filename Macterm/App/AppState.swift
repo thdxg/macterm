@@ -196,6 +196,7 @@ final class AppState {
         first.activeProjectID = saved[0].activeProjectID ?? first.activeProjectID
         if let width = saved[0].sidebarWidth { first.sidebarWidth = width }
         if let visible = saved[0].sidebarVisible { first.sidebarVisible = visible }
+        if let visible = saved[0].projectMemoryPanelVisible { first.projectMemoryPanelVisible = visible }
         // After the project: making a project active opens its section, and
         // the saved set must win over that.
         if let expanded = saved[0].expandedProjectIDs { first.expandedProjects = Set(expanded) }
@@ -405,6 +406,7 @@ final class AppState {
             }
             if let width = restoring.sidebarWidth { window.sidebarWidth = width }
             if let visible = restoring.sidebarVisible { window.sidebarVisible = visible }
+            if let visible = restoring.projectMemoryPanelVisible { window.projectMemoryPanelVisible = visible }
             if let expanded = restoring.expandedProjectIDs { window.expandedProjects = Set(expanded) }
             if let frame = restoring.frame { window.frame = frame }
         } else if hasRestoredWindows {
@@ -982,6 +984,12 @@ final class AppState {
     var sidebarVisible: Bool {
         get { keyOrFirstWindow?.sidebarVisible ?? true }
         set { keyOrFirstWindow?.sidebarVisible = newValue }
+    }
+
+    /// The key window's project memory panel (Toggle Project Memory).
+    var projectMemoryPanelVisible: Bool {
+        get { keyOrFirstWindow?.projectMemoryPanelVisible ?? false }
+        set { keyOrFirstWindow?.projectMemoryPanelVisible = newValue }
     }
 
     var isCommandPaletteVisible: Bool {
@@ -1870,6 +1878,7 @@ final class AppState {
                         isKey: window.id == keyWindowID,
                         activeTabID: window.activeProjectID.flatMap { selectedTab(for: $0, in: window)?.id },
                         sidebarVisible: window.sidebarVisible,
+                        projectMemoryPanelVisible: window.projectMemoryPanelVisible ? true : nil,
                         frame: window.frame,
                         expandedProjectIDs: window.expandedProjects.sorted { $0.uuidString < $1.uuidString }
                     )
@@ -2667,6 +2676,9 @@ final class AppState {
             window.expandedProjects.remove(projectID)
         }
         vacateWindows(showing: projectID)
+        // Every removal path comes through here, so a removed project's
+        // memory never outlives it.
+        if ProjectMemory.isSupported { ProjectMemory.shared.forget(projectID) }
     }
 
     func removeProject(_ projectID: UUID) {

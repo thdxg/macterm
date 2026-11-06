@@ -282,6 +282,10 @@ extension AppCommand {
             return { ctx.appState.selectPreviousProject(projects: ctx.projectStore.projects) }
         case .toggleSidebar:
             return { ctx.appState.sidebarVisible.toggle() }
+        case .toggleProjectMemory:
+            // macOS 26 and later only: the command is not there below it.
+            guard ProjectMemory.isSupported else { return nil }
+            return { ctx.appState.projectMemoryPanelVisible.toggle() }
         case .toggleToolbar:
             // The one preference that View → Hide Toolbar, the toolbar's own
             // menu and Settings → Appearance → Show toolbar all flip. It is

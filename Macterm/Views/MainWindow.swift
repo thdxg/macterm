@@ -181,6 +181,25 @@ struct MainWindow: View {
                     WelcomeView()
                 }
             }
+            // Project memory: a floating glass panel over the terminal, on
+            // the trailing side. It covers the panes; it never resizes them.
+            .overlay(alignment: .trailing) {
+                if #available(macOS 26.0, *), windowState.projectMemoryPanelVisible,
+                   let project = activeProject, ProjectMemory.covers(project.id)
+                {
+                    ProjectMemoryPanel(project: project)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .animation(
+                NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .smooth(duration: 0.25),
+                value: windowState.projectMemoryPanelVisible
+            )
+            // Every way to show or hide it (toolbar, close button, the
+            // command) lands here, so the snapshot keeps it per window.
+            .onChange(of: windowState.projectMemoryPanelVisible) { _, _ in
+                appState.noteSidebarChanged()
+            }
             // Same safe-area reclaim as the sidebar: without it the terminal
             // keeps a blank strip where the hidden titlebar used to be.
             .ignoresSafeArea(chromeHidden ? .container : [], edges: .top)
@@ -194,6 +213,18 @@ struct MainWindow: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     UpdateAvailableToolbarButton()
+                }
+                if ProjectMemory.isSupported {
+                    ToolbarItem(placement: .primaryAction) {
+                        // Filled while the panel is up, as a toggle's state.
+                        Button(
+                            String(localized: "Project Memory"),
+                            systemImage: windowState.projectMemoryPanelVisible ? "info.circle.fill" : "info.circle"
+                        ) {
+                            windowState.projectMemoryPanelVisible.toggle()
+                        }
+                        .help(String(localized: "Show or hide the project memory panel"))
+                    }
                 }
                 // Structural branch, not a placement ternary: each side is its
                 // own toolbar item identity, so flipping the preference tears

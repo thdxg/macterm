@@ -432,6 +432,14 @@ final class Preferences {
         didSet { Keys.autoUpdateExtensions.write(autoUpdateExtensions, to: defaults) }
     }
 
+    /// Record the commands that finish in each project for the project
+    /// memory panel (`ProjectMemory`, Settings → Intelligence). Off by
+    /// default: a log of commands is the user's to start, never a surprise.
+    /// macOS 26 and later only.
+    var projectMemory: Bool {
+        didSet { Keys.projectMemory.write(projectMemory, to: defaults) }
+    }
+
     var showNewProjectButton: Bool {
         didSet { Keys.showNewProjectButton.write(showNewProjectButton, to: defaults) }
     }
@@ -1014,6 +1022,7 @@ final class Preferences {
         showSpinnerOverAgentIcons = Keys.showSpinnerOverAgentIcons.read(defaults)
         autoAssignProjectColors = Keys.autoAssignProjectColors.read(defaults)
         autoUpdateExtensions = Keys.autoUpdateExtensions.read(defaults)
+        projectMemory = Keys.projectMemory.read(defaults)
         showNewProjectButton = Keys.showNewProjectButton.read(defaults)
         showProjectNewTabButton = Keys.showProjectNewTabButton.read(defaults)
         backgroundSSHConnections = Keys.backgroundSSHConnections.read(defaults)
@@ -1195,6 +1204,7 @@ final class Preferences {
         static let showSpinnerOverAgentIcons = PreferenceStorageKey("macterm.sidebar.showSpinnerOverAgentIcons", default: true)
         static let autoAssignProjectColors = PreferenceStorageKey("macterm.projects.autoAssignColors", default: false)
         static let autoUpdateExtensions = PreferenceStorageKey("macterm.extensions.autoUpdate", default: true)
+        static let projectMemory = PreferenceStorageKey("macterm.memory.enabled", default: false)
         static let showNewProjectButton = PreferenceStorageKey("macterm.sidebar.showNewProjectButton", default: true)
         static let showProjectNewTabButton = PreferenceStorageKey("macterm.sidebar.showProjectNewTabButton", default: true)
         static let backgroundSSHConnections = PreferenceStorageKey("macterm.remote.backgroundSSHConnections", default: true)

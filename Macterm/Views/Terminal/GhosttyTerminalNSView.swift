@@ -395,6 +395,11 @@ final class GhosttyTerminalNSView: NSView {
     /// arming that `recordCommandSubmission` then sets, so the reverse order
     /// silently disarms the agent path. Keep the two calls in this order.
     var onCommandSubmitted: ((Bool) -> Void)?
+    /// The text that `sendText` submitted, for the length of its
+    /// `onCommandSubmitted` call; nil for a Return that the user typed. Its
+    /// echo may not be on the screen yet, so project memory reads the
+    /// command from here, and from the screen only for a typed Return.
+    private(set) var submittedText: String?
     /// Whether a programmatic payload's content evidence may be carried past
     /// the submission that consumed it — true only for a raw-mode agent
     /// foreground, where a bracketed paste can leave it unsubmitted. See
@@ -2114,7 +2119,9 @@ extension GhosttyTerminalNSView {
         }
         if TerminalCommandSubmission.textContainsNewline(text) {
             let hasContent = consumeCommandSubmissionEvidence()
+            submittedText = text
             onCommandSubmitted?(hasContent)
+            submittedText = nil
             if hasContent { preserveProgrammaticCommandInput(text) }
         }
         return true
@@ -2149,6 +2156,27 @@ extension GhosttyTerminalNSView {
         guard h > 0 else { return nil }
         let rect = NSRect(x: x, y: bounds.height - y - h, width: max(w, 1), height: h)
         return bounds.intersects(rect) ? rect.intersection(bounds) : nil
+    }
+
+    /// The column of the cursor on its screen row, or nil without a surface
+    /// or while the cursor is scrolled out of view.
+    ///
+    /// From the IME point: libghostty puts it at the MIDDLE of the cursor's
+    /// cell, measured from the view's edge, so the left window padding is in
+    /// it (`Surface.imePointScaled`). The cell width comes from the surface
+    /// size, because the point's own width is the preedit's, zero with
+    /// nothing composed. `window-padding-balance` adds under half a cell on
+    /// the left, which the round down absorbs with the half cell of the
+    /// midpoint.
+    func cursorColumn() -> Int? {
+        guard let surface, let size = surfaceSize, size.cell_width_px > 0 else { return nil }
+        var x: Double = 0, y: Double = 0, w: Double = 0, h: Double = 0
+        ghostty_surface_ime_point(surface, &x, &y, &w, &h)
+        guard h > 0 else { return nil }
+        let scale = Double(window?.backingScaleFactor ?? 2.0)
+        let cellWidth = Double(size.cell_width_px) / scale
+        let column = ((x - GhosttyApp.shared.windowPadding.left) / cellWidth).rounded(.down)
+        return column >= 0 ? Int(column) : nil
     }
 
     /// Send a single key chord through libghostty's key-*encoding* path — the
