@@ -62,4 +62,25 @@ struct ProjectMemorySuggestionsTests {
         let actions = ProjectMemorySuggestions.actions(from: (0 ..< 10).map { suggestion("task \($0)") }, entries: entries)
         #expect(actions.count == ProjectMemorySuggestions.limit)
     }
+
+    @Test
+    func a_git_command_needs_a_reason_in_the_git_state() {
+        var git = GitStatus(branch: "main")
+        let all = ProjectMemorySuggestions.safeGitCommands.map { suggestion($0, "Because.") }
+
+        // A clean repository with no upstream: only the log reads.
+        #expect(ProjectMemorySuggestions.actions(from: all, entries: [], git: git).map(\.command) == ["git log"])
+
+        git.upstream = "origin/main"
+        git.behind = 2
+        git.unstaged = 1
+        git.stashes = 1
+        // Every git command has a reason now; the rows stop at the limit.
+        #expect(ProjectMemorySuggestions.actions(from: all, entries: [], git: git).map(\.command)
+            == Array(ProjectMemorySuggestions.safeGitCommands.prefix(ProjectMemorySuggestions.limit)))
+
+        // No Git state refutes nothing; a project command is never judged.
+        #expect(ProjectMemorySuggestions.actions(from: all, entries: [], git: nil).count == ProjectMemorySuggestions.limit)
+        #expect(ProjectMemorySuggestions.gitStateSupports("make test", git: GitStatus(branch: "main")))
+    }
 }
