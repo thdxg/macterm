@@ -298,6 +298,53 @@ if [[ -x "$ZMX_BIN" ]]; then
   fi
 fi
 
+# The release file the app's zmx installer reads (`ZmxRelease`, #699): the tag,
+# and the SHA-256 of every asset that has a `.sha256` beside it, so a download
+# for a remote host is checked before it goes over ssh. A release from before
+# the checksums lists no assets; the installer then says the build has no
+# binary for the host. Written with `python3` so the JSON is well-formed
+# whatever the file names hold.
+#
+# Its own step, not part of the zmx download: CI restores zmx and its stamp
+# from a cache that does not hold this file, so a zmx that needs no refresh
+# must still get its release file. The release build of 1.33.2-tip.27 shipped
+# without one, and the install sheet had nothing to offer.
+ZMX_RELEASE_FILE="Macterm/Resources/zmx-release.json"
+write_zmx_release_file() {
+  local tag="$1" checksum_dir
+  checksum_dir=$(mktemp -d)
+  gh release download "$tag" --pattern "*.sha256" --repo "$ZMX_REPO" --dir "$checksum_dir" 2>/dev/null || true
+  python3 - "$tag" "$checksum_dir" > "$ZMX_RELEASE_FILE" <<'PY'
+import json, os, sys
+tag, directory = sys.argv[1], sys.argv[2]
+assets = {}
+for name in sorted(os.listdir(directory)):
+    if not name.endswith(".sha256"):
+        continue
+    for line in open(os.path.join(directory, name)):
+        parts = line.split()
+        if len(parts) == 2 and len(parts[0]) == 64:
+            assets[parts[1].lstrip("*")] = parts[0].lower()
+print(json.dumps({"tag": tag, "assets": assets}, indent=2, sort_keys=True))
+PY
+  rm -rf "$checksum_dir"
+}
+# The tag the file names, empty when there is no file.
+zmx_release_file_tag() {
+  [[ -f "$ZMX_RELEASE_FILE" ]] || return 0
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("tag",""))' "$ZMX_RELEASE_FILE" 2>/dev/null || true
+}
+# A zmx that is fresh but has no release file, or one that names another tag,
+# gets the file now. `latest` resolves to the stamp the zmx came with.
+if ! $need_zmx; then
+  release_tag="$ZMX_TAG"
+  [[ "$ZMX_TAG" == "latest" ]] && release_tag="$zmx_stamped_tag"
+  if [[ "$(zmx_release_file_tag)" != "$release_tag" ]]; then
+    echo "Writing the zmx release file for $release_tag"
+    write_zmx_release_file "$release_tag"
+  fi
+fi
+
 if ! $need_xcframework && ! $need_resources && ! $need_zmx; then
   echo "GhosttyKit, resources and zmx are already present"
   # This is the path a settled checkout takes every time, so it is also where an
@@ -398,28 +445,7 @@ if $need_zmx; then
   tar xzf zmx-universal-macos.tar.gz -C Macterm/Resources/zmx
   chmod +x Macterm/Resources/zmx/zmx
   rm zmx-universal-macos.tar.gz
-  # The release file the app's zmx installer reads (`ZmxRelease`, #699): the
-  # tag, and the SHA-256 of every asset that has a `.sha256` beside it, so a
-  # download for a remote host is checked before it goes over ssh. A release
-  # from before the checksums lists no assets; the installer then says the
-  # build has no binary for the host. Written with `python3` so the JSON is
-  # well-formed whatever the file names hold.
-  checksum_dir=$(mktemp -d)
-  gh release download "$resolved_zmx_tag" --pattern "*.sha256" --repo "$ZMX_REPO" --dir "$checksum_dir" 2>/dev/null || true
-  python3 - "$resolved_zmx_tag" "$checksum_dir" > Macterm/Resources/zmx-release.json <<'PY'
-import json, os, sys
-tag, directory = sys.argv[1], sys.argv[2]
-assets = {}
-for name in sorted(os.listdir(directory)):
-    if not name.endswith(".sha256"):
-        continue
-    for line in open(os.path.join(directory, name)):
-        parts = line.split()
-        if len(parts) == 2 and len(parts[0]) == 64:
-            assets[parts[1].lstrip("*")] = parts[0].lower()
-print(json.dumps({"tag": tag, "assets": assets}, indent=2, sort_keys=True))
-PY
-  rm -rf "$checksum_dir"
+  write_zmx_release_file "$resolved_zmx_tag"
   # Stamp only what this run actually installed, mirroring $TAG_STAMP.
   printf '%s\n' "$resolved_zmx_tag" > "$ZMX_TAG_STAMP"
 fi
