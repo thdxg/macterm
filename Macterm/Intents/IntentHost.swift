@@ -37,6 +37,10 @@ final class MactermIntentHost {
     private weak var projectStore: ProjectStore?
     /// True once the state objects exist AND the launch restore has run.
     private(set) var isReady = false
+    /// The project memory that `GetMactermProjectMemoryIntent` reads. A
+    /// closure, so a test can hand in a memory on a temporary store without
+    /// starting the shared one.
+    var projectMemory: () -> ProjectMemory = { .shared }
 
     private init() {}
 

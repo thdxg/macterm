@@ -513,4 +513,36 @@ struct MactermIntentsTests {
         #expect(DockMenu.preparation(for: .toggleCommandPalette) == .frontTerminalWindow)
         #expect(DockMenu.preparation(for: .newTab) == .frontTerminalWindow)
     }
+
+    // MARK: - Where Did I Leave Off reads project memory
+
+    @Test
+    func where_did_i_leave_off_answers_from_the_log_and_refuses_while_memory_is_off() async throws {
+        let (appState, projectStore) = makeHost()
+        defer { teardown() }
+        let project = seedProject(appState, projectStore)
+        let store = ProjectMemoryStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-intent-tests-memory-\(UUID().uuidString)", isDirectory: true))
+        let memory = ProjectMemory(store: store)
+        MactermIntentHost.shared.projectMemory = { memory }
+        defer { MactermIntentHost.shared.projectMemory = { .shared } }
+        let wasOn = Preferences.shared.projectMemory
+        defer { Preferences.shared.projectMemory = wasOn }
+
+        let intent = GetMactermProjectMemoryIntent()
+        intent.project = MactermProjectEntity(project)
+
+        Preferences.shared.projectMemory = false
+        await #expect(throws: MactermIntentError.self) { try await intent.perform() }
+
+        Preferences.shared.projectMemory = true
+        store.append(MemoryEntry(command: "make test", directory: "/tmp", exitCode: 2, finishedAt: Date(), duration: 1), to: project.id)
+        let result = try await intent.perform()
+        #expect(String(describing: result.value).contains("The last command, make test, failed with exit code 2"))
+
+        // The pinned workspace is not a project, so it has no memory.
+        let pinned = GetMactermProjectMemoryIntent()
+        pinned.project = MactermProjectEntity(PinnedTabs.project)
+        await #expect(throws: MactermIntentError.self) { try await pinned.perform() }
+    }
 }
