@@ -54,6 +54,9 @@ enum Output {
         for action in state.actions {
             print("action[\(action.kind)]: \(action.command)")
         }
+        if let summary = state.summary {
+            print("summary[\(summary.phase)]: \(summary.text)")
+        }
     }
 
     private static func renderExplain(_ state: ControlExplainState) {
