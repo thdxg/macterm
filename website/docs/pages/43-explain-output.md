@@ -37,7 +37,6 @@ Macterm finds the output from the marks of the shell integration (OSC 133). With
 ## The popover
 
 - Press <kbd>Esc</kbd>, or click outside the popover, to close it. Closing it stops the explanation.
-- Click **Copy** to copy the explanation.
 - You can select text in the popover and press <kbd>⌘</kbd><kbd>C</kbd>.
 
 The explanation is in the language of Macterm (**Settings → General → Language**).
