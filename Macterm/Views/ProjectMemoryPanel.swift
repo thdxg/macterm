@@ -204,7 +204,9 @@ struct ProjectMemoryPanel: View {
             case .waiting,
                  .streaming,
                  .done:
-                Text(verbatim: state.text)
+                // The model writes inline Markdown: backticks round commands
+                // and files. Drawn, as Explain Output draws its reply.
+                Text(ExplainPopoverView.rendered(state.text))
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
@@ -282,7 +284,7 @@ struct ProjectMemoryPanel: View {
                     if let subtitle = action.subtitle {
                         // A command's middle is its distinctive part; a
                         // sentence reads from its start.
-                        Text(verbatim: subtitle)
+                        Text(action.kind == .suggested ? ExplainPopoverView.rendered(subtitle) : AttributedString(subtitle))
                             .font(action.kind == .retry ? .caption.monospaced() : .caption)
                             .foregroundStyle(MactermTheme.fgMuted)
                             .lineLimit(1)
@@ -333,16 +335,15 @@ struct ProjectMemoryPanel: View {
             Text(gitHeadline(git))
                 .font(.caption)
                 .foregroundStyle(MactermTheme.fgMuted)
-            let others = git.branches.filter { $0.name != git.branch }
-            if !others.isEmpty {
+            if !git.branches.isEmpty {
                 Text("Branches")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(MactermTheme.fgMuted)
                     .padding(.top, 4)
                 GlassEffectContainer(spacing: 6) {
                     VStack(spacing: 6) {
-                        ForEach(others, id: \.name) { branch in
-                            branchRow(branch)
+                        ForEach(git.branches, id: \.name) { branch in
+                            branchRow(branch, isCurrent: branch.name == git.branch)
                         }
                     }
                 }
@@ -350,21 +351,24 @@ struct ProjectMemoryPanel: View {
         }
     }
 
-    /// A branch, other than the current one, with its latest commit's age,
-    /// as a glass row like the Suggested ones. A click switches to it: a tab
-    /// in the branch's worktree, as the sidebar's Worktrees menu opens, or
-    /// `git switch` typed into a new split for a branch with no worktree, so
-    /// the switch is on the screen and in the shell's history.
-    private func branchRow(_ branch: GitStatus.Branch) -> some View {
+    /// A branch with its latest commit's age, as a glass row like the
+    /// Suggested ones. The current branch is a row like the others, with the
+    /// accent on its glass, the filled check and a bold name; one style for
+    /// every row keeps the ages in line. A click switches to the branch: a
+    /// tab in its worktree, as the sidebar's Worktrees menu opens (the
+    /// current branch's worktree is the project itself), or `git switch`
+    /// typed into a new split for a branch with no worktree, so the switch
+    /// is on the screen and in the shell's history.
+    private func branchRow(_ branch: GitStatus.Branch, isCurrent: Bool) -> some View {
         Button {
-            switchTo(branch)
+            switchTo(branch, isCurrent: isCurrent)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: "arrow.triangle.branch")
+                Image(systemName: isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch")
                     .font(.caption)
-                    .foregroundStyle(MactermTheme.fgMuted)
+                    .foregroundStyle(isCurrent ? MactermTheme.accent : MactermTheme.fgMuted)
                 Text(verbatim: branch.name)
-                    .font(.caption.monospaced())
+                    .font(.caption.monospaced().weight(isCurrent ? .semibold : .regular))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
@@ -374,14 +378,14 @@ struct ProjectMemoryPanel: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassRow(cornerRadius: Self.rowCornerRadius)
+            .glassRow(cornerRadius: Self.rowCornerRadius, tint: isCurrent ? MactermTheme.accent.opacity(0.35) : nil)
         }
         .buttonStyle(.plain)
-        .help(branchHelp(branch))
+        .help(branchHelp(branch, isCurrent: isCurrent))
     }
 
-    private func switchTo(_ branch: GitStatus.Branch) {
-        if let worktree = branch.worktree {
+    private func switchTo(_ branch: GitStatus.Branch, isCurrent: Bool) {
+        if let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
             ProjectMemoryActions.openTab(in: worktree, project: project, appState: appState, projects: projectStore.projects)
         } else {
             ProjectMemoryActions.run(
@@ -394,8 +398,10 @@ struct ProjectMemoryPanel: View {
         }
     }
 
-    private func branchHelp(_ branch: GitStatus.Branch) -> String {
-        if let worktree = branch.worktree { return String(localized: "Open a tab in the worktree at \(worktree)") }
+    private func branchHelp(_ branch: GitStatus.Branch, isCurrent: Bool) -> String {
+        if let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
+            return String(localized: "Open a tab in the worktree at \(worktree)")
+        }
         return String(localized: "Switch to \(branch.name) in a new split")
     }
 
@@ -479,10 +485,11 @@ private extension View {
     /// glass ignores `buttonBorderShape`, so the row draws its glass itself,
     /// at the panel's row corner, with the press feedback of interactive
     /// glass.
-    func glassRow(cornerRadius: CGFloat) -> some View {
-        padding(.horizontal, 12)
+    func glassRow(cornerRadius: CGFloat, tint: Color? = nil) -> some View {
+        let glass: Glass = tint.map { Glass.regular.tint($0) } ?? .regular
+        return padding(.horizontal, 12)
             .padding(.vertical, 8)
             .contentShape(.rect(cornerRadius: cornerRadius))
-            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: cornerRadius))
+            .glassEffect(glass.interactive(), in: .rect(cornerRadius: cornerRadius))
     }
 }
