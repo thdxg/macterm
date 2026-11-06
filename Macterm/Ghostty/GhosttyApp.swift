@@ -16,8 +16,8 @@ final class GhosttyApp {
     /// `RemoteSpawn`'s constants can read it. nil if it comes back empty.
     nonisolated static let version: String? = {
         let info = ghostty_info()
-        guard let pointer = info.version, info.version_len > 0 else { return nil }
-        let bytes = UnsafeRawBufferPointer(start: pointer, count: Int(info.version_len))
+        guard info.version_len > 0 else { return nil }
+        let bytes = UnsafeRawBufferPointer(start: info.version, count: Int(info.version_len))
         return String(decoding: bytes, as: UTF8.self)
     }()
 
@@ -27,8 +27,12 @@ final class GhosttyApp {
     private(set) var configVersion = 0
     @ObservationIgnored
     private var tickTimer: Timer?
+    /// The one callbacks object, nonisolated: libghostty calls the runtime
+    /// callbacks from its own threads, so the closures that name it are
+    /// built off the main actor (`makeRuntimeConfig`).
     @ObservationIgnored
-    private let callbacks = GhosttyCallbacks()
+    nonisolated static let sharedCallbacks = GhosttyCallbacks()
+    private let callbacks = GhosttyApp.sharedCallbacks
     @ObservationIgnored
     private var resourcesDir: String?
     @ObservationIgnored
@@ -112,29 +116,7 @@ final class GhosttyApp {
             return
         }
 
-        var rt = ghostty_runtime_config_s()
-        // No `rt.userdata`: the app-target callbacks below reach `GhosttyApp
-        // .shared` directly (safe — the singleton outlives the app and these
-        // fire only after init). The per-surface callbacks recover their owner
-        // from the SURFACE userdata instead (see `surface(from:)`), so the
-        // app-level userdata pointer was dead weight.
-        rt.supports_selection_clipboard = true
-        rt.wakeup_cb = { _ in GhosttyApp.shared.callbacks.wakeup() }
-        rt.action_cb = { _, target, action in GhosttyApp.shared.callbacks.action(target: target, action: action) }
-        rt.read_clipboard_cb = { ud, _, state, mimes, mimesLen, list in
-            GhosttyApp.shared.callbacks.readClipboard(
-                ud: ud, state: state, mimes: mimes, mimesLen: mimesLen, list: list
-            )
-        }
-        rt.confirm_read_clipboard_cb = { ud, confirm, state, _ in
-            GhosttyApp.shared.callbacks.confirmReadClipboard(ud: ud, confirm: confirm, state: state)
-        }
-        rt.write_clipboard_cb = { _, loc, content, len, confirm in
-            GhosttyApp.shared.callbacks.writeClipboard(
-                content: content, len: UInt(len), location: loc, confirm: confirm
-            )
-        }
-        rt.close_surface_cb = { ud, _ in GhosttyApp.shared.callbacks.closeSurface(ud: ud) }
+        var rt = Self.makeRuntimeConfig()
 
         guard let createdApp = ghostty_app_new(&rt, cfg) else {
             logger.error("ghostty_app_new failed")
@@ -595,11 +577,9 @@ final class GhosttyApp {
         let diagCount = ghostty_config_diagnostics_count(cfg)
         for i in 0 ..< diagCount {
             let diag = ghostty_config_get_diagnostic(cfg, i)
-            if let msg = diag.message {
-                let s = String(cString: msg)
-                logger.warning("config: \(s, privacy: .public)")
-                result.diagnostics.append(s)
-            }
+            let s = String(cString: diag.message)
+            logger.warning("config: \(s, privacy: .public)")
+            result.diagnostics.append(s)
         }
 
         // Raw-text values the C API can't answer, re-read with the config
@@ -719,6 +699,41 @@ final class GhosttyApp {
         var background: RGB?
         var foreground: RGB?
         var palette: [RGB?]
+    }
+
+    /// The runtime callbacks for `ghostty_app_new`. The header marks them
+    /// non-null, so the struct has no zero initializer: every callback is
+    /// given here. No `userdata`: the app-target callbacks reach the shared
+    /// callbacks object directly (the singleton outlives the app, and these
+    /// fire only after init). The per-surface callbacks recover their owner
+    /// from the SURFACE userdata instead (see `surface(from:)`).
+    ///
+    /// `nonisolated`, and never a closure literal inside `init`: a closure
+    /// made in a `@MainActor` context is inferred main-actor-isolated, and
+    /// libghostty calls the wakeup and the clipboard callbacks from its own
+    /// threads. That was a SIGTRAP in `dispatch_assert_queue` at the first
+    /// wakeup, before any test ran.
+    nonisolated private static func makeRuntimeConfig() -> ghostty_runtime_config_s {
+        ghostty_runtime_config_s(
+            userdata: nil,
+            supports_selection_clipboard: true,
+            wakeup_cb: { _ in GhosttyApp.sharedCallbacks.wakeup() },
+            action_cb: { _, target, action in GhosttyApp.sharedCallbacks.action(target: target, action: action) },
+            read_clipboard_cb: { ud, _, state, mimes, mimesLen, list in
+                GhosttyApp.sharedCallbacks.readClipboard(
+                    ud: ud, state: state, mimes: mimes, mimesLen: mimesLen, list: list
+                )
+            },
+            confirm_read_clipboard_cb: { ud, confirm, state, _ in
+                GhosttyApp.sharedCallbacks.confirmReadClipboard(ud: ud, confirm: confirm, state: state)
+            },
+            write_clipboard_cb: { _, loc, content, len, confirm in
+                GhosttyApp.sharedCallbacks.writeClipboard(
+                    content: content, len: UInt(len), location: loc, confirm: confirm
+                )
+            },
+            close_surface_cb: { ud, _ in GhosttyApp.sharedCallbacks.closeSurface(ud: ud) }
+        )
     }
 
     /// Read the chrome colors out of a libghostty config handle. `nonisolated`

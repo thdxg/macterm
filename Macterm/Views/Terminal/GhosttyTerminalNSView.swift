@@ -776,7 +776,8 @@ final class GhosttyTerminalNSView: NSView {
         var envVars: [ghostty_env_var_s] = []
         if let env, !env.isEmpty {
             for (key, value) in env {
-                envVars.append(ghostty_env_var_s(key: cString(key), value: cString(value)))
+                guard let k = cString(key), let v = cString(value) else { continue }
+                envVars.append(ghostty_env_var_s(key: k, value: v))
             }
         }
         if !wrapperArgv.isEmpty {
@@ -785,10 +786,9 @@ final class GhosttyTerminalNSView: NSView {
             // would otherwise move where a *nested* zmx invocation resolves
             // sockets, past what the budget probe validated — kill and attach
             // could then target different dirs. (Same defense Supacode ships.)
-            envVars.append(ghostty_env_var_s(
-                key: cString("ZMX_DIR"),
-                value: cString(ZmxSocketBudget.socketDir())
-            ))
+            if let k = cString("ZMX_DIR"), let v = cString(ZmxSocketBudget.socketDir()) {
+                envVars.append(ghostty_env_var_s(key: k, value: v))
+            }
         }
 
         /// Sets env on the config and spawns. Split out so the optional
@@ -965,14 +965,14 @@ final class GhosttyTerminalNSView: NSView {
             syncOcclusion()
             return
         }
-        if surface == nil {
-            createSurface()
-        } else {
+        if let surface {
             // Reconnect existing surface to the new window
             let scale = Double(window.backingScaleFactor)
             ghostty_surface_set_content_scale(surface, scale, scale)
             applySurfaceSize(convertToBacking(bounds).size)
             ghostty_surface_set_focus(surface, isFocused)
+        } else {
+            createSurface()
         }
         updateMetalLayerSize()
 
