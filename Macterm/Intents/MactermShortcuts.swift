@@ -39,5 +39,13 @@ struct MactermShortcuts: AppShortcutsProvider {
             shortTitle: "New Tab",
             systemImageName: "plus.rectangle.on.rectangle"
         )
+        AppShortcut(
+            intent: GetMactermProjectMemoryIntent(),
+            phrases: [
+                "Where did I leave off in \(.applicationName)",
+            ],
+            shortTitle: "Where Did I Leave Off",
+            systemImageName: "info.circle"
+        )
     }
 }

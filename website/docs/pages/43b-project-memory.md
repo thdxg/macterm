@@ -52,6 +52,10 @@ Macterm writes the summary ten minutes after the last command in a project, pane
 
 To turn the summary off, open **Settings → Intelligence** and turn off **Summarize with Apple Intelligence**. The facts stay.
 
+## Ask Siri or Shortcuts
+
+The action **Where Did I Leave Off** returns the same answer as text, for a project that you select. Say "Where did I leave off in Macterm" to Siri, or add the action to a shortcut. The text is the summary when Macterm wrote one, then the commands that finished after it. Without a summary, it is the latest command and its result, and a command that failed and did not succeed since. The action never writes a summary. See [Shortcuts](/docs/shortcuts).
+
 ## What Macterm records
 
 Macterm records a command when the shell reports that it finished (OSC 133). This needs [shell integration](/docs/configuration). Macterm reads the command from the prompt line when you press Return, up to the cursor, so a command that clears the screen, such as `clear`, is recorded too, and a right prompt or an autosuggestion after the cursor is not part of it. In bash and zsh, the shell integration sends no mark for the first prompt of a pane, so the first command of a new pane is read only when it finishes. The output tail of a failed command comes from the screen after the next prompt shows. If Macterm cannot read the command, it records nothing. A tab that two windows show records each command one time.

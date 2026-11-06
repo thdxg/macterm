@@ -144,6 +144,28 @@
         }
       }
     },
+    "%@ failed with exit code %lld and has not succeeded since." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ failed with exit code %2$lld and has not succeeded since."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@이(가) 종료 코드 %2$lld(으)로 실패했고, 그 뒤로 성공하지 않았습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 以退出码 %2$lld 失败，此后再未成功。"
+          }
+        }
+      }
+    },
     "%@ is missing the `path: %@` marker. Macterm does not touch it" : {
       "localizations" : {
         "en" : {
@@ -162,6 +184,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ 缺少 `path: %2$@` 标记。Macterm 不会更改它"
+          }
+        }
+      }
+    },
+    "%@ is not a project, so it has no memory." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@은(는) 프로젝트가 아니므로 메모리가 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 不是项目，因此没有记忆。"
           }
         }
       }
@@ -476,6 +514,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个文件有更改"
+          }
+        }
+      }
+    },
+    "%lld commands ran in %@, the last one %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld commands ran in %2$@, the last one %3$@."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$@에서 명령 %1$lld개가 실행되었고, 마지막 명령은 %3$@ 실행되었습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$@ 中运行了 %1$lld 条命令，最后一条在%3$@运行。"
           }
         }
       }
@@ -6172,6 +6232,22 @@
         }
       }
     },
+    "Nothing has run in %@ yet." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에서 아직 실행된 명령이 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 中还没有运行过任何命令。"
+          }
+        }
+      }
+    },
     "Number" : {
       "localizations" : {
         "ko" : {
@@ -7284,6 +7360,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "项目图标"
+          }
+        }
+      }
+    },
+    "Project memory is off. Turn it on in Settings → Intelligence." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 메모리가 꺼져 있습니다. 설정 → 인텔리전스에서 켜십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目记忆已关闭。请在“设置 → 智能”中打开。"
+          }
+        }
+      }
+    },
+    "Project memory needs macOS 26 or later." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 메모리에는 macOS 26 이상이 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目记忆需要 macOS 26 或更高版本。"
           }
         }
       }
@@ -8491,6 +8599,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已为来自任意命令的此提示符存储。当命令和提示符都匹配时，Macterm 会提供自动填充。没有提示符时，Macterm 不会在提示符处提供此密码。请在命令面板的密码管理器中选择它。"
+          }
+        }
+      }
+    },
+    "Say where you left off in a project: the summary of its project memory, or the latest command and a failure that is not fixed yet." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트에서 어디까지 했는지 말합니다. 프로젝트 메모리의 요약, 또는 마지막 명령과 아직 해결되지 않은 실패를 알려 줍니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说出你在项目中进行到哪里：项目记忆的摘要，或最后一条命令与尚未修复的失败。"
           }
         }
       }
@@ -10108,6 +10232,72 @@
         }
       }
     },
+    "The last command, %@, ended %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The last command, %1$@, ended %2$@."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마지막 명령 %1$@이(가) %2$@ 종료되었습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最后一条命令 %1$@ 在%2$@结束。"
+          }
+        }
+      }
+    },
+    "The last command, %@, failed with exit code %lld %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The last command, %1$@, failed with exit code %2$lld %3$@."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마지막 명령 %1$@이(가) %3$@ 종료 코드 %2$lld(으)로 실패했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最后一条命令 %1$@ 在%3$@以退出码 %2$lld 失败。"
+          }
+        }
+      }
+    },
+    "The last command, %@, succeeded %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The last command, %1$@, succeeded %2$@."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마지막 명령 %1$@이(가) %2$@ 성공했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最后一条命令 %1$@ 在%2$@成功。"
+          }
+        }
+      }
+    },
     "The layout file declares no tabs" : {
       "localizations" : {
         "ko" : {
@@ -11292,6 +11482,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当此标签页顶部列出的某个程序正在聚焦的窗格中运行时，将此快捷键发送给该程序，而不执行操作。在其他地方，操作仍会执行。"
+          }
+        }
+      }
+    },
+    "Where Did I Leave Off" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "어디까지 했는지 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我进行到哪里了"
+          }
+        }
+      }
+    },
+    "Where did I leave off in ${project}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${project}에서 어디까지 했는지 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我在 ${project} 中进行到哪里了"
           }
         }
       }
