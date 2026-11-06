@@ -14,13 +14,13 @@ A remote project is a project whose folder is on another machine. Each pane is a
 
 **SSH access to the host.** You sign in interactively in the pane. Anything that works for `ssh` works here.
 
-**zmx on the host**, in a folder in your `PATH`. Macterm finds `~/bin` and `~/.local/bin` also when the host does not load your profile.
+**zmx 0.7.1 or later on the host**, in a folder in your `PATH`. Macterm finds `~/bin` and `~/.local/bin` also when the host does not load your profile. Macterm uses the session labels of zmx to find and remove orphan sessions. Labels start in zmx 0.7.0. Version 0.7.1 also fixes a hang with sessions that zmx 0.6.0 started.
 
 ```sh title="on the remote host"
-curl -fsSL https://zmx.sh/a/zmx-0.6.0-linux-x86_64.tar.gz | tar xz -C ~/bin
+curl -fsSL https://zmx.sh/a/zmx-0.8.1-linux-x86_64.tar.gz | tar xz -C ~/bin
 ```
 
-For ARM hosts, use `linux-aarch64`.
+For ARM hosts, use `linux-aarch64`. To see the version on the host, run `zmx version`.
 
 **Connection settings come from `~/.ssh/config`.** They never come from Macterm. Define a `Host` alias and use the alias as the host of the project.
 
@@ -90,6 +90,6 @@ tabs:
 ## Limitations
 
 - zmx must already be on the host. Macterm has no upload flow yet.
-- Orphan cleanup only touches sessions that this installation marked as its own. For a session that became an orphan before the mark, run `zmx ls` and `zmx kill` by hand.
+- Orphan cleanup only touches sessions that this installation marked as its own. A zmx older than 0.7.0 cannot keep the mark. On such a host, Macterm removes no orphan sessions. After you upgrade zmx, the sessions that the old zmx started still have no mark. For these sessions, and for a session that became an orphan before the mark, run `zmx ls` and `zmx kill` by hand.
 - **Replace Project Path with Current Dir** and other local-directory features are off.
 - A session keeps the environment from the time when Macterm created it. After you upgrade Macterm, an existing remote tab does not get new variables (for example, the variable that lets agents report progress). Open a new tab or pane instead.
