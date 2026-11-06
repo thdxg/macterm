@@ -109,7 +109,7 @@ struct ProjectMemoryPanel: View {
 
     private var turnedOff: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(String(localized: "Project Memory Is Off"), systemImage: "brain")
+            Label(String(localized: "Project Insights Is Off"), systemImage: "brain")
                 .font(.headline)
             VStack(alignment: .leading, spacing: 6) {
                 Text("Turn it on to see where you left off in each project and the commands to run next.")
@@ -119,7 +119,7 @@ struct ProjectMemoryPanel: View {
             .font(.callout)
             .foregroundStyle(MactermTheme.fgMuted)
             .fixedSize(horizontal: false, vertical: true)
-            Button(String(localized: "Turn On Project Memory")) {
+            Button(String(localized: "Turn On Project Insights")) {
                 preferences.projectMemory = true
             }
             .buttonStyle(.glassProminent)
@@ -174,7 +174,9 @@ struct ProjectMemoryPanel: View {
             }
             VStack(alignment: .leading, spacing: 10) {
                 summaryParagraph
-                if summary.lastActivity == nil {
+                // With no command, the line explains the empty Recent list,
+                // unless the summary already fills the space from the Git state.
+                if summary.lastActivity == nil, summarizer.state(for: project.id).text.isEmpty {
                     Text("No commands recorded yet. Run something in this project.")
                         .font(.callout)
                         .foregroundStyle(MactermTheme.fgMuted)
@@ -213,8 +215,12 @@ struct ProjectMemoryPanel: View {
         }
     }
 
+    /// The summary needs something to say: a command in the log, or the
+    /// Git state alone, which is what a project shows before its first
+    /// command (`ProjectMemoryDigest` is nil with neither).
     private var summaryEnabled: Bool {
-        preferences.projectMemorySummary && ProjectMemorySummarizer.isEnabled && !entries.isEmpty
+        preferences.projectMemorySummary && ProjectMemorySummarizer.isEnabled
+            && (!entries.isEmpty || memory.git[project.id] != nil)
     }
 
     /// The reload button of the Summary header: a spinner while the model
@@ -383,45 +389,30 @@ struct ProjectMemoryPanel: View {
         .help(branchHelp(branch, isCurrent: isCurrent))
     }
 
-    /// A branch that a worktree has checked out opens a tab there. On a
-    /// remote project the worktree is on the host, so a new split goes
-    /// there with a typed `cd`, as `git switch` is typed: the shell is the
-    /// host's. The project's own path is a local fallback for the current
-    /// branch when the worktree list did not name it.
-    private func switchTo(_ branch: GitStatus.Branch, isCurrent: Bool) {
-        if project.isRemote, let worktree = branch.worktree {
+    /// A branch row types into the current pane: `cd` to the worktree that
+    /// has the branch checked out, or `git switch` for a branch with none.
+    /// Local and remote alike, because the line goes to the shell that is
+    /// up, wherever it runs. The branch name is typed as git reported it;
+    /// a worktree path with a quote or a newline cannot be typed safely.
+    private func switchTo(_ branch: GitStatus.Branch, isCurrent _: Bool) {
+        let line: String
+        if let worktree = branch.worktree {
             guard !worktree.contains("\""), !worktree.contains("\n") else {
                 appState.presentToast(String(localized: "Macterm cannot type the path of that worktree."))
                 return
             }
-            ProjectMemoryActions.run(
-                command: "cd \"\(worktree)\"",
-                directory: nil,
-                in: project,
-                appState: appState,
-                projects: projectStore.projects
-            )
-        } else if !project.isRemote, let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
-            ProjectMemoryActions.openTab(in: worktree, project: project, appState: appState, projects: projectStore.projects)
+            line = "cd \"\(worktree)\""
         } else {
-            ProjectMemoryActions.run(
-                command: "git switch \(branch.name)",
-                directory: nil,
-                in: project,
-                appState: appState,
-                projects: projectStore.projects
-            )
+            line = "git switch \(branch.name)"
         }
+        ProjectMemoryActions.type(line, in: project, appState: appState)
     }
 
-    private func branchHelp(_ branch: GitStatus.Branch, isCurrent: Bool) -> String {
-        if project.isRemote, let worktree = branch.worktree {
-            return String(localized: "Go to the worktree at \(worktree) in a new split")
+    private func branchHelp(_ branch: GitStatus.Branch, isCurrent _: Bool) -> String {
+        if let worktree = branch.worktree {
+            return String(localized: "Go to the worktree at \(worktree) in this pane")
         }
-        if !project.isRemote, let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
-            return String(localized: "Open a tab in the worktree at \(worktree)")
-        }
-        return String(localized: "Switch to \(branch.name) in a new split")
+        return String(localized: "Switch to \(branch.name) in this pane")
     }
 
     // MARK: - Recent

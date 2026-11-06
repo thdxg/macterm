@@ -37,14 +37,17 @@ enum ProjectMemorySuggestions {
 
     /// The model's suggestions as rows, in its order: only known commands,
     /// each one time, at most `limit`. The folder is where the command last
-    /// ran.
-    static func actions(from suggestions: [OnDeviceModel.Suggestion], entries: [MemoryEntry]) -> [QuickAction] {
+    /// ran. A git command is kept only when the Git state supports it
+    /// (`gitStateSupports`): with nothing in the log, the model padded the
+    /// list with every allowed git command and a reason it made up (`git
+    /// pull` "behind the remote" in a repository with no remote).
+    static func actions(from suggestions: [OnDeviceModel.Suggestion], entries: [MemoryEntry], git: GitStatus? = nil) -> [QuickAction] {
         let known = Set(candidates(entries: entries) + safeGitCommands)
         var taken: Set<String> = []
         var actions: [QuickAction] = []
         for suggestion in suggestions {
             let command = QuickActionRanker.normalized(suggestion.command)
-            guard known.contains(command), !taken.contains(command) else { continue }
+            guard known.contains(command), !taken.contains(command), gitStateSupports(command, git: git) else { continue }
             taken.insert(command)
             let last = entries.last { $0.command.map(QuickActionRanker.normalized) == command }
             actions.append(QuickAction(
@@ -57,5 +60,22 @@ enum ProjectMemorySuggestions {
             if actions.count == limit { break }
         }
         return actions
+    }
+
+    /// Whether the Git state gives a git command a reason: a pull needs
+    /// commits behind, a fetch needs an upstream, status and diff need
+    /// changes, a stash list needs stashes. A log always reads. A command
+    /// that is not one of `safeGitCommands` is not judged here. With no Git
+    /// state, nothing is refuted.
+    static func gitStateSupports(_ command: String, git: GitStatus?) -> Bool {
+        guard let git, safeGitCommands.contains(command) else { return true }
+        switch command {
+        case "git pull": return git.behind > 0
+        case "git fetch": return git.upstream != nil
+        case "git status",
+             "git diff": return !git.isClean
+        case "git stash list": return git.stashes > 0
+        default: return true
+        }
     }
 }

@@ -224,6 +224,33 @@ struct ProjectMemoryTests {
     }
 
     @Test
+    func a_git_state_the_summary_has_not_seen_schedules_the_background_summary() async throws {
+        var runs = 0
+        let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        var git = GitStatus(branch: "main")
+        memory.gitReader = { _ in git }
+
+        // No command at all: the Git state alone is the digest.
+        memory.refreshGit(project.id)
+        try await waitForSummary(summarizer, project.id)
+        #expect(runs == 1)
+
+        // The same state again: nothing new to say.
+        memory.refreshGit(project.id)
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(runs == 1)
+
+        // A commit moved a branch: news.
+        git.branches = [GitStatus.Branch(name: "main", hash: "abc1234", subject: "Fix", lastCommit: now, worktree: nil)]
+        memory.refreshGit(project.id)
+        let deadline = Date().addingTimeInterval(5)
+        while runs < 2, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(runs == 2)
+    }
+
+    @Test
     func the_button_writes_a_summary_now_and_again_for_the_same_records() async throws {
         var runs = 0
         let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }

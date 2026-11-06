@@ -262,7 +262,20 @@ final class ProjectMemory {
             readingGit.remove(projectID)
             apply(result, to: project)
             pendingGitReads[projectID] = nil
+            // A Git state the summary has not seen is news as a command is:
+            // a commit from another terminal, or a project with no command
+            // yet, whose summary is its Git state alone.
+            if case .read(.some) = result, gitStateIsNews(for: project) {
+                scheduleBackgroundSummary(projectID)
+            }
         }
+    }
+
+    /// Whether the summary on record was written for another Git state (or
+    /// for none), with the records as they are now.
+    private func gitStateIsNews(for project: Project) -> Bool {
+        let key = ProjectMemoryDigest.key(projectName: project.name, entries: store.entries(for: project.id), git: git[project.id])
+        return summarizer.state(for: project.id).key != key
     }
 
     /// One read of a project's git state, local or remote.
@@ -294,18 +307,21 @@ final class ProjectMemory {
     /// The rows of the panel's Suggested section: the model's suggestions
     /// when it gave some (`ProjectMemorySuggestions`), else the ranker's.
     func suggestedActions(projectID: UUID, entries: [MemoryEntry]) -> [QuickAction] {
-        let suggested = ProjectMemorySuggestions.actions(from: summarizer.state(for: projectID).suggestions, entries: entries)
+        let suggested = ProjectMemorySuggestions.actions(
+            from: summarizer.state(for: projectID).suggestions, entries: entries, git: git[projectID]
+        )
         return suggested.isEmpty ? QuickActionRanker.actions(entries: entries, git: git[projectID]) : suggested
     }
 
     // MARK: - Background summary
 
     /// Write a project's summary once it has been quiet for `delay`
-    /// (`summaryQuietPeriod` when nil), panel or no panel. A new command
-    /// restarts the wait. This and the panel's button are the only ways a
-    /// summary is written: a panel that opens shows the stored one, and a
-    /// command that finishes only restarts the wait, so the model never runs
-    /// in the middle of work.
+    /// (`summaryQuietPeriod` when nil), panel or no panel. A new command, or
+    /// a Git state the summary has not seen (`refreshGit`), restarts the
+    /// wait. This and the panel's button are the only ways a summary is
+    /// written: a panel that opens shows the stored one, and a command that
+    /// finishes only restarts the wait, so the model never runs in the
+    /// middle of work.
     func scheduleBackgroundSummary(_ projectID: UUID, after delay: Duration? = nil) {
         quietTimers[projectID]?.cancel()
         let wait = delay ?? summaryQuietPeriod

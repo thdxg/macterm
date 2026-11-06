@@ -147,7 +147,7 @@ struct MactermApp: App {
                         command: .toggleProjectMemory,
                         appState: appState,
                         projectStore: projectStore,
-                        titleOverride: "Toggle Project Memory"
+                        titleOverride: "Toggle Project Insights"
                     )
                 }
                 AppCommandMenuItem(

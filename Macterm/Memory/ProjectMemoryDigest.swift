@@ -23,6 +23,8 @@ struct ProjectMemoryDigest: Equatable {
     that ran there and the state of its Git repository. \
     Write two or three sentences, at most 60 words: what they were doing, whether it worked, \
     and what probably comes next. If the latest run of a command failed, name it and the likely cause. \
+    When the log has no commands, say what the repository shows: the branch in use, its uncommitted \
+    changes, and the branches with recent commits. \
     Name only commands, files and branches that are in the log; never guess a file name. \
     Put commands, branches and file names in backticks. \
     Do not say how long ago things happened: the reader may see the text hours later. \
