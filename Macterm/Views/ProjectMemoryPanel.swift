@@ -174,7 +174,9 @@ struct ProjectMemoryPanel: View {
             }
             VStack(alignment: .leading, spacing: 10) {
                 summaryParagraph
-                if summary.lastActivity == nil {
+                // With no command, the line explains the empty Recent list,
+                // unless the summary already fills the space from the Git state.
+                if summary.lastActivity == nil, summarizer.state(for: project.id).text.isEmpty {
                     Text("No commands recorded yet. Run something in this project.")
                         .font(.callout)
                         .foregroundStyle(MactermTheme.fgMuted)
@@ -213,8 +215,12 @@ struct ProjectMemoryPanel: View {
         }
     }
 
+    /// The summary needs something to say: a command in the log, or the
+    /// Git state alone, which is what a project shows before its first
+    /// command (`ProjectMemoryDigest` is nil with neither).
     private var summaryEnabled: Bool {
-        preferences.projectMemorySummary && ProjectMemorySummarizer.isEnabled && !entries.isEmpty
+        preferences.projectMemorySummary && ProjectMemorySummarizer.isEnabled
+            && (!entries.isEmpty || memory.git[project.id] != nil)
     }
 
     /// The reload button of the Summary header: a spinner while the model
