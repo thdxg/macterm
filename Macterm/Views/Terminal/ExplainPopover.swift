@@ -1,5 +1,8 @@
 import AppKit
+import os
 import SwiftUI
+
+private let logger = Logger(subsystem: appBundleID, category: "ExplainPopover")
 
 /// The popover of Explain Output: Apple's on-device model explains the
 /// selection, or the output of the last command, at the text it explains.
@@ -59,12 +62,22 @@ final class ExplainPopover: NSObject, NSPopoverDelegate {
             model.fail(String(localized: "There is no output to explain."))
             return
         }
-        let stream = OnDeviceModel.stream(
-            instructions: OutputExplanation.instructions,
-            prompt: explanation.prompt,
-            maximumResponseTokens: OutputExplanation.maximumReplyTokens
-        )
         task = Task { [model] in
+            var explanation = explanation
+            let contextSize = OnDeviceModel.contextSize
+            let start = ContinuousClock.now
+            await explanation.fit(contextSize: contextSize, countTokens: OnDeviceModel.tokenCounter)
+            logger.debug("""
+            explain fit: context \(contextSize, privacy: .public), \
+            text \(explanation.text.count, privacy: .public) of \(explanation.fullText.count, privacy: .public) \
+            characters, in \((ContinuousClock.now - start).formatted(.units(allowed: [.milliseconds])), privacy: .public)
+            """)
+            guard !Task.isCancelled else { return }
+            let stream = OnDeviceModel.stream(
+                instructions: OutputExplanation.instructions,
+                prompt: explanation.prompt,
+                maximumResponseTokens: OutputExplanation.maximumReplyTokens
+            )
             do {
                 for try await partial in stream {
                     model.receive(partial)
