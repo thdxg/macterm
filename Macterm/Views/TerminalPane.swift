@@ -471,7 +471,7 @@ private struct TerminalSurface: NSViewRepresentable {
             let resolved = color?.usingColorSpace(.sRGB)?.cgColor
             onAdaptiveBackgroundChange(resolved)
         }
-        view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs in
+        view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs, command in
             guard let pane else { return }
             // A command boundary is exactly when the pane's identity changes —
             // the program that just exited (claude, hx) is gone and the shell
@@ -494,7 +494,9 @@ private struct TerminalSurface: NSViewRepresentable {
             // Project memory: off unless the user turned it on, macOS 26+. A
             // mirror parses the same OSC 133;D; only the real pane records.
             if !pane.isMirror {
-                ProjectMemory.shared.commandFinished(pane: pane, view: view, exitCode: exitCode, durationNs: durationNs)
+                ProjectMemory.shared.commandFinished(
+                    pane: pane, view: view, exitCode: exitCode, durationNs: durationNs, reportedCommand: command
+                )
             }
             if Preferences.shared.showTabStatusIndicator {
                 pane.markCommandFinished()

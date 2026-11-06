@@ -59,9 +59,13 @@ final class GhosttyCallbacks: @unchecked Sendable {
             guard let view = surfaceView(from: target) else { return true }
             let exitCode = action.action.command_finished.exit_code
             let duration = action.action.command_finished.duration
+            // Fork patch 0019: the command as typed at the prompt, or NULL
+            // when the shell marked no input. Valid for the action only, so
+            // it is copied here, before the hop to the main queue.
+            let command = action.action.command_finished.command.map { String(cString: $0) }
             DispatchQueue.main.async {
                 PasswordPromptMonitor.shared.viewDidFinishCommand(view, exitCode: Int32(exitCode))
-                view.onCommandFinished?(exitCode, duration)
+                view.onCommandFinished?(exitCode, duration, command)
             }
             return true
         case GHOSTTY_ACTION_PROGRESS_REPORT:

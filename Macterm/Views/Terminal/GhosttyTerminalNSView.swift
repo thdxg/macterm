@@ -436,7 +436,9 @@ final class GhosttyTerminalNSView: NSView {
     /// for every surface; this is the per-pane half — the pane marks itself
     /// as ringing so the Dock badge can count its tab (`Pane.ringBell`).
     var onBell: (() -> Void)?
-    var onCommandFinished: ((Int16, UInt64) -> Void)?
+    /// Exit code (-1 unknown), duration in ns, and the command as typed
+    /// at the prompt when libghostty has it (fork patch 0019), else nil.
+    var onCommandFinished: ((Int16, UInt64, String?) -> Void)?
     var onProgressStarted: (() -> Void)?
     /// A progress report ended the run (`TerminalProgressReport`). The Bool is
     /// whether it failed: true for ERROR, false for REMOVE and PAUSE.

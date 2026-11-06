@@ -58,7 +58,7 @@ The action **Where Did I Leave Off** returns the same answer as text, for a proj
 
 ## What Macterm records
 
-Macterm records a command when the shell reports that it finished (OSC 133). This needs [shell integration](/docs/configuration). Macterm reads the command from the prompt line when you press Return, up to the cursor, so a command that clears the screen, such as `clear`, is recorded too, and a right prompt or an autosuggestion after the cursor is not part of it. In bash and zsh, the shell integration sends no mark for the first prompt of a pane, so the first command of a new pane is read only when it finishes. The output tail of a failed command comes from the screen after the next prompt shows. If Macterm cannot read the command, it records nothing. A tab that two windows show records each command one time.
+Macterm records a command when the shell reports that it finished (OSC 133). This needs [shell integration](/docs/configuration). The terminal gives Macterm the command as you typed it, from the cells of the prompt where you typed, at the moment the output starts. A command that clears the screen, such as `clear`, is recorded too, and a right prompt or an autosuggestion is not part of it. The output tail of a failed command comes from the screen after the next prompt shows. If Macterm cannot read the command, it records nothing. A tab that two windows show records each command one time.
 
 Macterm does not record:
 
