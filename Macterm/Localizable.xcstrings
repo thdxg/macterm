@@ -3939,18 +3939,18 @@
         }
       }
     },
-    "Go to the worktree at %@ in a new split" : {
+    "Go to the worktree at %@ in this pane" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "새 분할에서 %@의 워크트리로 이동"
+            "value" : "이 페인에서 %@의 워크트리로 이동"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在新的分栏中前往位于 %@ 的工作树"
+            "value" : "在此窗格中前往位于 %@ 的工作树"
           }
         }
       }
@@ -6553,18 +6553,18 @@
         }
       }
     },
-    "Open a tab in the worktree at %@" : {
+    "Open a terminal in the project first." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@의 워크트리에서 탭 열기"
+            "value" : "먼저 프로젝트에서 터미널을 여십시오."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在位于 %@ 的工作树中打开标签页"
+            "value" : "请先在项目中打开一个终端。"
           }
         }
       }
@@ -9829,18 +9829,18 @@
         }
       }
     },
-    "Switch to %@ in a new split" : {
+    "Switch to %@ in this pane" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "새 분할에서 %@(으)로 전환"
+            "value" : "이 페인에서 %@(으)로 전환"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在新的拆分中切换到 %@"
+            "value" : "在此窗格中切换到 %@"
           }
         }
       }
@@ -10362,6 +10362,22 @@
         }
       }
     },
+    "The pane is running a command. Finish or stop it first." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인에서 명령이 실행 중입니다. 먼저 끝내거나 중지하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该窗格正在运行命令。请先完成或停止它。"
+          }
+        }
+      }
+    },
     "The row has no directory" : {
       "localizations" : {
         "ko" : {
@@ -10426,6 +10442,22 @@
         }
       }
     },
+    "The terminal of that pane is not live yet." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "해당 페인의 터미널이 아직 실행되지 않았습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该窗格的终端尚未运行。"
+          }
+        }
+      }
+    },
     "The terminal of that pane is not live yet. Select its tab one time, then try again." : {
       "localizations" : {
         "ko" : {
@@ -10470,22 +10502,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "网页目标不包含有效的主机。"
-          }
-        }
-      }
-    },
-    "There is no folder at %@" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@에 폴더가 없습니다"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 处没有文件夹"
           }
         }
       }
