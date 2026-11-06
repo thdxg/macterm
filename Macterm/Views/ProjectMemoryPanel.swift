@@ -369,7 +369,9 @@ struct ProjectMemoryPanel: View {
             switchTo(branch, isCurrent: isCurrent)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch")
+                // The same glyph for every row: the fill and the bold name
+                // mark the current branch, and a check read as "done".
+                Image(systemName: "arrow.triangle.branch")
                     .font(.caption)
                     .foregroundStyle(isCurrent ? MactermTheme.accent : MactermTheme.fgMuted)
                 Text(verbatim: branch.name)
