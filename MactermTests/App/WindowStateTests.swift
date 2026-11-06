@@ -725,6 +725,46 @@ struct WindowStateTests {
     }
 
     @Test
+    func a_snapshot_that_showed_the_panel_in_a_window_turns_the_one_toggle_on() throws {
+        // The panel was per window before it became one toggle for the app.
+        // A saved window that showed it turns the toggle on at the restore;
+        // the next save writes no per-window value.
+        Preferences.shared.projectMemoryPanelVisible = false
+        defer { Preferences.shared.projectMemoryPanelVisible = false }
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-\(UUID().uuidString).json")
+        let projects = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let files = ProjectFileStore(directoryURL: projects)
+        let p = Project(name: "p", path: "/tmp", sortOrder: 0)
+
+        let writer = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        writer.restoreSelection(projects: [p])
+        writer.selectProject(p)
+        let w1 = WindowState(activeProjectID: p.id)
+        writer.registerWindow(w1)
+        writer.noteKeyWindow(w1)
+        writer.saveWorkspaces()
+        // The field as an older build wrote it.
+        var file = try JSONSerialization.jsonObject(with: Data(contentsOf: tmp)) as? [String: Any] ?? [:]
+        var windows = file["windows"] as? [[String: Any]] ?? []
+        #expect(windows.count == 1)
+        #expect(windows.first?["projectMemoryPanelVisible"] == nil, "a current build writes no per-window value")
+        windows[0]["projectMemoryPanelVisible"] = true
+        file["windows"] = windows
+        try JSONSerialization.data(withJSONObject: file).write(to: tmp)
+
+        let reader = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        reader.restoreSelection(projects: [p])
+        let first = WindowState()
+        reader.registerWindow(first)
+        reader.noteKeyWindow(first)
+        reader.restoreWindows(adopting: first)
+        #expect(Preferences.shared.projectMemoryPanelVisible)
+        #expect(reader.projectMemoryPanelVisible)
+    }
+
+    @Test
     func every_window_reopens_at_its_own_saved_frame() {
         // #496: the frame was left to SwiftUI's autosave, whose key changes
         // every launch, so windows always came back at the default size. It

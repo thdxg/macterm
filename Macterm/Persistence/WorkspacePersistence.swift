@@ -108,8 +108,10 @@ struct WindowSnapshot: Codable {
     /// leaked one window's collapsed state into the next window at that slot.
     /// nil (an older snapshot) means shown.
     var sidebarVisible: Bool?
-    /// Whether the project memory panel was shown. nil (an older snapshot)
-    /// means hidden.
+    /// Whether the project memory panel was shown, from before the panel
+    /// was one toggle for the app (`Preferences.projectMemoryPanelVisible`).
+    /// Read once by the restore to carry a shown panel over; never written
+    /// since.
     var projectMemoryPanelVisible: Bool?
     /// The window's frame, as AppKit's own `frameDescriptor` string (the frame
     /// plus the screen it was on, so `setFrame(from:)` can fit it to a display
