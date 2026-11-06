@@ -23,6 +23,10 @@ struct ForegroundSample: Equatable {
         case processTable(pid: pid_t?)
         /// The per-host ssh probe (`RemoteForegroundResolver`).
         case remoteProbe
+        /// A report the host's zmx pushed through the pane's own connection
+        /// (`ZmxForegroundEvents`): current at the moment it arrived, in the
+        /// order of the output, and it costs no connection of its own.
+        case remoteEvent
     }
 
     /// Foreground comm basename (normalized), or nil when the origin had
@@ -70,6 +74,10 @@ enum ForegroundPolicy {
     /// warn on EVERY close forever (no probe can ever land) — the user chose
     /// "don't warn" over "always warn" when they turned probing off. Local
     /// panes are untouched: their signals cost no ssh connections.
+    ///
+    /// A sample the host pushed (`.remoteEvent`) counts whatever the toggle
+    /// says: it rides the pane's own connection, so it is never a relic and
+    /// never costs a prompt.
     static func needsConfirmClose(
         sample: ForegroundSample?,
         executionState: TerminalExecutionState,
@@ -81,6 +89,9 @@ enum ForegroundPolicy {
         guard hasSurface else { return false }
         guard isRemote else { return surfaceBusy() }
         if executionState == .running { return true }
+        if let sample, sample.origin == .remoteEvent, let name = sample.name, !name.isEmpty {
+            return !sample.isIdleShell
+        }
         guard remoteProbingEnabled else { return false }
         guard let sample, let name = sample.name, !name.isEmpty else { return surfaceBusy() }
         return !sample.isIdleShell

@@ -1691,8 +1691,12 @@ final class AppState {
                         // finishing in a background project must still
                         // rename its tab without waiting for a switch — and
                         // so does a title waiting on a probe to confirm it.
-                        if projectID == activeProjectID || pane.remoteProbePending
-                            || pane.awaitsRemoteTitleConfirmation
+                        // A pane whose host pushes its foreground through the
+                        // pane's own connection needs no probe at all
+                        // (`Pane.remoteForegroundIsPushed`).
+                        if !pane.remoteForegroundIsPushed,
+                           projectID == activeProjectID || pane.remoteProbePending
+                           || pane.awaitsRemoteTitleConfirmation
                         {
                             activeRemotePanes.append(pane)
                         }
