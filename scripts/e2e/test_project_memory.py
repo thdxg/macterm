@@ -1,6 +1,7 @@
 """Project memory: a command that finishes in a project's pane is recorded,
 with its exit code, its secrets masked, and a tail of its output when it
-fails. The panel's quick actions offer to run the failure again.
+fails. Without the on-device model the panel suggests nothing, also after
+a failure: Suggested holds only the model's suggestions.
 
 Recording starts at OSC 133;D (`GHOSTTY_ACTION_COMMAND_FINISHED`). CI's
 bash 3.2 login shell gets no shell integration, so the script prints the
@@ -92,18 +93,20 @@ def test_a_failed_command_is_recorded_with_its_secrets_masked(app, live_pane, re
     # in place of the secret.
     assert not any("•••" in action["command"] for action in memory["actions"])
 
-    # A failure with no secret is offered to run again.
+    # A failure with no secret is the unresolved failure, but nothing is
+    # suggested for it: CI has no on-device model, and Suggested shows only
+    # what the model suggests.
     plain = _script(START + f"printf 'plain-{nonce}\\n'\nprintf '\\033]133;D;2\\007'\n")
     try:
         app.pane_run(f"/bin/sh {plain}", pane=live_pane["id"])
-        retry = wait_for(
-            lambda: next((a for a in _memory(app, recording["id"])["actions"] if a["kind"] == "retry"), None),
+        wait_for(
+            lambda: _memory(app, recording["id"])["unresolvedFailure"] == f"/bin/sh {plain}",
             timeout=30,
-            message="a Run Again action",
+            message="the plain failure as the unresolved failure",
         )
     finally:
         os.unlink(plain)
-    assert retry["command"] == f"/bin/sh {plain}"
+    assert _memory(app, recording["id"])["actions"] == []
 
 
 def test_nothing_is_recorded_while_memory_is_off(app, live_pane, recording):

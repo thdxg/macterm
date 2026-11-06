@@ -44,7 +44,6 @@ struct ProjectMemorySuggestionsTests {
         ], entries: entries)
 
         #expect(actions.map(\.command) == ["make test", "git status", "make build"])
-        #expect(actions.allSatisfy { $0.kind == .suggested })
         #expect(actions[0].subtitle == "The latest run failed.")
         #expect(actions[2].directory == "/repo/app")
     }

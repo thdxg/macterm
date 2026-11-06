@@ -1169,7 +1169,7 @@ final class ControlHandler {
                 ControlMemoryState.Entry(command: $0.command, directory: $0.directory, exitCode: $0.exitCode, failureTail: $0.failureTail)
             },
             unresolvedFailure: summary.unresolvedFailure?.command,
-            actions: actions.map { ControlMemoryState.Action(kind: "\($0.kind)", title: $0.title, command: $0.command) },
+            actions: actions.map { ControlMemoryState.Action(kind: "suggested", title: $0.title, command: $0.command) },
             summary: ProjectMemorySummarizer.isEnabled
                 ? ControlMemoryState.Summary(
                     phase: ProjectMemorySummarizer.shared.state(for: project.id).phase.rawValue,

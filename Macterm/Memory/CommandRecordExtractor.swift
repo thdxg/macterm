@@ -88,7 +88,7 @@ struct ScreenCommandExtractor: CommandTextSource {
     /// and a right prompt after a gap of two or more spaces. The output of
     /// the screen's command is then this command's output.
     static func screenCommand(_ screen: String, shows command: String) -> Bool {
-        if QuickActionRanker.normalized(screen) == QuickActionRanker.normalized(command) { return true }
+        if MemoryCommand.normalized(screen) == MemoryCommand.normalized(command) { return true }
         guard screen.hasPrefix(command) else { return false }
         let rest = screen.dropFirst(command.count)
         return rest.hasPrefix("  ") || rest.hasPrefix(" \t")

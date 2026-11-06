@@ -305,12 +305,14 @@ final class ProjectMemory {
     }
 
     /// The rows of the panel's Suggested section: the model's suggestions
-    /// when it gave some (`ProjectMemorySuggestions`), else the ranker's.
+    /// (`ProjectMemorySuggestions`), or none. With no model, no summary yet,
+    /// or nothing the model suggested that survives the checks, the section
+    /// is hidden, as the summary is: a command is never suggested only
+    /// because it ran recently or often.
     func suggestedActions(projectID: UUID, entries: [MemoryEntry]) -> [QuickAction] {
-        let suggested = ProjectMemorySuggestions.actions(
+        ProjectMemorySuggestions.actions(
             from: summarizer.state(for: projectID).suggestions, entries: entries, git: git[projectID]
         )
-        return suggested.isEmpty ? QuickActionRanker.actions(entries: entries, git: git[projectID]) : suggested
     }
 
     // MARK: - Background summary
