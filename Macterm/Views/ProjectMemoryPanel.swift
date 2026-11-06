@@ -273,7 +273,9 @@ struct ProjectMemoryPanel: View {
             ProjectMemoryActions.run(action, in: project, appState: appState, projects: projectStore.projects)
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: action.symbol)
+                // One glyph for every row: the rows are commands, and the
+                // Summary says which one failed.
+                Image(systemName: "terminal")
                     .frame(width: 18)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(verbatim: action.title)

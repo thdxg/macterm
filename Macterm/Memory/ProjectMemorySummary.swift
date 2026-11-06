@@ -54,8 +54,6 @@ struct QuickAction: Equatable, Identifiable {
     var kind: Kind
     var title: String
     var subtitle: String?
-    /// An SF Symbol.
-    var symbol: String
     var command: String
     /// Where the command runs; nil is the project's directory.
     var directory: String?
@@ -114,7 +112,6 @@ enum QuickActionRanker {
                 kind: .retry,
                 title: String(localized: "Run Again"),
                 subtitle: command,
-                symbol: "arrow.clockwise",
                 command: command,
                 directory: failure.directory
             ))
@@ -127,7 +124,6 @@ enum QuickActionRanker {
                     kind: .git,
                     title: String(localized: "Pull"),
                     subtitle: String(localized: "\(git.behind) commits behind \(git.upstream ?? "upstream")"),
-                    symbol: "arrow.down.circle",
                     command: "git pull"
                 ))
             }
@@ -136,7 +132,6 @@ enum QuickActionRanker {
                     kind: .git,
                     title: String(localized: "Show Changes"),
                     subtitle: String(localized: "\(git.changedFiles) changed files"),
-                    symbol: "plusminus",
                     command: "git status"
                 ))
             }
@@ -145,7 +140,6 @@ enum QuickActionRanker {
                     kind: .git,
                     title: String(localized: "Show Stashes"),
                     subtitle: String(localized: "\(git.stashes) stashes"),
-                    symbol: "tray.full",
                     command: "git stash list"
                 ))
             }
@@ -158,7 +152,6 @@ enum QuickActionRanker {
                 kind: .frequent,
                 title: score.command,
                 subtitle: nil,
-                symbol: score.last.outcome == .failure ? "xmark.circle" : "terminal",
                 command: score.command,
                 directory: score.last.directory
             ))

@@ -51,7 +51,6 @@ enum ProjectMemorySuggestions {
                 kind: .suggested,
                 title: command,
                 subtitle: suggestion.reason.trimmingCharacters(in: .whitespacesAndNewlines),
-                symbol: last?.outcome == .failure ? "xmark.circle" : "terminal",
                 command: command,
                 directory: last?.directory
             ))
