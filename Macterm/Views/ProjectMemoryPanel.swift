@@ -322,16 +322,7 @@ struct ProjectMemoryPanel: View {
 
     private func gitDetails(_ git: GitStatus) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.triangle.branch")
-                Text(verbatim: git.branch ?? git.detachedAt.map { "(\($0))" } ?? "—")
-                    .font(.callout.monospaced().weight(.medium))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 0)
-                if git.ahead > 0 { countLabel(git.ahead, symbol: "arrow.up") }
-                if git.behind > 0 { countLabel(git.behind, symbol: "arrow.down") }
-            }
+            // No branch line: the list below has the current branch, highlighted.
             Text(gitHeadline(git))
                 .font(.caption)
                 .foregroundStyle(MactermTheme.fgMuted)
@@ -405,17 +396,11 @@ struct ProjectMemoryPanel: View {
         return String(localized: "Switch to \(branch.name) in a new split")
     }
 
-    private func countLabel(_ count: Int, symbol: String) -> some View {
-        Label {
-            Text(verbatim: "\(count)")
-        } icon: {
-            Image(systemName: symbol)
-        }
-        .font(.caption)
-    }
-
     private func gitHeadline(_ git: GitStatus) -> String {
         var parts: [String] = []
+        if git.branch == nil, let commit = git.detachedAt { parts.append(String(localized: "Detached at \(commit)")) }
+        if git.ahead > 0 { parts.append(String(localized: "\(git.ahead) ahead")) }
+        if git.behind > 0 { parts.append(String(localized: "\(git.behind) behind")) }
         if git.isClean { parts.append(String(localized: "No changes")) }
         if git.staged > 0 { parts.append(String(localized: "\(git.staged) staged")) }
         if git.unstaged > 0 { parts.append(String(localized: "\(git.unstaged) modified")) }

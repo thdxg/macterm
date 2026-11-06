@@ -448,6 +448,38 @@
         }
       }
     },
+    "%lld ahead" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld개 앞섬"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "领先 %lld 个提交"
+          }
+        }
+      }
+    },
+    "%lld behind" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld개 뒤처짐"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "落后 %lld 个提交"
+          }
+        }
+      }
+    },
     "%lld changed files" : {
       "localizations" : {
         "ko" : {
@@ -2898,6 +2930,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "桌面小组件"
+          }
+        }
+      }
+    },
+    "Detached at %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에서 분리됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已分离于 %@"
           }
         }
       }
