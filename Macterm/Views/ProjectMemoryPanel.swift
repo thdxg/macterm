@@ -321,16 +321,14 @@ struct ProjectMemoryPanel: View {
     }
 
     private func gitDetails(_ git: GitStatus) -> some View {
+        // The card is the branches, with the current one highlighted: no
+        // branch line and no counts line above them.
         VStack(alignment: .leading, spacing: 8) {
-            // No branch line: the list below has the current branch, highlighted.
-            Text(gitHeadline(git))
-                .font(.caption)
-                .foregroundStyle(MactermTheme.fgMuted)
-            if !git.branches.isEmpty {
-                Text("Branches")
-                    .font(.caption.weight(.semibold))
+            if git.branches.isEmpty {
+                Text("No branches yet.")
+                    .font(.callout)
                     .foregroundStyle(MactermTheme.fgMuted)
-                    .padding(.top, 4)
+            } else {
                 GlassEffectContainer(spacing: 6) {
                     VStack(spacing: 6) {
                         ForEach(git.branches, id: \.name) { branch in
@@ -394,20 +392,6 @@ struct ProjectMemoryPanel: View {
             return String(localized: "Open a tab in the worktree at \(worktree)")
         }
         return String(localized: "Switch to \(branch.name) in a new split")
-    }
-
-    private func gitHeadline(_ git: GitStatus) -> String {
-        var parts: [String] = []
-        if git.branch == nil, let commit = git.detachedAt { parts.append(String(localized: "Detached at \(commit)")) }
-        if git.ahead > 0 { parts.append(String(localized: "\(git.ahead) ahead")) }
-        if git.behind > 0 { parts.append(String(localized: "\(git.behind) behind")) }
-        if git.isClean { parts.append(String(localized: "No changes")) }
-        if git.staged > 0 { parts.append(String(localized: "\(git.staged) staged")) }
-        if git.unstaged > 0 { parts.append(String(localized: "\(git.unstaged) modified")) }
-        if git.untracked > 0 { parts.append(String(localized: "\(git.untracked) untracked")) }
-        if git.conflicted > 0 { parts.append(String(localized: "\(git.conflicted) conflicted")) }
-        if git.stashes > 0 { parts.append(String(localized: "\(git.stashes) stashed")) }
-        return parts.joined(separator: " · ")
     }
 
     // MARK: - Recent

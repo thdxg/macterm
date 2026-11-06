@@ -448,38 +448,6 @@
         }
       }
     },
-    "%lld ahead" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld개 앞섬"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "领先 %lld 个提交"
-          }
-        }
-      }
-    },
-    "%lld behind" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld개 뒤처짐"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "落后 %lld 个提交"
-          }
-        }
-      }
-    },
     "%lld changed files" : {
       "localizations" : {
         "ko" : {
@@ -518,38 +486,6 @@
         }
       }
     },
-    "%lld conflicted" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "충돌 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个冲突"
-          }
-        }
-      }
-    },
-    "%lld modified" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "수정됨 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个已修改"
-          }
-        }
-      }
-    },
     "%lld panes" : {
       "comment" : "Sidebar title of a tab with four or more panes",
       "localizations" : {
@@ -583,38 +519,6 @@
         }
       }
     },
-    "%lld staged" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "스테이징됨 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个已暂存"
-          }
-        }
-      }
-    },
-    "%lld stashed" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "스태시 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个储藏"
-          }
-        }
-      }
-    },
     "%lld stashes" : {
       "localizations" : {
         "ko" : {
@@ -627,22 +531,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个储藏"
-          }
-        }
-      }
-    },
-    "%lld untracked" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "추적되지 않음 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个未跟踪"
           }
         }
       }
@@ -1854,22 +1742,6 @@
         }
       }
     },
-    "Branches" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "브랜치"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "分支"
-          }
-        }
-      }
-    },
     "Browse files and folders in this project" : {
       "localizations" : {
         "ko" : {
@@ -2930,22 +2802,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "桌面小组件"
-          }
-        }
-      }
-    },
-    "Detached at %@" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@에서 분리됨"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已分离于 %@"
           }
         }
       }
@@ -5738,18 +5594,18 @@
         }
       }
     },
-    "No changes" : {
+    "No branches yet." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "변경 사항 없음"
+            "value" : "아직 브랜치가 없습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有更改"
+            "value" : "还没有分支。"
           }
         }
       }
