@@ -164,25 +164,13 @@ struct ProjectMemoryPanel: View {
         section(String(localized: "Summary")) {
             VStack(alignment: .leading, spacing: 10) {
                 summaryParagraph
-                if let last = summary.lastActivity {
-                    Text("Last command \(last.formatted(.relative(presentation: .named)))")
-                        .font(.callout)
-                        .foregroundStyle(MactermTheme.fgMuted)
-                } else {
+                if summary.lastActivity == nil {
                     Text("No commands recorded yet. Run something in this project.")
                         .font(.callout)
                         .foregroundStyle(MactermTheme.fgMuted)
                 }
                 if let failure = summary.unresolvedFailure {
                     failureCard(failure)
-                } else if let last = summary.lastCommand, let command = last.command {
-                    HStack(spacing: 6) {
-                        outcomeGlyph(last.outcome)
-                        Text(verbatim: command)
-                            .font(.callout.monospaced())
-                            .lineLimit(2)
-                            .truncationMode(.middle)
-                    }
                 }
             }
         }

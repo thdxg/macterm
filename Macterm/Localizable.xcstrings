@@ -4544,22 +4544,6 @@
         }
       }
     },
-    "Last command %@" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "마지막 명령: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上一条命令：%@"
-          }
-        }
-      }
-    },
     "Layout" : {
       "localizations" : {
         "ko" : {
