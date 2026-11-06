@@ -975,6 +975,7 @@ final class Pane: Identifiable {
         )
         hasBuiltSurface = true
         view.owningPane = self
+        MactermPaneEntity.annotate(view, for: self)
         _nsView = view
         return view
     }

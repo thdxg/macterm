@@ -118,6 +118,35 @@ enum IntentTargets {
         return project
     }
 
+    /// Show a project and front its window — what Focus Project and the
+    /// Spotlight open both do.
+    static func focusProject(_ id: UUID, in ctx: AppCommandContext) throws {
+        let target = try project(id, in: ctx)
+        // `revealProject` fronts a window ALREADY showing it rather than
+        // repointing whichever window happens to be key — the rule for
+        // something that happens *to* a project rather than being chosen in a
+        // window (a notification click, the CLI's `pane focus`), which is
+        // exactly the shape of an intent arriving from outside.
+        ctx.appState.appDelegate?.showWindow()
+        if target.id == PinnedTabs.projectID {
+            // The sentinel must not go through the project path: it has its
+            // own selection (`selectPinnedProject`), and `selectProject`
+            // would treat it as a project rooted at the home directory.
+            ctx.appState.selectPinnedProject()
+        } else if target.id == ScratchTabs.projectID {
+            ctx.appState.selectScratchTabs()
+        } else {
+            ctx.appState.revealProject(target.id)
+        }
+    }
+
+    /// Whether a pane in this workspace is one the pane entities can name.
+    /// `allPanes` walks the workspaces only, so the quick terminal's panes
+    /// and the desktop widgets' panes are not addressable.
+    static func isAddressablePane(projectID: UUID) -> Bool {
+        projectID != QuickTerminalService.projectID && projectID != DesktopWidget.projectID
+    }
+
     /// A tab by id, searched across every loaded workspace — a `TabEntity`
     /// carries no project, and a tab can be moved between projects after the
     /// shortcut was written.

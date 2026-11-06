@@ -54,6 +54,18 @@ All five actions need a live terminal. A pane in a tab that you never selected h
 | **Toggle Quick Terminal** | Shows or hides the [quick terminal](/docs/quick-terminal). |
 | **Open Command Palette** | Opens the [palette](/docs/command-palette) in the frontmost window. |
 
+## Projects in Spotlight
+
+Macterm adds your projects to Spotlight. Search for the name of a project or the name of its folder. Click the result to show the project, as **Focus Project** does. Macterm updates the index when you add, rename, move or remove a project.
+
+The pinned workspace and the scratch workspace are not projects, so they are not in Spotlight. A click on a result is an action, so [Permission](#permission) applies to it.
+
+## The pane on the screen
+
+Each pane of a project tells macOS which pane it is. Siri and Apple Intelligence can then use "this pane" as the target of a pane action. macOS 15.4 or later is necessary.
+
+Macterm gives only the identity of the pane. It does not give the text of the pane to the system, because terminal text can contain secrets. **Get Pane Contents** is the only way to read it, and the permission applies. The panes of the quick terminal and of the desktop widgets do not tell macOS which pane they are, because the pane actions cannot find them.
+
 ## Picking a project, tab or pane
 
 Type to filter the picker. A pane matches the name in the sidebar *and* its session name. You can paste a session name from `macterm pane list` or `$MACTERM_SESSION`.

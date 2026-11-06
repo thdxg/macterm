@@ -845,6 +845,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 appState?.windows.contains { $0.projectMemoryPanelVisible && $0.activeProjectID == projectID } ?? false
             }
         }
+        ProjectSpotlightIndex.shared.attach(projectStore: projectStore)
         // Draws the restored widgets (the restore may land on either side of
         // this) and every one created from here on.
         DesktopWidgetWindows.shared.attach(appState: appState)
