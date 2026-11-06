@@ -97,6 +97,40 @@ struct RemoteSpawnTests {
     }
 
     @Test
+    func zmx_install_connections_run_without_batch_mode_and_stay_single_quote_free() throws {
+        // The install is a click, so ssh may ask (`TTYCommand`): no
+        // BatchMode. The scripts ship as `sh -c '<script>'`, so they hold no
+        // single quote of their own.
+        let check = try #require(RemoteSpawn.zmxHostCheckArgv(remote: remote))
+        #expect(check.first == "ssh")
+        #expect(!check.joined(separator: " ").contains("BatchMode"))
+        #expect(check.contains("devbox"))
+        let checkScript = check.last ?? ""
+        #expect(checkScript.contains("uname -s"))
+        #expect(checkScript.contains("uname -m"))
+        #expect(checkScript.contains("command -v zmx"))
+        #expect(!RemoteSpawn.zmxHostCheckScript.contains("'"))
+        #expect(!RemoteSpawn.zmxInstallScript.contains("'"))
+
+        // A project's own zmx path is what the check asks about.
+        let own = RemoteSpawn.zmxHostCheckArgv(remote: remote, zmxPath: "/opt/zmx/bin/zmx")?.last ?? ""
+        #expect(own.contains("command -v \"/opt/zmx/bin/zmx\""))
+
+        let upload = try #require(RemoteSpawn.zmxUploadArgv(remote: remote, localPath: "/tmp/zmx-x86_64-linux"))
+        #expect(upload.first == "scp")
+        #expect(upload.contains("/tmp/zmx-x86_64-linux"))
+        #expect(upload.last == "devbox:.zmx.macterm")
+
+        let install = try #require(RemoteSpawn.zmxInstallArgv(remote: remote))
+        #expect(install.first == "ssh")
+        let installScript = install.last ?? ""
+        #expect(installScript.contains("mkdir -p \"$HOME/.local/bin\""))
+        #expect(installScript.contains("mv -f \"$HOME/.zmx.macterm\" \"$HOME/.local/bin/zmx\""))
+        #expect(installScript.contains("installed=%s"))
+        #expect(RemoteSpawn.zmxHostCheckArgv(remote: .local("/tmp")) == nil)
+    }
+
+    @Test
     func pane_command_asks_the_host_zmx_for_foreground_reports() throws {
         // The fork's client reads the variable (`ZmxForegroundEvents`) and
         // removes it before the session starts. Background operations never

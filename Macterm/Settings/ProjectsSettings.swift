@@ -22,6 +22,9 @@ struct ProjectsSettings: View {
     /// the user can expect it to change.
     @State private var layouts: [ProjectFileStore.Listing] = []
     @State private var layoutPendingDeletion: ProjectFileStore.Listing?
+    /// The zmx install sheet for a remote project (#699), on this window:
+    /// the main window's copy would open behind Settings.
+    @State private var zmxInstall: ZmxInstallRequest?
     @State private var deleteFailure: String?
 
     var body: some View {
@@ -42,13 +45,7 @@ struct ProjectsSettings: View {
                     // The cost is `.onMove`, which exists only on `List`, so
                     // reordering moved into the row menu.
                     ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { index, project in
-                        ProjectRow(
-                            project: project,
-                            canMoveUp: index > 0,
-                            canMoveDown: index < projectStore.projects.count - 1,
-                            onMoveUp: { projectStore.reorder(fromOffsets: [index], toOffset: index - 1) },
-                            onMoveDown: { projectStore.reorder(fromOffsets: [index], toOffset: index + 2) }
-                        )
+                        projectRow(project, at: index)
                     }
                 }
                 Text("Change the order in the menu of a row. The order is the same as in the sidebar.")
@@ -104,6 +101,12 @@ struct ProjectsSettings: View {
         }
         .formStyle(.grouped)
         .onAppear { reloadLayouts() }
+        .sheet(item: $zmxInstall) { request in
+            ZmxInstallSheet(request: request) { installed in
+                guard let projectID = request.projectID else { return }
+                appState.useInstalledZmx(at: installed, for: projectID, store: projectStore)
+            }
+        }
         // Reflect a Save Layout made from this pane (or elsewhere while it's
         // open) — a save can create a file the list doesn't know about yet.
         .onChange(of: appState.layoutFilesVersion) { _, _ in reloadLayouts() }
@@ -138,6 +141,23 @@ struct ProjectsSettings: View {
     }
 
     // MARK: - Projects
+
+    /// One row. A function, not an inline expression: with the closures
+    /// written out in the `ForEach`, the type-checker gave up on the body.
+    private func projectRow(_ project: Project, at index: Int) -> some View {
+        ProjectRow(
+            project: project,
+            canMoveUp: index > 0,
+            canMoveDown: index < projectStore.projects.count - 1,
+            onMoveUp: { projectStore.reorder(fromOffsets: [index], toOffset: index - 1) },
+            onMoveDown: { projectStore.reorder(fromOffsets: [index], toOffset: index + 2) },
+            onInstallZmx: { installZmx(on: project) }
+        )
+    }
+
+    private func installZmx(on project: Project) {
+        zmxInstall = ZmxInstallRequest(path: project.path, projectID: project.id, zmxPath: project.zmxPath)
+    }
 
     /// Folder picker → new project → select it, the same as the sidebar's
     /// "Local Folder…". Picking a directory that already backs a project makes
@@ -223,6 +243,8 @@ private struct ProjectRow: View {
     let canMoveDown: Bool
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
+    /// Opens the zmx install sheet for a remote project (#699).
+    let onInstallZmx: () -> Void
 
     @Environment(AppState.self)
     private var appState
@@ -274,6 +296,14 @@ private struct ProjectRow: View {
                     appState.noteLayoutFilesChanged()
                 }
                 .disabled(appState.workspaces[project.id] == nil)
+
+                if project.isRemote {
+                    Divider()
+
+                    // Install or update: the sheet decides which after it
+                    // asked the host.
+                    Button("Install zmx on Host…") { onInstallZmx() }
+                }
 
                 Divider()
 
