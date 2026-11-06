@@ -233,6 +233,76 @@ enum RemoteSpawn {
         return "ssh -t \(shellQuote(destination(user: user, host: host))) \(shellQuote(remoteCommand))"
     }
 
+    /// What the install sheet asks a host first (#699): its OS and CPU, which
+    /// zmx the project would run (`zmxPath`, else the first `zmx` in PATH)
+    /// and what that zmx says. `key=value` lines, read by
+    /// `ZmxHostState.parse`; the version line is the first of `zmx version`.
+    /// `<ZMX>` is the resolved invocation, as in the probe script.
+    static let zmxHostCheckScript = """
+    printf "system=%s\\n" "$(uname -s)"; printf "machine=%s\\n" "$(uname -m)"; \
+    z=$(command -v <ZMX> 2>/dev/null); printf "path=%s\\n" "$z"; \
+    if [ -n "$z" ]; then printf "version=%s\\n" "$("$z" version 2>/dev/null | head -n 1)"; fi
+    """
+
+    /// Where the install puts the binary: in the fallback PATH of the pane
+    /// script (`remoteEnvPreamble`), so a pane finds it with no `zmxPath`.
+    static let zmxInstallDirectory = "$HOME/.local/bin"
+    /// Where `scp` lands the binary first: in the home, which exists, under
+    /// a name no program uses. The install script moves it into place.
+    static let zmxUploadName = ".zmx.macterm"
+
+    /// What the install sheet runs after the upload: the binary moves into
+    /// `zmxInstallDirectory` in one `mv`, so a running `zmx attach` on the
+    /// host never sees a half-written file, and the new binary names
+    /// itself. `installed=` is the line the sheet reads back.
+    static let zmxInstallScript = """
+    mkdir -p "\(zmxInstallDirectory)" && mv -f "$HOME/\(zmxUploadName)" "\(zmxInstallDirectory)/zmx" \
+    && chmod 755 "\(zmxInstallDirectory)/zmx" && printf "installed=%s\\n" "\(zmxInstallDirectory)/zmx" \
+    && "\(zmxInstallDirectory)/zmx" version | head -n 1
+    """
+
+    /// argv for the host check, run under a pty (`TTYCommand`), so ssh may
+    /// ask for a password or a host key: no `BatchMode`, a longer connect
+    /// timeout than a poll gets. nil for a local path.
+    static func zmxHostCheckArgv(remote: ProjectPath, zmxPath: String? = nil) -> [String]? {
+        guard case let .remote(user, host, _) = remote else { return nil }
+        let script = assertSingleQuoteFree(
+            remoteEnvPreamble
+                + zmxHostCheckScript.replacingOccurrences(of: "<ZMX>", with: zmxInvocation(zmxPath: zmxPath)),
+            onViolation: .failNonZero
+        )
+        return [
+            "ssh", "-o", "ConnectTimeout=\(installConnectTimeoutSeconds)",
+            destination(user: user, host: host),
+            "\(remoteShell) \(shellQuote(script))",
+        ]
+    }
+
+    /// argv for the upload of the binary at `localPath` to the host's home
+    /// as `zmxUploadName`, under a pty like the check.
+    static func zmxUploadArgv(remote: ProjectPath, localPath: String) -> [String]? {
+        guard case let .remote(user, host, _) = remote else { return nil }
+        return [
+            "scp", "-q", "-o", "ConnectTimeout=\(installConnectTimeoutSeconds)",
+            localPath,
+            "\(destination(user: user, host: host)):\(zmxUploadName)",
+        ]
+    }
+
+    /// argv for the move into place and the check of the installed binary.
+    static func zmxInstallArgv(remote: ProjectPath) -> [String]? {
+        guard case let .remote(user, host, _) = remote else { return nil }
+        return [
+            "ssh", "-o", "ConnectTimeout=\(installConnectTimeoutSeconds)",
+            destination(user: user, host: host),
+            "\(remoteShell) \(shellQuote(zmxInstallScript))",
+        ]
+    }
+
+    /// An install is a click, and the user waits on it: a host that takes
+    /// longer than a poll's 5 s to answer still gets the install.
+    static let installConnectTimeoutSeconds = 15
+
     /// argv (for `/usr/bin/ssh`) running a background `zmx` operation on the
     /// remote host, `sh -c`-wrapped like every remote command. `zmxPath`
     /// (optional) is used verbatim. nil for a local path.

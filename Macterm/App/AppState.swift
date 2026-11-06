@@ -1040,6 +1040,23 @@ final class AppState {
         set { keyOrFirstWindow?.isNewRemoteProjectSheetPresented = newValue }
     }
 
+    /// Opens the zmx install sheet for a remote project in the key window
+    /// (`ZmxInstallSheet`, #699). Nothing for a local project.
+    func presentZmxInstall(for project: Project) {
+        guard project.isRemote else { return }
+        keyOrFirstWindow?.zmxInstall = ZmxInstallRequest(path: project.path, projectID: project.id, zmxPath: project.zmxPath)
+    }
+
+    /// After an install put a zmx on the host that the project's panes would
+    /// not run (another one comes first in PATH, or `zmxPath` names an old
+    /// one): make the project use it, now and in every pane.
+    func useInstalledZmx(at path: String, for projectID: UUID, store: ProjectStore) {
+        store.setZmxPath(id: projectID, to: path)
+        if let project = store.projects.first(where: { $0.id == projectID }) {
+            stampRemoteZmxPath(project)
+        }
+    }
+
     private var windowPersistTask: Task<Void, Never>?
 
     /// Persist the window list after it changes.
@@ -1938,7 +1955,7 @@ final class AppState {
     /// Apply `project.zmxPath` to every pane in its workspace, so the remote
     /// spawn/kill/probe commands use it. Idempotent; safe to call on each
     /// open. No-op for local projects (nil path leaves PATH resolution).
-    private func stampRemoteZmxPath(_ project: Project) {
+    func stampRemoteZmxPath(_ project: Project) {
         guard let ws = workspaces[project.id] else { return }
         for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
             pane.remoteZmxPath = project.zmxPath

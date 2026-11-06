@@ -159,6 +159,9 @@ final class WindowState: Identifiable {
     }
 
     var isNewRemoteProjectSheetPresented = false
+    /// The zmx install sheet up in this window (`ZmxInstallSheet`, #699),
+    /// opened for a remote project.
+    var zmxInstall: ZmxInstallRequest?
     /// The password editor sheet up in this window — the palette's Password
     /// Manager adding an entry.
     var passwordEditor: PasswordEditorRequest?

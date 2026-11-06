@@ -23,6 +23,9 @@ struct NewRemoteProjectSheet: View {
     private var directory = "~"
     @State
     private var zmxPath = ""
+    /// The zmx install sheet, over this one, for the host typed above.
+    @State
+    private var zmxInstall: ZmxInstallRequest?
 
     private var composedPath: String? {
         ProjectPath.composeRemote(host: host, directory: directory)
@@ -59,14 +62,20 @@ struct NewRemoteProjectSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text("""
-            Each pane is a persistent zmx session on the host, over ssh. zmx must be installed there. \
-            If Macterm cannot find it, set an absolute path, for example ~/bin/zmx or /usr/local/bin/zmx. \
+            Each pane is a persistent zmx session on the host, over ssh. zmx must be installed there: \
+            Install zmx on Host puts Macterm's build in ~/.local/bin on the host. \
+            If Macterm cannot find a zmx, set an absolute path, for example ~/bin/zmx or /usr/local/bin/zmx. \
             Port, identity and ControlMaster come from ~/.ssh/config.
             """)
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             HStack {
+                Button("Install zmx on Host…") {
+                    guard let path = composedPath else { return }
+                    zmxInstall = ZmxInstallRequest(path: path, projectID: nil, zmxPath: trimmedZmxPath)
+                }
+                .disabled(composedPath == nil)
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
@@ -77,6 +86,11 @@ struct NewRemoteProjectSheet: View {
         }
         .padding(20)
         .frame(width: 380)
+        .sheet(item: $zmxInstall) { request in
+            // No project yet: an install that lands beside another zmx sets
+            // the path field, so the project is created with it.
+            ZmxInstallSheet(request: request) { installed in zmxPath = installed }
+        }
     }
 
     private func add() {

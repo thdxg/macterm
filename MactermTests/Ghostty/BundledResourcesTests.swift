@@ -93,6 +93,31 @@ struct BundledResourcesTests {
     /// linker-signed as `zmx`, and Xcode never re-signs a Mach-O it copies into
     /// Resources/, so `scripts/embed-zmx.sh` does it — this pins that a build
     /// phase edit can't silently turn every pane prompt into one for "zmx".
+    /// `scripts/setup.sh` writes the release file the zmx installer reads
+    /// (#699) next to the binary it unpacked, and its tag is the stamp of
+    /// that download. A release from before the checksums lists no assets;
+    /// the tag must still be there.
+    @Test
+    func zmx_release_file_names_the_pinned_build() throws {
+        guard let resourcesDir = Self.resourcesDir else { return }
+        let stamp = resourcesDir
+            .deletingLastPathComponent() // Macterm
+            .deletingLastPathComponent() // repo root
+            .appendingPathComponent(".zmx-tag")
+        guard let tag = try? String(contentsOf: stamp, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+              !tag.isEmpty
+        else { return }
+        let release = try #require(
+            ZmxRelease.bundled,
+            "zmx-release.json missing from the built bundle — run `mise run setup`"
+        )
+        #expect(release.tag == tag)
+        for (asset, sha) in release.assets {
+            #expect(asset.hasPrefix("zmx-") && asset.hasSuffix(".tar.gz"), "unexpected asset \(asset)")
+            #expect(sha.count == 64, "not a SHA-256: \(sha)")
+        }
+    }
+
     /// Read from the test host's own bundle, which is the built app.
     @Test
     func bundled_zmx_is_signed_as_the_app() throws {

@@ -398,6 +398,28 @@ if $need_zmx; then
   tar xzf zmx-universal-macos.tar.gz -C Macterm/Resources/zmx
   chmod +x Macterm/Resources/zmx/zmx
   rm zmx-universal-macos.tar.gz
+  # The release file the app's zmx installer reads (`ZmxRelease`, #699): the
+  # tag, and the SHA-256 of every asset that has a `.sha256` beside it, so a
+  # download for a remote host is checked before it goes over ssh. A release
+  # from before the checksums lists no assets; the installer then says the
+  # build has no binary for the host. Written with `python3` so the JSON is
+  # well-formed whatever the file names hold.
+  checksum_dir=$(mktemp -d)
+  gh release download "$resolved_zmx_tag" --pattern "*.sha256" --repo "$ZMX_REPO" --dir "$checksum_dir" 2>/dev/null || true
+  python3 - "$resolved_zmx_tag" "$checksum_dir" > Macterm/Resources/zmx-release.json <<'PY'
+import json, os, sys
+tag, directory = sys.argv[1], sys.argv[2]
+assets = {}
+for name in sorted(os.listdir(directory)):
+    if not name.endswith(".sha256"):
+        continue
+    for line in open(os.path.join(directory, name)):
+        parts = line.split()
+        if len(parts) == 2 and len(parts[0]) == 64:
+            assets[parts[1].lstrip("*")] = parts[0].lower()
+print(json.dumps({"tag": tag, "assets": assets}, indent=2, sort_keys=True))
+PY
+  rm -rf "$checksum_dir"
   # Stamp only what this run actually installed, mirroring $TAG_STAMP.
   printf '%s\n' "$resolved_zmx_tag" > "$ZMX_TAG_STAMP"
 fi

@@ -87,9 +87,16 @@ tabs:
 | An agent shows its logo but never its busy or done dot | The session of the tab started before Macterm began to tell the host that it runs in Ghostty. Agents need this before they report progress. Open a new tab or pane for the agent. |
 | Any background prompt at all | Turn off **Settings → General → Remote Projects → Background SSH connections**. You lose live tab names and agent logos, remote `run:` capture in Save Layout, and cleanup of orphan sessions. On a host with no [shell integration](https://ghostty.org/docs/features/shell-integration), you also lose busy-close warnings. |
 
+## Installing zmx on the host
+
+Macterm can put its own zmx build on the host. In **Settings → Projects**, open the menu of a remote project and choose **Install zmx on Host…**. The same button is in the **New Remote Project** sheet, so you can install before you add the project.
+
+The sheet asks the host what it is (Linux x86_64, Linux aarch64 or macOS) and which zmx it runs, and tells you what it will do. Nothing on the host changes until you click **Install** or **Update**. If the host asks for a password, a passphrase or a host key, the sheet asks you. The binary comes from Macterm, not from the internet of the host, and Macterm checks its checksum first. It goes to `~/.local/bin/zmx`, which the panes of Macterm find. When the host already has another zmx first in its PATH, Macterm sets the **zmx path** of the project to the new one.
+
+A session that is running keeps its old zmx until you close and open it again. Macterm's build has fixes that its remote panes rely on, for example the foreground reports (see "Tab names and busy panes"). Choose **Install zmx on Host…** again after a Macterm update to get the build that it pins.
+
 ## Limitations
 
-- zmx must already be on the host. Macterm has no upload flow yet.
 - Orphan cleanup only touches sessions that this installation marked as its own. For a session that became an orphan before the mark, run `zmx ls` and `zmx kill` by hand.
 - **Replace Project Path with Current Dir** and other local-directory features are off.
 - A session keeps the environment from the time when Macterm created it. After you upgrade Macterm, an existing remote tab does not get new variables (for example, the variable that lets agents report progress). Open a new tab or pane instead.
