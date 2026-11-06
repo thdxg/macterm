@@ -29,7 +29,7 @@ final class TTYCommand {
     private var exitSource: DispatchSourceProcess?
     private var exitStatus: Int32?
     private var exitWaiters: [CheckedContinuation<Int32, Never>] = []
-    private var pendingBytes = Data()
+    private var decoder = UTF8ChunkDecoder()
 
     /// Everything the command printed, as text. A secret the owner wrote is
     /// never here: the program turned echo off before it asked.
@@ -97,8 +97,7 @@ final class TTYCommand {
             var buffer = [UInt8](repeating: 0, count: 4096)
             let n = read(ptyFD, &buffer, buffer.count)
             if n > 0 {
-                pendingBytes.append(contentsOf: buffer[0 ..< n])
-                flushBytes(final: false)
+                output += decoder.feed(buffer[0 ..< n])
                 let text = output
                 onOutput(text)
             } else if n == 0 || errno != EAGAIN {
@@ -109,7 +108,7 @@ final class TTYCommand {
         }
         source.setCancelHandler { [weak self] in
             guard let self else { return }
-            flushBytes(final: true)
+            output += decoder.finish()
             if ptyFD >= 0 { close(ptyFD) }
             ptyFD = -1
         }
@@ -136,31 +135,6 @@ final class TTYCommand {
         exit.resume()
     }
 
-    /// Decodes what arrived. A chunk can end inside a UTF-8 sequence, so
-    /// the tail that does not decode waits for the next chunk; at the end,
-    /// what is left decodes with replacement.
-    private func flushBytes(final: Bool) {
-        var cut = pendingBytes.count
-        if !final {
-            // Back off at most three bytes to the start of an unfinished
-            // multibyte character.
-            var i = pendingBytes.count - 1
-            var steps = 0
-            while i >= 0, steps < 3, pendingBytes[i] & 0xC0 == 0x80 {
-                i -= 1
-                steps += 1
-            }
-            if i >= 0, pendingBytes[i] & 0x80 != 0 {
-                let lead = pendingBytes[i]
-                let needed = lead & 0xE0 == 0xC0 ? 2 : lead & 0xF0 == 0xE0 ? 3 : lead & 0xF8 == 0xF0 ? 4 : 1
-                if pendingBytes.count - i < needed { cut = i }
-            }
-        }
-        guard cut > 0 else { return }
-        output += String(decoding: pendingBytes.prefix(cut), as: UTF8.self)
-        pendingBytes.removeFirst(cut)
-    }
-
     /// Answers a prompt: `text` and a newline go to the program's tty.
     func write(_ text: String) {
         guard ptyFD >= 0 else { return }
@@ -175,6 +149,29 @@ final class TTYCommand {
             if n <= 0 { break }
             offset += n
         }
+    }
+
+    /// Whether the program's terminal echoes what it reads. A program that
+    /// asks for a secret turns echo off first (ssh's `readpassphrase` does).
+    var echoIsOn: Bool {
+        var settings = termios()
+        guard ptyFD >= 0, tcgetattr(ptyFD, &settings) == 0 else { return false }
+        return settings.c_lflag & tcflag_t(ECHO) != 0
+    }
+
+    /// Answers a prompt for a secret, but only once the terminal has echo
+    /// off: the prompt can be on the screen a moment before the program
+    /// turns echo off, and a secret written then is echoed into the output
+    /// (and into the sheet's log). Waits up to `timeout`; false, and nothing
+    /// written, when echo stays on.
+    func writeSecret(_ text: String, timeout: Duration = .seconds(1)) async -> Bool {
+        let deadline = ContinuousClock.now + timeout
+        while echoIsOn {
+            guard ContinuousClock.now < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        write(text)
+        return true
     }
 
     /// Stops the program: SIGTERM, and SIGKILL a second later if it stays.
@@ -195,5 +192,51 @@ final class TTYCommand {
         return await withCheckedContinuation { continuation in
             exitWaiters.append(continuation)
         }
+    }
+}
+
+/// Turns the chunks a pty delivers into text. A chunk can end inside a UTF-8
+/// sequence, so up to three trailing bytes of an unfinished character wait
+/// for the next chunk; `finish` decodes what is left with replacement.
+///
+/// An array, never `Data`: `Data` is its own slice type, so trimming it with
+/// `removeFirst` keeps its old indices, and an index computed from `count`
+/// then points before `startIndex`. That trapped the app (SIGTRAP on the main
+/// queue) as soon as a later chunk was shorter than an earlier one: every
+/// zmx install of 1.33.2-tip.27 crashed while reading its last step. Pure.
+struct UTF8ChunkDecoder {
+    private var pending: [UInt8] = []
+
+    /// The text of everything complete so far, after `chunk`.
+    mutating func feed(_ chunk: some Collection<UInt8>) -> String {
+        pending.append(contentsOf: chunk)
+        let cut = Self.completePrefixLength(pending)
+        guard cut > 0 else { return "" }
+        let text = String(decoding: pending[0 ..< cut], as: UTF8.self)
+        pending.removeFirst(cut)
+        return text
+    }
+
+    /// Whatever waits, decoded with replacement: the program is done.
+    mutating func finish() -> String {
+        defer { pending.removeAll() }
+        return String(decoding: pending, as: UTF8.self)
+    }
+
+    /// How many leading bytes end on a character boundary: all of them,
+    /// unless the last one to four bytes are the start of a character that
+    /// needs more.
+    static func completePrefixLength(_ bytes: [UInt8]) -> Int {
+        guard !bytes.isEmpty else { return 0 }
+        var i = bytes.count - 1
+        var steps = 0
+        while i > 0, steps < 3, bytes[i] & 0xC0 == 0x80 {
+            i -= 1
+            steps += 1
+        }
+        let lead = bytes[i]
+        guard lead & 0x80 != 0 else { return bytes.count }
+        let needed = lead & 0xE0 == 0xC0 ? 2 : lead & 0xF0 == 0xE0 ? 3 : lead & 0xF8 == 0xF0 ? 4 : 1
+        return bytes.count - i < needed ? i : bytes.count
     }
 }
