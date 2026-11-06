@@ -118,3 +118,53 @@ struct OpenMactermProjectIntent: OpenIntent {
         return .result()
     }
 }
+
+/// Where the user left off in a project, as text: the memory panel's
+/// summary for Siri and Shortcuts.
+///
+/// Reads what project memory already holds (`ProjectMemoryAnswer`): the
+/// stored summary, or the facts of the log. It never asks the model, so it
+/// answers at once and runs nothing. A summary is written after a quiet
+/// period and from the panel's button only, so a project that was busy a
+/// minute ago gets its latest command and not a paragraph.
+struct GetMactermProjectMemoryIntent: AppIntent {
+    static let title: LocalizedStringResource = "Where Did I Leave Off"
+    static let description = IntentDescription(
+        "Say where you left off in a project: the summary of its project memory, or the latest command and a failure that is not fixed yet."
+    )
+
+    #if compiler(>=6.2)
+    @available(macOS 26.0, *)
+    static let supportedModes: IntentModes = .background
+    #endif
+
+    @Parameter(title: "Project")
+    var project: MactermProjectEntity
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Where did I leave off in \(\.$project)")
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
+        let ctx = try await MactermIntentHost.shared.authorizedContext()
+        guard ProjectMemory.isSupported else {
+            throw MactermIntentError.unavailable(String(localized: "Project memory needs macOS 26 or later."))
+        }
+        guard Preferences.shared.projectMemory else {
+            throw MactermIntentError.unavailable(String(localized: "Project memory is off. Turn it on in Settings → Intelligence."))
+        }
+        let target = try IntentTargets.project(project.id, in: ctx)
+        guard ProjectMemory.covers(target.id) else {
+            throw MactermIntentError.unavailable(String(localized: "\(target.name) is not a project, so it has no memory."))
+        }
+        let memory = MactermIntentHost.shared.projectMemory()
+        let text = ProjectMemoryAnswer.text(
+            projectName: target.name,
+            entries: memory.store.entries(for: target.id),
+            summary: memory.store.summary(for: target.id)
+        )
+        logger.info("intent: answered where the user left off in \(target.name, privacy: .public)")
+        return .result(value: text, dialog: IntentDialog(stringLiteral: text))
+    }
+}

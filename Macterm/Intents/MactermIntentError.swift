@@ -24,6 +24,10 @@ enum MactermIntentError: Error, CustomLocalizedStringResourceConvertible {
     case busy
     /// The input didn't parse (an unknown key chord, an empty command).
     case badInput(String)
+    /// The feature is not there for this Mac, this setting or this target
+    /// (project memory below macOS 26, or off, or asked of the pinned tabs).
+    /// The message says what to change.
+    case unavailable(String)
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
@@ -37,7 +41,8 @@ enum MactermIntentError: Error, CustomLocalizedStringResourceConvertible {
             "The terminal of that pane is not live yet. Select its tab one time, then try again."
         case .busy:
             "A pane there has a running program. Close it in \(appDisplayName) instead."
-        case let .badInput(detail):
+        case let .badInput(detail),
+             let .unavailable(detail):
             "\(detail)"
         }
     }
