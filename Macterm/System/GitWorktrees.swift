@@ -127,7 +127,7 @@ enum GitWorktrees {
     }
 
     /// The root's git dir: `.git` itself, or where a `.git` file points.
-    private static func gitDir(atRoot root: String) -> String? {
+    static func gitDir(atRoot root: String) -> String? {
         let dotGit = root + "/.git"
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: dotGit, isDirectory: &isDirectory) else { return nil }
@@ -139,7 +139,7 @@ enum GitWorktrees {
         return isExistingDirectory(gitDir) ? gitDir : nil
     }
 
-    private static func commonDir(forGitDir gitDir: String) -> String {
+    static func commonDir(forGitDir gitDir: String) -> String {
         guard let common = firstLine(of: gitDir + "/commondir"), !common.isEmpty else { return gitDir }
         return absolute(common, relativeTo: gitDir)
     }

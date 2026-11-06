@@ -224,6 +224,25 @@ struct ProjectMemoryTests {
     }
 
     @Test
+    func reads_of_an_unchanged_git_state_do_not_hold_off_the_summary() async throws {
+        // The panel reads git every 15 s and on every change in the git dir.
+        // With no summary on record each read used to count as news and
+        // restart the quiet wait, so with the panel up the summary never
+        // came. A read that finds the same state restarts nothing.
+        var runs = 0
+        let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        memory.gitReader = { _ in GitStatus(branch: "main") }
+        let deadline = Date().addingTimeInterval(1)
+        memory.refreshGit(project.id)
+        while summarizer.state(for: project.id).phase != .done, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(15))
+            memory.refreshGit(project.id)
+        }
+        #expect(summarizer.state(for: project.id).phase == .done)
+        #expect(runs == 1)
+    }
+
+    @Test
     func a_git_state_the_summary_has_not_seen_schedules_the_background_summary() async throws {
         var runs = 0
         let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
