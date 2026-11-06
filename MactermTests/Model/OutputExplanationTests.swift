@@ -173,14 +173,191 @@ struct OutputExplanationTests {
 
     @Test
     func token_estimate_counts_non_ascii_as_one_token_each() {
-        #expect(OutputExplanation.estimatedTokens("abcdef") == 2)
+        #expect(OutputExplanation.estimatedTokens("abcdef") == 3)
+        #expect(OutputExplanation.estimatedTokens("abcdefghij") == 4)
         #expect(OutputExplanation.estimatedTokens("빌드 실패") == 5)
     }
 
     @Test
     func the_budget_fits_the_context_window() {
         let framing = OutputExplanation.estimatedTokens(OutputExplanation.instructions) + 100
-        #expect(framing + OutputExplanation.textTokenBudget + OutputExplanation.maximumReplyTokens < 4096)
+        #expect(framing <= OutputExplanation.framingTokens)
+        for contextSize in [4096, 8192] {
+            let budget = OutputExplanation.textTokenBudget(contextSize: contextSize)
+            #expect(framing + budget + OutputExplanation.maximumReplyTokens <= contextSize)
+        }
+        #expect(OutputExplanation.textTokenBudget(contextSize: 8192) > 2 * OutputExplanation.textTokenBudget(contextSize: 4096))
+    }
+
+    // MARK: - Fit
+
+    /// A traceback of `frames` frames: about 2.5 characters to a token.
+    private func traceback(frames: Int) -> String {
+        (0 ..< frames).flatMap { index in
+            [
+                "  File \"/srv/orbit/app/module_\(index).py\", line \(100 + index), in handler_\(index)",
+                "    result = dispatch(request, config[\"key_\(index)\"])",
+            ]
+        }.joined(separator: "\n") + "\nKeyError: 'ORBIT_DATABASE_URL'"
+    }
+
+    /// The tokens that a model with `charactersPerToken` counts, and the
+    /// counts that it made.
+    @MainActor
+    private final class Counter {
+        let charactersPerToken: Double
+        var calls = 0
+        init(charactersPerToken: Double) {
+            self.charactersPerToken = charactersPerToken
+        }
+
+        func count(_ text: String) -> Int {
+            calls += 1
+            return Int((Double(text.count) / charactersPerToken).rounded(.up))
+        }
+    }
+
+    @MainActor
+    private func fits(_ explanation: OutputExplanation, contextSize: Int, counter: Counter) -> Bool {
+        counter.count(OutputExplanation.instructions) + counter.count(explanation.prompt)
+            + OutputExplanation.chatFormatTokens + OutputExplanation.maximumReplyTokens <= contextSize
+    }
+
+    @Test @MainActor
+    func fit_cuts_text_that_the_estimate_counts_low() async {
+        let counter = Counter(charactersPerToken: 2)
+        var explanation = OutputExplanation(source: .output, text: traceback(frames: 400))
+        await explanation.fit(contextSize: 8192) { counter.count($0) }
+        #expect(fits(explanation, contextSize: 8192, counter: counter))
+        #expect(explanation.text.hasSuffix("KeyError: 'ORBIT_DATABASE_URL'"))
+        #expect(explanation.text.contains("lines not shown"))
+        // It used most of the space.
+        #expect(counter.count(explanation.prompt) * 10 > 8192 * 8)
+    }
+
+    @Test @MainActor
+    func fit_grows_text_that_the_estimate_counts_high() async {
+        let text = (1 ... 3000).map { "Compiling crate number \($0) of the workspace" }.joined(separator: "\n")
+        let estimated = OutputExplanation(source: .output, text: text, contextSize: 8192)
+        let counter = Counter(charactersPerToken: 4)
+        var explanation = estimated
+        await explanation.fit(contextSize: 8192) { counter.count($0) }
+        #expect(fits(explanation, contextSize: 8192, counter: counter))
+        #expect(explanation.text.count > estimated.text.count * 3 / 2)
+        #expect(counter.calls <= OutputExplanation.maximumFitPasses + 1)
+    }
+
+    @Test @MainActor
+    func fit_does_not_count_short_text() async {
+        let counter = Counter(charactersPerToken: 2.5)
+        var explanation = OutputExplanation(source: .output, text: traceback(frames: 20))
+        await explanation.fit(contextSize: 8192) { counter.count($0) }
+        #expect(explanation.text == explanation.fullText)
+        #expect(counter.calls == 0)
+    }
+
+    @Test @MainActor
+    func fit_keeps_text_that_fits_whole_with_one_count() async {
+        let counter = Counter(charactersPerToken: 2.5)
+        var explanation = OutputExplanation(source: .output, text: traceback(frames: 100))
+        #expect(explanation.text != explanation.fullText)
+        await explanation.fit(contextSize: 8192) { counter.count($0) }
+        #expect(explanation.text == explanation.fullText)
+        #expect(counter.calls == 2)
+    }
+
+    /// A count that answers the prompts from a script: a number, or nil to
+    /// throw. The instructions count as 100.
+    @MainActor
+    private final class ScriptedCounter {
+        struct Failure: Error {}
+        var answers: [Int?]
+        var prompts: [String] = []
+        init(_ answers: [Int?]) {
+            self.answers = answers
+        }
+
+        func count(_ text: String) throws -> Int {
+            if text == OutputExplanation.instructions { return 100 }
+            prompts.append(text)
+            guard !answers.isEmpty, let answer = answers.removeFirst() else { throw Failure() }
+            return answer
+        }
+    }
+
+    @Test @MainActor
+    func fit_keeps_the_last_fitting_text_when_a_later_count_fails() async {
+        let text = traceback(frames: 400)
+        let first = OutputExplanation(source: .output, text: text, contextSize: 8192)
+        // It fits with room, so it grows; the growth does not fit, so it
+        // shrinks; then the count fails.
+        let counter = ScriptedCounter([3000, 99999, nil])
+        var explanation = OutputExplanation(source: .output, text: text)
+        await explanation.fit(contextSize: 8192) { try counter.count($0) }
+        #expect(counter.prompts.count == 3)
+        #expect(counter.prompts[1].count > counter.prompts[0].count)
+        #expect(counter.prompts[2].count < counter.prompts[0].count)
+        #expect(explanation.text == first.text)
+    }
+
+    @Test @MainActor
+    func fit_goes_back_to_the_last_fitting_text_when_a_grown_text_does_not_fit() async {
+        let text = traceback(frames: 400)
+        let first = OutputExplanation(source: .output, text: text, contextSize: 8192)
+        let counter = ScriptedCounter([3000] + Array(repeating: 99999, count: 10))
+        var explanation = OutputExplanation(source: .output, text: text)
+        await explanation.fit(contextSize: 8192) { try counter.count($0) }
+        #expect(counter.prompts.count <= OutputExplanation.maximumFitPasses)
+        #expect(counter.prompts[1].count > counter.prompts[0].count)
+        #expect(explanation.text == first.text)
+    }
+
+    @Test @MainActor
+    func fit_counts_each_text_once() async {
+        // Each line is longer than the gap between two near budgets, so
+        // they cut to the same lines.
+        let text = (1 ... 400).map { "\($0) " + String(repeating: "빌", count: 60) }.joined(separator: "\n")
+        let counter = Counter(charactersPerToken: 1.0 / 3.0)
+        var explanation = OutputExplanation(source: .output, text: text)
+        var prompts: [String] = []
+        await explanation.fit(contextSize: 4096) { prompt in
+            if prompt != OutputExplanation.instructions { prompts.append(prompt) }
+            return counter.count(prompt)
+        }
+        #expect(Set(prompts).count == prompts.count)
+    }
+
+    @Test @MainActor
+    func fit_stops_counting_when_cancelled() async {
+        let counter = Counter(charactersPerToken: 2)
+        let task = Task { @MainActor in
+            var explanation = OutputExplanation(source: .output, text: traceback(frames: 400))
+            await explanation.fit(contextSize: 8192) { prompt in
+                if prompt != OutputExplanation.instructions { withUnsafeCurrentTask { $0?.cancel() } }
+                return counter.count(prompt)
+            }
+        }
+        await task.value
+        // The instructions, then one prompt; the cancel stops the rest.
+        #expect(counter.calls == 2)
+    }
+
+    @Test @MainActor
+    func fit_without_a_count_uses_the_estimate_for_the_context_size() async {
+        let text = traceback(frames: 400)
+        var explanation = OutputExplanation(source: .output, text: text)
+        await explanation.fit(contextSize: 8192, countTokens: nil)
+        #expect(explanation == OutputExplanation(source: .output, text: text, contextSize: 8192))
+        #expect(explanation.text.count > OutputExplanation(source: .output, text: text).text.count * 2)
+    }
+
+    @Test @MainActor
+    func fit_with_a_count_that_fails_uses_the_estimate() async {
+        struct Failure: Error {}
+        let text = traceback(frames: 400)
+        var explanation = OutputExplanation(source: .output, text: text)
+        await explanation.fit(contextSize: 8192) { _ in throw Failure() }
+        #expect(explanation == OutputExplanation(source: .output, text: text, contextSize: 8192))
     }
 
     // MARK: - Prompt
