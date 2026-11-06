@@ -134,9 +134,11 @@ struct ProjectMemoryPanel: View {
         leftOff(summary)
         if !actions.isEmpty {
             section(String(localized: "Suggested")) {
-                VStack(spacing: 6) {
-                    ForEach(actions) { action in
-                        actionRow(action)
+                GlassEffectContainer(spacing: 6) {
+                    VStack(spacing: 6) {
+                        ForEach(actions) { action in
+                            actionRow(action)
+                        }
                     }
                 }
             }
@@ -278,22 +280,21 @@ struct ProjectMemoryPanel: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if let subtitle = action.subtitle {
+                        // A command's middle is its distinctive part; a
+                        // sentence reads from its start.
                         Text(verbatim: subtitle)
                             .font(action.kind == .retry ? .caption.monospaced() : .caption)
                             .foregroundStyle(MactermTheme.fgMuted)
                             .lineLimit(1)
-                            .truncationMode(.middle)
+                            .truncationMode(action.kind == .retry ? .middle : .tail)
                     }
                 }
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 2)
+            .glassRow(cornerRadius: Self.rowCornerRadius)
         }
-        .buttonStyle(.glass)
-        // Rounder than the glass style's own corner, in step with the
-        // failure card above the rows.
-        .buttonBorderShape(.roundedRectangle(radius: Self.rowCornerRadius))
+        .buttonStyle(.plain)
         .help(action.command)
     }
 
@@ -332,65 +333,55 @@ struct ProjectMemoryPanel: View {
             Text(gitHeadline(git))
                 .font(.caption)
                 .foregroundStyle(MactermTheme.fgMuted)
-            if git.branches.contains(where: { $0.name != git.branch }) {
+            let others = git.branches.filter { $0.name != git.branch }
+            if !others.isEmpty {
                 Text("Branches")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(MactermTheme.fgMuted)
                     .padding(.top, 4)
-                VStack(spacing: 6) {
-                    ForEach(git.branches, id: \.name) { branch in
-                        branchRow(branch, isCurrent: branch.name == git.branch)
+                GlassEffectContainer(spacing: 6) {
+                    VStack(spacing: 6) {
+                        ForEach(others, id: \.name) { branch in
+                            branchRow(branch)
+                        }
                     }
                 }
             }
         }
     }
 
-    /// A branch with its latest commit's age and, when a worktree has it
-    /// checked out, that worktree's folder, as a glass row like the Suggested
-    /// ones. A click switches to it: a tab in the worktree, as the sidebar's
-    /// Worktrees menu opens (the current branch's worktree is the project
-    /// itself), or `git switch` typed into a new split for a branch with no
-    /// worktree, so the switch is on the screen and in the shell's history.
-    private func branchRow(_ branch: GitStatus.Branch, isCurrent: Bool) -> some View {
-        let label = HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch")
-                .font(.caption)
-            Text(verbatim: branch.name)
-                .font(.caption.monospaced().weight(isCurrent ? .semibold : .regular))
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if let worktree = branch.worktree {
-                Label {
-                    Text(verbatim: (worktree as NSString).lastPathComponent)
-                } icon: {
-                    Image(systemName: "folder")
-                }
-                .font(.caption2)
-                .lineLimit(1)
+    /// A branch, other than the current one, with its latest commit's age,
+    /// as a glass row like the Suggested ones. A click switches to it: a tab
+    /// in the branch's worktree, as the sidebar's Worktrees menu opens, or
+    /// `git switch` typed into a new split for a branch with no worktree, so
+    /// the switch is on the screen and in the shell's history.
+    private func branchRow(_ branch: GitStatus.Branch) -> some View {
+        Button {
+            switchTo(branch)
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.caption)
+                    .foregroundStyle(MactermTheme.fgMuted)
+                Text(verbatim: branch.name)
+                    .font(.caption.monospaced())
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+                Text(branch.lastCommit.formatted(.relative(presentation: .named)))
+                    .font(.caption2)
+                    .foregroundStyle(MactermTheme.fgMuted)
+                    .lineLimit(1)
             }
-            Spacer(minLength: 4)
-            Text(branch.lastCommit.formatted(.relative(presentation: .named)))
-                .font(.caption2)
-                .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassRow(cornerRadius: Self.rowCornerRadius)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
-        return Group {
-            if isCurrent {
-                Button { switchTo(branch, isCurrent: true) } label: { label }
-                    .buttonStyle(.glassProminent)
-            } else {
-                Button { switchTo(branch, isCurrent: false) } label: { label }
-                    .buttonStyle(.glass)
-            }
-        }
-        .buttonBorderShape(.roundedRectangle(radius: Self.rowCornerRadius))
-        .help(branchHelp(branch, isCurrent: isCurrent))
+        .buttonStyle(.plain)
+        .help(branchHelp(branch))
     }
 
-    private func switchTo(_ branch: GitStatus.Branch, isCurrent: Bool) {
-        if let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
+    private func switchTo(_ branch: GitStatus.Branch) {
+        if let worktree = branch.worktree {
             ProjectMemoryActions.openTab(in: worktree, project: project, appState: appState, projects: projectStore.projects)
         } else {
             ProjectMemoryActions.run(
@@ -403,10 +394,8 @@ struct ProjectMemoryPanel: View {
         }
     }
 
-    private func branchHelp(_ branch: GitStatus.Branch, isCurrent: Bool) -> String {
-        if let worktree = branch.worktree ?? (isCurrent ? project.path : nil) {
-            return String(localized: "Open a tab in the worktree at \(worktree)")
-        }
+    private func branchHelp(_ branch: GitStatus.Branch) -> String {
+        if let worktree = branch.worktree { return String(localized: "Open a tab in the worktree at \(worktree)") }
         return String(localized: "Switch to \(branch.name) in a new split")
     }
 
@@ -481,5 +470,19 @@ struct ProjectMemoryPanel: View {
         case .unknown:
             Image(systemName: "circle").foregroundStyle(MactermTheme.fgDim)
         }
+    }
+}
+
+@available(macOS 26.0, *)
+private extension View {
+    /// A row of the panel as a glass button body: the button style's own
+    /// glass ignores `buttonBorderShape`, so the row draws its glass itself,
+    /// at the panel's row corner, with the press feedback of interactive
+    /// glass.
+    func glassRow(cornerRadius: CGFloat) -> some View {
+        padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .contentShape(.rect(cornerRadius: cornerRadius))
+            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: cornerRadius))
     }
 }
