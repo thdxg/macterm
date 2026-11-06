@@ -1,9 +1,20 @@
 name: Build zmx
 
 # Drop this into thdxg/zmx at .github/workflows/build-zmx.yml.
-# Mirrors thdxg/ghostty's build-ghosttykit.yml: builds the arm64 binary on a
-# macos runner with pinned zig and publishes it as a release asset that
-# Macterm's setup.sh downloads. zmx is never compiled on a dev machine.
+# Mirrors thdxg/ghostty's build-ghosttykit.yml: builds the universal macOS
+# binary on a macos runner with pinned zig and publishes it as a release asset
+# that Macterm's setup.sh downloads. zmx is never compiled on a dev machine.
+#
+# A second job builds static Linux binaries (x86_64 and aarch64, musl) and
+# adds them to the same release, so Macterm can install this fork on a remote
+# host (thdxg/macterm#699). Every asset has a `.sha256` beside it, so an
+# installer can check what it downloaded. The Linux job runs after the
+# release exists and never blocks it: a Linux build that fails leaves a
+# release with the macOS asset alone.
+#
+# The binary knows which build it is: `zmx version` prints
+# `<upstream version>+thdxg.<release tag>` (build.zig's -Dversion), so a
+# frontend can tell this fork from upstream zmx, and one build from another.
 
 on:
   workflow_dispatch:
@@ -77,12 +88,23 @@ jobs:
           # check that field first.
           version: 0.16.0
 
+      - name: Resolve version
+        id: version
+        env:
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: |
+          UPSTREAM=$(sed -n 's/^ *\.version = "\(.*\)",$/\1/p' build.zig.zon)
+          test -n "$UPSTREAM"
+          echo "version=${UPSTREAM}+thdxg.${TAG}" >> "$GITHUB_OUTPUT"
+
       # Build both arches and lipo into a universal binary — Macterm ships a
       # universal app, so an arm64-only zmx would fail to exec on Intel.
       - name: Build zmx (aarch64 + x86_64)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          zig build -Doptimize=ReleaseSafe -Dtarget=aarch64-macos --prefix zig-out-arm64
-          zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-macos --prefix zig-out-x86_64
+          zig build -Doptimize=ReleaseSafe -Dtarget=aarch64-macos -Dversion="$VERSION" --prefix zig-out-arm64
+          zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-macos -Dversion="$VERSION" --prefix zig-out-x86_64
 
       - name: Make universal binary
         run: |
@@ -91,17 +113,22 @@ jobs:
             zig-out-arm64/bin/zmx zig-out-x86_64/bin/zmx
 
       - name: Verify binary
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           test -x zig-out/bin/zmx
           # Both slices must be present, or the universal build is broken.
           lipo zig-out/bin/zmx -verify_arch arm64 x86_64
           file zig-out/bin/zmx
+          # The binary names this build.
+          zig-out/bin/zmx version | grep -F "$VERSION"
 
       - name: Package
         run: |
           # Tar (not a bare asset) so the executable bit survives the GitHub
           # asset round-trip; setup.sh extracts + chmod +x.
           tar czf zmx-universal-macos.tar.gz -C zig-out/bin zmx
+          shasum -a 256 zmx-universal-macos.tar.gz > zmx-universal-macos.tar.gz.sha256
 
       - name: Create release
         env:
@@ -115,4 +142,64 @@ jobs:
             --title "zmx $DATE ($COMMIT)" \
             --latest \
             --notes "Built from commit ${GITHUB_SHA} (committed $DATE)." \
-            zmx-universal-macos.tar.gz
+            zmx-universal-macos.tar.gz zmx-universal-macos.tar.gz.sha256
+
+  # Static Linux binaries for remote hosts (thdxg/macterm#699), added to the
+  # release the macOS job made. Cross-compiled with zig's own musl, so one
+  # runner builds both; the x86_64 one is run here as the smoke test, the
+  # aarch64 one is only inspected.
+  build-linux:
+    needs: [tag, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Resolve version
+        id: version
+        env:
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: |
+          UPSTREAM=$(sed -n 's/^ *\.version = "\(.*\)",$/\1/p' build.zig.zon)
+          test -n "$UPSTREAM"
+          echo "version=${UPSTREAM}+thdxg.${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build zmx (x86_64 + aarch64, musl)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-linux-musl -Dversion="$VERSION" --prefix zig-out-x86_64
+          zig build -Doptimize=ReleaseSafe -Dtarget=aarch64-linux-musl -Dversion="$VERSION" --prefix zig-out-aarch64
+
+      - name: Verify binaries
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          file zig-out-x86_64/bin/zmx zig-out-aarch64/bin/zmx
+          file zig-out-x86_64/bin/zmx | grep -F "x86-64"
+          file zig-out-aarch64/bin/zmx | grep -F "aarch64"
+          zig-out-x86_64/bin/zmx version | grep -F "$VERSION"
+
+      - name: Package
+        run: |
+          tar czf zmx-x86_64-linux.tar.gz -C zig-out-x86_64/bin zmx
+          tar czf zmx-aarch64-linux.tar.gz -C zig-out-aarch64/bin zmx
+          for f in zmx-x86_64-linux.tar.gz zmx-aarch64-linux.tar.gz; do
+            sha256sum "$f" > "$f.sha256"
+          done
+
+      - name: Add to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: |
+          gh release upload "$TAG" \
+            zmx-x86_64-linux.tar.gz zmx-x86_64-linux.tar.gz.sha256 \
+            zmx-aarch64-linux.tar.gz zmx-aarch64-linux.tar.gz.sha256
