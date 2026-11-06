@@ -14,6 +14,7 @@ const lib_posix = @import("posix.zig");
 const signal = @import("signal.zig");
 const Cfg = @import("cfg.zig");
 const loop = @import("loop.zig");
+const foreground = @import("foreground.zig");
 const daemonize = @import("daemonize.zig");
 const Client = loop.Client;
 const Daemon = loop.Daemon;
@@ -199,7 +200,12 @@ pub fn main(init: std.process.Init) !void {
         const env_str = try getTrackedEnvStr(gpa, env_keys, init.environ_map);
         defer gpa.free(env_str);
 
-        return attach(gpa, io, &daemon, env_str, parsed.labels);
+        // Read before the session starts and removed, so the session's shell
+        // does not inherit it (see foreground.zig).
+        const foreground_events = lib_posix.getenv(foreground.env_var) != null;
+        if (foreground_events) _ = cross.c.unsetenv(foreground.env_var);
+
+        return attach(gpa, io, &daemon, env_str, parsed.labels, foreground_events);
     } else if (std.mem.eql(u8, cmd, "run") or std.mem.eql(u8, cmd, "r")) {
         const session_name = args.next() orelse "";
         if (std.mem.eql(u8, session_name, "--help") or std.mem.eql(u8, session_name, "-h")) {
@@ -1641,7 +1647,7 @@ fn parseAttachArgs(argv: []const []const u8) AttachArgs {
     return parsed;
 }
 
-fn attach(gpa: std.mem.Allocator, io: std.Io, daemon: *Daemon, env_str: []const u8, labels: ?[]const u8) !void {
+fn attach(gpa: std.mem.Allocator, io: std.Io, daemon: *Daemon, env_str: []const u8, labels: ?[]const u8, foreground_events: bool) !void {
     const sesh = socket.getSeshNameFromEnv();
     if (sesh.len > 0) {
         return switchSesh(gpa, io, daemon, sesh);
@@ -1713,7 +1719,7 @@ fn attach(gpa: std.mem.Allocator, io: std.Io, daemon: *Daemon, env_str: []const 
     const clear_seq = "\x1b[2J\x1b[H";
     _ = try lib_posix.write(lib_posix.STDOUT_FILENO, clear_seq);
 
-    const looper = try loop.clientLoop(client_sock, env_str);
+    const looper = try loop.clientLoop(client_sock, env_str, foreground_events);
     switch (looper.kind) {
         .detach => return,
         .switch_session => {
@@ -1741,7 +1747,7 @@ fn attach(gpa: std.mem.Allocator, io: std.Io, daemon: *Daemon, env_str: []const 
                 std.log.info("switching to new session cwd={s}", .{switch_cwd});
                 target_daemon.setCwd(switch_cwd);
                 target_daemon.shell = daemon.shell;
-                return attach(gpa, io, &target_daemon, env_str, null);
+                return attach(gpa, io, &target_daemon, env_str, null, foreground_events);
             }
         },
     }

@@ -3,6 +3,7 @@ const ghostty_vt = @import("ghostty-vt");
 const ipc = @import("ipc.zig");
 const log = @import("log.zig");
 const util = @import("util.zig");
+const foreground = @import("foreground.zig");
 const cross = @import("cross.zig");
 const socket = @import("socket.zig");
 const label = @import("label.zig");
@@ -15,7 +16,9 @@ const builtin = @import("builtin");
 
 /// clientLoop sends ipc commands to its corresponding daemon.  It uses poll() as its non-blocking
 /// mechanism. It will send stdin to the daemon and receive stdout from the daemon.
-pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
+/// `foreground_events`: subscribe to foreground reports and write each one
+/// to stdout as an APC sequence (see foreground.zig).
+pub fn clientLoop(client_sock_fd: i32, env_str: []const u8, foreground_events: bool) !ClientResult {
     std.log.info("client loop fd={d}", .{client_sock_fd});
     const gpa: std.mem.Allocator = blk: {
         if (builtin.mode == .Debug) {
@@ -48,6 +51,12 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
     // Send init message with terminal size (buffered)
     const size = ipc.getTerminalSize(lib_posix.STDOUT_FILENO);
     try ipc.appendSizeMessage(gpa, &sock_write_buf, .Init, size);
+
+    // After Init, so the first report finds the client's size and leadership
+    // settled. An old daemon ignores the tag and never reports.
+    if (foreground_events) {
+        try ipc.appendMessage(gpa, &sock_write_buf, .Foreground, "");
+    }
 
     var poll_fds = try std.ArrayList(lib_posix.pollfd).initCapacity(gpa, 4);
     defer poll_fds.deinit(gpa);
@@ -169,6 +178,15 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
                             try stdout_buf.appendSlice(gpa, msg.payload);
                         }
                     },
+                    .Foreground => {
+                        // Into the same buffer as Output, so the report lands
+                        // in front of the output it precedes.
+                        if (foreground_events and msg.payload.len > 0) {
+                            try stdout_buf.appendSlice(gpa, "\x1b_");
+                            try stdout_buf.appendSlice(gpa, msg.payload);
+                            try stdout_buf.appendSlice(gpa, "\x1b\\");
+                        }
+                    },
                     .Resize => {
                         // daemon is asking for the client's window size usually in response
                         // to this client being set as leader.
@@ -240,6 +258,7 @@ fn initTerminal(gpa: std.mem.Allocator, io: std.Io, size: ipc.Resize, cfg: *cons
 /// clients.  It uses poll() as its non-blocking mechanism.
 fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_fd: lib_posix.socket_t, pty_fd: i32) !void {
     std.log.info("daemon started session={s} pty_fd={d}", .{ daemon.session_name, pty_fd });
+    daemon.pty_fd = pty_fd;
 
     try signal.openSignalPipe();
     signal.installWakeHandler(@intFromEnum(lib_posix.SIG.TERM));
@@ -302,7 +321,12 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
             });
         }
 
-        _ = try lib_posix.poll(poll_fds.items, -1);
+        // A subscriber gets a timer, so a program that takes the pty and
+        // prints nothing is still reported (see foreground.zig).
+        const timeout: i32 = if (daemon.hasForegroundSubscriber()) foreground.poll_interval_ms else -1;
+        _ = try lib_posix.poll(poll_fds.items, timeout);
+
+        daemon.checkForeground(gpa, false);
 
         if (poll_fds.items[2].revents & lib_posix.POLL.IN != 0) {
             signal.drainSignalPipe();
@@ -409,6 +433,11 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
                         );
                     }
 
+                    // The report of a foreground change goes out in front of
+                    // the first output that follows it: a report that the
+                    // shell is back always precedes its prompt.
+                    daemon.checkForeground(gpa, false);
+
                     // Broadcast data to all clients.
                     // Rewrite OSC 133;A to include redraw=0 so the outer terminal
                     // does not clear prompt lines on resize (issue #111).
@@ -486,6 +515,7 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
                         .Switch => try daemon.handleSwitch(gpa, msg.payload),
                         .Resize => try daemon.handleResize(gpa, client, pty_fd, &term, msg.payload),
                         .Claim => try daemon.handleClaim(gpa, client),
+                        .Foreground => daemon.handleForeground(gpa, client),
                         .Detach => {
                             daemon.handleDetach(gpa, client, i);
                             break :clients_loop;
@@ -560,6 +590,8 @@ pub const Client = struct {
     socket_fd: i32,
     has_pending_output: bool = false,
     is_terminal: bool = false, // sent .Init (a `zmx attach`), not a run/send/tail client
+    /// Asked for foreground reports (see foreground.zig).
+    wants_foreground: bool = false,
     read_buf: ipc.SocketBuffer,
     write_buf: std.ArrayList(u8),
     env_str: ?[]u8 = null,
@@ -618,7 +650,15 @@ pub const Daemon = struct {
     task_id: [4]u8 = undefined,
     task_exit_code: ?u8 = null, // null = running or n/a, set when task completes
     task_ended_at: ?u64 = null, // timestamp when task exited
-    pty_fd: i32 = -1, // set by daemonLoop so handleRun can probe the foreground process
+    pty_fd: i32 = -1, // set by daemonLoop; the foreground reports read it
+    /// The pty's foreground process group at the last report, so only a
+    /// change is reported. null before the first.
+    foreground_pgid: ?lib_posix.pid_t = null,
+    /// `/etc/shells` of this host, read once for the shell verdict of the
+    /// reports. `etc_shells` is null when the host has none.
+    etc_shells_loaded: bool = false,
+    etc_shells: ?[]const u8 = null,
+    etc_shells_buf: [8192]u8 = undefined,
     shell: []const u8 = "/bin/sh",
     /// Whether the client that creates the session prints `session "<name>"
     /// created`. `attach` turns it off: it clears the screen right after, and
@@ -976,6 +1016,71 @@ pub const Daemon = struct {
     pub fn handleClaim(self: *Daemon, gpa: std.mem.Allocator, client: *Client) !void {
         if (self.leader_client_fd == client.socket_fd) return;
         try self.setLeader(gpa, client);
+    }
+
+    /// A client asked for foreground reports. It gets the current state at
+    /// once, then every change. On a platform with no process reader the
+    /// request is ignored, so the client never writes a report.
+    pub fn handleForeground(self: *Daemon, gpa: std.mem.Allocator, client: *Client) void {
+        if (!foreground.supported) return;
+        client.wants_foreground = true;
+        self.checkForeground(gpa, true);
+    }
+
+    pub fn hasForegroundSubscriber(self: *const Daemon) bool {
+        for (self.clients.items) |c| {
+            if (c.wants_foreground) return true;
+        }
+        return false;
+    }
+
+    /// Reads the pty's foreground process group and, when it differs from
+    /// the last report (or `force`), reports it to every subscriber. One
+    /// ioctl when nothing changed, so it can run on every loop turn.
+    pub fn checkForeground(self: *Daemon, gpa: std.mem.Allocator, force: bool) void {
+        if (!foreground.supported) return;
+        if (self.pty_fd < 0 or !self.hasForegroundSubscriber()) return;
+        var pgrp: lib_posix.pid_t = 0;
+        if (cross.c.ioctl(self.pty_fd, cross.c.TIOCGPGRP, &pgrp) != 0 or pgrp <= 0) return;
+        if (!force and self.foreground_pgid == pgrp) return;
+        self.foreground_pgid = pgrp;
+
+        if (!self.etc_shells_loaded) {
+            self.etc_shells_loaded = true;
+            self.etc_shells = foreground.readEtcShells(&self.etc_shells_buf);
+        }
+
+        // The group leader can be gone while the group lives on (the first
+        // process of a pipeline exited). Then there is no name to report;
+        // the next change reports again.
+        var comm_buf: [std.fs.max_path_bytes]u8 = undefined;
+        var args_buf: [foreground.args_max]u8 = undefined;
+        var scratch: [8192]u8 = undefined;
+        const process = foreground.readProcess(pgrp, &comm_buf, &args_buf, &scratch) orelse {
+            std.log.info("foreground pgid={d} has no readable leader", .{pgrp});
+            return;
+        };
+        var report_buf: [foreground.report_max]u8 = undefined;
+        const report = foreground.write(&report_buf, .{
+            .idle = pgrp == self.pid,
+            .shell = if (self.etc_shells) |shells| foreground.isListedShell(shells, process.comm) else null,
+            .comm = process.comm,
+            .args = process.args,
+        });
+        std.log.debug("foreground report={s}", .{report});
+        self.broadcastForeground(gpa, report);
+    }
+
+    /// Queues `report` for every subscribed client.
+    fn broadcastForeground(self: *Daemon, gpa: std.mem.Allocator, report: []const u8) void {
+        for (self.clients.items) |client| {
+            if (!client.wants_foreground) continue;
+            ipc.appendMessage(gpa, &client.write_buf, .Foreground, report) catch |err| {
+                std.log.warn("failed to buffer foreground report for client err={s}", .{@errorName(err)});
+                continue;
+            };
+            client.has_pending_output = true;
+        }
     }
 
     /// Queue input from `zmx send` without changing interactive client leadership.
@@ -1507,6 +1612,81 @@ test "claim by the existing leader is a no-op" {
     // No size request: re-asking a leader for a size it already set would
     // make every focus change a redundant pty resize and TUI redraw.
     try std.testing.expectEqual(@as(usize, 0), client.write_buf.items.len);
+}
+
+test "foreground: a subscriber without a pty is marked and gets no report" {
+    const alloc = std.testing.allocator;
+    var daemon = Daemon{
+        .cfg = undefined,
+        .clients = .empty,
+        .session_name = "test",
+        .socket_path = "",
+        .running = true,
+        .pid = 0,
+        .created_at = 0,
+    };
+    var client = Client{
+        .alloc = alloc,
+        .socket_fd = 7,
+        .read_buf = try ipc.SocketBuffer.init(alloc),
+        .write_buf = .empty,
+    };
+    defer client.read_buf.deinit();
+    defer client.write_buf.deinit(alloc);
+    try daemon.clients.append(alloc, &client);
+    defer daemon.clients.deinit(alloc);
+
+    try std.testing.expect(!daemon.hasForegroundSubscriber());
+    daemon.handleForeground(alloc, &client);
+    try std.testing.expectEqual(foreground.supported, client.wants_foreground);
+    try std.testing.expectEqual(foreground.supported, daemon.hasForegroundSubscriber());
+    // No pty to read: nothing is reported, and nothing is remembered.
+    try std.testing.expectEqual(@as(usize, 0), client.write_buf.items.len);
+    try std.testing.expectEqual(@as(?lib_posix.pid_t, null), daemon.foreground_pgid);
+}
+
+test "foreground: a report reaches only the clients that subscribed" {
+    const alloc = std.testing.allocator;
+    var daemon = Daemon{
+        .cfg = undefined,
+        .clients = .empty,
+        .session_name = "test",
+        .socket_path = "",
+        .running = true,
+        .pid = 0,
+        .created_at = 0,
+    };
+    var subscriber = Client{
+        .alloc = alloc,
+        .socket_fd = 7,
+        .read_buf = try ipc.SocketBuffer.init(alloc),
+        .write_buf = .empty,
+        .wants_foreground = true,
+    };
+    defer subscriber.read_buf.deinit();
+    defer subscriber.write_buf.deinit(alloc);
+    var other = Client{
+        .alloc = alloc,
+        .socket_fd = 8,
+        .read_buf = try ipc.SocketBuffer.init(alloc),
+        .write_buf = .empty,
+    };
+    defer other.read_buf.deinit();
+    defer other.write_buf.deinit(alloc);
+    try daemon.clients.append(alloc, &subscriber);
+    try daemon.clients.append(alloc, &other);
+    defer daemon.clients.deinit(alloc);
+
+    const report = "zmx;foreground;0;0;hx;hx README.md";
+    daemon.broadcastForeground(alloc, report);
+
+    try std.testing.expect(subscriber.has_pending_output);
+    try std.testing.expectEqual(@sizeOf(ipc.Header) + report.len, subscriber.write_buf.items.len);
+    const header = std.mem.bytesToValue(ipc.Header, subscriber.write_buf.items[0..@sizeOf(ipc.Header)]);
+    try std.testing.expectEqual(ipc.Tag.Foreground, header.tag);
+    try std.testing.expectEqualStrings(report, subscriber.write_buf.items[@sizeOf(ipc.Header)..]);
+    try std.testing.expect(!other.has_pending_output);
+    try std.testing.expectEqual(@as(usize, 0), other.write_buf.items.len);
 }
 
 test "terminal retains the configured scrollback without the default byte cap" {
