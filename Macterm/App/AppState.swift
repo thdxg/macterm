@@ -1247,6 +1247,10 @@ final class AppState {
     /// `localSweepKey` for the local daemon) → when it was last swept.
     @ObservationIgnored
     private var sweptDestinations: [String: Date] = [:]
+    /// Remote destinations whose owner stamp failed (`ZmxReaper.unstamped`),
+    /// so the warning logs once per host for the run.
+    @ObservationIgnored
+    private var unstampedDestinations: Set<String> = []
     private var autoTileObserver: Any?
 
     /// Re-reads each pane's foreground process so tab names track the running
@@ -2491,9 +2495,18 @@ final class AppState {
             .map(\.sessionName)
         let ownerID = Preferences.shared.installationID
         let zmxPath = project.zmxPath
-        Task { [zmx] in
+        Task { [zmx, weak self] in
             guard let entries = await zmx.sweepRemoteOrphans(remote, zmxPath, claimed, ownerID)
             else { return }
+            let unstamped = ZmxReaper.unstamped(in: entries, claimed: claimed, owner: ownerID)
+            if !unstamped.isEmpty, let self, self.unstampedDestinations.insert(destination).inserted {
+                // Once per host: a host older than zmx 0.7.0 fails every sweep.
+                let count = unstamped.count
+                let reason = "zmx (or the session daemon) is older than 0.7.0, so these sessions are never reaped"
+                logger.warning(
+                    "No owner stamp on \(destination, privacy: .public), \(count, privacy: .public) sessions: \(reason, privacy: .public)"
+                )
+            }
             let orphans = ZmxReaper.orphans(in: entries, known: known, owner: ownerID)
             guard !orphans.isEmpty else { return }
             logger.info("Reaping \(orphans.count, privacy: .public) orphan remote session(s) on \(destination, privacy: .public)")
