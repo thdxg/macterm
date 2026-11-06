@@ -333,6 +333,39 @@ enum RemoteSpawn {
         ]
     }
 
+    /// The git reads of the memory panel for a remote project, in one
+    /// connection (`ProjectGit.remoteStatus`): the same four commands that
+    /// `ProjectGit.status` runs locally, with their outputs separated by
+    /// `ProjectGit.recordSeparator`. The script exits 2 when the directory
+    /// is not there, 3 when the host has no git, and 4 when the directory is
+    /// not in a repository; ssh itself exits 255. `GIT_OPTIONAL_LOCKS=0` and
+    /// `core.fsmonitor=false` for the same reasons as locally. Never sources
+    /// a profile (see `remoteEnvPreamble`). nil for a local path.
+    static func gitProbeArgv(remote: ProjectPath) -> [String]? {
+        guard case let .remote(user, host, directory) = remote else { return nil }
+        let git = "git -c core.fsmonitor=false --no-pager"
+        let separator = "printf \"\\036\""
+        let branchFormat = "%(refname:short)%1f%(objectname:short)%1f%(committerdate:unix)%1f%(subject)"
+        let script = assertSingleQuoteFree(
+            remoteEnvPreamble
+                + "GIT_OPTIONAL_LOCKS=0; GIT_TERMINAL_PROMPT=0; export GIT_OPTIONAL_LOCKS GIT_TERMINAL_PROMPT; "
+                + "cd \(quoteRemoteDirectory(directory)) 2>/dev/null || exit 2; "
+                + "command -v git >/dev/null 2>&1 || exit 3; "
+                + "\(git) status --porcelain=v2 --branch --show-stash 2>/dev/null || exit 4; \(separator); "
+                + "\(git) log -\(ProjectGit.recentCommitCount) --format=%h%x1f%s%x1f%ct 2>/dev/null; \(separator); "
+                + "\(git) for-each-ref refs/heads --sort=-committerdate --count=\(ProjectGit.recentBranchCount) "
+                + "--format=\"\(branchFormat)\" 2>/dev/null; \(separator); "
+                + "\(git) worktree list --porcelain 2>/dev/null",
+            onViolation: .failNonZero
+        )
+        return [
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
+            destination(user: user, host: host),
+            "\(remoteShell) \(shellQuote(script))",
+        ]
+    }
+
     /// The zmx label key marking a session as created by a Macterm
     /// installation (`macterm.owner=<Preferences.installationID>`). Labels
     /// are in-memory and settable only on a LIVE session — `zmx set` has no
