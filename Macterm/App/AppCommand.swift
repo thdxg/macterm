@@ -158,7 +158,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .nextProject: "Next Project"
         case .previousProject: "Previous Project"
         case .toggleSidebar: "Toggle Sidebar"
-        case .toggleProjectMemory: "Toggle Project Memory"
+        case .toggleProjectMemory: "Toggle Project Insights"
         case .toggleToolbar: "Toggle Toolbar"
         case .newWindow: "New Window"
         case .newDesktopWidget: "New Desktop Widget"

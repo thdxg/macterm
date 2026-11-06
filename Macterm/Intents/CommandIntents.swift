@@ -94,7 +94,7 @@ enum MactermKeybind: String, AppEnum {
         .splitDown: "Split Down",
         .splitAuto: "Split Automatically",
         .toggleSidebar: "Toggle Sidebar",
-        .toggleProjectMemory: "Toggle Project Memory",
+        .toggleProjectMemory: "Toggle Project Insights",
         .toggleToolbar: "Toggle Toolbar",
         .recentTab: "Recent Tab",
         .nextProject: "Next Project",

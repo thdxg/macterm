@@ -1,14 +1,14 @@
 <!-- page:
-slug: project-memory
-title: Project Memory
-nav: Project Memory
+slug: project-insights
+title: Project Insights
+nav: Project Insights
 group: Everyday use
 description: See where you left off in a project, its Git state, and the commands to run next, in a panel next to your terminal.
 -->
 
-# Project Memory
+# Project Insights
 
-Project memory records the commands that finish in each project. A panel next to your terminal then shows where you left off, the state of the project's Git repository, and the commands that you will probably run next. Click a command to run it in a new split.
+Project Insights records the commands that finish in each project. A panel next to your terminal then shows where you left off, the state of the project's Git repository, and the commands that you will probably run next. Click a command to run it in a new split.
 
 Macterm stores the records on your Mac only. It does not record the output of your terminal: it keeps only the command, its folder, its exit code and its time, plus the last lines of output of a command that fails.
 
@@ -18,18 +18,18 @@ Macterm stores the records on your Mac only. It does not record the output of yo
 
 The panel works on every Mac with macOS 26. On a Mac that can run Apple Intelligence, it also shows a short summary. See [Summary](#summary).
 
-## Turn on project memory
+## Turn on Project Insights
 
-Project memory is off until you turn it on.
+Project Insights is off until you turn it on.
 
 1. Open **Settings → Intelligence**.
-2. Turn on **Record commands for project memory**.
+2. Turn on **Record commands for Project Insights**.
 
-You can also open the panel and click **Turn On Project Memory**.
+You can also open the panel and click **Turn On Project Insights**.
 
 ## Open the panel
 
-Press <kbd>⌥</kbd><kbd>⌘</kbd><kbd>0</kbd>, or click the panel button in the toolbar. You can also run **Toggle Project Memory** from the command palette or from the **View** menu. Each window has its own panel, and the panel shows the project of its window.
+Press <kbd>⌥</kbd><kbd>⌘</kbd><kbd>0</kbd>, or click the panel button in the toolbar. You can also run **Toggle Project Insights** from the command palette or from the **View** menu. Each window has its own panel, and the panel shows the project of its window.
 
 The panel floats over the right side of the terminal. It does not make your panes smaller. To hide it, press <kbd>⌥</kbd><kbd>⌘</kbd><kbd>0</kbd> again or click the panel button in the toolbar. The project icon in the panel is the icon that you chose in **Settings → Appearance → Project icon**, with the color of the project.
 
