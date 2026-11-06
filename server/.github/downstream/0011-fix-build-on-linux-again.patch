@@ -1,0 +1,45 @@
+From b6c9c0f3d4c2b324fe3a95cf092d0890fa52891e Mon Sep 17 00:00:00 2001
+From: Ethan Lee <ethantlee21@gmail.com>
+Date: Fri, 6 Nov 2026 12:03:01 -0500
+Subject: [PATCH] fix: build on Linux again, so that the fork can publish a
+ binary for a remote host
+
+The daemon's re-exec (patch 0004) is called behind a runtime optional
+that the caller leaves null off macOS. That is not enough for Zig: the
+call is analyzed on every target, and `reexecDisclaimed` names Darwin's
+posix_spawn, so a Linux build stopped in `std.c.darwin` with "reached
+unreachable code". The tests passed on Linux all along, because a test
+build analyzes only what the tests reach.
+
+The call is now behind a comptime check of the target as well.
+---
+ src/daemonize.zig | 16 +++++++++++-----
+ 1 file changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/src/daemonize.zig b/src/daemonize.zig
+index 98be69a..1e66dec 100644
+--- a/src/daemonize.zig
++++ b/src/daemonize.zig
+@@ -391,11 +391,17 @@ pub fn daemonize(sesh_name: []const u8, cmd: Cmd, keep_fds_open: []i32, reexec:
+         }
+     }
+ 
+-    if (reexec) |spec| {
+-        reexecDisclaimed(spec, term_size) catch |err| {
+-            std.log.warn("daemon re-exec failed, continuing in the forked image: {s}", .{@errorName(err)});
+-            unsetReexecEnv();
+-        };
++    // Comptime, not only the runtime optional: `reexecDisclaimed` names
++    // Darwin's posix_spawn, which a Linux build must never analyze. The
++    // caller passes null off macOS, so the runtime check alone looked
++    // enough, and the Linux build failed in `std.c.darwin` for weeks.
++    if (comptime builtin.os.tag.isDarwin()) {
++        if (reexec) |spec| {
++            reexecDisclaimed(spec, term_size) catch |err| {
++                std.log.warn("daemon re-exec failed, continuing in the forked image: {s}", .{@errorName(err)});
++                unsetReexecEnv();
++            };
++        }
+     }
+ 
+     return spawnPty(sesh_name, cmd, term_size);
