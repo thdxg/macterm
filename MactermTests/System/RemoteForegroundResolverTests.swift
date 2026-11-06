@@ -458,4 +458,133 @@ struct RemoteForegroundResolverTests {
         await waitUntil { calls.value.count(where: { $0 == "beta" }) == 2 }
         #expect(calls.value.count(where: { $0 == "alpha" }) == 1)
     }
+
+    // MARK: - Foreground reports the host pushes (#695)
+
+    private let agentReport = "zmx;foreground;0;0;2.1.289;claude"
+    private let shellReport = "zmx;foreground;1;1;-zsh;-zsh"
+
+    @Test
+    func a_pushed_report_names_the_pane_and_no_boundary_asks_for_a_probe() {
+        let pane = remotePane()
+        #expect(!pane.remoteForegroundIsPushed)
+        pane.receiveUnknownAPC("zmx;foreground;0;0;/usr/bin/hx;hx README.md")
+        #expect(pane.remoteForegroundIsPushed)
+        #expect(pane.foregroundProcessName == "hx")
+        #expect(pane.foregroundSample?.origin == .remoteEvent)
+        #expect(pane.foregroundSample?.isIdleShell == false)
+        // The first report answered the request a new pane is primed with,
+        // and the edges of a run ask for no more.
+        #expect(!pane.remoteProbePending)
+        pane.recordUserInteraction()
+        pane.markCommandRunning()
+        pane.markProgressFinished()
+        pane.noteRemoteCommandBoundary()
+        #expect(!pane.remoteProbePending)
+        // The invoked name, as the probe's `args` give it.
+        pane.receiveUnknownAPC(agentReport)
+        #expect(pane.foregroundProcessName == "claude")
+    }
+
+    @Test
+    func a_report_that_is_not_a_foreground_changes_nothing() {
+        let pane = remotePane()
+        pane.receiveUnknownAPC("Gi=31,s=1,v=1;AAAA")
+        #expect(!pane.remoteForegroundIsPushed)
+        #expect(pane.foregroundSample == nil)
+    }
+
+    @Test
+    func a_title_outside_a_run_is_judged_against_the_latest_report() {
+        let pane = remotePane()
+        pane.receiveUnknownAPC(agentReport)
+        // An agent idle between turns names itself: shown now, held for
+        // nothing.
+        pane.receiveRemoteReportedTitle("✳ task")
+        #expect(pane.programTitle == "✳ task")
+        #expect(!pane.awaitsRemoteTitleConfirmation)
+        // The agent quits: the shell's report lands before its prompt, and
+        // the prompt's title is the shell's.
+        pane.receiveUnknownAPC(shellReport)
+        #expect(pane.programTitle == nil)
+        pane.receiveRemoteReportedTitle("~/dev")
+        #expect(pane.programTitle == nil)
+        #expect(pane.foregroundSample?.isIdleShell == true)
+    }
+
+    @Test
+    func a_run_that_ends_keeps_the_title_only_while_a_program_holds_the_pty() {
+        let pane = remotePane()
+        pane.receiveUnknownAPC(agentReport)
+        pane.recordUserInteraction()
+        pane.markCommandRunning()
+        pane.receiveRemoteReportedTitle("◐ task")
+        // A turn ends with the agent still in front: the title stays, with
+        // no probe to wait for.
+        pane.markProgressFinished()
+        #expect(pane.programTitle == "◐ task")
+        #expect(!pane.awaitsRemoteTitleConfirmation)
+        // The next run ends after the shell took the pty back: the shell's
+        // report lands before the prompt, and the title goes with the run.
+        pane.markCommandRunning()
+        pane.receiveUnknownAPC(shellReport)
+        #expect(pane.programTitle == "◐ task")
+        pane.markProgressFinished()
+        #expect(pane.programTitle == nil)
+    }
+
+    @Test
+    func the_first_report_settles_a_title_that_waited_for_a_probe() {
+        // A host whose zmx was upgraded while the pane held a title for the
+        // probe: the report is the witness the title waited for.
+        let pane = paneAfterATurn()
+        #expect(pane.awaitsRemoteTitleConfirmation)
+        pane.receiveUnknownAPC(agentReport)
+        #expect(!pane.awaitsRemoteTitleConfirmation)
+        #expect(pane.programTitle == "◐ task")
+
+        let held = remotePane()
+        held.isRemoteProbingEnabled = { true }
+        held.applyRemoteForeground(claude)
+        held.receiveRemoteReportedTitle("✳ task")
+        #expect(held.awaitsRemoteTitleConfirmation)
+        held.receiveUnknownAPC(shellReport)
+        #expect(!held.awaitsRemoteTitleConfirmation)
+        #expect(held.programTitle == nil)
+    }
+
+    @Test
+    func a_pushed_report_counts_with_background_ssh_off() {
+        let pane = remotePane()
+        pane.isRemoteProbingEnabled = { false }
+        pane.receiveUnknownAPC(agentReport)
+        pane.receiveRemoteReportedTitle("✳ task")
+        #expect(pane.programTitle == "✳ task")
+        #expect(ForegroundPolicy.needsConfirmClose(
+            sample: pane.foregroundSample, executionState: .idle, isRemote: true,
+            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: false
+        ))
+        pane.receiveUnknownAPC(shellReport)
+        #expect(pane.programTitle == nil)
+        #expect(!ForegroundPolicy.needsConfirmClose(
+            sample: pane.foregroundSample, executionState: .idle, isRemote: true,
+            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: true
+        ))
+    }
+
+    @Test
+    func the_probe_still_names_a_pane_that_no_host_pushes() async {
+        // An upstream zmx on the host sends no report: the ssh probe keeps
+        // naming the pane, and its boundaries keep asking for one.
+        let pane = remotePane()
+        pane.recordUserInteraction()
+        pane.markCommandRunning()
+        #expect(pane.remoteProbePending)
+        let session = pane.sessionName
+        let resolver = RemoteForegroundResolver(minInterval: 0)
+        resolver.refresh(panes: [pane], probe: { [claude] _, _ in .success([session: claude]) })
+        await waitUntil { pane.foregroundProcessName == "claude" }
+        #expect(!pane.remoteForegroundIsPushed)
+        #expect(pane.foregroundSample?.origin == .remoteProbe)
+    }
 }

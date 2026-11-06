@@ -129,12 +129,22 @@ struct ZmxInstallSheet: View {
         }
         guard let verdict = flow.verdict else { return "" }
         switch verdict {
+        case .missing,
+             .upstream,
+             .otherBuild:
+            // The release carries no binary for this host's target (a
+            // release from before the Linux assets): say so, rather than
+            // name a button that is not there.
+            if flow.offer == nil {
+                return String(localized: "This Macterm build has no zmx binary for \(flow.hostState?.target?.displayName ?? "").")
+            }
+        default:
+            break
+        }
+        switch verdict {
         case let .unsupported(system, machine):
             return String(localized: "Macterm has no zmx build for \(system) on \(machine).")
         case .missing:
-            if flow.offer == nil {
-                return String(localized: "The host has no zmx, and this Macterm build has no binary for it.")
-            }
             return String(localized: """
             The host has no zmx. Macterm's build goes to ~/.local/bin/zmx, which its panes find. \
             Nothing on the host is changed before you click Install.

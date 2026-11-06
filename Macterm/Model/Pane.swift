@@ -209,7 +209,12 @@ final class Pane: Identifiable {
             // way: it may predate the program starting or quitting. With
             // probing off no probe will answer, so the title goes now.
             if isRemote, oldValue == .running, programTitle != nil {
-                if isRemoteProbingEnabled() {
+                if remoteForegroundIsPushed {
+                    // The host's report is current, and the shell's own
+                    // report came before the prompt that ended the run: the
+                    // title stays only while a program still holds the pty.
+                    if !remoteProgramHoldsForeground { programTitle = nil }
+                } else if isRemoteProbingEnabled() {
                     remoteTitleConfirmation.demoteShown()
                     scheduleRemoteTitleRetries()
                 } else {
@@ -220,8 +225,9 @@ final class Pane: Identifiable {
             // Any execution transition on a remote pane is also a naming
             // boundary (idle→running: a program took the foreground;
             // running→ended: the shell owns it again) — request an immediate
-            // probe rather than waiting out the resolver's throttle.
-            if isRemote { remoteProbeRequest.request() }
+            // probe rather than waiting out the resolver's throttle. A pane
+            // whose host pushes its foreground has already been told.
+            if isRemote, !remoteForegroundIsPushed { remoteProbeRequest.request() }
             // Transitions (idle→running, running→done) are exactly when the
             // adaptive poll should speed up; steady-state assignments and
             // per-frame heartbeats don't reach here (value unchanged).
@@ -258,13 +264,32 @@ final class Pane: Identifiable {
 
     var remoteProbePending: Bool { remoteProbeRequest.isPending }
 
+    /// The host's zmx pushes this pane's foreground through the pane's own
+    /// connection (`ZmxForegroundEvents`, fork patch 0010), so the ssh
+    /// probe never covers it, no boundary requests one, and a title outside
+    /// a run is judged against the latest report at once instead of held
+    /// for a probe (`RemoteTitleConfirmation`). Set by the first report,
+    /// which the daemon sends as soon as the client asks; a host that runs
+    /// an upstream zmx never sends one, and the pane keeps the probe. Cleared
+    /// with the surface: the next connection asks again.
+    private(set) var remoteForegroundIsPushed = false
+
+    /// An APC that libghostty did not know (`GhosttyTerminalNSView.onUnknownAPC`).
+    /// A foreground report of the zmx fork is applied as a sample; anything
+    /// else is dropped. Local panes attach without the request, so a report
+    /// can only reach a remote pane, and a local one is ignored either way.
+    func receiveUnknownAPC(_ payload: String) {
+        guard isRemote, let report = ZmxForegroundEvents.parse(payload) else { return }
+        applyRemoteForeground(report, origin: .remoteEvent)
+    }
+
     /// Note an execution boundary reported outside the execution tracker —
     /// the unconditional OSC 133;D hook in `TerminalSurface`, which fires
     /// even with the status indicator off (when no `executionState` edge
     /// exists at all). Posts a poll event so a slowed or paused poll wakes
     /// to fire the probe now.
     func noteRemoteCommandBoundary() {
-        guard isRemote else { return }
+        guard isRemote, !remoteForegroundIsPushed else { return }
         remoteProbeRequest.request()
         NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
     }
@@ -315,6 +340,11 @@ final class Pane: Identifiable {
         scheduleRemoteTitleRetry()
     }
 
+    private func cancelRemoteTitleRetries() {
+        remoteTitleRetryWork?.cancel()
+        remoteTitleRetryWork = nil
+    }
+
     private func scheduleRemoteTitleRetry() {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
@@ -334,8 +364,7 @@ final class Pane: Identifiable {
     /// probe goes, so the tab falls back to the process name instead of
     /// keeping a title nothing can confirm.
     func abandonRemoteTitleConfirmation() {
-        remoteTitleRetryWork?.cancel()
-        remoteTitleRetryWork = nil
+        cancelRemoteTitleRetries()
         guard remoteTitleConfirmation.awaitsProbe else { return }
         if remoteTitleConfirmation.shownUnconfirmed { programTitle = nil }
         remoteTitleConfirmation.reset()
@@ -761,6 +790,15 @@ final class Pane: Identifiable {
             return
         }
         guard !isShellAtPrompt else { return }
+        if remoteForegroundIsPushed {
+            // The host reported the foreground before this title went out,
+            // so the latest report is the witness: a program's idle title
+            // is shown now, a prompt's title is dropped now.
+            guard remoteProgramHoldsForeground else { return }
+            if trimmed != programTitle { programTitle = trimmed }
+            programTitlePID = nil
+            return
+        }
         // Only a probe can vouch for it. With probing off, none ever will.
         guard isRemoteProbingEnabled() else { return }
         remoteTitleConfirmation.hold(trimmed)
@@ -775,9 +813,12 @@ final class Pane: Identifiable {
     /// SSH was turned off will never be refreshed, so it counts for nothing,
     /// as in `ForegroundPolicy.needsConfirmClose`.
     private var remoteProgramHoldsForeground: Bool {
-        guard isRemoteProbingEnabled(),
-              let sample = foregroundSample, sample.origin == .remoteProbe, sample.name != nil
-        else { return false }
+        guard let sample = foregroundSample, sample.name != nil else { return false }
+        switch sample.origin {
+        case .processTable: return false
+        case .remoteProbe: guard isRemoteProbingEnabled() else { return false }
+        case .remoteEvent: break
+        }
         return !sample.isIdleShell && !remoteForegroundIsShell
     }
 
@@ -821,30 +862,53 @@ final class Pane: Identifiable {
     ///
     /// Every answer also settles a title waiting on a probe
     /// (`RemoteTitleConfirmation`), if this probe went out after it.
-    func applyRemoteForeground(_ foreground: RemoteForeground?) {
+    ///
+    /// A report the host pushed (`origin: .remoteEvent`, see
+    /// `remoteForegroundIsPushed`) is current, so it settles any waiting
+    /// title at once, with no revision to compare: the title is shown when
+    /// a program holds the pty, and dropped when the shell does.
+    func applyRemoteForeground(_ foreground: RemoteForeground?, origin: ForegroundSample.Origin = .remoteProbe) {
         guard let foreground, !foreground.comm.isEmpty else { return }
         let name = Self.remoteProcessName(comm: foreground.comm, command: foreground.command)
         guard !name.isEmpty else { return }
+        let pushed = origin == .remoteEvent
+        if pushed, !remoteForegroundIsPushed {
+            remoteForegroundIsPushed = true
+            // Whatever boundary asked for a probe, this report answers it.
+            remoteProbeRequest.consume()
+        }
         let isShell = foreground.isShell ?? ProcessInspector.isShellProcessName(name)
         let isIdleShell = foreground.isIdle ?? isShell
-        if name != foregroundProcessName || isIdleShell != foregroundSample?.isIdleShell {
+        if name != foregroundProcessName || isIdleShell != foregroundSample?.isIdleShell
+            || origin != foregroundSample?.origin
+        {
             foregroundSample = ForegroundSample(
                 name: name,
                 isIdleShell: isIdleShell,
-                origin: .remoteProbe,
+                origin: origin,
                 sampledAt: Date()
             )
         }
         remoteForegroundIsShell = isShell
         remoteForegroundCommand = isShell ? nil : (foreground.command ?? name)
-        switch remoteTitleConfirmation.resolve(programInFront: remoteProgramHoldsForeground) {
-        case let .adopt(title):
-            if let title, title != programTitle { programTitle = title }
-            programTitlePID = nil
-        case .clear:
-            programTitle = nil
-        case .undecided:
-            break
+        if pushed {
+            let held = remoteTitleConfirmation.pending
+            cancelRemoteTitleRetries()
+            remoteTitleConfirmation.reset()
+            if remoteProgramHoldsForeground, let held {
+                if held != programTitle { programTitle = held }
+                programTitlePID = nil
+            }
+        } else {
+            switch remoteTitleConfirmation.resolve(programInFront: remoteProgramHoldsForeground) {
+            case let .adopt(title):
+                if let title, title != programTitle { programTitle = title }
+                programTitlePID = nil
+            case .clear:
+                programTitle = nil
+            case .undecided:
+                break
+            }
         }
         // The shell is back in front: whatever program titled the pane has
         // gone, and the run-state edge may never have fired (it ended idle).
@@ -1099,6 +1163,10 @@ final class Pane: Identifiable {
         view.onBackgroundColorChange = nil
         view.onAdaptiveBackgroundChange = nil
         view.onOutputActivity = nil
+        view.onUnknownAPC = nil
+        // The next surface asks the host again, and its first report sets
+        // the flag again; until then the probe covers the pane.
+        remoteForegroundIsPushed = false
         view.onScrollbarUpdate = nil
         view.onLinkHover = nil
         view.onReadOnlyChange = nil

@@ -754,6 +754,52 @@ enum ZmxLeadership {
     static let claimSequence = "\u{1b}_zmx;claim\u{1b}\\"
 }
 
+/// The foreground reports of the zmx fork (`src/foreground.zig` there, patch
+/// 0010): a daemon that a client asked tells it which process group holds
+/// the pty, before the first output that follows each change, and the
+/// client writes the report into its output as an APC. libghostty raises
+/// an APC it does not know as `GHOSTTY_ACTION_UNKNOWN_APC` (fork patch
+/// 0020), and `Pane.receiveUnknownAPC` applies it as a foreground sample.
+/// Both constants are a wire contract with the fork, not local choices.
+///
+/// Only a client started with the variable asks, so only Macterm's remote
+/// panes get reports, and only from a host that runs the fork: an upstream
+/// zmx ignores the request, the pane gets no report, and the ssh probe
+/// (`RemoteForegroundResolver`) keeps naming it as before.
+enum ZmxForegroundEvents {
+    /// Exported by `RemoteSpawn.paneCommand` before `zmx attach`. The client
+    /// removes it from its environment before the session starts.
+    static let environmentVariable = "ZMX_FOREGROUND_EVENTS"
+
+    /// `zmx;foreground;<idle>;<shell>;<comm>;<args>`: the host's idle
+    /// verdict (the foreground is the session's own shell), its shell
+    /// verdict (`comm` is in its `/etc/shells`; empty when it has none), the
+    /// process name and the command line, which is last because it may
+    /// contain `;`.
+    static let reportPrefix = "zmx;foreground;"
+
+    /// The report as a `RemoteForeground`, the same shape as one line of
+    /// the probe, or nil for an APC that is not a report. Pure.
+    nonisolated static func parse(_ payload: String) -> RemoteForeground? {
+        guard payload.hasPrefix(reportPrefix) else { return nil }
+        let fields = payload.dropFirst(reportPrefix.count)
+            .split(separator: ";", maxSplits: 3, omittingEmptySubsequences: false)
+        guard fields.count == 4 else { return nil }
+        func flag(_ field: Substring) -> Bool? {
+            switch field {
+            case "1": true
+            case "0": false
+            default: nil
+            }
+        }
+        guard let isIdle = flag(fields[0]) else { return nil }
+        let comm = fields[2].trimmingCharacters(in: .whitespaces)
+        guard !comm.isEmpty else { return nil }
+        let args = fields[3].trimmingCharacters(in: .whitespaces)
+        return RemoteForeground(comm: comm, isIdle: isIdle, isShell: flag(fields[1]), command: args.isEmpty ? nil : args)
+    }
+}
+
 /// Resolves how a surface launches under zmx.
 enum ZmxAttach {
     /// The `command-wrapper` argv that wraps a surface's shell in zmx:

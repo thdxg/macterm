@@ -131,6 +131,20 @@ struct RemoteSpawnTests {
     }
 
     @Test
+    func pane_command_asks_the_host_zmx_for_foreground_reports() throws {
+        // The fork's client reads the variable (`ZmxForegroundEvents`) and
+        // removes it before the session starts. Background operations never
+        // attach, so they carry nothing.
+        let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123") ?? ""
+        #expect(cmd.contains("ZMX_FOREGROUND_EVENTS=1; export ZMX_FOREGROUND_EVENTS; "))
+        #expect(try #require(cmd.range(of: "ZMX_FOREGROUND_EVENTS")?.lowerBound) < cmd.range(of: "attach")!.lowerBound)
+        let op = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["ls"])?.joined(separator: " ") ?? ""
+        let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
+        #expect(!op.contains("ZMX_FOREGROUND_EVENTS"))
+        #expect(!probe.contains("ZMX_FOREGROUND_EVENTS"))
+    }
+
+    @Test
     func terminal_program_preamble_drops_a_version_that_is_not_plain() {
         for version in [nil, "", "1.3; rm -rf ~", "1.3 beta", "1.3\"", "$(id)"] {
             let preamble = RemoteSpawn.terminalProgramPreamble(version: version)

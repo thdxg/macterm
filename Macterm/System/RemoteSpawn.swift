@@ -165,6 +165,15 @@ enum RemoteSpawn {
     /// only sessions created from here on pick it up.
     static let remoteTerminalProgramPreamble = terminalProgramPreamble(version: GhosttyApp.version)
 
+    /// Prepended to the pane script only: asks the host's zmx to push the
+    /// session's foreground into the pane's output (`ZmxForegroundEvents`).
+    /// The fork's client reads the variable and removes it before the
+    /// session starts, so the shell never sees it; an upstream zmx ignores
+    /// it, and the pane keeps the probe. Background operations never attach,
+    /// so they do not carry it.
+    static let remoteForegroundEventsPreamble =
+        "\(ZmxForegroundEvents.environmentVariable)=1; export \(ZmxForegroundEvents.environmentVariable); "
+
     /// Testable core of `remoteTerminalProgramPreamble`. The version is
     /// dropped unless it is all `[A-Za-z0-9.+_-]`, so nothing from it can
     /// reach the shell as syntax; `TERM_PROGRAM` is exported regardless.
@@ -222,7 +231,7 @@ enum RemoteSpawn {
         // the pane. No `-l` (unportable — see remoteShell).
         let fallbackShell = "exec ${SHELL:-/bin/sh}"
         let preamble = remoteEnvPreamble + remoteTermPreamble + remoteColorPreamble
-            + remoteTerminalProgramPreamble
+            + remoteTerminalProgramPreamble + remoteForegroundEventsPreamble
         let script = assertSingleQuoteFree(preamble + [
             zmxPresenceGuard(zmx: zmx, fallbackShell: fallbackShell),
             "cd \(quotedDir) || "

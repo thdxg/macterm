@@ -10484,22 +10484,6 @@
         }
       }
     },
-    "The host has no zmx, and this Macterm build has no binary for it." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트에 zmx가 없고, 이 Macterm 빌드에는 해당 호스트용 바이너리가 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机上没有 zmx，而此 Macterm 构建没有适用于它的二进制文件。"
-          }
-        }
-      }
-    },
     "The host has no zmx. Macterm's build goes to ~/.local/bin/zmx, which its panes find. Nothing on the host is changed before you click Install." : {
       "localizations" : {
         "ko" : {
@@ -10946,6 +10930,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有可解释的输出。"
+          }
+        }
+      }
+    },
+    "This Macterm build has no zmx binary for %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Macterm 빌드에는 %@용 zmx 바이너리가 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 Macterm 构建没有适用于 %@ 的 zmx 二进制文件。"
           }
         }
       }
