@@ -40,9 +40,6 @@
       }
     },
     "%@" : {
-      "localizations" : {
-
-      },
       "shouldTranslate" : false
     },
     "%@\n\nPinned-tab auto-save is paused so your edits are not overwritten. Fix the file, or delete it, to start auto-save again." : {
@@ -505,22 +502,6 @@
         }
       }
     },
-    "%lld changed files" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "변경된 파일 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个文件有更改"
-          }
-        }
-      }
-    },
     "%lld commands ran in %@, the last one %@." : {
       "localizations" : {
         "en" : {
@@ -539,28 +520,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%2$@ 中运行了 %1$lld 条命令，最后一条在%3$@运行。"
-          }
-        }
-      }
-    },
-    "%lld commits behind %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld commits behind %2$@"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%2$@보다 커밋 %1$lld개 뒤처짐"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "落后 %2$@ %1$lld 个提交"
           }
         }
       }
@@ -594,22 +553,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仍有 %lld 个进程在运行。仍要退出吗？"
-          }
-        }
-      }
-    },
-    "%lld stashes" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "스태시 %lld개"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个储藏"
           }
         }
       }
@@ -4120,9 +4063,6 @@
       }
     },
     "ID" : {
-      "localizations" : {
-
-      },
       "shouldTranslate" : false
     },
     "Icon size" : {
@@ -7601,22 +7541,6 @@
         }
       }
     },
-    "Pull" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "풀"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "拉取"
-          }
-        }
-      }
-    },
     "Purple" : {
       "comment" : "Project color tag",
       "localizations" : {
@@ -8551,22 +8475,6 @@
         }
       }
     },
-    "Run Again" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다시 실행"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "再次运行"
-          }
-        }
-      }
-    },
     "Run Command in Pane" : {
       "localizations" : {
         "ko" : {
@@ -9403,38 +9311,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示 AI 智能体图标"
-          }
-        }
-      }
-    },
-    "Show Changes" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "변경 사항 보기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示更改"
-          }
-        }
-      }
-    },
-    "Show Stashes" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "스태시 보기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示储藏"
           }
         }
       }
@@ -12110,15 +11986,9 @@
       }
     },
     "X" : {
-      "localizations" : {
-
-      },
       "shouldTranslate" : false
     },
     "Y" : {
-      "localizations" : {
-
-      },
       "shouldTranslate" : false
     },
     "Yellow" : {

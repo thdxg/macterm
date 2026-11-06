@@ -292,9 +292,21 @@ final class RemoteZmxInstallFlow {
     /// Answers the prompt the connection waits on. The text goes to the
     /// program's tty and nowhere else.
     func answerPrompt(_ text: String) {
-        guard prompt != nil else { return }
+        guard let asked = prompt else { return }
         prompt = nil
-        command?.write(text)
+        guard case .secret = asked else {
+            command?.write(text)
+            return
+        }
+        // A secret goes only to a terminal that does not echo it.
+        guard let command else { return }
+        Task { [weak self] in
+            guard await command.writeSecret(text) else {
+                logger.warning("a secret prompt kept echo on; nothing was sent")
+                self?.prompt = asked
+                return
+            }
+        }
     }
 
     /// Stops whatever runs. The sheet closes after it.

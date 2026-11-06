@@ -410,6 +410,42 @@ struct RemoteZmxInstallFlowTests {
     }
 }
 
+@MainActor
+struct UTF8ChunkDecoderTests {
+    @Test
+    func a_shorter_chunk_after_a_longer_one_decodes() {
+        // The crash of 1.33.2-tip.27: a long chunk, then a short one.
+        var decoder = UTF8ChunkDecoder()
+        let long = Array(String(repeating: "x", count: 4096).utf8)
+        #expect(decoder.feed(long).count == 4096)
+        #expect(decoder.feed(Array("installed=/home/demo/.local/bin/zmx\n".utf8)) == "installed=/home/demo/.local/bin/zmx\n")
+        #expect(decoder.feed(Array("ok".utf8)) == "ok")
+        #expect(decoder.finish().isEmpty)
+    }
+
+    @Test
+    func a_character_split_across_chunks_waits_for_its_end() {
+        var decoder = UTF8ChunkDecoder()
+        let euro = Array("€".utf8) // three bytes
+        #expect(decoder.feed(Array("price ".utf8) + euro[0 ..< 1]) == "price ")
+        #expect(decoder.feed(euro[1 ..< 2]).isEmpty)
+        #expect(decoder.feed(Array(euro[2 ..< 3]) + Array("5".utf8)) == "€5")
+        // A four-byte character split after its first byte, then the rest.
+        let face = Array("😀".utf8)
+        #expect(decoder.feed(face[0 ..< 1]).isEmpty)
+        #expect(decoder.feed(face[1 ..< 4]) == "😀")
+    }
+
+    @Test
+    func an_unfinished_character_at_the_end_decodes_with_replacement() {
+        var decoder = UTF8ChunkDecoder()
+        #expect(decoder.feed(Array("a".utf8) + [0xE2, 0x82]) == "a")
+        #expect(decoder.finish() == "\u{FFFD}")
+        #expect(UTF8ChunkDecoder.completePrefixLength([]) == 0)
+        #expect(UTF8ChunkDecoder.completePrefixLength([0x80, 0x80]) == 2)
+    }
+}
+
 /// `TTYCommand` against a real program: the test is the shell asking on
 /// its tty, with echo off, and reading what the sheet answers.
 @MainActor
@@ -423,7 +459,9 @@ struct TTYCommandTests {
         ) { seen = $0 }
         try await waitUntil { SSHPrompt.detect(in: command.output) == .secret("Password:") }
         #expect(seen.hasSuffix("Password: "))
-        command.write("hunter2")
+        // The script prints its prompt before it turns echo off, as a
+        // careless program might: the secret waits for echo off.
+        #expect(await command.writeSecret("hunter2"))
         let status = await command.waitForExit()
         #expect(status == 0)
         try await waitUntil { command.output.contains("got:hunter2") }
@@ -440,6 +478,18 @@ struct TTYCommandTests {
         let status = await command.waitForExit()
         #expect(status == 3)
         try await waitUntil { command.output.contains("has-tty") }
+    }
+
+    @Test
+    func a_secret_is_not_written_while_echo_stays_on() async throws {
+        let command = TTYCommand()
+        try command.start(argv: ["/bin/sh", "-c", "printf 'Password: '; read -r p; echo got:$p"]) { _ in }
+        try await waitUntil { command.output.contains("Password:") }
+        #expect(command.echoIsOn)
+        #expect(await command.writeSecret("hunter2", timeout: .milliseconds(200)) == false)
+        #expect(!command.output.contains("hunter2"))
+        command.terminate()
+        _ = await command.waitForExit()
     }
 
     @Test
