@@ -587,6 +587,7 @@ final class GhosttyApp {
         let userConfigText = MactermConfig.userGhosttyConfigText()
         mouseScrollMultiplier = MouseScrollMultiplier.resolve(userConfigText: userConfigText)
         windowPadding = WindowPadding.resolve(userConfigText: userConfigText)
+        TerminalFont.shared.update(family: TerminalFontFamily.resolve(userConfigText: userConfigText))
 
         return (cfg, result)
     }

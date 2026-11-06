@@ -251,7 +251,7 @@ struct ProjectMemoryPanel: View {
             HStack(spacing: 6) {
                 outcomeGlyph(.failure)
                 Text(verbatim: entry.command ?? "")
-                    .font(.callout.monospaced())
+                    .font(.terminal(.callout))
                     .lineLimit(2)
                     .truncationMode(.middle)
             }
@@ -262,7 +262,7 @@ struct ProjectMemoryPanel: View {
             }
             if let tail = entry.failureTail {
                 Text(verbatim: tail)
-                    .font(.caption.monospaced())
+                    .font(.terminal(.caption))
                     .foregroundStyle(MactermTheme.fgMuted)
                     .lineLimit(6)
                     .truncationMode(.head)
@@ -285,14 +285,14 @@ struct ProjectMemoryPanel: View {
                     .frame(width: 18)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(verbatim: action.title)
-                        .font(action.kind == .frequent || action.kind == .suggested ? .callout.monospaced() : .callout.weight(.medium))
+                        .font(action.kind == .frequent || action.kind == .suggested ? .terminal(.callout) : .callout.weight(.medium))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if let subtitle = action.subtitle {
                         // A command's middle is its distinctive part; a
                         // sentence reads from its start.
                         Text(action.kind == .suggested ? ExplainPopoverView.rendered(subtitle) : AttributedString(subtitle))
-                            .font(action.kind == .retry ? .caption.monospaced() : .caption)
+                            .font(action.kind == .retry ? .terminal(.caption) : .caption)
                             .foregroundStyle(MactermTheme.fgMuted)
                             .lineLimit(1)
                             .truncationMode(action.kind == .retry ? .middle : .tail)
@@ -373,7 +373,7 @@ struct ProjectMemoryPanel: View {
                     .font(.caption)
                     .foregroundStyle(isCurrent ? MactermTheme.accent : MactermTheme.fgMuted)
                 Text(verbatim: branch.name)
-                    .font(.caption.monospaced().weight(isCurrent ? .semibold : .regular))
+                    .font(.terminal(.caption, weight: isCurrent ? .semibold : .regular))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
@@ -431,7 +431,7 @@ struct ProjectMemoryPanel: View {
             HStack(spacing: 6) {
                 outcomeGlyph(entry.outcome)
                 Text(verbatim: entry.command ?? String(localized: "Unknown command"))
-                    .font(.caption.monospaced())
+                    .font(.terminal(.caption))
                     .foregroundStyle(entry.command == nil ? MactermTheme.fgDim : MactermTheme.fg)
                     .lineLimit(1)
                     .truncationMode(.middle)
