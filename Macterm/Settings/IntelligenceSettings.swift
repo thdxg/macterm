@@ -28,9 +28,8 @@ struct IntelligenceSettings: View {
                 .disabled(!preferences.projectMemory)
                 .padding(.leading, 16)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Macterm records each command that finishes in a project: the command, its folder, its exit code and its time.")
-                    Text("For a command that fails, it also records the last lines of its output.")
-                    Text("It removes secrets first and keeps the records on this Mac only. The project memory panel shows them.")
+                    Text("Keeps a log of the commands that finish in each project, with their results.")
+                    Text("Secrets are removed first, and the log stays on this Mac.")
                 }
                 .settingsCaption()
                 HStack {
@@ -46,7 +45,7 @@ struct IntelligenceSettings: View {
                 LabeledContent("On-device model") {
                     Text(modelStatus)
                 }
-                Text("Explain Output uses Apple's on-device model. Nothing leaves this Mac.")
+                Text("Every feature that uses a model uses Apple's on-device model. Nothing leaves this Mac.")
                     .settingsCaption()
             }
         }
