@@ -2,10 +2,11 @@ import AppKit
 
 /// The user's ghostty `font-family`, read from their raw config text, for the
 /// monospaced text that Macterm's own UI draws (commands, paths, logs and
-/// keybinds in panels, sheets and Settings). The UI then reads as one surface
-/// with the terminal. `TerminalFont` holds the result for the views.
+/// keybinds in panels, sheets and Settings). `TerminalFont` holds the result
+/// for the views. With no installed family, the UI keeps the system
+/// monospaced font, also where the terminal draws ghostty's embedded font.
 ///
-/// Raw text rather than `ghostty_config_get`: the key is a
+/// Macterm reads raw text and not `ghostty_config_get`, because the key is a
 /// `RepeatableString`, which has no C shape in `ghostty.h`. As for every raw
 /// read, a value in a `config-file` include is not seen.
 ///
