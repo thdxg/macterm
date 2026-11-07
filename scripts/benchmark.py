@@ -15,7 +15,8 @@ suite (scripts/e2e/) — this file owns only the sampling and reporting.
 
 Per state: settle, then sample several short windows and report the
 per-metric median — each window reads the process's CPU-time delta (the
-primary metric — immune to sampling aliasing) and median RSS. Taking the
+primary metric — immune to sampling aliasing) and the median phys_footprint
+of the process tree. Taking the
 median across windows keeps a single co-scheduled CPU spike on a shared
 runner from skewing a state. When passwordless sudo is available (GitHub
 runners), a concurrent `powermetrics --samplers tasks` window adds
@@ -28,15 +29,17 @@ Subcommands:
 """
 
 import argparse
+import ctypes
 import json
 import os
 import re
 import statistics
+import struct
 import subprocess
 import sys
 import time
 
-from _harness import HarnessError, MactermHarness, notify, sh
+from _harness import HarnessError, MactermHarness, notify, runner_info, sh, wait_for_load
 
 # The benchmark samples one idle state as a sanity baseline plus the two
 # workload states that carry the real signal — an app doing terminal work,
@@ -76,12 +79,70 @@ def parse_cputime(value):
 
 
 def ps_sample(pid):
-    """Return (cputime_seconds, rss_kb) or None if the process is gone."""
-    result = sh(["ps", "-p", str(pid), "-o", "cputime=,rss="])
+    """Return the CPU time in seconds, or None if the process is gone."""
+    result = sh(["ps", "-p", str(pid), "-o", "cputime="])
     fields = result.stdout.split()
-    if result.returncode != 0 or len(fields) != 2:
+    if result.returncode != 0 or len(fields) != 1:
         return None
-    return parse_cputime(fields[0]), int(fields[1])
+    return parse_cputime(fields[0])
+
+
+_LIBPROC = ctypes.CDLL("/usr/lib/libproc.dylib") if sys.platform == "darwin" else None
+# proc_pid_rusage flavor RUSAGE_INFO_V2; ri_phys_footprint follows a 16-byte
+# uuid and seven uint64 fields.
+_RUSAGE_INFO_V2 = 2
+_PHYS_FOOTPRINT_OFFSET = 72
+
+
+def phys_footprint(pid):
+    """The process's phys_footprint in bytes (what Activity Monitor calls
+    Memory), or None if the process is gone. RSS from `ps` counts shared
+    pages and misses compressed memory, so it is not used for memory."""
+    buffer = ctypes.create_string_buffer(512)
+    if _LIBPROC is None or _LIBPROC.proc_pid_rusage(pid, _RUSAGE_INFO_V2, buffer) != 0:
+        return None
+    return struct.unpack_from("Q", buffer.raw, _PHYS_FOOTPRINT_OFFSET)[0]
+
+
+def process_tree(root_pid, zmx_path):
+    """The app, every zmx process of its bundle (clients and session
+    daemons, which zmx detaches from the app), and all their descendants:
+    the shells and the programs in the panes."""
+    result = sh(["ps", "-axo", "pid=,ppid=,command="])
+    children, roots = {}, {root_pid}
+    for line in result.stdout.splitlines():
+        fields = line.split(None, 2)
+        if len(fields) < 3:
+            continue
+        pid, ppid, command = int(fields[0]), int(fields[1]), fields[2]
+        children.setdefault(ppid, []).append(pid)
+        if command.startswith(zmx_path):
+            roots.add(pid)
+    tree, stack = set(), list(roots)
+    while stack:
+        pid = stack.pop()
+        if pid not in tree:
+            tree.add(pid)
+            stack.extend(children.get(pid, []))
+    return tree
+
+
+def tree_footprint(root_pid, zmx_path):
+    """Sum of phys_footprint over the process tree, in bytes, and its size."""
+    pids = process_tree(root_pid, zmx_path)
+    total = sum(phys_footprint(pid) or 0 for pid in pids)
+    return total, len(pids)
+
+
+def same_image(a, b):
+    """Whether two results came from the same runner image: the same image
+    OS and the same macOS version. The image version is not compared: it
+    changes about weekly, and a pool of one or two runs is noise. A result
+    with no record matches nothing, so an unknown image is never pooled."""
+    def key(result):
+        runner = result.get("runner") or {}
+        return runner.get("image_os"), runner.get("macos")
+    return key(a) == key(b) and None not in key(a)
 
 
 def start_powermetrics(seconds):
@@ -128,8 +189,11 @@ def check_alive(harness):
 
 
 def sample_window(harness, seconds):
-    """One contiguous sampling window: the process's CPU-time rate over the
-    window, its median RSS, and (best-effort) powermetrics CPU ms/s + wakeups/s.
+    """One contiguous sampling window: the app's CPU-time rate over the
+    window, the median phys_footprint of the whole process tree (app, zmx
+    clients and daemons, shells), and (best-effort) powermetrics CPU ms/s +
+    wakeups/s. CPU stays the app's own: a tree sum loses the CPU time of the
+    short-lived children that a workload starts every second.
     A single reading — `sample_state` runs several and medians them so one
     unlucky window (a shared-runner co-scheduled spike) can't skew the result.
     """
@@ -140,7 +204,8 @@ def sample_window(harness, seconds):
         sys.exit("error: app process not sampleable")
     power = start_powermetrics(seconds)
 
-    rss_samples = []
+    zmx_path = os.path.join(harness.app, "Contents", "Resources", "zmx", "zmx")
+    footprint_samples, tree_sizes = [], []
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         time.sleep(1)
@@ -148,7 +213,9 @@ def sample_window(harness, seconds):
         sample = ps_sample(pid)
         if sample is None:
             sys.exit("error: app process died mid-sample")
-        rss_samples.append(sample[1])
+        footprint, size = tree_footprint(pid, zmx_path)
+        footprint_samples.append(footprint)
+        tree_sizes.append(size)
     end = ps_sample(pid)
 
     cpu_ms_per_s = wakeups_per_s = None
@@ -162,8 +229,9 @@ def sample_window(harness, seconds):
             power.kill()
 
     return {
-        "cpu_pct": round((end[0] - start[0]) / seconds * 100, 3),
-        "rss_mb": round(statistics.median(rss_samples) / 1024, 1),
+        "cpu_pct": round((end - start) / seconds * 100, 3),
+        "footprint_mb": round(statistics.median(footprint_samples) / 1048576, 1),
+        "processes": int(statistics.median(tree_sizes)),
         "cpu_ms_per_s": cpu_ms_per_s,
         "wakeups_per_s": wakeups_per_s,
     }
@@ -194,7 +262,8 @@ def sample_state(harness, seconds, samples):
         return windows[0]
     return {
         "cpu_pct": _median_or_none([w["cpu_pct"] for w in windows]),
-        "rss_mb": _median_or_none([w["rss_mb"] for w in windows]),
+        "footprint_mb": _median_or_none([w["footprint_mb"] for w in windows]),
+        "processes": _median_or_none([w["processes"] for w in windows]),
         "cpu_ms_per_s": _median_or_none([w["cpu_ms_per_s"] for w in windows]),
         "wakeups_per_s": _median_or_none([w["wakeups_per_s"] for w in windows]),
     }
@@ -262,7 +331,20 @@ def git_sha():
     return result.stdout.strip() if result.returncode == 0 else "unknown"
 
 
+def gated_sample(harness, state, args):
+    """Wait for the load gate, then sample the state. The gate's record rides
+    in the state's results."""
+    gate = wait_for_load(args.max_load, args.load_timeout)
+    print(f"sampling {state}: {args.samples}x{args.seconds}s, load {gate['load']}", flush=True)
+    result = sample_state(harness, args.seconds, args.samples)
+    result["load_gate"] = gate
+    print(f"  {result}", flush=True)
+    return result
+
+
 def cmd_run(args):
+    if args.max_load is None:
+        args.max_load = max(1.0, os.cpu_count() / 2)
     # Isolation (throwaway $HOME, MACTERM_BENCHMARK_DATA_DIR, ZMX_DIR) and the
     # LaunchServices launch + exact-pid-match recipe live in MactermHarness,
     # shared with the e2e suite; this function owns settling and sampling. The
@@ -286,9 +368,7 @@ def cmd_run(args):
             for state in IDLE_STATES:
                 enter_state(harness.app, state)
                 time.sleep(args.settle)
-                print(f"sampling {state}: {args.samples}x{args.seconds}s", flush=True)
-                results[state] = sample_state(harness, args.seconds, args.samples)
-                print(f"  {results[state]}", flush=True)
+                results[state] = gated_sample(harness, state, args)
 
             if args.workload > 0:
                 # Re-run under busy tabs so the numbers reflect an app doing real
@@ -300,9 +380,7 @@ def cmd_run(args):
                 for state in WORKLOAD_STATES:
                     enter_state(harness.app, state)
                     time.sleep(args.settle)
-                    print(f"sampling {state}: {args.samples}x{args.seconds}s", flush=True)
-                    results[state] = sample_state(harness, args.seconds, args.samples)
-                    print(f"  {results[state]}", flush=True)
+                    results[state] = gated_sample(harness, state, args)
         except HarnessError as exc:
             dump_diagnostics(harness, args.out)
             sys.exit(f"error: {exc}")
@@ -313,8 +391,9 @@ def cmd_run(args):
         harness.cleanup()
 
     payload = {
-        "schema": 2,
+        "schema": 3,
         "commit": git_sha(),
+        "runner": runner_info(),
         # Each state is observed for samples x seconds total, split into
         # `samples` windows whose per-metric median is what `states` records.
         # `seconds_per_state` stays the TOTAL observation time (back-compat with
@@ -346,11 +425,11 @@ THRESHOLD_PCT = 25
 #     by shared-runner scheduling jitter, so a big relative swing off it isn't
 #     a real regression — e.g. a focused-idle app legitimately wanders 0.6–1.4%
 #     CPU depending on what the runner co-schedules. Only the CPU metrics need
-#     it (RSS/wakeups aren't noise-dominated at low values); None disables it.
+#     it (memory/wakeups aren't noise-dominated at low values); None disables it.
 METRICS = (
     # key, table label, format, absolute noise floor, min baseline to flag
     ("cpu_pct", "CPU %", "{:.2f}", 0.5, 1.5),
-    ("rss_mb", "Memory (RSS MB)", "{:.1f}", 25.0, None),
+    ("footprint_mb", "Memory (footprint MB, process tree)", "{:.1f}", 25.0, None),
     ("cpu_ms_per_s", "CPU ms/s (powermetrics)", "{:.1f}", 5.0, 15.0),
     ("wakeups_per_s", "Wakeups/s (powermetrics)", "{:.1f}", 50.0, None),
 )
@@ -413,7 +492,7 @@ def delta_cell(base, current, floor, min_baseline=None):
     return f"{diff / base * 100:+.0f}% {arrow}".strip()
 
 
-def pool_baselines(paths):
+def pool_baselines(paths, current=None):
     """Pool several main-run baselines into one synthetic baseline: for each
     state/metric, the per-metric median across runs. A PR delta is one noisy
     sample against the reference, so a single-run reference doubles the noise
@@ -421,11 +500,17 @@ def pool_baselines(paths):
     next push replaces it. The median (not the mean) keeps one such anomalous
     run from moving the reference at all, matching the per-state window median.
     Paths arrive newest-first (the workflow's index-prefixed filenames), so
-    `commit` records the newest run for the report header."""
+    `commit` records the newest run for the report header. Runs from another
+    runner image than `current` are dropped: an image change moves every
+    number at once (2026-10-22)."""
     runs = []
     for path in paths:
         with open(path) as f:
-            runs.append(json.load(f))
+            run = json.load(f)
+        if current is None or same_image(run, current):
+            runs.append(run)
+    if not runs:
+        return None
     if len(runs) == 1:
         return runs[0]
     states = {}
@@ -447,7 +532,7 @@ def pool_baselines(paths):
 def cmd_report(args):
     with open(args.results) as f:
         current = json.load(f)
-    baseline = pool_baselines(args.baseline) if args.baseline else None
+    baseline = pool_baselines(args.baseline, current) if args.baseline else None
 
     lines = ["## Window-state benchmark", ""]
     if baseline:
@@ -567,9 +652,19 @@ def cmd_report(args):
         "metrics in the same direction, at least one under workload — so a lone noisy cell "
         "shows its arrow here without tagging the PR._",
     ]
+    over_load = [
+        state for state in STATES
+        if not current["states"].get(state, {}).get("load_gate", {}).get("passed", True)
+    ]
+    if over_load:
+        lines.append("")
+        lines.append(
+            f"_⚠️ The load average did not drop below the gate before: {', '.join(over_load)}. "
+            "Treat these states with care._"
+        )
     if baseline is None:
         lines.append("")
-        lines.append("_No main-branch baseline found; showing absolute values only._")
+        lines.append("_No main-branch baseline of this runner image found; showing absolute values only._")
     elif baseline.get("runs", 1) > 1:
         lines.append("")
         lines.append(
@@ -621,6 +716,13 @@ def main():
         help="also sample workload-* states after spawning TABS busy tabs "
              "(2x2 grid each) via the bundled macterm CLI (default: off)",
     )
+    run.add_argument(
+        "--max-load", type=float,
+        help="1-minute load average to wait for before each state "
+             "(default: half the CPU count, at least 1)",
+    )
+    run.add_argument("--load-timeout", type=int, default=120,
+                     help="seconds to wait for the load gate")
     run.set_defaults(func=cmd_run)
 
     report = sub.add_parser("report", help="render results as markdown")

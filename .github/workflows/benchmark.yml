@@ -102,7 +102,7 @@ jobs:
       always() && needs.changes.outputs.swift == 'true'
       && needs.baseline.result != 'cancelled'
     runs-on: xcode-27
-    timeout-minutes: 30
+    timeout-minutes: 40
     # Read-only: the label/comment writes live in benchmark-report.yml, which
     # runs with a read/write token because a fork PR can't get one here. This
     # job just renders the report and hands it off as an artifact.
@@ -179,6 +179,16 @@ jobs:
       - name: Build and benchmark
         run: mise run bench --verbose
 
+      # Session-layer latency (scripts/session_bench.py), headless, with the
+      # zmx of the built app. A failure here must not cost the window-state
+      # report, so it does not fail the job.
+      - name: Session layer
+        continue-on-error: true
+        run: |
+          python3 scripts/session_bench.py run \
+            --zmx build/DerivedData/Build/Products/Release/Macterm.app/Contents/Resources/zmx/zmx \
+            --out build/benchmark/session-macos.json
+
       # Under the restore-time key, success-only — see test.yml's unit job.
       - name: Save DerivedData (Release)
         uses: actions/cache/save@v6
@@ -190,7 +200,10 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
-          path: build/benchmark/results.json
+          path: |
+            build/benchmark/results.json
+            build/benchmark/session-macos.json
+          if-no-files-found: warn
 
       - name: Upload failure diagnostics
         if: failure()
@@ -221,6 +234,9 @@ jobs:
           fi
           python3 scripts/benchmark.py report "${args[@]}" > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f build/benchmark/session-macos.json ]; then
+            python3 scripts/session_bench.py report build/benchmark/session-macos.json >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # Hand the rendered report + verdict + PR number to benchmark-report.yml.
       # That companion runs on `workflow_run` with a read/write token (this job
@@ -240,3 +256,64 @@ jobs:
         with:
           name: benchmark-report
           path: report-bundle/
+
+  # Session-layer latency over ssh (scripts/session_bench.py). A remote pane
+  # of v1 is `ssh` + `zmx attach`, one ssh login for each pane. This job runs
+  # the same arms as the macOS job plus the ssh arms, against sshd on
+  # localhost with 25 ms of delay each way (50 ms round trip). Linux, because
+  # sshd and netem are an apt install there.
+  session-linux:
+    name: Session Layer (Linux)
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The zmx that setup.sh pins, checked against the release's own
+      # SHA-256.
+      - name: Download zmx
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(sed -n 's/^ZMX_TAG="${ZMX_TAG:-\(.*\)}"$/\1/p' scripts/setup.sh)
+          echo "zmx $tag"
+          mkdir -p zmx && cd zmx
+          gh release download "$tag" --repo thdxg/zmx \
+            --pattern zmx-x86_64-linux.tar.gz --pattern zmx-x86_64-linux.tar.gz.sha256
+          sha256sum -c zmx-x86_64-linux.tar.gz.sha256
+          tar xzf zmx-x86_64-linux.tar.gz
+          ./zmx version
+
+      - name: Start sshd on localhost
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends openssh-server
+          sudo mkdir -p /run/sshd
+          sudo /usr/sbin/sshd
+          ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519 -q
+          cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=no localhost true
+
+      - name: Delay loopback by 25 ms
+        run: |
+          sudo modprobe sch_netem || true
+          sudo tc qdisc add dev lo root netem delay 25ms
+          ping -c 3 localhost
+
+      - name: Measure
+        run: |
+          python3 scripts/session_bench.py run --zmx zmx/zmx --ssh-host localhost \
+            --network "localhost, netem delay 25 ms each way" --out session-linux.json
+          python3 scripts/session_bench.py report session-linux.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        uses: actions/upload-artifact@v7
+        with:
+          name: session-results-linux
+          path: session-linux.json
