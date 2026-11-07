@@ -1052,7 +1052,7 @@ final class ControlHandler {
         }
         #endif
         let count = args.count ?? 200
-        guard (1...10000).contains(count) else {
+        guard (1 ... 10000).contains(count) else {
             throw ControlError(code: .badRequest, message: "count must be from 1 to 10000")
         }
         guard let key = HotkeyRegistry.parseShortcut(args.key ?? "x"), key.modifiers.isEmpty,

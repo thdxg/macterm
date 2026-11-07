@@ -52,7 +52,7 @@ enum TypingLatencyProbe {
         count: Int
     ) async -> Result {
         var result = Result(samples: [], misses: 0)
-        for _ in 0..<count {
+        for _ in 0 ..< count {
             guard let rect = view.cursorCellRect(),
                   let before = cell(of: view, in: rect)
             else {
@@ -115,7 +115,7 @@ enum TypingLatencyProbe {
         let base = IOSurfaceGetBaseAddress(surface)
         let bytesPerRow = IOSurfaceGetBytesPerRow(surface)
         var data = Data(capacity: (x1 - x0) * 4 * (y1 - y0))
-        for row in y0..<y1 {
+        for row in y0 ..< y1 {
             data.append(base.advanced(by: row * bytesPerRow + x0 * 4).assumingMemoryBound(to: UInt8.self), count: (x1 - x0) * 4)
         }
         return data
