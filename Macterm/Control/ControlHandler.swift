@@ -1041,7 +1041,7 @@ final class ControlHandler {
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
 
-    /// Type a key many times into a pane and time each glyph to the screen
+    /// Type x many times into a pane and time each glyph to the screen
     /// (`TypingLatencyProbe`). Only debug builds and benchmark runs
     /// (`MACTERM_BENCHMARK=1`) answer: the benchmark job runs a Release build.
     /// The line is cleared with ctrl+u after each key.
@@ -1055,10 +1055,8 @@ final class ControlHandler {
         guard (1 ... 10000).contains(count) else {
             throw ControlError(code: .badRequest, message: "count must be from 1 to 10000")
         }
-        guard let key = HotkeyRegistry.parseShortcut(args.key ?? "x"), key.modifiers.isEmpty,
-              let clear = HotkeyRegistry.parseShortcut("ctrl+u")
-        else {
-            throw ControlError(code: .badRequest, message: "key must be one printable key with no modifiers")
+        guard let key = HotkeyRegistry.parseShortcut("x"), let clear = HotkeyRegistry.parseShortcut("ctrl+u") else {
+            throw ControlError(code: .internalError, message: "the latency keys do not parse")
         }
         let (_, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)

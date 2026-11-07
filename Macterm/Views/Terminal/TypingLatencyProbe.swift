@@ -1,4 +1,5 @@
 import AppKit
+import GhosttyKit
 import IOSurface
 
 /// Measures in-app typing latency for the benchmark (`pane.latency`): the time
@@ -7,8 +8,9 @@ import IOSurface
 ///
 /// The probe reads the pane's IOSurface, as `PanePreviewCapture` does. The
 /// renderer sets the layer's contents on the main thread, so a poll on the
-/// main actor sees each frame when it lands. The error is one poll interval
-/// plus main-queue delay, and it is the same for every build that we compare.
+/// main actor sees each frame when it lands, late by up to one poll and the
+/// main-queue delay. `Task.sleep` coalesces short sleeps, so the poll gap is
+/// not measured here; it is the same for every build that we compare.
 ///
 /// The glyph frame is not "the first frame that changed": a cursor blink also
 /// changes the cell. It is the first frame whose cell is the same as the cell
@@ -16,6 +18,8 @@ import IOSurface
 /// cell and the glyph stays.
 ///
 /// Not measured: `keyDown`, and the display compositor after the frame.
+/// The benchmark's hermetic run has no smooth cursor, no cursor trail and a
+/// shell with no syntax highlighting; each of them would move the final frame.
 @MainActor
 enum TypingLatencyProbe {
     struct Result: Equatable {
@@ -43,8 +47,33 @@ enum TypingLatencyProbe {
         return observations.first { $0.cell == final }?.seconds
     }
 
+    /// The cursor's cell in view points (bottom-left origin) from the IME
+    /// point. libghostty puts the point's x at the MIDDLE of the cell and its
+    /// y at the cell's BOTTOM edge, measured from the top of the view; the
+    /// point's own width is the preedit's, so the cell width comes from the
+    /// surface size. (`cursorCellRect` keeps its own shape for its callers.)
+    nonisolated static func cursorCell(
+        imeX: Double, imeY: Double, height: Double, cellWidth: Double, boundsHeight: Double
+    ) -> NSRect? {
+        guard height > 0, cellWidth > 0 else { return nil }
+        return NSRect(x: imeX - cellWidth / 2, y: boundsHeight - imeY, width: cellWidth, height: height)
+    }
+
+    private static func cursorCell(of view: GhosttyTerminalNSView) -> NSRect? {
+        guard let surface = view.surface, let size = view.surfaceSize else { return nil }
+        var x: Double = 0, y: Double = 0, w: Double = 0, h: Double = 0
+        ghostty_surface_ime_point(surface, &x, &y, &w, &h)
+        let scale = Double(view.window?.backingScaleFactor ?? 2)
+        return cursorCell(
+            imeX: x, imeY: y, height: h,
+            cellWidth: Double(size.cell_width_px) / scale,
+            boundsHeight: view.bounds.height
+        )
+    }
+
     /// Type `key` `count` times into `view`, each time clearing the line
-    /// with `clear` after the window.
+    /// with `clear` after the window. A key that cannot be sent counts as a
+    /// miss.
     static func measure(
         view: GhosttyTerminalNSView,
         key: HotkeyShortcut,
@@ -53,7 +82,7 @@ enum TypingLatencyProbe {
     ) async -> Result {
         var result = Result(samples: [], misses: 0)
         for _ in 0 ..< count {
-            guard let rect = view.cursorCellRect(),
+            guard let rect = cursorCell(of: view),
                   let before = cell(of: view, in: rect)
             else {
                 result.misses += 1
@@ -62,7 +91,10 @@ enum TypingLatencyProbe {
             }
             let clock = ContinuousClock()
             let start = clock.now
-            guard view.sendKey(keyCode: key.keyCode, mods: key.modifiers) else { break }
+            guard view.sendKey(keyCode: key.keyCode, mods: key.modifiers) else {
+                result.misses += 1
+                continue
+            }
             var observations: [Observation] = []
             var lastFrame: (IOSurfaceID, UInt32)?
             while clock.now - start < window {

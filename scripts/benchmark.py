@@ -332,12 +332,16 @@ def control(harness, command, args, timeout):
         conn.settimeout(timeout)
         conn.connect(harness.socket)
         conn.sendall((json.dumps(request) + "\n").encode())
+        # The server reads the request to EOF.
+        conn.shutdown(socket.SHUT_WR)
         reply = b""
         while not reply.endswith(b"\n"):
             chunk = conn.recv(65536)
             if not chunk:
                 break
             reply += chunk
+    if not reply:
+        raise HarnessError(f"{command}: the app closed the socket with no reply")
     response = json.loads(reply)
     if not response.get("ok"):
         raise HarnessError(f"{command} failed: {response.get('error')}")
@@ -362,11 +366,13 @@ def measure_typing_latency(harness, keys, args):
     data = control(harness, "pane.latency", {"count": keys}, timeout=keys + 60)
     result = data.get("latency") or {}
     samples = result.get("samples") or []
-    if not samples:
-        raise HarnessError(f"typing latency: no glyph seen in {keys} keys")
+    misses = result.get("misses", 0)
+    # A percentile of a few keys is a guess: fail the run instead.
+    if not samples or misses > keys // 10:
+        raise HarnessError(f"typing latency: {misses} of {keys} keys showed no glyph")
     return {
         "keys": keys,
-        "misses": result.get("misses", 0),
+        "misses": misses,
         "p50_ms": round(percentile(samples, 50), 2),
         "p95_ms": round(percentile(samples, 95), 2),
         "max_ms": round(max(samples), 2),
@@ -579,12 +585,15 @@ def latency_lines(current, baseline):
             lines.append(f"| {label} | {fmt(base.get(key), '{:.1f} ms')} | {fmt(cur.get(key), '{:.1f} ms')} |")
         else:
             lines.append(f"| {label} | {fmt(cur.get(key), '{:.1f} ms')} |")
+    gate = cur.get("load_gate") or {}
+    if not gate.get("passed", True):
+        lines += ["", "_⚠️ The load average did not drop below the gate before the typing latency run._"]
     lines += [
         "",
         f"_{cur['keys']} keys typed on the `pane key` path into the idle focused pane, "
         "each timed to the first frame that shows its glyph. "
         f"Keys with no glyph: {cur.get('misses', 0)}. "
-        f"1-minute load average: {(cur.get('load_gate') or {}).get('load')}. "
+        f"1-minute load average: {gate.get('load')}. "
         "Not flagged and not labeled._",
     ]
     return lines
