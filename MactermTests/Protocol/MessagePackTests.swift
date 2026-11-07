@@ -70,7 +70,8 @@ struct MessagePackTests {
         #expect(Self.encode(ProtocolSecret(bytes)).prefix(5) == [0xC6, 0, 1, 0, 0])
         #expect(Self.encode([UInt16(1), 2]) == [0x92, 1, 2])
         #expect(Self.encode([UInt16](repeating: 1, count: 16)).prefix(3) == [0xDC, 0, 16])
-        #expect(Self.encode(Sample(name: "a", tags: [])) == [0x82, 0xA4, 0x6E, 0x61, 0x6D, 0x65, 0xA1, 0x61, 0xA4, 0x74, 0x61, 0x67, 0x73, 0x90])
+        let sample: [UInt8] = [0x82, 0xA4] + Array("name".utf8) + [0xA1, 0x61, 0xA4] + Array("tags".utf8) + [0x90]
+        #expect(Self.encode(Sample(name: "a", tags: [])) == sample)
     }
 
     @Test

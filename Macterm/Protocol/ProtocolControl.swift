@@ -111,7 +111,8 @@ extension MactermProtocol.Response {
 
     /// The result as the method's type, or `ProtocolControlError.errorResponse`.
     func result<M: ProtocolMethod>(of _: M.Type) throws -> M.Result {
-        guard let ok else { throw ProtocolControlError.errorResponse(err ?? .init(code: "", message: "")) }
-        return try ok.decode(M.Result.self)
+        if let ok { return try ok.decode(M.Result.self) }
+        if let err { throw ProtocolControlError.errorResponse(err) }
+        throw MessagePackError.missingField("ok")
     }
 }

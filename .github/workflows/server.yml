@@ -1,8 +1,9 @@
 name: Server
 
 # Builds the session server in server/ and runs its Zig tests and its bats
-# tests where it runs: macOS, Linux x86_64 and Linux aarch64. Only a change to
-# server/ or to this file starts it.
+# tests where it runs: macOS, Linux x86_64 and Linux aarch64. On macOS it also
+# checks the files that the protocol schema makes (scripts/protocol.sh). Only
+# a change to server/, to those files or to this file starts it.
 #
 # macOS runs on macos-15: zig cannot link with Xcode 26.4 or later
 # (zig#31658), and the xcode-27 image has nothing older.
@@ -12,11 +13,15 @@ on:
     branches: [main]
     paths:
       - "server/**"
+      - "Macterm/Protocol/**"
+      - "scripts/protocol.sh"
       - ".github/workflows/server.yml"
   push:
     branches: [main]
     paths:
       - "server/**"
+      - "Macterm/Protocol/**"
+      - "scripts/protocol.sh"
       - ".github/workflows/server.yml"
 
 permissions:
@@ -67,6 +72,18 @@ jobs:
 
       - name: Build
         run: zig build
+
+      # The Swift side of the protocol is generated from the Zig schema. As
+      # `mise run strings --check` does for the catalog, this fails on a
+      # generated file that is not current or was edited by hand, on a change
+      # that breaks the add-only rule against the metadata on main, and on a
+      # reply or an event that holds a secret (design/003 §3, design/006 §1).
+      - name: Check the Generated Protocol Files
+        if: runner.os == 'macOS'
+        working-directory: .
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          PROTOCOL_BASE=FETCH_HEAD scripts/protocol.sh --check
 
       # A skipped test fails the step, so a missing tool cannot hide a test.
       # daemon_responsibility.bats tests a macOS concept, so Linux leaves it
