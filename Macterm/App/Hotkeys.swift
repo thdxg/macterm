@@ -125,9 +125,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .splitDown: "cmd+shift+d"
         case .splitAuto: "none"
         case .toggleSidebar: "cmd+\\"
-        // Xcode's Show Inspectors chord. ghostty binds no default to it
-        // (its own inspector is super+alt+i).
-        case .toggleProjectMemory: "cmd+opt+0"
+        // ⌘I, for the panel that the toolbar's (i) button opens. Neither
+        // Macterm nor ghostty binds it by default (ghostty's own inspector
+        // is super+alt+i).
+        case .toggleProjectMemory: "cmd+i"
         // The chord of Show/Hide Toolbar in Finder, Mail and Xcode. No ghostty
         // default binds it (only ⌘T, ⇧⌘T and ⌃⇧T). A hidden toolbar takes the
         // traffic lights and the window drag with it, so the way back must be

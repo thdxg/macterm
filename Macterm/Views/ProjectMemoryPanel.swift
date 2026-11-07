@@ -373,20 +373,22 @@ struct ProjectMemoryPanel: View {
 
     /// A branch with its latest commit's age, as a card row like the
     /// Suggested ones. The current branch is a row like the others, with the
-    /// accent as its fill, the filled check and a bold name; one style for
-    /// every row keeps the ages in line. A click switches to the branch: a
-    /// tab in its worktree, as the sidebar's Worktrees menu opens (the
-    /// current branch's worktree is the project itself), or `git switch`
-    /// typed into a new split for a branch with no worktree, so the switch
-    /// is on the screen and in the shell's history.
+    /// accent as its fill and a bold name; one style for every row keeps the
+    /// ages in line. A click goes to the branch in the current pane: `cd`
+    /// typed for a branch that a worktree has checked out, or `git switch`
+    /// for a branch with none, so the switch is on the screen and in the
+    /// shell's history.
     private func branchRow(_ branch: GitStatus.Branch, isCurrent: Bool) -> some View {
         Button {
             switchTo(branch, isCurrent: isCurrent)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch")
+                // The same glyph, in the same color, on every row: the
+                // row's highlight alone marks the current branch. A check
+                // read as "done".
+                Image(systemName: "arrow.triangle.branch")
                     .font(.caption)
-                    .foregroundStyle(isCurrent ? MactermTheme.accent : MactermTheme.fgMuted)
+                    .foregroundStyle(MactermTheme.fgMuted)
                 Text(verbatim: branch.name)
                     .font(.terminal(.caption, weight: isCurrent ? .semibold : .regular))
                     .lineLimit(1)
