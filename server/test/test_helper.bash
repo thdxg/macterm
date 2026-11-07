@@ -37,6 +37,40 @@ teardown() {
   fi
 }
 
+# start_session <name> [command...]: create a session and leave it running
+# with no client. `zmx attach` needs a terminal, so it runs on a pty here.
+# Once the attach has cleared the screen (raw mode is on by then), Ctrl+\
+# detaches it. With no command, the session runs $SHELL.
+start_session() {
+  python3 - "$ZMX" "$@" 3>&- <<'PY'
+import os, pty, sys, time
+zmx, name, cmd = sys.argv[1], sys.argv[2], sys.argv[3:]
+pid, fd = pty.fork()
+if pid == 0:
+    os.execv(zmx, [zmx, "attach", name] + cmd)
+os.set_blocking(fd, False)
+out, deadline = b"", time.time() + 10
+while b"\x1b[2J" not in out:
+    if time.time() > deadline:
+        sys.exit("attach did not start: %r" % out)
+    try:
+        out += os.read(fd, 65536)
+    except (BlockingIOError, OSError):
+        time.sleep(0.02)
+os.write(fd, b"\x1c")
+while time.time() < deadline:
+    done, status = os.waitpid(pid, os.WNOHANG)
+    if done:
+        sys.exit(os.waitstatus_to_exitcode(status))
+    try:
+        os.read(fd, 65536)
+    except (BlockingIOError, OSError):
+        time.sleep(0.02)
+sys.exit("attach did not detach")
+PY
+  wait_for_session "$1"
+}
+
 # Helper: wait for a session to appear in list (up to N seconds)
 wait_for_session() {
   local name="$1" timeout="${2:-5}" i=0

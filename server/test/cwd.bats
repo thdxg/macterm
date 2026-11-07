@@ -17,7 +17,7 @@ osc7_session() {
   # is doubled because this goes through printf, which would otherwise read
   # "%20s" as a width specifier.
   encoded="${path// /%%20}"
-  "$ZMX" run "$name" -d sh -c \
+  start_session "$name" sh -c \
     "printf '\033]7;file://$(hostname)$encoded\007marker-$name\n'; sleep 30"
 }
 
@@ -26,7 +26,6 @@ osc7_session() {
   mkdir -p "$dir"
 
   osc7_session test-cwd-uri "$dir"
-  wait_for_session test-cwd-uri
   wait_for_output test-cwd-uri marker-test-cwd-uri
   wait_for_cwd test-cwd-uri "cwd=file://$(hostname)${dir// /%20}"
 
@@ -36,9 +35,8 @@ osc7_session() {
 }
 
 @test "list: shows a remote cwd's host, so SSH is visible" {
-  "$ZMX" run test-cwd-remote -d sh -c \
+  start_session test-cwd-remote sh -c \
     "printf '\033]7;file://some-remote-box/home/me\007marker-remote\n'; sleep 30"
-  wait_for_session test-cwd-remote
   wait_for_output test-cwd-remote marker-remote
   wait_for_cwd test-cwd-remote "cwd=file://some-remote-box/home/me"
 
@@ -48,11 +46,10 @@ osc7_session() {
 }
 
 @test "list: reports an OSC 7 URI even when given a plain path" {
-  # `zmx run` hands the daemon the client's cwd as a path, so this covers the
-  # encode direction rather than the decode one.
+  # `zmx attach` hands the daemon the client's cwd as a path, so this covers
+  # the encode direction rather than the decode one.
   cd "$BATS_TEST_TMPDIR"
-  "$ZMX" run test-cwd-encode -d sleep 30
-  wait_for_session test-cwd-encode
+  start_session test-cwd-encode sleep 30
 
   run "$ZMX" list
   [ "$status" -eq 0 ]
@@ -64,8 +61,7 @@ osc7_session() {
   mkdir -p "$dir"
 
   cd "$dir"
-  "$ZMX" run test-cwd-chdir -d sh -c 'pwd; sleep 30'
-  wait_for_session test-cwd-chdir
+  start_session test-cwd-chdir sh -c 'pwd; sleep 30'
   wait_for_output test-cwd-chdir "zmx spaced dir"
 
   # `pwd` inside the session is what the daemon actually chdir'd into. Compare
@@ -77,14 +73,19 @@ osc7_session() {
 
 @test "unchanged OSC 7 is not logged again after output or queries" {
   local name=test-cwd-unchanged uri=file://localhost/tmp
-  "$ZMX" run "$name" -d sh -c \
-    'printf "\033]7;file://localhost/tmp\007cwd-ready\n"; cat'
+  # The line "again" makes the program report the same cwd again.
+  start_session "$name" sh -c \
+    'printf "\033]7;file://localhost/tmp\007cwd-ready\n"
+     while IFS= read -r l; do
+       if [ "$l" = again ]; then printf "\033]7;file://localhost/tmp\007repeated-%s\n" cwd
+       else printf "%s\n" "$l"; fi
+     done'
   wait_for_output "$name" cwd-ready
   wait_for_cwd "$name" "cwd=$uri"
 
   "$ZMX" send "$name" $'ordinary-output\n'
   wait_for_output "$name" ordinary-output
-  printf '\033]7;%s\007repeated-cwd\n' "$uri" | "$ZMX" print "$name"
+  "$ZMX" send "$name" $'again\n'
   wait_for_output "$name" repeated-cwd
   wait_for_cwd "$name" "cwd=$uri"
 
@@ -93,11 +94,12 @@ osc7_session() {
 
 @test "OSC 7 tracks changed directories and returning to a previous directory" {
   local name=test-cwd-changes uri
-  "$ZMX" run "$name" -d cat
-  wait_for_session "$name"
+  # The program reports each line it reads as its cwd.
+  start_session "$name" sh -c \
+    'while IFS= read -r l; do printf "\033]7;%s\007" "$l"; done'
 
   for uri in file://localhost/tmp/a%20b file://some-remote-box/home/me file://localhost/tmp/a%20b; do
-    printf '\033]7;%s\007' "$uri" | "$ZMX" print "$name"
+    "$ZMX" send "$name" "$uri"$'\n'
     wait_for_cwd "$name" "cwd=$uri"
   done
 }

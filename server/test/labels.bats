@@ -8,8 +8,7 @@ load test_helper
 # ============================================================================
 
 @test "set/get: round-trips labels" {
-  "$ZMX" run test-labels -d sleep 30
-  wait_for_session test-labels
+  start_session test-labels sleep 30
 
   run "$ZMX" set test-labels project=zmx env=dev
   [ "$status" -eq 0 ]
@@ -21,8 +20,7 @@ load test_helper
 }
 
 @test "set: updates existing label" {
-  "$ZMX" run test-update -d sleep 30
-  wait_for_session test-update
+  start_session test-update sleep 30
 
   run "$ZMX" set test-update status=busy
   [ "$status" -eq 0 ]
@@ -36,8 +34,7 @@ load test_helper
 }
 
 @test "set: rejects reserved key 'name'" {
-  "$ZMX" run test-reserved -d sleep 30
-  wait_for_session test-reserved
+  start_session test-reserved sleep 30
 
   run "$ZMX" set test-reserved name=bad
   [ "$status" -ne 0 ]
@@ -45,8 +42,7 @@ load test_helper
 }
 
 @test "set: rejects reserved key 'start_dir'" {
-  "$ZMX" run test-reserved2 -d sleep 30
-  wait_for_session test-reserved2
+  start_session test-reserved2 sleep 30
 
   run "$ZMX" set test-reserved2 start_dir=/tmp
   [ "$status" -ne 0 ]
@@ -54,8 +50,7 @@ load test_helper
 }
 
 @test "set: rejects reserved key 'cmd'" {
-  "$ZMX" run test-reserved3 -d sleep 30
-  wait_for_session test-reserved3
+  start_session test-reserved3 sleep 30
 
   run "$ZMX" set test-reserved3 cmd=bad
   [ "$status" -ne 0 ]
@@ -63,8 +58,7 @@ load test_helper
 }
 
 @test "set with empty value removes label" {
-  "$ZMX" run test-unset -d sleep 30
-  wait_for_session test-unset
+  start_session test-unset sleep 30
 
   run "$ZMX" set test-unset a=1 b=2
   run "$ZMX" set test-unset a=
@@ -76,8 +70,7 @@ load test_helper
 }
 
 @test "clear: removes all labels" {
-  "$ZMX" run test-clear -d sleep 30
-  wait_for_session test-clear
+  start_session test-clear sleep 30
 
   run "$ZMX" set test-clear x=1 y=2
   run "$ZMX" clear test-clear
@@ -88,8 +81,7 @@ load test_helper
 }
 
 @test "clear: cl alias works" {
-  "$ZMX" run test-clear-alias -d sleep 30
-  wait_for_session test-clear-alias
+  start_session test-clear-alias sleep 30
 
   run "$ZMX" set test-clear-alias x=1 y=2
   run "$ZMX" cl test-clear-alias
@@ -101,8 +93,7 @@ load test_helper
 }
 
 @test "set: missing key-value pairs exits non-zero" {
-  "$ZMX" run test-nokv -d sleep 30
-  wait_for_session test-nokv
+  start_session test-nokv sleep 30
 
   run "$ZMX" set test-nokv
   [ "$status" -ne 0 ]
@@ -110,8 +101,7 @@ load test_helper
 }
 
 @test "get: missing key in existing session exits non-zero" {
-  "$ZMX" run test-getkey -d sleep 30
-  wait_for_session test-getkey
+  start_session test-getkey sleep 30
 
   run "$ZMX" set test-getkey a=1
   run "$ZMX" get test-getkey b

@@ -1,11 +1,10 @@
 #!/usr/bin/env bats
 # What `zmx attach` prints when it creates the session it attaches to.
 #
-# `zmx run` announces a new session with `session "<name>" created`; `attach`
-# must not. It clears the screen right after, so the line is never meant to be
-# seen, and on a terminal one row tall its newline scrolls it into scrollback,
-# out of the clear's reach — a terminal that grows then shows it above the
-# session's prompt.
+# Nothing: `attach` clears the screen right after, so a line is never meant
+# to be seen, and on a terminal one row tall its newline scrolls it into
+# scrollback, out of the clear's reach. A terminal that grows then shows it
+# above the session's prompt.
 
 load test_helper
 
@@ -40,10 +39,4 @@ PY
   [[ "$output" == *$'\e[2J'* ]]
   [[ "$output" != *"created"* ]]
   wait_for_session test-attach-quiet
-}
-
-@test "run: creating the session still announces it" {
-  run "$ZMX" run test-run-announce -d echo hello
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"session \"test-run-announce\" created"* ]]
 }

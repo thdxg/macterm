@@ -19,7 +19,7 @@ const ghostty_vt = terminal.ghostty_vt;
 /// mechanism. It will send stdin to the daemon and receive stdout from the daemon.
 /// `foreground_events`: subscribe to foreground reports and write each one
 /// to stdout as an APC sequence (see foreground.zig).
-pub fn clientLoop(client_sock_fd: i32, env_str: []const u8, foreground_events: bool) !ClientResult {
+pub fn clientLoop(client_sock_fd: i32, foreground_events: bool) !ClientResult {
     std.log.info("client loop fd={d}", .{client_sock_fd});
     const gpa: std.mem.Allocator = blk: {
         if (builtin.mode == .debug) {
@@ -48,10 +48,6 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8, foreground_events: b
     // Buffer for outgoing socket writes
     var sock_write_buf = try std.ArrayList(u8).initCapacity(gpa, 4096);
     defer sock_write_buf.deinit(gpa);
-
-    if (env_str.len > 0) {
-        try ipc.appendMessage(gpa, &sock_write_buf, .EnvSet, env_str);
-    }
 
     // Send init message with terminal size (buffered)
     const size = ipc.getTerminalSize(lib_posix.STDOUT_FILENO);
@@ -286,12 +282,6 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
     var vt_stream = term.vtStream();
     defer vt_stream.deinit();
 
-    // Carries the tail of the previous PTY read so the task-exit marker
-    // search below can see across a read() boundary. Sized to comfortably
-    // hold "ZMX_TASK_COMPLETED:" (19 bytes) plus a u8 exit code and CRLF.
-    var marker_carry: [32]u8 = undefined;
-    var marker_carry_len: usize = 0;
-
     var had_terminal_client = daemon.hasTerminalClient();
 
     daemon_loop: while (daemon.running) {
@@ -411,41 +401,11 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
                     // terminal queries (e.g. DA1/DA2) on behalf of the terminal.
                     // This prevents fish from waiting 10s for unanswered queries.
                     // Only clients that sent .Init (a real zmx attach) count,
-                    // not a `zmx run` tail-only client.
+                    // not a `zmx send` or `zmx history` client.
                     if (!daemon.hasTerminalClient() and
                         daemon.pty_write_buf.items.len < Daemon.PTY_WRITE_BUF_MAX)
                     {
                         util.respondToDeviceAttributes(gpa, &daemon.pty_write_buf, buf[0..n]);
-                    }
-
-                    // In run mode, scan output for exit code marker. The marker
-                    // can straddle two PTY reads (more likely under a throttled
-                    // scheduler, e.g. containers), so prepend the tail carried
-                    // over from the previous read before searching.
-                    if (daemon.is_task_mode and daemon.task_exit_code == null) {
-                        var scan_buf: [marker_carry.len + buf.len]u8 = undefined;
-                        @memcpy(scan_buf[0..marker_carry_len], marker_carry[0..marker_carry_len]);
-                        @memcpy(scan_buf[marker_carry_len..][0..n], buf[0..n]);
-                        const scan_len = marker_carry_len + n;
-
-                        if (try util.findTaskExitMarker(scan_buf[0..scan_len], daemon.task_id)) |exit_code| {
-                            daemon.task_exit_code = exit_code;
-                            daemon.task_ended_at = @intCast(std.Io.Timestamp.now(io, .real).toSeconds());
-
-                            std.log.info("task completed exit_code={d}", .{exit_code});
-
-                            // Notify connected clients
-                            for (daemon.clients.items) |c| {
-                                ipc.appendMessage(gpa, &c.write_buf, .TaskComplete, &[_]u8{exit_code}) catch {};
-                                c.has_pending_output = true;
-                            }
-                        }
-
-                        marker_carry_len = @min(marker_carry.len, scan_len);
-                        @memcpy(
-                            marker_carry[0..marker_carry_len],
-                            scan_buf[scan_len - marker_carry_len .. scan_len],
-                        );
                     }
 
                     // The report of a foreground change goes out in front of
@@ -525,7 +485,6 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
                     switch (msg.header.tag) {
                         .Input => try daemon.handleInput(gpa, client, msg.payload),
                         .Send => daemon.handleSend(gpa, msg.payload),
-                        .Output => try daemon.handleOutput(gpa, msg.payload, &term, &vt_stream),
                         .Init => try daemon.handleInit(gpa, client, pty_fd, &term, msg.payload),
                         .Switch => try daemon.handleSwitch(gpa, msg.payload),
                         .Resize => try daemon.handleResize(gpa, client, pty_fd, &term, msg.payload),
@@ -535,10 +494,6 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
                             daemon.handleDetach(gpa, client, i);
                             break :clients_loop;
                         },
-                        .DetachAll => {
-                            daemon.handleDetachAll(gpa);
-                            break :clients_loop;
-                        },
                         .Kill => {
                             break :daemon_loop;
                         },
@@ -546,14 +501,13 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
                         .LabelGet => try daemon.handleLabelGet(gpa, client),
                         .LabelSet => try daemon.handleLabelSet(gpa, client, msg.payload),
                         .LabelClear => try daemon.handleLabelClear(gpa, client),
-                        .EnvGet => try daemon.handleEnvGet(gpa, client),
-                        .EnvSet => try daemon.handleEnvSet(gpa, client, msg.payload),
                         .History => try daemon.handleHistory(gpa, client, &term, msg.payload),
                         .Capture => try daemon.handleCapture(gpa, client, &term, msg.payload),
-                        .Run => try daemon.handleRun(gpa, io, client, msg.payload),
-                        .Ack, .TaskComplete, .LabelData, .EnvData, .Unsupported => {},
-                        .Write => try daemon.handleWrite(gpa, client, msg.payload),
-                        _ => {
+                        .Ack, .LabelData, .Unsupported => {},
+                        // `run`, `write`, `print`, `detach` and `print-env`
+                        // are gone: their requests get the reply of a tag
+                        // this daemon does not know.
+                        .Output, .DetachAll, .EnvGet, .EnvSet, .EnvData, .Run, .TaskComplete, .Write, _ => {
                             std.log.warn(
                                 "ignoring unknown IPC tag={d}",
                                 .{@backingInt(msg.header.tag)},
@@ -585,7 +539,7 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
             }
 
             if (revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) {
-                // A client that writes and exits (`zmx send`, `zmx run -d`) is
+                // A client that writes and exits (`zmx send`, `zmx set`) is
                 // reported HUP with part of its message still unread: a pass
                 // reads at most 4 KiB. Closing now drops the rest. Leave it to
                 // the next pass, which reads on until EOF closes the client.
@@ -614,23 +568,16 @@ pub const Client = struct {
     alloc: std.mem.Allocator,
     socket_fd: i32,
     has_pending_output: bool = false,
-    is_terminal: bool = false, // sent .Init (a `zmx attach`), not a run/send/tail client
+    is_terminal: bool = false, // sent .Init (a `zmx attach`), not a send/history client
     /// Asked for foreground reports (see foreground.zig).
     wants_foreground: bool = false,
     read_buf: ipc.SocketBuffer,
     write_buf: std.ArrayList(u8),
-    env_str: ?[]u8 = null,
 
-    pub fn deinit(self: *Client, gpa: std.mem.Allocator) void {
+    pub fn deinit(self: *Client, _: std.mem.Allocator) void {
         lib_posix.close(self.socket_fd);
         self.read_buf.deinit();
         self.write_buf.deinit(self.alloc);
-        if (self.env_str) |s| gpa.free(s);
-    }
-
-    fn setEnv(self: *Client, gpa: std.mem.Allocator, env_str: []const u8) !void {
-        if (self.env_str) |s| gpa.free(s);
-        self.env_str = if (env_str.len > 0) try gpa.dupe(u8, env_str) else null;
     }
 };
 
@@ -670,10 +617,6 @@ pub const Daemon = struct {
     cwd_path_buf: [std.fs.max_path_bytes]u8 = undefined,
     has_pty_output: bool = false,
     created_at: u64, // unix timestamp (ns)
-    is_task_mode: bool = false, // flag for when session is run as a task
-    task_id: [4]u8 = undefined,
-    task_exit_code: ?u8 = null, // null = running or n/a, set when task completes
-    task_ended_at: ?u64 = null, // timestamp when task exited
     pty_fd: i32 = -1, // set by daemonLoop; the foreground reports read it
     /// The pty's foreground process group at the last report, so only a
     /// change is reported. null before the first.
@@ -684,7 +627,6 @@ pub const Daemon = struct {
     etc_shells: ?[]const u8 = null,
     etc_shells_buf: [8192]u8 = undefined,
     shell: []const u8 = "/bin/sh",
-    quiet: bool = false,
 
     /// Create a Daemon. Caller is responsible for freeing all variables passed
     /// into the init fn.
@@ -823,7 +765,7 @@ pub const Daemon = struct {
         const log_fd = if (log.log_system.file) |f| f.handle else -1;
 
         var keep_fds_open = [_]i32{ server_sock_fd, dir.handle, log_fd };
-        const cmd = try daemonize.createCmdZ(self.shell, self.is_task_mode, self.command);
+        const cmd = try daemonize.createCmdZ(self.shell, self.command);
 
         // `cwd_path` is the decoded path, and is empty when the cwd is on
         // another host: OSC 7 crosses SSH boundaries, so a session that ssh'd
@@ -847,7 +789,6 @@ pub const Daemon = struct {
         const reexec: ?daemonize.Reexec = if (builtin.os.tag.isDarwin()) .{
             .session_name = sesh_name,
             .shell = self.shell,
-            .is_task_mode = self.is_task_mode,
             .command = self.command,
             .cwd = self.cwd,
             .server_sock_fd = server_sock_fd,
@@ -861,13 +802,10 @@ pub const Daemon = struct {
         ) catch |err| {
             switch (err) {
                 error.IsClientProc => {
-                    // send a msg to the client that the session was created.
-                    if (!self.quiet) {
-                        var w_buf: [2048]u8 = undefined;
-                        var w = std.Io.File.stdout().writer(io, &w_buf);
-                        try w.interface.print("session \"{s}\" created\n", .{sesh_name});
-                        try w.interface.flush();
-                    }
+                    // Nothing announces the new session: `attach` clears
+                    // the screen next, and on a terminal a row or two tall
+                    // the line scrolls into scrollback, out of the clear's
+                    // reach (macterm#487).
                     lib_posix.close(server_sock_fd);
                     return false;
                 },
@@ -895,7 +833,7 @@ pub const Daemon = struct {
     pub fn resumeAfterReexec(self: *Daemon, io: std.Io, server_sock_fd: lib_posix.socket_t, size: ipc.Resize) !bool {
         var dir = try std.Io.Dir.openDirAbsolute(io, self.cfg.socket_dir, .{});
         defer dir.close(io);
-        const cmd = try daemonize.createCmdZ(self.shell, self.is_task_mode, self.command);
+        const cmd = try daemonize.createCmdZ(self.shell, self.command);
         const pty_info = daemonize.spawnPty(self.session_name, cmd, size) catch |err| {
             lib_posix.close(server_sock_fd);
             dir.deleteFile(io, self.session_name) catch {};
@@ -944,7 +882,7 @@ pub const Daemon = struct {
 
         defer {
             // Close and unlink the listen socket BEFORE handleKill()'s
-            // 500ms SIGHUP->SIGKILL grace sleep. Otherwise a `zmx run`
+            // 500ms SIGHUP->SIGKILL grace sleep. Otherwise a `zmx attach`
             // for the same name issued in that window will hang waiting
             // for a connect.
             lib_posix.close(server_sock_fd);
@@ -1243,15 +1181,6 @@ pub const Daemon = struct {
         _ = self.closeClient(gpa, client, i, false);
     }
 
-    pub fn handleDetachAll(self: *Daemon, gpa: std.mem.Allocator) void {
-        std.log.info("detach all clients={d}", .{self.clients.items.len});
-        // Go through closeClient so the leader is cleared like any other detach.
-        while (self.clients.items.len > 0) {
-            const last = self.clients.items.len - 1;
-            _ = self.closeClient(gpa, self.clients.items[last], last, false);
-        }
-    }
-
     pub fn handleKill(self: *Daemon, gpa: std.mem.Allocator, io: std.Io) void {
         std.log.info("kill received session={s}", .{self.session_name});
         self.shutdown(gpa);
@@ -1279,8 +1208,6 @@ pub const Daemon = struct {
         info.clients_len = self.clients.items.len - 1;
         info.pid = self.pid;
         info.created_at = self.created_at;
-        info.task_ended_at = self.task_ended_at orelse 0;
-        info.task_exit_code = self.task_exit_code orelse 0;
 
         // Build command string from args, re-quoting args that contain
         // shell-special characters so the displayed command is copy-pasteable.
@@ -1359,43 +1286,6 @@ pub const Daemon = struct {
         client.has_pending_output = true;
     }
 
-    pub fn handleRun(self: *Daemon, gpa: std.mem.Allocator, io: std.Io, client: *Client, payload: []const u8) !void {
-        // Reset task tracking so the new command's exit marker is detected.
-        // Without this, a second `zmx run` on the same session is ignored
-        // because task_exit_code is still set from the first run.
-        self.task_exit_code = null;
-        self.task_ended_at = null;
-        self.is_task_mode = true;
-        self.task_id = util.generateTaskId(io);
-
-        if (payload.len == 0) return;
-
-        const cmd = payload;
-
-        // Chain the exit marker with `;` on the same line. `$?` captures the
-        // exit code of the command (not the `;`). The sole exception is when
-        // the command contains a heredoc (`<<`), the delimiter must be alone
-        // on its line, so the marker goes on the next line instead.
-        var buf: [1024]u8 = undefined;
-        const marker = try util.getTaskExitMarker(&buf, self.task_id);
-        var single_buf: [1024]u8 = undefined;
-        const single_line_marker = try std.fmt.bufPrint(&single_buf, "; echo {s}$?\r", .{marker});
-        var here_buf: [1024]u8 = undefined;
-        const heredoc_marker = try std.fmt.bufPrint(&here_buf, "\r\necho {s}$?\r", .{marker});
-        const uses_heredoc = std.mem.indexOf(u8, cmd, "<<") != null;
-
-        if (cmd.len > 0 and cmd[cmd.len - 1] == '\r') {
-            self.queuePtyInput(gpa, cmd[0 .. cmd.len - 1]);
-        } else {
-            self.queuePtyInput(gpa, cmd);
-        }
-        self.queuePtyInput(gpa, if (uses_heredoc) heredoc_marker else single_line_marker);
-
-        try ipc.appendMessage(gpa, &client.write_buf, .Ack, "");
-        client.has_pending_output = true;
-        std.log.debug("run command len={d}", .{payload.len});
-    }
-
     /// Store the session's working directory as a plain path.
     ///
     /// Accepts either an OSC 7 value (`file://<host><path>`, percent-encoded)
@@ -1439,88 +1329,6 @@ pub const Daemon = struct {
         const pwd = term.getPwd() orelse return;
         if (std.mem.eql(u8, self.cwd, pwd)) return;
         self.setCwd(pwd);
-    }
-
-    pub fn handleOutput(self: *Daemon, gpa: std.mem.Allocator, payload: []const u8, term: *ghostty_vt.Terminal, vt_stream: anytype) !void {
-        vt_stream.nextSlice(payload);
-        self.setPwd(term);
-        self.has_pty_output = true;
-        for (self.clients.items) |client| {
-            try ipc.appendMessage(gpa, &client.write_buf, .Output, payload);
-            client.has_pending_output = true;
-        }
-        if (self.clients.items.len > 0) {
-            lib_posix.kill(self.pid, lib_posix.SIG.WINCH) catch |err| {
-                std.log.warn("failed to send SIGWINCH err={s}", .{@errorName(err)});
-            };
-        }
-    }
-
-    pub fn handleWrite(self: *Daemon, gpa: std.mem.Allocator, client: *Client, payload: []const u8) !void {
-        // Wire format: [u32 path len][path bytes][file content]
-        if (payload.len < @sizeOf(u32)) return error.InvalidPayload;
-        const path_len = std.mem.bytesToValue(u32, payload[0..@sizeOf(u32)]);
-        if (payload.len < @sizeOf(u32) + path_len) return error.InvalidPayload;
-        const file_path = payload[@sizeOf(u32)..][0..path_len];
-        const file_content = payload[@sizeOf(u32) + path_len ..];
-
-        // Inject file creation through the PTY so it works over SSH.
-        // Base64-encode content and pipe through printf | base64 -d > file.
-        // Chunk large files to stay under command-line length limits.
-        // 48000 is divisible by 3 (clean base64 boundaries) and encodes
-        // to ~64KB, well under typical ARG_MAX.
-        // The commands skip queuePtyInput's cap: it would drop the chunks
-        // past PTY_WRITE_BUF_MAX and leave the file cut short. The payload
-        // is already bounded by ipc.MAX_PAYLOAD_LEN.
-        const chunk_size = 48000;
-        var offset: usize = 0;
-        var is_first = true;
-
-        while (offset < file_content.len or is_first) {
-            const end = @min(offset + chunk_size, file_content.len);
-            const chunk = file_content[offset..end];
-
-            const encoded_len = std.base64.standard.Encoder.calcSize(chunk.len);
-            const encoded = try gpa.alloc(u8, encoded_len);
-            defer gpa.free(encoded);
-            _ = std.base64.standard.Encoder.encode(encoded, chunk);
-
-            try self.pty_write_buf.appendSlice(gpa, "printf '%s' '");
-            try self.pty_write_buf.appendSlice(gpa, encoded);
-            if (is_first) {
-                try self.pty_write_buf.appendSlice(gpa, "' | base64 -d > '");
-            } else {
-                try self.pty_write_buf.appendSlice(gpa, "' | base64 -d >> '");
-            }
-            try self.pty_write_buf.appendSlice(gpa, file_path);
-            try self.pty_write_buf.appendSlice(gpa, "'");
-            try self.pty_write_buf.appendSlice(gpa, "\r");
-
-            offset = end;
-            is_first = false;
-        }
-
-        try ipc.appendMessage(gpa, &client.write_buf, .Ack, "");
-        client.has_pending_output = true;
-        std.log.debug(
-            "write command len={d} file_path={s}",
-            .{ file_content.len, file_path },
-        );
-    }
-
-    fn handleEnvGet(self: *Daemon, gpa: std.mem.Allocator, client: *Client) !void {
-        const leader_opt = self.getLeaderClient();
-        const payload = if (leader_opt) |leader| leader.env_str orelse "" else "";
-        try ipc.appendMessage(gpa, &client.write_buf, .EnvData, payload);
-        client.has_pending_output = true;
-    }
-
-    fn handleEnvSet(_: *Daemon, gpa: std.mem.Allocator, client: *Client, env_str: []const u8) !void {
-        std.log.info("handle env set payload={s}", .{env_str});
-        try client.setEnv(gpa, env_str);
-
-        try ipc.appendMessage(gpa, &client.write_buf, .Ack, "");
-        client.has_pending_output = true;
     }
 
     fn handleLabelGet(self: *Daemon, gpa: std.mem.Allocator, client: *Client) !void {
@@ -1755,7 +1563,7 @@ fn testClient(alloc: std.mem.Allocator, fd: i32, is_terminal: bool) !*Client {
     return c;
 }
 
-test "hasTerminalClient follows attach, detach and detach-all" {
+test "hasTerminalClient follows attach and detach" {
     const alloc = std.testing.allocator;
     var daemon = testDaemon();
     defer daemon.clients.deinit(alloc);
@@ -1763,11 +1571,10 @@ test "hasTerminalClient follows attach, detach and detach-all" {
 
     // Real fds (pipes) so Client.deinit's close() is legal.
     const a = try lib_posix.pipe2(.{});
-    const b = try lib_posix.pipe2(.{});
 
     try std.testing.expect(!daemon.hasTerminalClient());
 
-    // A run/send/tail client doesn't count.
+    // A send client doesn't count.
     const tail_client = try testClient(alloc, a[0], false);
     try daemon.clients.append(alloc, tail_client);
     try std.testing.expect(!daemon.hasTerminalClient());
@@ -1780,12 +1587,6 @@ test "hasTerminalClient follows attach, detach and detach-all" {
     try std.testing.expect(daemon.hasTerminalClient());
     _ = daemon.closeClient(alloc, term_client, 0, false);
     try std.testing.expect(!daemon.hasTerminalClient());
-
-    try daemon.clients.append(alloc, try testClient(alloc, b[0], true));
-    try daemon.clients.append(alloc, try testClient(alloc, b[1], true));
-    daemon.handleDetachAll(alloc);
-    try std.testing.expect(!daemon.hasTerminalClient());
-    try std.testing.expectEqual(@as(?i32, null), daemon.leader_client_fd);
 }
 
 test "send queues PTY input without changing leader" {
@@ -1811,86 +1612,4 @@ test "deinit leaves socket_path to the caller" {
         .created_at = 0,
     };
     daemon.deinit(std.testing.allocator);
-}
-
-test "handleEnvGet returns leader client's environment variables including unsets" {
-    const alloc = std.testing.allocator;
-    var cfg = Cfg{
-        .socket_dir = "/tmp",
-        .log_dir = "/tmp",
-    };
-
-    var daemon = Daemon{
-        .cfg = &cfg,
-        .clients = .empty,
-        .session_name = "test",
-        .socket_path = "",
-        .running = true,
-        .pid = 0,
-        .created_at = 0,
-    };
-    defer daemon.deinit(alloc);
-
-    const fds1 = try lib_posix.pipe2(.{});
-    defer lib_posix.close(fds1[1]);
-    var client1 = Client{
-        .alloc = alloc,
-        .socket_fd = fds1[0],
-        .read_buf = try ipc.SocketBuffer.init(alloc),
-        .write_buf = std.ArrayList(u8).empty,
-    };
-    defer client1.deinit(alloc);
-    try client1.setEnv(alloc, "DISPLAY=:1\nSSH_AUTH_SOCK=/tmp/ssh-1\nKITTY_LISTEN_ON=unix:/tmp/kitty-1\n-WINDOWID\n");
-
-    const fds2 = try lib_posix.pipe2(.{});
-    defer lib_posix.close(fds2[1]);
-    var client2 = Client{
-        .alloc = alloc,
-        .socket_fd = fds2[0],
-        .read_buf = try ipc.SocketBuffer.init(alloc),
-        .write_buf = std.ArrayList(u8).empty,
-    };
-    defer client2.deinit(alloc);
-    try client2.setEnv(alloc, "SSH_AUTH_SOCK=/tmp/ssh-2\nWINDOWID=12345\nKITTY_LISTEN_ON=unix:/tmp/kitty-2\n-DISPLAY\n");
-
-    const fds_req = try lib_posix.pipe2(.{});
-    defer lib_posix.close(fds_req[1]);
-    var client_req = Client{
-        .alloc = alloc,
-        .socket_fd = fds_req[0],
-        .read_buf = try ipc.SocketBuffer.init(alloc),
-        .write_buf = std.ArrayList(u8).empty,
-    };
-    defer client_req.deinit(alloc);
-
-    try daemon.clients.append(alloc, &client1);
-    try daemon.clients.append(alloc, &client2);
-
-    // No leader yet -> handleEnvGet returns empty string payload
-    try daemon.handleEnvGet(alloc, &client_req);
-    try std.testing.expect(client_req.write_buf.items.len > 0);
-    client_req.write_buf.clearRetainingCapacity();
-
-    // Set client1 as leader
-    try daemon.setLeader(alloc, &client1);
-    try std.testing.expectEqual(@as(?i32, fds1[0]), daemon.leader_client_fd);
-    try daemon.handleEnvGet(alloc, &client_req);
-    // Wire message: [Header][Payload]
-    const pay1 = client_req.write_buf.items[@sizeOf(ipc.Header)..];
-    try std.testing.expectEqualStrings("DISPLAY=:1\nSSH_AUTH_SOCK=/tmp/ssh-1\nKITTY_LISTEN_ON=unix:/tmp/kitty-1\n-WINDOWID\n", pay1);
-    client_req.write_buf.clearRetainingCapacity();
-
-    // Switch leader to client2
-    try daemon.setLeader(alloc, &client2);
-    try std.testing.expectEqual(@as(?i32, fds2[0]), daemon.leader_client_fd);
-    try daemon.handleEnvGet(alloc, &client_req);
-    const pay2 = client_req.write_buf.items[@sizeOf(ipc.Header)..];
-    try std.testing.expectEqualStrings("SSH_AUTH_SOCK=/tmp/ssh-2\nWINDOWID=12345\nKITTY_LISTEN_ON=unix:/tmp/kitty-2\n-DISPLAY\n", pay2);
-    client_req.write_buf.clearRetainingCapacity();
-
-    // Client2 updates env
-    try daemon.handleEnvSet(alloc, &client2, "DISPLAY=:99\n");
-    try daemon.handleEnvGet(alloc, &client_req);
-    const pay3 = client_req.write_buf.items[@sizeOf(ipc.Header)..];
-    try std.testing.expectEqualStrings("DISPLAY=:99\n", pay3);
 }

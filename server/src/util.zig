@@ -1,11 +1,9 @@
 const std = @import("std");
-const build_options = @import("build_options");
-const has_daemon = if (@hasDecl(build_options, "has_daemon")) build_options.has_daemon else true;
-pub const terminal = if (has_daemon) @import("terminal.zig") else struct {};
-pub const isUserInput = if (has_daemon) terminal.isUserInput else struct {};
-pub const serializeTerminalState = if (has_daemon) terminal.serializeTerminalState else struct {};
-pub const serializeTerminal = if (has_daemon) terminal.serializeTerminal else struct {};
-pub const serializeTerminalRange = if (has_daemon) terminal.serializeTerminalRange else struct {};
+pub const terminal = @import("terminal.zig");
+pub const isUserInput = terminal.isUserInput;
+pub const serializeTerminalState = terminal.serializeTerminalState;
+pub const serializeTerminal = terminal.serializeTerminal;
+pub const serializeTerminalRange = terminal.serializeTerminalRange;
 const ipc = @import("ipc.zig");
 const socket = @import("socket.zig");
 const cross = @import("cross");
@@ -23,8 +21,6 @@ pub const SessionEntry = struct {
     cwd: ?[]const u8 = null,
     labels: ?[]const u8 = null,
     created_at: u64,
-    task_ended_at: ?u64,
-    task_exit_code: ?u8,
 
     pub fn deinit(self: SessionEntry, alloc: std.mem.Allocator) void {
         alloc.free(self.name);
@@ -69,8 +65,6 @@ pub fn get_session_entries(
                     .is_error = true,
                     .error_name = @errorName(err),
                     .created_at = 0,
-                    .task_exit_code = 1,
-                    .task_ended_at = 0,
                     .labels = "",
                 });
                 // Only clean up when the daemon is definitively gone. A busy
@@ -112,8 +106,6 @@ pub fn get_session_entries(
                 .cwd = cwd,
                 .labels = labels,
                 .created_at = result.info.created_at,
-                .task_ended_at = result.info.task_ended_at,
-                .task_exit_code = result.info.task_exit_code,
             });
         }
     }
@@ -188,7 +180,7 @@ fn isLocalHost(host: ?std.Uri.Component, hostname: []const u8) bool {
 ///
 /// The daemon stores its cwd in this form so `zmx list` shows the host, which
 /// is how you can tell at a glance that a session is inside SSH. Callers that
-/// only have a local path (`zmx run`, `zmx attach`) go through this so the
+/// only have a local path (`zmx attach`) go through this so the
 /// stored value has one shape regardless of where it came from.
 ///
 /// Returns null when the result would not fit in `buf`.
@@ -269,12 +261,12 @@ const DA2_RESPONSE = "\x1b[>1;10;0c";
 
 pub fn respondToDeviceAttributes(alloc: std.mem.Allocator, buf: *std.ArrayList(u8), data: []const u8) void {
     // Scan for DA queries in PTY output and respond on behalf of the terminal.
-    // This handles the case where no client is attached (e.g. zmx run)
+    // This handles the case where no client is attached (e.g. after a detach)
     // and the shell (e.g. fish) sends a DA query that would otherwise go unanswered.
     //
     // Responses are queued into the daemon's pty_write_buf (not written
     // directly) so they don't interleave with any already-buffered input —
-    // e.g. a large `zmx run` payload still draining after the client
+    // e.g. a large `zmx send` payload still draining after the client
     // disconnected.
     //
     // DA1 query: ESC [ c  or  ESC [ 0 c
@@ -444,49 +436,6 @@ test "rewritePromptRedraw: embedded in larger output" {
     const result = rewritePromptRedraw(std.testing.allocator, input).?;
     defer std.testing.allocator.free(result);
     try std.testing.expectEqualStrings("some output\r\n\x1b]133;A;redraw=0\x07prompt$ \x1b]133;B\x07", result);
-}
-
-pub fn generateTaskId(io: std.Io) [4]u8 {
-    var bytes: [2]u8 = undefined;
-    io.random(&bytes);
-    return std.fmt.bytesToHex(bytes, .lower);
-}
-
-pub fn getTaskExitMarker(buf: []u8, id_marker: [4]u8) ![]u8 {
-    return std.fmt.bufPrint(buf, "ZMX_TASK_COMPLETED:{s}:", .{id_marker});
-}
-
-pub fn findTaskExitMarker(output: []const u8, id_marker: [4]u8) !?u8 {
-    var buf: [1024]u8 = undefined;
-    const marker = try getTaskExitMarker(&buf, id_marker);
-
-    // The command line is echoed back by the PTY (canonical mode) before the
-    // shell evaluates it, so the *first* occurrence of the marker in the
-    // output is often the literal, unexpanded "ZMX_TASK_COMPLETED:{id}:$?" from
-    // the echo, not the real "ZMX_TASK_COMPLETED:{id}:<code>" written once the
-    // shell actually runs it. Keep scanning past unparseable occurrences
-    // instead of giving up on the first one.
-    var search_start: usize = 0;
-    while (std.mem.indexOfPos(u8, output, search_start, marker)) |idx| {
-        const after_marker = output[idx + marker.len ..];
-
-        // Find the exit code number and newline
-        var end_idx: usize = 0;
-        while (end_idx < after_marker.len and after_marker[end_idx] != '\n' and after_marker[end_idx] != '\r') {
-            end_idx += 1;
-        }
-
-        const exit_code_str = after_marker[0..end_idx];
-
-        // Parse exit code
-        if (std.fmt.parseInt(u8, exit_code_str, 10)) |exit_code| {
-            return exit_code;
-        } else |_| {
-            search_start = idx + marker.len;
-        }
-    }
-
-    return null;
 }
 
 /// Strip ANSI escape sequences from data, returning only printable characters
@@ -857,15 +806,6 @@ pub fn writeSessionLine(
     if (session.cmd) |cmd| {
         try writer.print("\tcmd={s}", .{cmd});
     }
-    if (session.task_ended_at) |ended_at| {
-        if (ended_at > 0) {
-            try writer.print("\tended={d}", .{ended_at});
-
-            if (session.task_exit_code) |exit_code| {
-                try writer.print("\texit_code={d}", .{exit_code});
-            }
-        }
-    }
     if (session.labels) |labels| {
         var kvs = label.LabelIterator.init(labels);
         while (kvs.next()) |kv| {
@@ -892,8 +832,6 @@ test "writeSessionLine formats output for current session and short output" {
         .cmd = null,
         .cwd = null,
         .created_at = 0,
-        .task_ended_at = null,
-        .task_exit_code = null,
     };
 
     const cases = [_]Case{

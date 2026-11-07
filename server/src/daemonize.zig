@@ -14,7 +14,7 @@ const Cmd = struct {
     argv_ptr: [*:null]const ?[*:0]const u8,
 };
 
-pub fn createCmdZ(def_shell: []const u8, is_task_mode: bool, command: ?[]const []const u8) !Cmd {
+pub fn createCmdZ(def_shell: []const u8, command: ?[]const []const u8) !Cmd {
     const gpa = std.heap.c_allocator;
 
     if (command) |cmd_args| {
@@ -31,10 +31,7 @@ pub fn createCmdZ(def_shell: []const u8, is_task_mode: bool, command: ?[]const [
         }
     }
 
-    const shell: [:0]const u8 = if (is_task_mode)
-        "bash"
-    else
-        try gpa.dupeSentinel(u8, def_shell, 0);
+    const shell: [:0]const u8 = try gpa.dupeSentinel(u8, def_shell, 0);
 
     // Use "-shellname" as argv[0] to signal login shell (traditional method)
     const login_shell = try std.fmt.allocPrintSentinel(
@@ -147,7 +144,6 @@ pub fn spawnPty(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize) !PtyInfo {
 pub const Reexec = struct {
     session_name: []const u8,
     shell: []const u8,
-    is_task_mode: bool,
     command: ?[]const []const u8,
     /// The session's cwd as `Daemon.cwd` holds it (OSC 7 form); empty when unknown.
     cwd: []const u8,
@@ -174,9 +170,8 @@ pub const reexec_env = struct {
     pub const xpixel = "ZMX_DAEMON_XPIXEL";
     pub const ypixel = "ZMX_DAEMON_YPIXEL";
     pub const shell = "ZMX_DAEMON_SHELL";
-    pub const task_mode = "ZMX_DAEMON_TASK_MODE";
     pub const cwd = "ZMX_DAEMON_CWD";
-    pub const all = [_][:0]const u8{ socket_fd, rows, cols, xpixel, ypixel, shell, task_mode, cwd };
+    pub const all = [_][:0]const u8{ socket_fd, rows, cols, xpixel, ypixel, shell, cwd };
 };
 
 /// What `takeReexecState` hands the `__daemon` entry.
@@ -184,7 +179,6 @@ pub const ReexecState = struct {
     server_sock_fd: i32,
     size: ipc.Resize,
     shell: []const u8,
-    is_task_mode: bool,
     cwd: []const u8,
 };
 
@@ -239,7 +233,6 @@ fn reexecDisclaimed(spec: Reexec, size: ipc.Resize) !void {
     try setReexecEnv(gpa, reexec_env.xpixel, "{d}", .{size.xpixel});
     try setReexecEnv(gpa, reexec_env.ypixel, "{d}", .{size.ypixel});
     try setReexecEnv(gpa, reexec_env.shell, "{s}", .{spec.shell});
-    try setReexecEnv(gpa, reexec_env.task_mode, "{d}", .{@intFromBool(spec.is_task_mode)});
     try setReexecEnv(gpa, reexec_env.cwd, "{s}", .{spec.cwd});
 
     var attr: std.c.posix_spawnattr_t = undefined;
@@ -286,7 +279,6 @@ pub fn takeReexecState(gpa: std.mem.Allocator) !?ReexecState {
             .ypixel = try parseReexecInt(u16, reexec_env.ypixel),
         },
         .shell = try gpa.dupe(u8, lib_posix.getenv(reexec_env.shell) orelse return error.ReexecStateIncomplete),
-        .is_task_mode = std.mem.eql(u8, lib_posix.getenv(reexec_env.task_mode) orelse "0", "1"),
         .cwd = try gpa.dupe(u8, lib_posix.getenv(reexec_env.cwd) orelse ""),
     };
     return state;

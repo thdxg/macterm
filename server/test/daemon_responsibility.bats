@@ -37,11 +37,9 @@ responsible_for() {
   command -v cc >/dev/null || skip "needs a C compiler for the responsibility probe"
   build_probe
 
-  "$ZMX" run resp-test -d sleep 60
-  wait_for_session resp-test
-
-  # `zmx run` types the command into the shell over IPC, so the daemon's argv
-  # ends at the session name.
+  # A session with no command runs $SHELL, so the daemon's argv ends at the
+  # session name.
+  start_session resp-test
   local daemon shell
   daemon=$(pgrep -f "__daemon resp-test$")
   [[ -n "$daemon" ]]
@@ -58,10 +56,7 @@ responsible_for() {
 @test "macos: the re-exec's state never reaches the session" {
   [[ "$(uname)" == "Darwin" ]] || skip "the re-exec only happens on macOS"
 
-  # The typed command line is echoed into the history too, so the name is
-  # assembled at run time: the joined string only ever appears as real output.
-  "$ZMX" run leak-test -d sh -c 'env | grep ZMX_DAEMON""_ || echo no-daemon-vars'
-  wait_for_session leak-test
+  start_session leak-test sh -c 'env | grep ZMX_DAEMON_ || echo no-daemon-vars; exec sleep 30'
   local i=0
   until "$ZMX" history leak-test 2>/dev/null | grep -q "no-daemon-vars"; do
     sleep 0.1

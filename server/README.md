@@ -1,58 +1,30 @@
-<h1>
-<p align="center">
-  <img src="./logo.png" alt="Logo" width="128">
-  <br>zmx
-</h1>
-<p align="center">
-  Session attach/detach for the terminal.
-  <br />
-  <a href="https://zmx.sh">Docs</a>
-  ·
-  <a href="https://bower.sh/you-might-not-need-tmux">You might not need tmux</a>
-  ·
-  Sponsored by <a href="https://pico.sh">pico.sh</a>
-</p>
+# server
 
-## features
+The session server of Macterm. It keeps each terminal session (a shell or a
+program on a pty) running when no window shows it, and lets a client attach
+to it again.
 
-- Persist terminal shell sessions
-- Ability to attach and detach from a shell session without it being killed
-- Native terminal scrollback
-- Multiple clients can connect to the same session
-- Re-attaching to a session restores previous terminal state and output
-- Send commands to a session without attaching to it
-- Print scrollback history of a terminal session in plain text
-- Works on mac and linux
-- Use `zmx` as a zig package
-- This project does **NOT** provide windows, tabs, or splits
+It starts as [zmx](https://github.com/neurosnap/zmx) by Eric Bower, MIT
+(`LICENSE`), with its history: `git log -- server/` shows it. Macterm's fork,
+`thdxg/zmx`, is upstream v1.0.1 plus the changes in `DOWNSTREAM.md`.
 
-## demos
+The app still bundles the pinned fork release. This folder is not yet the
+binary that Macterm ships.
 
-- [zmx - intro](https://youtu.be/UIXj0_rhPgI)
-- [zmx - ai portal](https://youtu.be/CV3skPYHP4Q)
+## Commands
 
-## docs
+`zmx help` lists them: `attach`, `send`, `list`, `get`, `set`, `clear`,
+`kill`, `history` and `version`. Macterm v1 calls `attach`, `list`, `kill`,
+`set`, `version` and `history`. The macOS daemon runs `__daemon` after it
+starts itself again (change 0004).
 
-Full documentation is available at **[https://zmx.sh](https://zmx.sh)**:
+## Build and test
 
-- [Install & Usage](https://zmx.sh/getting-started)
-- [Shell Integration](https://zmx.sh/shell-integration)
-- [SSH Workflow](https://zmx.sh/ssh)
-- [Zig Package](https://zmx.sh/zig-package)
-- [Configuration & Debugging](https://zmx.sh/configuration)
-- [Architecture & Philosophy](https://zmx.sh/architecture)
-- [Community Tools](https://zmx.sh/community)
-
-## build
-
-Requires Zig `v0.17.0`:
+Zig 0.17.1. Zig cannot link with Xcode 26.4 or later (zig#31658), so on a
+Mac with a newer Xcode, let CI build it (`.github/workflows/server.yml`).
 
 ```bash
-# Build debug binary (./zig-out/bin/zmx)
-zig build
-
-# Install release binary to ~/.local/bin
-zig build -Doptimize=ReleaseSafe --prefix ~/.local
+zig build              # ./zig-out/bin/zmx
+zig build test         # Zig tests
+bats test/*.bats       # tests against the built binary
 ```
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for testing, local debugging, and contribution guidelines.

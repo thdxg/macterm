@@ -1,18 +1,19 @@
 # How this fork differs from upstream zmx
 
-This fork is the session daemon of [Macterm](https://github.com/thdxg/macterm).
-It no longer syncs with [upstream zmx](https://github.com/neurosnap/zmx).
+This folder is the session daemon of [Macterm](https://github.com/thdxg/macterm).
+It came from the fork `thdxg/zmx` (main at `2d98540`), with its history. It
+no longer syncs with [upstream zmx](https://github.com/neurosnap/zmx).
 
-- **Base:** upstream `v1.0.1` (`a35f00a2118b15a5e9d522a43035c8d7487df9b7`).
+- **Base:** upstream `v1.0.1` (`a35f00a` upstream; `9f980575` here, where
+  every commit of the fork moved into `server/`).
 - **Upstream fixes** are copied by hand, with their tests, when one is worth
-  it. To see what upstream did since the base:
-  `git remote add upstream https://github.com/neurosnap/zmx.git`, then
-  `git fetch upstream && git log a35f00a..upstream/main`.
+  it. To see what upstream did since the base, in a clone of upstream:
+  `git log a35f00a..main`.
 - **Each change below was a patch** (`.github/downstream/00NN-*.patch`) that a
   daily sync applied again on top of upstream. The code now holds the changes
   directly. The numbers stay as names, because Macterm's history cites them.
-  `77fc677` is the last commit that has the patch files:
-  `git show 77fc677:.github/downstream/<name>` prints one.
+  `d03311a3` is the last commit that has the patch files:
+  `git show d03311a3:server/.github/downstream/<name>` prints one.
 
 ## Changes
 
@@ -48,10 +49,10 @@ the local network with no prompt (macterm#419).
 
 `zmx attach` printed `session "<name>" created` and then cleared the screen.
 In a pane one or two rows tall, the line scrolled into scrollback and came
-back when the pane grew (macterm#487). Attach now uses upstream's `quiet`
-flag. `zmx run` still prints the line.
+back when the pane grew (macterm#487). With `run` gone, nothing prints the
+line.
 
-- Code: `src/client.zig`. Test: `test/attach_create.bats`.
+- Code: `src/loop.zig`. Test: `test/attach_create.bats`.
 
 ### 0006: reattach replays the mouse mode set last
 
@@ -109,6 +110,32 @@ path.
 
 - Code: `src/loop.zig`, `src/main.zig`. Test: `src/loop.zig`.
 
+### Removed: the commands Macterm never calls
+
+Macterm calls `attach`, `list`, `kill`, `set`, `version` and `history`, and
+the macOS daemon runs `__daemon`. These went, with their code and tests:
+
+- `run`, `wait`, `-d` and the task tracking (the bash wrapper and the exit
+  marker). `Info` keeps its `task_*` fields for the wire, at zero.
+- `write`, `print`, `print-env` and the environment tracking behind it
+  (`ZMX_TRACK_ENV`), `tail`, `detach` and `completions`.
+- The Zig package (`src/lib.zig`, `-Ddaemon`) and `examples/`.
+- The repository parts of zmx: the zmx.sh site, Docker, Nix and Homebrew
+  files, its changelog and its workflows.
+
+A daemon replies `Unsupported` to the requests of the removed commands, as it
+does to any tag it does not know. The tags stay in `ipc.Tag`, so no number is
+used again.
+
+### `/dev/tty` with no controlling terminal is no error
+
+`posix.open` gave `Unexpected` for `ENXIO`, which printed `unexpected errno:
+6` and a stack trace each time a process with no controlling terminal (the
+daemon, a CI job) looked for the terminal size. It is `NoDevice` now
+(thdxg/zmx#22).
+
+- Code and test: `src/posix.zig`.
+
 ### Retired
 
 - 0001 (cast `log_mode`) and 0002 (portable signal type): upstream fixed both.
@@ -121,7 +148,10 @@ The fork's IPC tags start at 192, far from upstream's sequence: `Claim` is
 
 ## CI
 
-- `test.yml` builds zmx and runs the Zig tests (`zig build test`) on Linux
-  and macOS, on every pull request and every push to `main`. The bats tests
-  and the Python tests in `test/` do not run in CI.
-- `build-zmx.yml` publishes the release that Macterm pins.
+- `.github/workflows/server.yml` (at the repository root) builds the server
+  and runs the Zig tests and the bats tests on macOS, Linux x86_64 and Linux
+  aarch64, for each change to `server/`. `leader.bats` runs
+  `claim_leader.py`. A skipped test fails the job. Linux leaves out
+  `daemon_responsibility.bats` (macOS only).
+- The app still bundles the release that `thdxg/zmx`'s `build-zmx.yml`
+  published (`ZMX_TAG` in `scripts/setup.sh`).

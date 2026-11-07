@@ -124,6 +124,7 @@ pub const Info = extern struct {
     cmd: [MAX_CMD_LEN]u8,
     cwd: [MAX_CWD_LEN]u8,
     created_at: u64,
+    /// No longer set (`run` is gone); the fields keep the wire shape.
     task_ended_at: u64,
     task_exit_code: u8,
     protocol_version: u8 = PROTOCOL_VERSION,

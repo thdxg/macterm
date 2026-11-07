@@ -29,11 +29,12 @@ da1_probe() {
 count() { "$ZMX" history "$1" | grep -o "$2" | wc -l | tr -d ' '; }
 
 @test "daemon answers DA1 while detached, also after a client has detached" {
-  "$ZMX" run test-da -d bash -c "$(da1_probe 5)"
+  start_session test-da bash --norc --noprofile
+  "$ZMX" send test-da "$(da1_probe 5)"$'\r'
   wait_for_output test-da "DA1_ANSWERED"
 
   fake_attach test-da 24 80          # attach + detach
-  "$ZMX" run test-da bash -c "$(da1_probe 5)"
+  "$ZMX" send test-da "$(da1_probe 5)"$'\r'
   for _ in $(seq 60); do [ "$(count test-da DA1_ANSWERED)" -eq 2 ] && break; sleep 0.1; done
   [ "$(count test-da DA1_ANSWERED)" -eq 2 ]
   [ "$(count test-da DA1_TIMEOUT)" -eq 0 ]
@@ -43,8 +44,7 @@ count() { "$ZMX" history "$1" | grep -o "$2" | wc -l | tr -d ' '; }
   # The session's own command probes after a delay; a client is attached by
   # then, so the daemon must stay quiet and (with no real terminal behind the
   # fake client) the probe times out.
-  "$ZMX" run test-da2 -d bash -c "sleep 1; $(da1_probe 1); sleep 30"
-  wait_for_session test-da2
+  start_session test-da2 bash -c "sleep 2; $(da1_probe 1); sleep 30"
   fake_attach test-da2 24 80 5 &
   wait_for_output test-da2 "DA1_TIMEOUT" 5
   kill %1 2>/dev/null || true
@@ -53,7 +53,7 @@ count() { "$ZMX" history "$1" | grep -o "$2" | wc -l | tr -d ' '; }
 @test "re-attach at the same size delivers SIGWINCH to foreground process" {
   # The trap prints a word assembled at runtime so it can't be confused with
   # the echoed command line in history.
-  "$ZMX" run test-winch -d bash -c 'trap "printf \"GOT_%s\n\" WINCH" WINCH; echo READY; while :; do sleep 0.1; done'
+  start_session test-winch bash -c 'trap "printf \"GOT_%s\n\" WINCH" WINCH; echo READY; while :; do sleep 0.1; done'
   wait_for_output test-winch "READY"
 
   fake_attach test-winch 24 80       # first attach: sets the initial size

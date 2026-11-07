@@ -9,7 +9,7 @@ comptime {
     _ = @import("terminal.zig");
     _ = @import("cfg.zig");
     _ = @import("daemonize.zig");
-    _ = @import("lib.zig");
     _ = @import("client.zig");
     _ = @import("foreground.zig");
+    _ = @import("posix.zig");
 }
