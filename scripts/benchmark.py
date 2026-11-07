@@ -434,7 +434,12 @@ def cmd_run(args):
                 enter_state(harness.app, "focused")
                 time.sleep(args.settle)
                 print(f"typing latency: {args.latency_keys} keys", flush=True)
-                latency = measure_typing_latency(harness, args.latency_keys, args)
+                try:
+                    latency = measure_typing_latency(harness, args.latency_keys, args)
+                except HarnessError as exc:
+                    # Keep the window-state numbers: they are the job's
+                    # baseline. The report shows the error.
+                    latency = {"keys": args.latency_keys, "error": str(exc)}
                 print(f"  {latency}", flush=True)
 
             if args.workload > 0:
@@ -571,6 +576,8 @@ def latency_lines(current, baseline):
     cur = current.get("typing_latency")
     if not cur:
         return []
+    if "error" in cur:
+        return ["", "### Typing latency", "", f"_⚠️ No measurement: {cur['error']}._"]
     base = (baseline or {}).get("typing_latency") or {}
     lines = [
         "",
@@ -593,8 +600,7 @@ def latency_lines(current, baseline):
         f"_{cur['keys']} keys typed on the `pane key` path into the idle focused pane, "
         "each timed to the first frame that shows its glyph. "
         f"Keys with no glyph: {cur.get('misses', 0)}. "
-        f"1-minute load average: {gate.get('load')}. "
-        "Not flagged and not labeled._",
+        f"1-minute load average: {gate.get('load')}._",
     ]
     return lines
 
@@ -634,7 +640,7 @@ def pool_baselines(paths, current=None):
         "runs": len(runs),
         "states": states,
     }
-    latencies = [r["typing_latency"] for r in runs if r.get("typing_latency")]
+    latencies = [r["typing_latency"] for r in runs if "p50_ms" in (r.get("typing_latency") or {})]
     if latencies:
         pooled["typing_latency"] = {
             key: _median_or_none([lat.get(key) for lat in latencies])

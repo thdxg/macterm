@@ -63,7 +63,9 @@ enum TypingLatencyProbe {
         guard let surface = view.surface, let size = view.surfaceSize else { return nil }
         var x: Double = 0, y: Double = 0, w: Double = 0, h: Double = 0
         ghostty_surface_ime_point(surface, &x, &y, &w, &h)
-        let scale = Double(view.window?.backingScaleFactor ?? 2)
+        // The same scale as the pixel read in `cell(of:in:)`.
+        guard let frame = view.layer?.contents as? IOSurface, view.bounds.width > 0 else { return nil }
+        let scale = Double(IOSurfaceGetWidth(frame)) / view.bounds.width
         return cursorCell(
             imeX: x, imeY: y, height: h,
             cellWidth: Double(size.cell_width_px) / scale,
@@ -93,6 +95,7 @@ enum TypingLatencyProbe {
             let start = clock.now
             guard view.sendKey(keyCode: key.keyCode, mods: key.modifiers) else {
                 result.misses += 1
+                try? await Task.sleep(for: settle)
                 continue
             }
             var observations: [Observation] = []
