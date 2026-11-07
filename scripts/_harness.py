@@ -74,6 +74,20 @@ def wait_for(condition, timeout=30.0, interval=0.25, message="condition"):
         time.sleep(interval)
 
 
+def wait_for_load(max_load, timeout):
+    """Wait until the 1-minute load average is below max_load, and return
+    the record of the gate. Load decides latency and CPU on a shared runner.
+    A gate that times out does not stop the run: the record says so, and the
+    report marks it."""
+    start = time.monotonic()
+    while True:
+        load = os.getloadavg()[0]
+        waited = time.monotonic() - start
+        if load < max_load or waited >= timeout:
+            return {"load": round(load, 2), "waited_s": round(waited, 1), "passed": load < max_load}
+        time.sleep(5)
+
+
 class MactermHarness:
     """One hermetic app instance: launch, drive over its control socket,
     tear down. Reusable across launches of the same home/data dir (kill()

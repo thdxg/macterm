@@ -1017,12 +1017,25 @@ The script stops only the process that it started, and it kills its own zmx sess
 
 ### Benchmarks
 
-`mise run bench` and `.github/workflows/benchmark.yml` measure the delta of CPU time, RSS and wakeups across `focused`, `workload-focused` and `workload-unfocused`. Darwin notifications drive them (`BenchmarkControl`, `MACTERM_BENCHMARK=1`, which also skips the notification prompt, Sparkle and the first-run seed).
+`mise run bench` and `.github/workflows/benchmark.yml` measure the delta of CPU time, memory and wakeups across `focused`, `workload-focused` and `workload-unfocused`. Darwin notifications drive them (`BenchmarkControl`, `MACTERM_BENCHMARK=1`, which also skips the notification prompt, Sparkle and the first-run seed).
 
+- Memory is the sum of `phys_footprint` over the process tree: the app, the zmx clients and session daemons of its bundle, and their shells (`tree_footprint`). Do not use `ps` RSS for memory. CPU time is the app's own, because a sum over the tree loses the short-lived children of a workload.
+- `results.json` records the runner image (`runner`, from `ImageOS` and `ImageVersion`). PR runs compare only against main runs of the same image (`same_image`). A change of image moves every number.
+- Each state waits until the 1-minute load average is below half the CPU count (`wait_for_load` in `_harness.py`, at most 120 s). The state records the load. The report marks a state whose gate timed out.
 - PR runs compare against a pooled median of the last 10 runs on main.
 - A cell gets a flag only beyond ±25% and a noise floor.
 - The label `benchmark:regression` or `benchmark:improvement` needs at least 2 corroborating cells, and one of them under a workload state (`should_label`).
 - The writes of labels and comments are in `benchmark-report.yml`. The token of a PR from a fork is read-only.
+
+**Session-layer latency** (`scripts/session_bench.py`) measures what the session layer adds to typing and to a reattach. It runs no app: a pty driver plays the terminal. The macOS job runs it after the window states with the zmx of the built app (`session-macos.json`). The job `Session Layer (Linux)` runs it with the pinned Linux zmx, against sshd on localhost with 25 ms of `netem` delay each way (`session-results-linux`). Each job writes a table into its summary. The report gives p50, p95 and p99:
+
+- **Echo**: write one key and time its echo, 500 keys. `bare` is `/bin/cat` on a pty (the floor). `zmx` is `zmx attach <s> /bin/cat` (a local pane). On Linux, `ssh` is `ssh -tt localhost /bin/cat` (the floor for a remote pane) and `ssh-zmx` is a remote pane of v1.
+- **New remote pane** (Linux): from the start of `ssh … zmx attach` to the first echo, 5 panes. v1 makes a new ssh login for each remote pane.
+- **Reattach**: fill a session with 10,000 lines of 199 characters on a 200-column terminal, detach, then time a new `zmx attach` until the echo of a marker line. The marker goes in after the client takes the terminal, and its echo comes after the replay. The report gives the size of the replay.
+- A key goes in only after the client turns echo off on its pty. Before that, the kernel echoes the key, and the time is not the session layer's.
+- Not measured here: the GUI part of typing latency (`keyDown`, the render, the compositor), and memory for each idle session.
+- Every session that a run makes is killed after the run, in a throwaway `ZMX_DIR`. A session with no client drops terminal replies.
+- No baseline comparison and no label yet. The numbers on main are v1's reference for v2.
 
 ### Demo recordings
 
