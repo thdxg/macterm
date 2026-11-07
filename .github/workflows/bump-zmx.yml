@@ -3,7 +3,8 @@ name: Bump zmx
 # zmx is pinned to one thdxg/zmx release (ZMX_TAG in scripts/setup.sh) for the
 # same reason GhosttyKit is, and goes stale the same way without a way back off
 # the pin: this opens the PR, weekly, and CI is the gate. It is
-# bump-ghosttykit.yml with the API review swapped for a downstream-patch review —
+# bump-ghosttykit.yml with the API review swapped for a review of the fork's
+# commits and its DOWNSTREAM.md —
 # read that file for why each step is shaped the way it is.
 #
 # The PR is a real test. `Macterm/Resources/zmx` rides the GhosttyKit cache,
@@ -87,15 +88,15 @@ jobs:
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "Pin $CURRENT is behind $LATEST."
 
-      # What moved between the two tags: the commits, and which downstream
-      # patches changed. The fork rewrites its downstream delta onto pristine
-      # upstream at every sync, so the compare is "diverged" — it always lists
-      # one delta commit, and its file list shows every patch as "added" because
-      # the merge base predates them all. So the patches are compared directly,
-      # by blob sha at each tag; that list is what says whether Macterm-facing
-      # behavior moved. Upstream PR numbers are written as neurosnap/zmx PRs in
-      # code spans, never bare: a bare #N links to a Macterm PR, and an
-      # auto-linked neurosnap/zmx#N backlinks every bump onto the upstream PR.
+      # What moved between the two tags: the commits, and the change to
+      # DOWNSTREAM.md. The fork is frozen at upstream v1.0.1 and no longer
+      # rewrites its history (thdxg/zmx#20), so the compare is "ahead" and its
+      # commits are the fork's own. DOWNSTREAM.md names each change Macterm
+      # depends on; a diff in it is a change to that behavior. A tag from before
+      # the freeze has no DOWNSTREAM.md, so its side of the diff is empty.
+      # Upstream PR numbers are written as neurosnap/zmx PRs in code spans,
+      # never bare: a bare #N links to a Macterm PR, and an auto-linked
+      # neurosnap/zmx#N backlinks every bump onto the upstream PR.
       - name: Build the change review
         id: review
         if: steps.check.outputs.proceed == 'true'
@@ -105,9 +106,23 @@ jobs:
         run: |
           # Advisory: a bad report must never block the bump PR, since the PR is
           # how the new pin gets tested at all.
+          downstream() {
+            # Prints DOWNSTREAM.md at a ref, or nothing when the ref has none.
+            # Any other failure fails the function.
+            local out
+            if out=$(gh api -H 'Accept: application/vnd.github.raw+json' \
+              "repos/thdxg/zmx/contents/DOWNSTREAM.md?ref=$1" 2>&1); then
+              printf '%s\n' "$out"
+            elif [[ "$out" == *"HTTP 404"* ]]; then
+              :
+            else
+              echo "$out" >&2
+              return 1
+            fi
+          }
           if ! gh api "repos/thdxg/zmx/compare/${CURRENT}...${LATEST}" > compare.json \
-            || ! gh api "repos/thdxg/zmx/contents/.github/downstream?ref=${CURRENT}" > old-patches.json \
-            || ! gh api "repos/thdxg/zmx/contents/.github/downstream?ref=${LATEST}" > new-patches.json
+            || ! downstream "$CURRENT" > old-downstream.md \
+            || ! downstream "$LATEST" > new-downstream.md
           then
             echo "warning: the GitHub API failed; opening the PR without a review section" >&2
             echo "ok=false" >> "$GITHUB_OUTPUT"
@@ -119,22 +134,17 @@ jobs:
             echo
             jq -r '.commits[] | "- `\(.sha[0:7])` \(.commit.message | split("\n")[0] | gsub("`"; "'"'"'") | gsub("\\(#(?<n>[0-9]+)\\)"; "(`neurosnap/zmx#\(.n)`)"))"' compare.json
             echo
-            echo "### Downstream patches"
+            echo "### DOWNSTREAM.md"
             echo
-            PATCHES=$(jq -rn --slurpfile o old-patches.json --slurpfile n new-patches.json '
-              ($o[0] | map({(.name): .sha}) | add // {}) as $old
-              | ($n[0] | map({(.name): .sha}) | add // {}) as $new
-              | ([$old, $new] | map(keys) | add | unique)[] as $f
-              | if $old[$f] == null then "- `\($f)` (added)"
-                elif $new[$f] == null then "- `\($f)` (removed)"
-                elif $old[$f] != $new[$f] then "- `\($f)` (changed)"
-                else empty end')
-            if [[ -n "$PATCHES" ]]; then
-              echo "$PATCHES"
-              echo
-              echo "A changed downstream patch is a change to behavior Macterm depends on — 0003 is the leadership claim (\`ZmxLeadership.claimSequence\`), 0004 the responsible-process disclaim (#419). Read those diffs, not just CI."
+            if diff -q old-downstream.md new-downstream.md > /dev/null; then
+              echo "_No change: the fork changes that Macterm depends on did not move._"
             else
-              echo "_None changed — this bump is upstream changes only._"
+              echo "A change here is a change to behavior that Macterm depends on: 0003 is the leadership claim (\`ZmxLeadership.claimSequence\`), 0004 the responsible-process disclaim (#419), 0010 the foreground report. Read the code diffs of those changes, not only CI."
+              echo
+              echo '```diff'
+              diff -u --label "${CURRENT}/DOWNSTREAM.md" --label "${LATEST}/DOWNSTREAM.md" \
+                old-downstream.md new-downstream.md || true
+              echo '```'
             fi
           } > review.md
           echo "ok=true" >> "$GITHUB_OUTPUT"
@@ -178,7 +188,7 @@ jobs:
             echo
             echo "**CI on this PR is the gate.** Editing \`scripts/setup.sh\` changes the cache key the bundled zmx rides, so this run downloads the new pin from scratch and exercises it through Unit, End-to-end, and the benchmark. End-to-end is the check that counts: nothing compiles against zmx, so a broken wire contract shows up only there."
             echo
-            echo "Before merging, update the comment above \`ZMX_TAG\` (what upstream it carries, which downstream patches)."
+            echo "Before merging, update the comment above \`ZMX_TAG\` (what upstream it carries, which fork changes)."
             echo
             echo "Compare: [\`${CURRENT}...${LATEST}\`](https://github.com/thdxg/zmx/compare/${CURRENT}...${LATEST})"
             echo
