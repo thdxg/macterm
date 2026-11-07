@@ -54,8 +54,16 @@ struct RemoteZmxInstallTests {
         log_dir\t\t/Users/demo/.local/state/zmx/logs
         """
         #expect(ZmxVersion.parse(output) == ZmxVersion(upstream: "1.0.1", forkTag: "build-2026-11-07-77fc677"))
-        let state = ZmxHostState(system: "Linux", machine: "x86_64", zmxPath: "/home/demo/.local/bin/zmx", version: ZmxVersion.parse(output))
-        #expect(ZmxInstallVerdict.decide(state: state, pinnedTag: "build-2026-11-07-77fc677") == .current(ZmxVersion(upstream: "1.0.1", forkTag: "build-2026-11-07-77fc677")))
+        let state = ZmxHostState(
+            system: "Linux",
+            machine: "x86_64",
+            zmxPath: "/home/demo/.local/bin/zmx",
+            version: ZmxVersion.parse(output)
+        )
+        #expect(ZmxInstallVerdict.decide(state: state, pinnedTag: "build-2026-11-07-77fc677") == .current(ZmxVersion(
+            upstream: "1.0.1",
+            forkTag: "build-2026-11-07-77fc677"
+        )))
     }
 
     @Test
