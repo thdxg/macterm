@@ -127,7 +127,43 @@ struct RemoteSpawnTests {
         #expect(installScript.contains("mkdir -p \"$HOME/.local/bin\""))
         #expect(installScript.contains("mv -f \"$HOME/.zmx.macterm\" \"$HOME/.local/bin/zmx\""))
         #expect(installScript.contains("installed=%s"))
+        #expect(!installScript.contains("ended="))
         #expect(RemoteSpawn.zmxHostCheckArgv(remote: .local("/tmp")) == nil)
+
+        let ending = try #require(RemoteSpawn.zmxInstallArgv(remote: remote, endingSessionsOf: "/usr/bin/zmx")).last ?? ""
+        #expect(ending.contains("\"/usr/bin/zmx\" kill"))
+        #expect(ending.contains("installed=%s"))
+    }
+
+    /// The script that ends the old sessions, run for real by /bin/sh
+    /// against a stand-in zmx that prints a listing and logs each kill.
+    @Test
+    func the_old_sessions_end_and_only_macterm_ones() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mt-end-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let zmx = dir.appendingPathComponent("old zmx")
+        let log = dir.appendingPathComponent("kills")
+        try """
+        #!/bin/sh
+        case "$1" in
+          ls) printf '  name=macterm-a\\tpid=1\\tclients=0\\n\\342\\206\\222 name=mine\\tpid=2\\n  name=macterm-b\\tpid=3\\n' ;;
+          kill) echo "$2" >> "\(log.path)" ;;
+        esac
+        """.write(to: zmx, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: zmx.path)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", RemoteSpawn.zmxEndSessionsScript(oldZmx: zmx.path)]
+        let out = Pipe()
+        process.standardOutput = out
+        try process.run()
+        process.waitUntilExit()
+        let printed = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        #expect(process.terminationStatus == 0)
+        #expect(printed == "ended=2\n")
+        #expect(try String(contentsOf: log, encoding: .utf8) == "macterm-a\nmacterm-b\n")
+        #expect(!RemoteSpawn.zmxEndSessionsScript(oldZmx: zmx.path).contains("'"))
     }
 
     @Test

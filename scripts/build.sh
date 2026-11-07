@@ -112,16 +112,24 @@ fi
 # (scripts/embed-zmx.sh), because it, not the app process, is what macOS holds
 # responsible for the programs in every pane; the same regression — an ad-hoc
 # identity resetting users' grants — applies to it.
-ZMX_BINARY="$APP_BUNDLE/Contents/Resources/zmx/zmx"
-ZMX_SIGNATURE="$(codesign --display --verbose "$ZMX_BINARY" 2>&1 || true)"
-if [[ -n "$CODESIGN_IDENTITY" ]] && grep -q "Signature=adhoc" <<<"$ZMX_SIGNATURE"; then
-  echo "ERROR: $ZMX_BINARY has an ad-hoc signature, but MACTERM_CODESIGN_IDENTITY is set" >&2
-  exit 1
-fi
-if ! grep -q "^Identifier=com.thdxg.macterm$" <<<"$ZMX_SIGNATURE"; then
-  echo "ERROR: $ZMX_BINARY is not signed as com.thdxg.macterm. Pane programs would ask for permission as a second app" >&2
-  exit 1
-fi
+# Both binaries: zmx-legacy runs the attach client of every session that a
+# Macterm from before zmx 1.0 started (ZmxProtocol).
+for ZMX_NAME in zmx zmx-legacy; do
+  ZMX_BINARY="$APP_BUNDLE/Contents/Resources/zmx/$ZMX_NAME"
+  if [[ ! -x "$ZMX_BINARY" ]]; then
+    echo "ERROR: $ZMX_BINARY is missing. Run scripts/setup.sh" >&2
+    exit 1
+  fi
+  ZMX_SIGNATURE="$(codesign --display --verbose "$ZMX_BINARY" 2>&1 || true)"
+  if [[ -n "$CODESIGN_IDENTITY" ]] && grep -q "Signature=adhoc" <<<"$ZMX_SIGNATURE"; then
+    echo "ERROR: $ZMX_BINARY has an ad-hoc signature, but MACTERM_CODESIGN_IDENTITY is set" >&2
+    exit 1
+  fi
+  if ! grep -q "^Identifier=com.thdxg.macterm$" <<<"$ZMX_SIGNATURE"; then
+    echo "ERROR: $ZMX_BINARY is not signed as com.thdxg.macterm. Pane programs would ask for permission as a second app" >&2
+    exit 1
+  fi
+done
 # The zmx installer (#699) reads the release this build pins from this file.
 # Without it the install sheet offers nothing, and nothing else notices: the
 # release build of 1.33.2-tip.27 shipped that way.

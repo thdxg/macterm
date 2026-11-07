@@ -163,6 +163,9 @@ final class RemoteZmxInstallFlow {
     private(set) var failure: String?
     private(set) var installedPath: String?
     private(set) var installedVersion: ZmxVersion?
+    /// How many sessions of the host's old zmx the install ended
+    /// (`ZmxHostState.installEndsSessions`). nil when it ended none.
+    private(set) var endedSessions: Int?
 
     /// How a step runs: the real one starts a `TTYCommand`; a test hands in
     /// a fake that returns a status and feeds output.
@@ -211,6 +214,12 @@ final class RemoteZmxInstallFlow {
     /// After a success: the binary the pane would run is not the one the
     /// install put on the host (another zmx comes first in PATH, or the
     /// project names one), so the project's `zmxPath` should be set.
+    /// Whether the install ends the host's Macterm sessions first
+    /// (`ZmxHostState.installEndsSessions`).
+    var installEndsSessions: Bool {
+        hostState?.installEndsSessions(installing: release?.wireProtocol) == true
+    }
+
     var installedPathDiffersFromProjectZmx: Bool {
         guard let installedPath else { return false }
         return hostState?.zmxPath != installedPath
@@ -267,12 +276,20 @@ final class RemoteZmxInstallFlow {
         }
 
         phase = .installing
-        guard let install = RemoteSpawn.zmxInstallArgv(remote: remote) else { return }
+        guard let install = RemoteSpawn.zmxInstallArgv(
+            remote: remote,
+            endingSessionsOf: installEndsSessions ? state.zmxPath : nil
+        )
+        else { return }
         let installStatus = await run(install)
         guard !cancelled else { return }
-        let installed = stepOutput.split(whereSeparator: \.isNewline)
-            .first { $0.hasPrefix("installed=") }
-            .map { String($0.dropFirst("installed=".count)).trimmingCharacters(in: .whitespaces) }
+        func field(_ key: String) -> String? {
+            stepOutput.split(whereSeparator: \.isNewline)
+                .first { $0.hasPrefix(key + "=") }
+                .map { String($0.dropFirst(key.count + 1)).trimmingCharacters(in: .whitespaces) }
+        }
+        endedSessions = field("ended").flatMap { Int($0) }
+        let installed = field("installed")
         guard installStatus == 0, let installed, !installed.isEmpty else {
             fail(String(localized: "The install on the host failed (ssh exited with \(installStatus))."))
             return

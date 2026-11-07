@@ -100,6 +100,12 @@ struct ZmxInstallSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let endsSessionsWarning {
+                    Label(endsSessionsWarning, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -114,6 +120,11 @@ struct ZmxInstallSheet: View {
     private var explanation: String {
         switch flow.phase {
         case .done:
+            if let ended = flow.endedSessions, ended > 0 {
+                return String(localized: """
+                Done. Macterm ended \(ended) sessions of the old zmx on the host. New tabs and splits use this zmx.
+                """)
+            }
             return String(localized: """
             Done. New tabs and splits use this zmx. A session that is running keeps its old daemon \
             until you create it again.
@@ -162,6 +173,16 @@ struct ZmxInstallSheet: View {
         case .current:
             return String(localized: "The host already runs the build this Macterm pins.")
         }
+    }
+
+    /// Said under the explanation when the update must end the host's
+    /// sessions (`ZmxHostState.installEndsSessions`).
+    private var endsSessionsWarning: String? {
+        guard flow.phase == .checked, flow.offer != nil, flow.installEndsSessions else { return nil }
+        return String(localized: """
+        zmx 1.0 cannot reach the sessions that the host's older zmx started. The update ends every \
+        Macterm session on this host first, and their panes close.
+        """)
     }
 
     // MARK: - A prompt of the connection

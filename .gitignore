@@ -12,6 +12,7 @@ Macterm/Resources/*
 # silently keeping the old copy. Per-checkout state, not source.
 .ghosttykit-tag
 .zmx-tag
+.zmx-legacy-tag
 
 build/
 __pycache__/

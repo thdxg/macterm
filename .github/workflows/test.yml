@@ -93,6 +93,7 @@ jobs:
             Macterm/Resources/terminfo
             Macterm/Resources/zmx
             .zmx-tag
+            .zmx-legacy-tag
             .ghosttykit-tag
           # The tag stamp is cached WITH the artifacts it describes. setup.sh
           # reads a missing stamp as "provenance unknown" and warns, which a
@@ -227,6 +228,7 @@ jobs:
             Macterm/Resources/terminfo
             Macterm/Resources/zmx
             .zmx-tag
+            .zmx-legacy-tag
             .ghosttykit-tag
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
       # Runs BEFORE the DerivedData cache, which keys on what this installs.

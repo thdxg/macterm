@@ -102,6 +102,8 @@ Macterm can put its own zmx build on the host. In **Settings → Projects**, ope
 
 The sheet asks the host what it is (Linux x86_64, Linux aarch64 or macOS) and which zmx it runs, and tells you what it will do. Nothing on the host changes until you click **Install** or **Update**. If the host asks for a password, a passphrase or a host key, the sheet asks you. The binary comes from Macterm, not from the internet of the host, and Macterm checks its checksum first. It goes to `~/.local/bin/zmx`, which the panes of Macterm find. When the host already has another zmx first in its PATH, Macterm sets the **zmx path** of the project to the new one.
 
+> zmx 1.0 cannot connect to a session that an older zmx started. When the zmx on the host is older than 1.0, **Update** ends every Macterm session on the host first, and their panes close. The sheet tells you before you click. If you update zmx on a host yourself, end its sessions first with `zmx kill`.
+
 A session that is running keeps its old zmx until you close and open it again. Macterm's build has fixes that its remote panes rely on, for example the foreground reports (see "Tab names and busy panes"). Choose **Install zmx on Host…** again after a Macterm update to get the build that it pins.
 
 ## Limitations

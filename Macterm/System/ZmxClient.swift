@@ -76,31 +76,33 @@ extension ZmxClient {
     static let subprocessTimeout: Duration = .seconds(5)
 
     static let live: ZmxClient = {
-        // The bundled binary at Contents/Resources/zmx/zmx (embed-zmx.sh).
-        let cachedBundledURL: URL? = Bundle.main.url(
-            forResource: "zmx",
-            withExtension: nil,
-            subdirectory: "zmx"
-        )
-
         @Sendable
         func resolveExecutable() -> URL? {
-            guard let url = cachedBundledURL else { return nil }
+            guard let url = bundledExecutable(.v1) else { return nil }
             return liveBypass == nil ? url : nil
-        }
-
-        @Sendable
-        func bundledExecutable() -> URL? {
-            cachedBundledURL
         }
 
         // Every local `zmx ls` goes through this one gate: see `ZmxListingGate`.
         let listingGate = ZmxListingGate()
 
+        /// One `zmx ls` for each protocol directory that holds sessions:
+        /// v1 always, the legacy binary only while a session of an older
+        /// Macterm is left. nil when either listing fails: a listing that
+        /// misses half of the sessions must not reach the reaper.
         @Sendable
         func listLocal() async -> String? {
             await listingGate.run {
-                await runZmx(["ls"], executable: bundledExecutable(), captureStdout: true)
+                let base = ZmxSocketBudget.socketDir()
+                var listings: [String] = []
+                for proto in ZmxProtocol.allCases {
+                    guard let executable = bundledExecutable(proto) else { continue }
+                    let dir = proto.socketDir(base: base)
+                    if proto == .legacy, !ZmxSessionLocator.holdsMactermSessions(directory: dir) { continue }
+                    guard let stdout = await runZmx(["ls"], executable: executable, zmxDir: dir, captureStdout: true)
+                    else { return nil }
+                    listings.append(stdout)
+                }
+                return listings.joined(separator: "\n")
             }
         }
 
@@ -113,9 +115,18 @@ extension ZmxClient {
         // record, not $HOME) covers background ops too.
         return ZmxClient(
             executableURL: resolveExecutable,
-            isBundled: { bundledExecutable() != nil },
+            isBundled: { bundledExecutable(.v1) != nil },
             killSession: { sessionID in
-                _ = await runZmx(["kill", sessionID], executable: bundledExecutable())
+                // In every directory that has the session: a stale legacy
+                // socket must not keep a live v1 session of the same name.
+                let base = ZmxSocketBudget.socketDir()
+                for proto in ZmxSessionLocator.protocolsHolding(sessionID, base: base) {
+                    _ = await runZmx(
+                        ["kill", sessionID],
+                        executable: bundledExecutable(proto),
+                        zmxDir: proto.socketDir(base: base)
+                    )
+                }
             },
             killRemoteSession: { remote, sessionID, zmxPath in
                 guard let argv = RemoteSpawn.opArgv(
@@ -185,6 +196,31 @@ extension ZmxClient {
             }
         )
     }()
+
+    /// The bundled binary of each protocol, in Contents/Resources/zmx
+    /// (embed-zmx.sh). nil when it is not bundled: a checkout without
+    /// `mise run setup`, or a later Macterm that no longer ships the legacy
+    /// binary.
+    static func bundledExecutable(_ proto: ZmxProtocol) -> URL? {
+        bundledExecutables[proto]
+    }
+
+    private static let bundledExecutables: [ZmxProtocol: URL] = ZmxProtocol.allCases.reduce(into: [:]) { found, proto in
+        found[proto] = Bundle.main.url(forResource: proto.executableName, withExtension: nil, subdirectory: "zmx")
+    }
+
+    /// How the surface of a LOCAL pane runs `zmx attach` for `sessionID`, or
+    /// nil when it runs no zmx (zmx not bundled, or bypassed). Cheap enough
+    /// for the main thread: a stat and, for a legacy socket, one connect.
+    static func liveAttachLaunch(sessionID: String) -> ZmxAttach.Launch? {
+        guard liveBypass == nil else { return nil }
+        return ZmxAttach.launch(
+            sessionID: sessionID,
+            base: ZmxSocketBudget.socketDir(),
+            executable: { bundledExecutable($0)?.path },
+            legacySessionIsLive: { ZmxSessionLocator.isListening(socketPath: $0) }
+        )
+    }
 
     /// See the PATH-resolution note above `return ZmxClient(` in `live`.
     private static let remoteSSHExecutable = URL(fileURLWithPath: "/usr/bin/env")
@@ -282,19 +318,24 @@ extension ZmxClient {
     private static func runZmx(
         _ arguments: [String],
         executable: URL?,
+        zmxDir: String? = nil,
         captureStdout: Bool = false,
         timeout: Duration = subprocessTimeout
     ) async -> String? {
         guard let outcome = await runZmxProcess(
-            arguments, executable: executable, captureStdout: captureStdout, timeout: timeout
+            arguments, executable: executable, zmxDir: zmxDir, captureStdout: captureStdout, timeout: timeout
         ), outcome.exitStatus == 0
         else { return nil }
         return captureStdout ? outcome.stdout : nil
     }
 
+    /// `zmxDir`: the socket directory of a LOCAL operation, which is
+    /// pinned as `ZMX_DIR` (see `ZmxProtocol`). nil for a remote operation:
+    /// ssh carries no such variable to the host.
     private static func runZmxProcess(
         _ arguments: [String],
         executable: URL?,
+        zmxDir: String? = nil,
         captureStdout: Bool = false,
         timeout: Duration = subprocessTimeout
     ) async -> SubprocessOutcome? {
@@ -306,7 +347,7 @@ extension ZmxClient {
         // Pin ZMX_DIR so the subprocess resolves the same socket dir as the
         // wrapped shell (defense-in-depth against env divergence).
         var env = ProcessInfo.processInfo.environment
-        env["ZMX_DIR"] = ZmxSocketBudget.socketDir(env: env)
+        if let zmxDir { env["ZMX_DIR"] = zmxDir }
         process.environment = env
 
         // macOS pipe buffer is ~64KB; a child that emits more without us draining
@@ -685,12 +726,24 @@ enum ZmxSocketBudget {
     /// Worst-case `macterm-<slug>-<hex>` name (33 bytes with a full-length slug).
     static let sessionNameByteCount = ZmxSessionName.maxByteCount
 
-    /// Resolved zmx socket dir: `ZMX_DIR`, then `XDG_RUNTIME_DIR`/zmx, then
-    /// `TMPDIR`/zmx-<uid>, then `/tmp/zmx-<uid>`. Mirrors zmx's own resolver
-    /// (incl. trailing-slash trim) so kill and the wrapped shell can't diverge.
-    /// `env` is injectable for deterministic tests.
+    /// The resolved base socket dir: `ZMX_DIR`, then `XDG_RUNTIME_DIR`/zmx,
+    /// then `TMPDIR`/zmx-<uid>, then `/tmp/zmx-<uid>`. Mirrors zmx's own
+    /// resolver (incl. trailing-slash trim) so kill and the wrapped shell
+    /// can't diverge. The sessions of each wire protocol live in their own
+    /// directory under it (`ZmxProtocol.socketDir`).
+    ///
+    /// A `ZMX_DIR` that names a protocol directory is a pane's own pin (an
+    /// app launched from a Macterm pane, `mise run run`, inherits it), so
+    /// its parent is the base. `env` is injectable for deterministic tests.
     static func socketDir(env: [String: String] = ProcessInfo.processInfo.environment) -> String {
-        if let custom = env["ZMX_DIR"], !custom.isEmpty { return custom }
+        if let custom = env["ZMX_DIR"], !custom.isEmpty {
+            let trimmed = trimTrailingSlash(custom)
+            let url = URL(fileURLWithPath: trimmed)
+            if ZmxProtocol.allCases.contains(where: { $0.directoryName == url.lastPathComponent }) {
+                return url.deletingLastPathComponent().path
+            }
+            return custom
+        }
         let uid = getuid()
         if let xdg = env["XDG_RUNTIME_DIR"], !xdg.isEmpty { return "\(trimTrailingSlash(xdg))/zmx" }
         if let tmp = env["TMPDIR"], !tmp.isEmpty { return "\(trimTrailingSlash(tmp))/zmx-\(uid)" }
@@ -706,14 +759,108 @@ enum ZmxSocketBudget {
     }
 
     /// Non-nil reason when `<dir>/macterm-<UUID>` would not fit; nil = safe.
+    /// Measured in the v1 directory, the longer one, where every new
+    /// session goes.
     static func probe(env: [String: String] = ProcessInfo.processInfo.environment) -> String? {
-        let dir = socketDir(env: env)
+        let dir = ZmxProtocol.v1.socketDir(base: socketDir(env: env))
         let totalLen = dir.utf8.count + 1 + sessionNameByteCount
         let budget = sunPathLimit - safetyMargin
         if totalLen > budget {
             return "socket path \(totalLen)B exceeds budget \(budget)B (dir=\(dir))"
         }
         return nil
+    }
+}
+
+/// The zmx wire protocols that Macterm meets on this Mac.
+///
+/// zmx 1.0 froze its IPC framing at an 8-byte header with a protocol
+/// version. Before it, the header was 5 bytes. The two never talk: a v1
+/// client that attaches to an older daemon hangs on its first message,
+/// and an older client gets no reply from a v1 daemon. A session daemon
+/// outlives every Macterm update (a quit only detaches), so the sessions
+/// that an older Macterm started are still there after the update.
+///
+/// Each protocol therefore has its own binary and its own socket
+/// directory, and a session is always reached with the binary of the
+/// directory that holds it. New sessions are always v1. The legacy binary
+/// only attaches to, lists and kills the sessions that are left; when none
+/// is left, nothing runs it. A later Macterm drops it.
+enum ZmxProtocol: CaseIterable {
+    /// Before zmx 1.0: the sessions that an older Macterm started, in the
+    /// base directory, where every Macterm before this one put them.
+    case legacy
+    /// zmx 1.0 and later, wire protocol 1: every new session.
+    case v1
+
+    /// The bundled binary in Contents/Resources/zmx.
+    var executableName: String {
+        switch self {
+        case .legacy: "zmx-legacy"
+        case .v1: "zmx"
+        }
+    }
+
+    /// The name of the protocol's directory under the base, or nil for the
+    /// base itself. Named after the wire protocol version, so a later
+    /// protocol gets a directory of its own the same way.
+    var directoryName: String? {
+        switch self {
+        case .legacy: nil
+        case .v1: "1"
+        }
+    }
+
+    /// The socket directory of this protocol's sessions. The legacy binary
+    /// lists only sockets, so the v1 directory inside the base is invisible
+    /// to it, and the other way around.
+    func socketDir(base: String) -> String {
+        guard let directoryName else { return base }
+        return (base as NSString).appendingPathComponent(directoryName)
+    }
+}
+
+/// Which protocol directory holds a session. Reads the file system only.
+enum ZmxSessionLocator {
+    /// The protocols whose directory has a socket file named `sessionID`.
+    static func protocolsHolding(
+        _ sessionID: String,
+        base: String,
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> [ZmxProtocol] {
+        ZmxProtocol.allCases.filter { proto in
+            fileExists((proto.socketDir(base: base) as NSString).appendingPathComponent(sessionID))
+        }
+    }
+
+    /// Whether `directory` has any `macterm-*` socket. Without one, the
+    /// legacy binary has nothing to list.
+    static func holdsMactermSessions(directory: String) -> Bool {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory)) ?? []
+        return names.contains { $0.hasPrefix(ZmxSessionName.prefix) }
+    }
+
+    /// Whether a daemon listens on the unix socket at `socketPath`. A
+    /// connect to a unix socket answers at once: a live listener accepts
+    /// into its backlog, and a socket file with no daemon refuses.
+    static func isListening(socketPath: String) -> Bool {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = Array(socketPath.utf8)
+        let capacity = MemoryLayout.size(ofValue: address.sun_path)
+        guard pathBytes.count < capacity else { return false }
+        withUnsafeMutableBytes(of: &address.sun_path) { raw in
+            raw.copyBytes(from: pathBytes)
+            raw[pathBytes.count] = 0
+        }
+        let length = socklen_t(MemoryLayout<sockaddr_un>.size)
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, length) }
+        }
+        return result == 0
     }
 }
 
@@ -814,5 +961,38 @@ enum ZmxAttach {
     static func wrapperArgv(executablePath: String?, sessionID: String) -> [String] {
         guard let executablePath else { return [] }
         return [executablePath, "attach", sessionID]
+    }
+
+    /// How a surface runs `zmx attach`: the wrapper argv and the socket
+    /// directory to pin as `ZMX_DIR` for it, its daemon and its shell.
+    struct Launch: Equatable {
+        let protocolVersion: ZmxProtocol
+        let argv: [String]
+        let socketDir: String
+    }
+
+    /// The launch for `sessionID`. A session that an older Macterm started
+    /// (a live socket in the legacy directory) is reattached with the
+    /// legacy binary; anything else, a new session included, is v1. A
+    /// legacy socket file with no daemon is a session that ended: v1 starts
+    /// it again. nil when the v1 binary is not there. Pure.
+    static func launch(
+        sessionID: String,
+        base: String,
+        executable: (ZmxProtocol) -> String?,
+        legacySessionIsLive: (String) -> Bool
+    ) -> Launch? {
+        let legacyDir = ZmxProtocol.legacy.socketDir(base: base)
+        if let legacy = executable(.legacy),
+           legacySessionIsLive((legacyDir as NSString).appendingPathComponent(sessionID))
+        {
+            return Launch(protocolVersion: .legacy, argv: wrapperArgv(executablePath: legacy, sessionID: sessionID), socketDir: legacyDir)
+        }
+        guard let v1 = executable(.v1) else { return nil }
+        return Launch(
+            protocolVersion: .v1,
+            argv: wrapperArgv(executablePath: v1, sessionID: sessionID),
+            socketDir: ZmxProtocol.v1.socketDir(base: base)
+        )
     }
 }

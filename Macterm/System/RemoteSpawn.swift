@@ -270,6 +270,19 @@ enum RemoteSpawn {
     && "\(zmxInstallDirectory)/zmx" version | head -n 1
     """
 
+    /// Ends every `macterm-*` session of the zmx at `oldZmx`, then prints
+    /// `ended=<count>`. Run before the install when the host's zmx is older
+    /// than 1.0 (`ZmxHostState.installEndsSessions`): zmx 1.0 cannot reach a
+    /// session that an older zmx started, and a pane that reattaches to one
+    /// hangs. The listing's words are `name=<session>`, as in the probe.
+    static func zmxEndSessionsScript(oldZmx: String) -> String {
+        let zmx = posixDoubleQuote(oldZmx)
+        return """
+        n=0; for w in $(\(zmx) ls 2>/dev/null); do case "$w" in name=macterm-*) \
+        \(zmx) kill "${w#name=}" >/dev/null 2>&1 && n=$((n+1));; esac; done; printf "ended=%s\\n" "$n"
+        """
+    }
+
     /// argv for the host check, run under a pty (`TTYCommand`), so ssh may
     /// ask for a password or a host key: no `BatchMode`, a longer connect
     /// timeout than a poll gets. nil for a local path.
@@ -299,12 +312,18 @@ enum RemoteSpawn {
     }
 
     /// argv for the move into place and the check of the installed binary.
-    static func zmxInstallArgv(remote: ProjectPath) -> [String]? {
+    /// `endingSessionsOf`: the host's old zmx, whose sessions end first
+    /// (`zmxEndSessionsScript`); nil to leave every session running.
+    static func zmxInstallArgv(remote: ProjectPath, endingSessionsOf oldZmx: String? = nil) -> [String]? {
         guard case let .remote(user, host, _) = remote else { return nil }
+        let script = assertSingleQuoteFree(
+            (oldZmx.map { zmxEndSessionsScript(oldZmx: $0) + "; " } ?? "") + zmxInstallScript,
+            onViolation: .failNonZero
+        )
         return [
             "ssh", "-o", "ConnectTimeout=\(installConnectTimeoutSeconds)",
             destination(user: user, host: host),
-            "\(remoteShell) \(shellQuote(zmxInstallScript))",
+            "\(remoteShell) \(shellQuote(script))",
         ]
     }
 

@@ -2975,6 +2975,22 @@
         }
       }
     },
+    "Done. Macterm ended %lld sessions of the old zmx on the host. New tabs and splits use this zmx." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "완료. Macterm이 호스트에서 이전 zmx의 세션 %lld개를 종료했습니다. 새 탭과 분할은 이 zmx를 사용합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成。Macterm 已结束主机上旧 zmx 的 %lld 个会话。新标签页和分割窗格将使用此 zmx。"
+          }
+        }
+      }
+    },
     "Done. New tabs and splits use this zmx. A session that is running keeps its old daemon until you create it again." : {
       "localizations" : {
         "ko" : {
@@ -12528,6 +12544,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "输入“%@”的密码"
+          }
+        }
+      }
+    },
+    "zmx 1.0 cannot reach the sessions that the host's older zmx started. The update ends every Macterm session on this host first, and their panes close." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "zmx 1.0은 호스트의 이전 zmx가 시작한 세션에 연결할 수 없습니다. 업데이트는 먼저 이 호스트의 모든 Macterm 세션을 종료하며, 해당 페인은 닫힙니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "zmx 1.0 无法连接到主机上旧版 zmx 启动的会话。更新会先结束此主机上的所有 Macterm 会话，这些会话的窗格将关闭。"
           }
         }
       }

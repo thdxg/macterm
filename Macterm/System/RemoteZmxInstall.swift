@@ -63,6 +63,13 @@ struct ZmxVersion: Equatable {
 
     var isFork: Bool { forkTag != nil }
 
+    /// The wire protocol this zmx speaks: 1.0 and later is v1, anything
+    /// before is legacy (`ZmxProtocol`). The two never talk.
+    var wireProtocol: ZmxProtocol {
+        let major = upstream.split(separator: ".").first.flatMap { Int($0) } ?? 0
+        return major >= 1 ? .v1 : .legacy
+    }
+
     static let forkMarker = "+thdxg."
 
     /// The version from the first line of `zmx version`, which is
@@ -96,6 +103,15 @@ struct ZmxHostState: Equatable {
     var version: ZmxVersion?
 
     var target: ZmxHostTarget? { ZmxHostTarget.detect(system: system, machine: machine) }
+
+    /// Whether installing a build of protocol `installing` must end the
+    /// host's Macterm sessions first: the host's zmx is older than 1.0 and
+    /// the build is 1.0 or later. The new zmx cannot reach the old
+    /// sessions, and a pane that reattaches to one hangs. An unknown build
+    /// ends nothing: no session ends without the evidence.
+    func installEndsSessions(installing: ZmxProtocol?) -> Bool {
+        zmxPath != nil && version?.wireProtocol == .legacy && installing == .v1
+    }
 
     /// The script prints `key=value` lines. A missing `system` or `machine`
     /// means the script did not run (an ssh that printed something else),
@@ -167,6 +183,15 @@ enum ZmxInstallVerdict: Equatable {
 /// binary for the host.
 struct ZmxRelease: Codable, Equatable {
     var tag: String
+    /// What the build's `zmx version` says, `1.0.1+thdxg.<tag>`. nil in a
+    /// file from before the field.
+    var version: String?
+
+    /// The wire protocol of the build, nil when the file does not say.
+    var wireProtocol: ZmxProtocol? {
+        version.flatMap(ZmxVersion.parse)?.wireProtocol
+    }
+
     /// Asset name → lowercase SHA-256 hex.
     var assets: [String: String]
 
@@ -204,7 +229,7 @@ struct ZmxRelease: Codable, Equatable {
             if name.hasPrefix("*") { name.removeFirst() }
             assets[name] = String(parts[0]).lowercased()
         }
-        return ZmxRelease(tag: tag, assets: assets)
+        return ZmxRelease(tag: tag, version: nil, assets: assets)
     }
 }
 

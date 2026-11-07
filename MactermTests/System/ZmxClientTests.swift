@@ -113,6 +113,71 @@ struct ZmxSocketBudgetTests {
         let reason = ZmxSocketBudget.probe(env: ["ZMX_DIR": longDir])
         #expect(reason != nil)
     }
+
+    @Test
+    func the_budget_is_measured_in_the_v1_directory() {
+        // 102 - 33 = 69 bytes of directory fit. A base of 67 fits on its own,
+        // but not with the "/1" of the v1 directory, where new sessions go.
+        let base = "/" + String(repeating: "x", count: 66)
+        #expect(base.utf8.count + 1 + ZmxSessionName.maxByteCount <= 102)
+        #expect(ZmxSocketBudget.probe(env: ["ZMX_DIR": base]) != nil)
+    }
+
+    @Test
+    func an_inherited_pin_of_a_protocol_directory_resolves_to_its_base() {
+        // A pane pins ZMX_DIR to the v1 directory; an app launched from that
+        // pane must not put its v1 sessions one level deeper.
+        #expect(ZmxSocketBudget.socketDir(env: ["ZMX_DIR": "/tmp/zmx-501/1"]) == "/tmp/zmx-501")
+        #expect(ZmxSocketBudget.socketDir(env: ["ZMX_DIR": "/tmp/zmx-501/1/"]) == "/tmp/zmx-501")
+        #expect(ZmxSocketBudget.socketDir(env: ["ZMX_DIR": "/tmp/zmx-501/10"]) == "/tmp/zmx-501/10")
+    }
+}
+
+struct ZmxProtocolTests {
+    @Test
+    func each_protocol_has_its_own_binary_and_directory() {
+        #expect(ZmxProtocol.legacy.executableName == "zmx-legacy")
+        #expect(ZmxProtocol.v1.executableName == "zmx")
+        #expect(ZmxProtocol.legacy.socketDir(base: "/tmp/zmx-501") == "/tmp/zmx-501")
+        #expect(ZmxProtocol.v1.socketDir(base: "/tmp/zmx-501") == "/tmp/zmx-501/1")
+    }
+
+    @Test
+    func a_session_is_killed_in_every_directory_that_has_it() {
+        let files: Set = ["/z/macterm-a", "/z/1/macterm-a", "/z/1/macterm-b"]
+        #expect(ZmxSessionLocator.protocolsHolding("macterm-a", base: "/z", fileExists: files.contains) == [.legacy, .v1])
+        #expect(ZmxSessionLocator.protocolsHolding("macterm-b", base: "/z", fileExists: files.contains) == [.v1])
+        #expect(ZmxSessionLocator.protocolsHolding("macterm-c", base: "/z", fileExists: files.contains).isEmpty)
+    }
+
+    @Test
+    func isListening_tells_a_live_socket_from_a_left_over_file() throws {
+        let dir = "/tmp/mtz-\(UUID().uuidString.prefix(8))"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let path = dir + "/s"
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        #expect(fd >= 0)
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        withUnsafeMutableBytes(of: &address.sun_path) { raw in
+            raw.copyBytes(from: Array(path.utf8))
+            raw[path.utf8.count] = 0
+        }
+        let bound = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        #expect(bound == 0)
+        #expect(listen(fd, 4) == 0)
+        #expect(ZmxSessionLocator.isListening(socketPath: path))
+        // The daemon is gone; its socket file is not.
+        close(fd)
+        #expect(FileManager.default.fileExists(atPath: path))
+        #expect(!ZmxSessionLocator.isListening(socketPath: path))
+        #expect(!ZmxSessionLocator.isListening(socketPath: dir + "/none"))
+    }
 }
 
 /// Two `zmx ls` at the same time count each other as a client, so Macterm's
@@ -331,6 +396,42 @@ struct ZmxReaperTests {
 }
 
 struct ZmxAttachTests {
+    private let executables: [ZmxProtocol: String] = [.legacy: "/b/zmx-legacy", .v1: "/b/zmx"]
+
+    @Test
+    func a_new_session_is_v1_in_the_v1_directory() {
+        let launch = ZmxAttach.launch(
+            sessionID: "macterm-x", base: "/z", executable: { executables[$0] }, legacySessionIsLive: { _ in false }
+        )
+        #expect(launch == .init(protocolVersion: .v1, argv: ["/b/zmx", "attach", "macterm-x"], socketDir: "/z/1"))
+    }
+
+    @Test
+    func a_live_session_of_an_older_macterm_is_reattached_with_the_legacy_binary() {
+        var asked: [String] = []
+        let launch = ZmxAttach.launch(
+            sessionID: "macterm-x", base: "/z", executable: { executables[$0] },
+            legacySessionIsLive: { asked.append($0)
+                return true
+            }
+        )
+        #expect(asked == ["/z/macterm-x"])
+        #expect(launch == .init(protocolVersion: .legacy, argv: ["/b/zmx-legacy", "attach", "macterm-x"], socketDir: "/z"))
+    }
+
+    @Test
+    func without_the_legacy_binary_every_session_is_v1() {
+        let launch = ZmxAttach.launch(
+            sessionID: "macterm-x", base: "/z", executable: { $0 == .v1 ? "/b/zmx" : nil }, legacySessionIsLive: { _ in true }
+        )
+        #expect(launch?.protocolVersion == .v1)
+    }
+
+    @Test
+    func without_the_v1_binary_there_is_no_launch() {
+        #expect(ZmxAttach.launch(sessionID: "macterm-x", base: "/z", executable: { _ in nil }, legacySessionIsLive: { _ in false }) == nil)
+    }
+
     @Test
     func wrapperArgvWrapsTheShellWhenExecutablePresent() {
         let argv = ZmxAttach.wrapperArgv(executablePath: "/path/to/zmx", sessionID: "macterm-1")

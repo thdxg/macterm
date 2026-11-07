@@ -352,7 +352,11 @@ struct RemoteZmxInstallFlowTests {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let asset = try makeAsset(in: directory)
-        let release = ZmxRelease(tag: "build-test", assets: [ZmxHostTarget.linuxX86_64.assetName: asset.sha256])
+        let release = ZmxRelease(
+            tag: "build-test",
+            version: "1.0.1+thdxg.build-test",
+            assets: [ZmxHostTarget.linuxX86_64.assetName: asset.sha256]
+        )
         let seen = LockedBox<[[String]]>([])
         let flow = RemoteZmxInstallFlow(
             request: ZmxInstallRequest(path: remote, projectID: UUID(), zmxPath: nil),
@@ -364,15 +368,18 @@ struct RemoteZmxInstallFlowTests {
             runner: scripted([
                 (0, "system=Linux\nmachine=x86_64\npath=/usr/local/bin/zmx\nversion=zmx\t\t0.6.0\n"),
                 (0, ""),
-                (0, "installed=/home/demo/.local/bin/zmx\nzmx\t\t0.8.1+thdxg.build-test\n"),
+                (0, "ended=2\ninstalled=/home/demo/.local/bin/zmx\nzmx\t\t1.0.1+thdxg.build-test\n"),
             ], seen: seen)
         )
         await flow.check()
         #expect(flow.offer == .update)
+        // 0.6.0 cannot be reached by the 1.0 build: its sessions end first.
+        #expect(flow.installEndsSessions)
         await flow.install()
         #expect(flow.phase == .done)
         #expect(flow.installedPath == "/home/demo/.local/bin/zmx")
-        #expect(flow.installedVersion == ZmxVersion(upstream: "0.8.1", forkTag: "build-test"))
+        #expect(flow.installedVersion == ZmxVersion(upstream: "1.0.1", forkTag: "build-test"))
+        #expect(flow.endedSessions == 2)
         // Another zmx came first in PATH: the project should name the new one.
         #expect(flow.installedPathDiffersFromProjectZmx)
         let argv = seen.value
@@ -381,6 +388,34 @@ struct RemoteZmxInstallFlowTests {
         #expect(argv[1].contains { $0.hasSuffix("/zmx-x86_64-linux") })
         #expect(argv[1].last == "demo@devbox:.zmx.macterm")
         #expect(argv[2].first == "ssh")
+        #expect(argv[2].last?.contains("\"/usr/local/bin/zmx\" kill") == true)
+    }
+
+    @Test
+    func only_a_host_zmx_older_than_1_0_ends_the_sessions() {
+        func state(_ version: String?) -> ZmxHostState {
+            ZmxHostState(
+                system: "Linux",
+                machine: "x86_64",
+                zmxPath: version == nil ? nil : "/usr/bin/zmx",
+                version: version.flatMap(ZmxVersion.parse)
+            )
+        }
+        #expect(state("0.8.1").installEndsSessions(installing: .v1))
+        #expect(state("0.7.1+thdxg.build-2026-11-06-0013517").installEndsSessions(installing: .v1))
+        #expect(!state("1.0.1").installEndsSessions(installing: .v1))
+        #expect(!state("1.0.1+thdxg.build-2026-11-07-aaaaaaa").installEndsSessions(installing: .v1))
+        #expect(!state("2.3.0").installEndsSessions(installing: .v1))
+        // No zmx on the host: nothing to end.
+        #expect(!state(nil).installEndsSessions(installing: .v1))
+        // A build of the same protocol, or one whose protocol is unknown,
+        // ends nothing.
+        #expect(!state("0.6.0").installEndsSessions(installing: .legacy))
+        #expect(!state("0.6.0").installEndsSessions(installing: nil))
+        #expect(ZmxRelease(tag: "t", version: "1.0.1+thdxg.t", assets: [:]).wireProtocol == .v1)
+        #expect(ZmxRelease(tag: "t", version: nil, assets: [:]).wireProtocol == nil)
+        #expect(ZmxVersion(upstream: "0.8.1", forkTag: nil).wireProtocol == .legacy)
+        #expect(ZmxVersion(upstream: "1.0.0", forkTag: nil).wireProtocol == .v1)
     }
 
     @Test

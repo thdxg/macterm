@@ -142,6 +142,16 @@ RESOURCES_MARKER="Macterm/Resources/terminfo"
 # and downloaded here, mirroring GhosttyKit — never compiled locally (zig).
 # Embedded into the bundle at Contents/Resources/zmx/zmx by embed-zmx.sh.
 ZMX_BIN="Macterm/Resources/zmx/zmx"
+# The binary for the sessions that a Macterm from before zmx 1.0 started
+# (ZmxProtocol.legacy). zmx 1.0 changed the wire framing, so the v1 binary
+# cannot reach those sessions, and a quit only detaches: they are still
+# running after the update. This binary attaches to, lists and kills them,
+# and nothing else. Its pin never moves: it is the last fork build before
+# 1.0. Drop it, with its stamp and embed-zmx.sh's copy, once a release has
+# shipped long enough that no such session is left.
+ZMX_LEGACY_TAG="build-2026-11-06-0013517"
+ZMX_LEGACY_BIN="Macterm/Resources/zmx/zmx-legacy"
+ZMX_LEGACY_STAMP=".zmx-legacy-tag"
 # Does the xcframework rooted at $1 expose the output-activity ABI Macterm's
 # activity indicator requires? Globs the slice directories rather than naming
 # one: the macOS slice's name is chosen by the fork's build (today
@@ -297,6 +307,10 @@ if [[ -x "$ZMX_BIN" ]]; then
     need_zmx=false
   fi
 fi
+need_zmx_legacy=true
+if [[ -x "$ZMX_LEGACY_BIN" && -f "$ZMX_LEGACY_STAMP" && "$(cat "$ZMX_LEGACY_STAMP")" == "$ZMX_LEGACY_TAG" ]]; then
+  need_zmx_legacy=false
+fi
 
 # The release file the app's zmx installer reads (`ZmxRelease`, #699): the tag,
 # and the SHA-256 of every asset that has a `.sha256` beside it, so a download
@@ -314,9 +328,14 @@ write_zmx_release_file() {
   local tag="$1" checksum_dir
   checksum_dir=$(mktemp -d)
   gh release download "$tag" --pattern "*.sha256" --repo "$ZMX_REPO" --dir "$checksum_dir" 2>/dev/null || true
-  python3 - "$tag" "$checksum_dir" > "$ZMX_RELEASE_FILE" <<'PY'
+  # The build's own version line (`zmx<TAB><TAB>1.0.1+thdxg.<tag>`): the
+  # installer reads the wire protocol of the build from it (ZmxRelease).
+  local version_line
+  version_line=$("$ZMX_BIN" version 2>/dev/null | head -n 1 || true)
+  python3 - "$tag" "$checksum_dir" "$version_line" > "$ZMX_RELEASE_FILE" <<'PY'
 import json, os, sys
 tag, directory = sys.argv[1], sys.argv[2]
+version = (sys.argv[3].split() or [None])[-1]
 assets = {}
 for name in sorted(os.listdir(directory)):
     if not name.endswith(".sha256"):
@@ -325,14 +344,18 @@ for name in sorted(os.listdir(directory)):
         parts = line.split()
         if len(parts) == 2 and len(parts[0]) == 64:
             assets[parts[1].lstrip("*")] = parts[0].lower()
-print(json.dumps({"tag": tag, "assets": assets}, indent=2, sort_keys=True))
+release = {"tag": tag, "assets": assets}
+if version and version[0].isdigit():
+    release["version"] = version
+print(json.dumps(release, indent=2, sort_keys=True))
 PY
   rm -rf "$checksum_dir"
 }
 # The tag the file names, empty when there is no file.
 zmx_release_file_tag() {
   [[ -f "$ZMX_RELEASE_FILE" ]] || return 0
-  python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("tag",""))' "$ZMX_RELEASE_FILE" 2>/dev/null || true
+  # A file with no version is from before the field: it counts as stale.
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("tag","") if d.get("version") else "")' "$ZMX_RELEASE_FILE" 2>/dev/null || true
 }
 # A zmx that is fresh but has no release file, or one that names another tag,
 # gets the file now. `latest` resolves to the stamp the zmx came with.
@@ -345,7 +368,7 @@ if ! $need_zmx; then
   fi
 fi
 
-if ! $need_xcframework && ! $need_resources && ! $need_zmx; then
+if ! $need_xcframework && ! $need_resources && ! $need_zmx && ! $need_zmx_legacy; then
   echo "GhosttyKit, resources and zmx are already present"
   # This is the path a settled checkout takes every time, so it is also where an
   # unstamped tree would otherwise sit unnoticed forever.
@@ -440,12 +463,25 @@ if $need_zmx; then
     resolved_zmx_tag="$ZMX_TAG"
   fi
   gh release download "$resolved_zmx_tag" --pattern "zmx-universal-macos.tar.gz" --repo "$ZMX_REPO"
-  rm -rf Macterm/Resources/zmx
+  # Only the v1 binary: the legacy binary beside it has its own pin.
+  rm -f "$ZMX_BIN"
   mkdir -p Macterm/Resources/zmx
   tar xzf zmx-universal-macos.tar.gz -C Macterm/Resources/zmx
-  chmod +x Macterm/Resources/zmx/zmx
+  chmod +x "$ZMX_BIN"
   rm zmx-universal-macos.tar.gz
   write_zmx_release_file "$resolved_zmx_tag"
   # Stamp only what this run actually installed, mirroring $TAG_STAMP.
   printf '%s\n' "$resolved_zmx_tag" > "$ZMX_TAG_STAMP"
+fi
+
+if $need_zmx_legacy; then
+  echo "Installing the legacy zmx ($ZMX_LEGACY_TAG)"
+  legacy_dir="$(mktemp -d)"
+  gh release download "$ZMX_LEGACY_TAG" --pattern "zmx-universal-macos.tar.gz" --repo "$ZMX_REPO" --dir "$legacy_dir"
+  tar xzf "$legacy_dir/zmx-universal-macos.tar.gz" -C "$legacy_dir"
+  mkdir -p Macterm/Resources/zmx
+  mv -f "$legacy_dir/zmx" "$ZMX_LEGACY_BIN"
+  chmod +x "$ZMX_LEGACY_BIN"
+  rm -rf "$legacy_dir"
+  printf '%s\n' "$ZMX_LEGACY_TAG" > "$ZMX_LEGACY_STAMP"
 fi

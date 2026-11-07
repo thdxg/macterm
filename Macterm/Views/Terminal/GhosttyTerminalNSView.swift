@@ -750,10 +750,8 @@ final class GhosttyTerminalNSView: NSView {
         // the socket-path budget) → no wrapper, a plain unpersisted shell.
         // The argv element buffers come from `cString` (freed in
         // destroySurface); the pointer array is bound around the spawn below.
-        var wrapper = remoteSpec != nil ? [] : ZmxAttach.wrapperArgv(
-            executablePath: ZmxClient.live.executableURL()?.path,
-            sessionID: sessionName
-        )
+        let zmxLaunch = remoteSpec != nil ? nil : ZmxClient.liveAttachLaunch(sessionID: sessionName)
+        var wrapper = zmxLaunch?.argv ?? []
 
         // A palette `run:` action's command, carried in the environment
         // (`CustomPaletteLaunch`): run before the shell by the bundled CLI,
@@ -788,13 +786,14 @@ final class GhosttyTerminalNSView: NSView {
                 envVars.append(ghostty_env_var_s(key: k, value: v))
             }
         }
-        if !wrapperArgv.isEmpty {
-            // Pin the socket dir into the WRAPPED SHELL's env, not just our own
-            // zmx subprocesses: a user's shell rc re-exporting ZMX_DIR/TMPDIR
-            // would otherwise move where a *nested* zmx invocation resolves
-            // sockets, past what the budget probe validated — kill and attach
-            // could then target different dirs. (Same defense Supacode ships.)
-            if let k = cString("ZMX_DIR"), let v = cString(ZmxSocketBudget.socketDir()) {
+        if let zmxLaunch {
+            // Pin the socket dir into the wrapper's env, and so the daemon's
+            // and the WRAPPED SHELL's: the wrapper finds its protocol's
+            // directory only through it (`ZmxProtocol`), and a user's shell
+            // rc re-exporting ZMX_DIR/TMPDIR would otherwise move where a
+            // *nested* zmx invocation resolves sockets, past what the budget
+            // probe validated. (Same defense Supacode ships.)
+            if let k = cString("ZMX_DIR"), let v = cString(zmxLaunch.socketDir) {
                 envVars.append(ghostty_env_var_s(key: k, value: v))
             }
         }
@@ -832,7 +831,9 @@ final class GhosttyTerminalNSView: NSView {
         // resolver's name→leader-pid cache needs a refresh to see it. (The
         // session registers asynchronously, so the first refresh may miss;
         // AppState retries while a wrapped pane is absent from `zmx ls`.)
-        if !wrapperArgv.isEmpty {
+        // The zmx launch, not the wrapper: a palette `run:` adds its own
+        // runner to the wrapper with or without zmx.
+        if zmxLaunch != nil {
             isZmxWrapped = true
             NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
         }

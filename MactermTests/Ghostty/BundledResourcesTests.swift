@@ -118,19 +118,22 @@ struct BundledResourcesTests {
         }
     }
 
-    /// Read from the test host's own bundle, which is the built app.
-    @Test
-    func bundled_zmx_is_signed_as_the_app() throws {
+    /// Read from the test host's own bundle, which is the built app. Both
+    /// binaries (`ZmxProtocol`): the legacy one still runs the attach client
+    /// of a session that an older Macterm started.
+    @Test(arguments: ZmxProtocol.allCases)
+    func bundled_zmx_is_signed_as_the_app(_ proto: ZmxProtocol) throws {
+        let name = proto.executableName
         let zmx = try #require(
-            Bundle.main.url(forResource: "zmx", withExtension: nil, subdirectory: "zmx"),
-            "zmx/zmx missing from the built bundle — run `mise run setup`"
+            ZmxClient.bundledExecutable(proto),
+            "zmx/\(name) missing from the built bundle — run `mise run setup`"
         )
         let appID = try #require(Bundle.main.bundleIdentifier)
         let signature = try Self.run("/usr/bin/codesign", ["--display", "--verbose", zmx.path])
-        #expect(signature.status == 0, "codesign could not read zmx: \(signature.output)")
+        #expect(signature.status == 0, "codesign could not read \(name): \(signature.output)")
         #expect(
             signature.output.contains("Identifier=\(appID)\n"),
-            "zmx is not signed as \(appID):\n\(signature.output)"
+            "\(name) is not signed as \(appID):\n\(signature.output)"
         )
     }
 
