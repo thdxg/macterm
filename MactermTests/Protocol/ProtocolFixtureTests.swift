@@ -13,16 +13,19 @@ struct ProtocolFixtureTests {
         let reencodes: Bool
     }
 
-    private static let fixtures: [String: (bytes: Data, reencodes: Bool)] = {
+    private static func loadFixtures() throws -> [String: (bytes: Data, reencodes: Bool)] {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // Protocol
             .deletingLastPathComponent() // MactermTests
             .deletingLastPathComponent() // repo root
             .appendingPathComponent("server/schema/frames.json")
-        let data = (try? Data(contentsOf: url)) ?? Data()
-        let list = (try? JSONDecoder().decode([Fixture].self, from: data)) ?? []
+        let list = try JSONDecoder().decode([Fixture].self, from: Data(contentsOf: url))
         return Dictionary(uniqueKeysWithValues: list.map { ($0.name, (bytes(hex: $0.frame), $0.reencodes)) })
-    }()
+    }
+
+    /// Empty if the file does not read: `every_fixture_is_here` then fails
+    /// with the error.
+    private static let fixtures = (try? loadFixtures()) ?? [:]
 
     private static func bytes(hex: String) -> Data {
         var out = Data()
@@ -46,8 +49,8 @@ struct ProtocolFixtureTests {
     }
 
     @Test
-    func every_fixture_is_here() {
-        #expect(Set(Self.fixtures.keys) == [
+    func every_fixture_is_here() throws {
+        #expect(try Set(Self.loadFixtures().keys) == [
             "hello", "refuse",
             "channel.open request", "channel.open result",
             "channel.close request", "channel.close result",

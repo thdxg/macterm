@@ -169,9 +169,9 @@ extension MactermProtocol.Request: ProtocolValue {
     }
 
     func encode(to writer: inout MessagePackWriter) {
-        var count = 2
-        if a != nil { count += 1 }
-        writer.writeMapHeader(count)
+        var keyCount = 2
+        if a != nil { keyCount += 1 }
+        writer.writeMapHeader(keyCount)
         writer.writeString("id")
         id.encode(to: &writer)
         writer.writeString("m")
@@ -211,10 +211,10 @@ extension MactermProtocol.Response: ProtocolValue {
     }
 
     func encode(to writer: inout MessagePackWriter) {
-        var count = 1
-        if ok != nil { count += 1 }
-        if err != nil { count += 1 }
-        writer.writeMapHeader(count)
+        var keyCount = 1
+        if ok != nil { keyCount += 1 }
+        if err != nil { keyCount += 1 }
+        writer.writeMapHeader(keyCount)
         writer.writeString("re")
         re.encode(to: &writer)
         if let ok {
@@ -256,9 +256,9 @@ extension MactermProtocol.ErrorInfo: ProtocolValue {
     }
 
     func encode(to writer: inout MessagePackWriter) {
-        var count = 2
-        if level != nil { count += 1 }
-        writer.writeMapHeader(count)
+        var keyCount = 2
+        if level != nil { keyCount += 1 }
+        writer.writeMapHeader(keyCount)
         writer.writeString("code")
         code.encode(to: &writer)
         writer.writeString("message")
@@ -326,9 +326,9 @@ extension MactermProtocol.Event: ProtocolValue {
     }
 
     func encode(to writer: inout MessagePackWriter) {
-        var count = 1
-        if a != nil { count += 1 }
-        writer.writeMapHeader(count)
+        var keyCount = 1
+        if a != nil { keyCount += 1 }
+        writer.writeMapHeader(keyCount)
         writer.writeString("e")
         e.encode(to: &writer)
         if let a {

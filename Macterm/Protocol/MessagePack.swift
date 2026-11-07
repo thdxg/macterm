@@ -11,6 +11,9 @@ import Foundation
 ///   comes two times.
 /// - A str must be valid UTF-8. Bytes that are not text are a bin.
 ///
+/// One difference is inherent: the cap on array memory counts Swift's
+/// stride, and Zig counts its own size of each element.
+///
 /// The types of the messages are generated from the Zig schema
 /// (`MactermProtocol.generated.swift`).
 protocol ProtocolValue: Equatable, Sendable {
@@ -128,10 +131,6 @@ struct MessagePackWriter {
         var writer = MessagePackWriter()
         value.encode(to: &writer)
         return writer.data
-    }
-
-    mutating func writeNil() {
-        bytes.append(0xC0)
     }
 
     mutating func writeBool(_ value: Bool) {
@@ -324,7 +323,11 @@ struct MessagePackReader {
         default: throw MessagePackError.wrongType
         }
         let slice = try take(length)
-        guard let string = String(bytes: slice, encoding: .utf8) else { throw MessagePackError.invalidUTF8 }
+        // Not Foundation's decoder: it drops a leading byte order mark, and
+        // the Zig side keeps every byte. Invalid UTF-8 decodes with U+FFFD,
+        // so its bytes differ from the input.
+        let string = String(decoding: slice, as: UTF8.self)
+        guard string.utf8.elementsEqual(slice) else { throw MessagePackError.invalidUTF8 }
         return string
     }
 

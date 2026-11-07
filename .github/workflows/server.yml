@@ -73,11 +73,11 @@ jobs:
       - name: Build
         run: zig build
 
-      # The Swift side of the protocol is generated from the Zig schema. As
-      # `mise run strings --check` does for the catalog, this fails on a
-      # generated file that is not current or was edited by hand, on a change
-      # that breaks the add-only rule against the metadata on main, and on a
-      # reply or an event that holds a secret (design/003 §3, design/006 §1).
+      # The Swift side of the protocol is generated from the Zig schema
+      # (design/003 §3). This step fails in three cases:
+      # - a generated file is not current, or someone edited it;
+      # - the schema breaks the add-only rule against the metadata on main;
+      # - a reply or an event holds a secret (design/006 §1).
       - name: Check the Generated Protocol Files
         if: runner.os == 'macOS'
         working-directory: .

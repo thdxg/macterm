@@ -114,6 +114,17 @@ struct MessagePackTests {
     }
 
     @Test
+    func a_str_keeps_a_byte_order_mark() throws {
+        let bytes: [UInt8] = [0xA5, 0xEF, 0xBB, 0xBF, 0x69, 0x64]
+        let text = try Self.decode(String.self, bytes)
+        #expect(Array(text.utf8) == [0xEF, 0xBB, 0xBF, 0x69, 0x64])
+        #expect(Self.encode(text) == bytes)
+        // So it is not the key `id`, and does not make a request of the body.
+        let body: [UInt8] = [0x81, 0xA4, 0xEF, 0xBB, 0xBF, 0x6D, 0x01]
+        #expect(try ProtocolControl.decode(Data(body)) == .unknown)
+    }
+
+    @Test
     func a_secret_prints_no_bytes() {
         let secret = ProtocolSecret(Data("hunter2".utf8))
         #expect("\(secret)" == "<secret>")

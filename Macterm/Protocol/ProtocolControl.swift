@@ -43,9 +43,11 @@ enum ProtocolControl: Equatable {
             }
         }
         var kind = Kind.unknown
+        // As the Zig side does: the keys at the top, with no depth for the
+        // map itself.
         var reader = MessagePackReader(body)
-        try reader.readMap { key, _ in
-            let found: Kind = switch key {
+        for _ in try 0 ..< (reader.readMapLength()) {
+            let found: Kind = switch try reader.readString() {
             case "m": .request
             case "re": .response
             case "seq": .events
@@ -54,7 +56,7 @@ enum ProtocolControl: Equatable {
             default: .unknown
             }
             kind = min(kind, found)
-            return false
+            try reader.skip()
         }
         switch kind {
         case .request:

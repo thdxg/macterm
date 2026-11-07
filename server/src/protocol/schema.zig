@@ -108,6 +108,18 @@ fn build() Metadata {
         for (messages.events, 0..) |E, i| event_out[i] = message(E);
         var type_out: [types.len]TypeDef = undefined;
         for (types, 0..) |T, i| type_out[i] = typeDef(T);
+        // Swift declares a nested type in an extension of its parent, so the
+        // parent must be a method or a type of the schema.
+        for (type_out) |t| {
+            const dot = std.mem.lastIndexOfScalar(u8, t.name, '.') orelse continue;
+            const parent = t.name[0..dot];
+            const known = for (method_out) |m| {
+                if (std.mem.eql(u8, m.type, parent)) break true;
+            } else for (type_out) |o| {
+                if (std.mem.eql(u8, o.name, parent)) break true;
+            } else false;
+            if (!known) @compileError(t.name ++ ": declare it in a method or in a type of the schema");
+        }
 
         const trust = std.meta.fieldNames(messages.Trust);
         var trust_out: [trust.len][]const u8 = undefined;
@@ -206,13 +218,17 @@ fn typeDef(comptime T: type) TypeDef {
         switch (@typeInfo(T)) {
             .@"enum" => |e| {
                 var cases: [e.field_names.len][]const u8 = undefined;
-                for (e.field_names, 0..) |name, i| cases[i] = name;
+                for (e.field_names, 0..) |name, i| {
+                    checkName(name);
+                    cases[i] = name;
+                }
                 const final = cases;
                 return .{ .name = shortName(T), .kind = .@"enum", .cases = &final };
             },
             .@"struct" => |s| {
                 var fields: [s.field_names.len]Field = undefined;
                 for (s.field_names, s.field_types, s.field_attrs, 0..) |name, F, attrs, i| {
+                    checkName(name);
                     const optional = @typeInfo(F) == .optional;
                     const Inner = if (optional) @typeInfo(F).optional.child else F;
                     if (optional and attrs.defaultValue(F) != null and attrs.defaultValue(F).? != null)
@@ -234,13 +250,36 @@ fn typeDef(comptime T: type) TypeDef {
 }
 
 /// A field's level: `T.field_since.<name>` for a field added after its type,
-/// else the type's own `since`, else 1. A new field in a type of an older
+/// else the type's own `since`, else the `since` of the method whose `Args`
+/// or `Result` it is, else 1. A new field in a type of an older
 /// level must name its level in `field_since`; `check` refuses it if not.
 fn fieldSince(comptime T: type, comptime name: []const u8) u32 {
     if (@hasDecl(T, "field_since") and @hasField(@TypeOf(T.field_since), name))
         return @field(T.field_since, name);
     if (@hasDecl(T, "since")) return T.since;
+    for (messages.methods) |M| {
+        if (T == M.Args or T == M.Result) return M.since;
+    }
     return 1;
+}
+
+/// Names that the generated Swift uses for its own locals.
+const reserved_names = [_][]const u8{ "self", "key", "reader", "writer", "key_count" };
+
+/// A field name or an enum tag must be a snake_case identifier: the Swift
+/// side compares it as a String, and only for ASCII is that the same as the
+/// byte compare of the Zig side.
+fn checkName(comptime name: []const u8) void {
+    comptime {
+        if (name.len == 0 or !std.ascii.isLower(name[0]))
+            @compileError("'" ++ name ++ "' must start with a lowercase letter");
+        for (name) |c| if (!(std.ascii.isLower(c) or std.ascii.isDigit(c) or c == '_'))
+            @compileError("'" ++ name ++ "' must be snake_case: a to z, 0 to 9 and _");
+        if (std.mem.indexOf(u8, name, "__") != null or name[name.len - 1] == '_')
+            @compileError("'" ++ name ++ "' has an _ that the Swift name cannot keep");
+        for (reserved_names) |r| if (std.mem.eql(u8, r, name))
+            @compileError("'" ++ name ++ "' is a name that the generated Swift uses");
+    }
 }
 
 fn defaultText(comptime F: type, comptime value: F) []const u8 {
@@ -334,6 +373,16 @@ pub fn check(w: *std.Io.Writer, old: ?Metadata, new: Metadata) std.Io.Writer.Err
         }
     }
 
+    for (new.types) |nt| {
+        if (findName(TypeDef, o.types, nt.name) != null) continue;
+        for (nt.fields) |nf| {
+            if (nf.since != new.level) {
+                try w.print("{s}.{s} is new, but its since is {d}, not {d}\n", .{ nt.name, nf.name, nf.since, new.level });
+                n += 1;
+            }
+        }
+    }
+
     for (o.types) |ot| {
         const nt = findName(TypeDef, new.types, ot.name) orelse {
             try w.print("type {s} was removed\n", .{ot.name});
@@ -353,6 +402,19 @@ pub fn check(w: *std.Io.Writer, old: ?Metadata, new: Metadata) std.Io.Writer.Err
                 n += 1;
             }
         }
+        // An older peer refuses a tag that it does not know, unless the enum
+        // has `unknown`.
+        const open = for (ot.cases) |c| {
+            if (std.mem.eql(u8, c, "unknown")) break true;
+        } else false;
+        if (!open) for (nt.cases) |case| {
+            for (ot.cases) |c| {
+                if (std.mem.eql(u8, c, case)) break;
+            } else {
+                try w.print("enum {s}: case {s} is new, but the enum has no unknown case\n", .{ ot.name, case });
+                n += 1;
+            }
+        };
         for (ot.fields) |of| {
             const nf = findName(Field, nt.fields, of.name) orelse {
                 try w.print("{s}.{s} was removed\n", .{ ot.name, of.name });
@@ -586,11 +648,11 @@ fn writeSwiftType(w: *std.Io.Writer, t: TypeDef) std.Io.Writer.Error!void {
             if (optionals == 0) {
                 try w.print("        writer.writeMapHeader({d})\n", .{required});
             } else {
-                try w.print("        var count = {d}\n", .{required});
+                try w.print("        var keyCount = {d}\n", .{required});
                 for (t.fields) |f| {
-                    if (f.optional) try w.print("        if {f} != nil {{ count += 1 }}\n", .{swiftCamel(f.name)});
+                    if (f.optional) try w.print("        if {f} != nil {{ keyCount += 1 }}\n", .{swiftCamel(f.name)});
                 }
-                try w.writeAll("        writer.writeMapHeader(count)\n");
+                try w.writeAll("        writer.writeMapHeader(keyCount)\n");
             }
             for (t.fields) |f| {
                 if (f.optional) {
@@ -616,6 +678,7 @@ const swift_keywords = [_][]const u8{
     "protocol", "public",        "repeat", "rethrows", "return", "self",    "Self",
     "static",  "struct",         "super",  "switch",   "throw",  "throws",  "true",
     "try",     "Type",           "typealias", "var",   "where",  "while",   "internal",
+    "deinit",  "fileprivate",    "subscript",
 };
 
 /// A Swift identifier, in backticks where it is a keyword.
@@ -894,6 +957,22 @@ test "the check refuses a removed field, message, method, type or case" {
     try testing.expectEqualStrings("type Role was removed\n", try problems(arena, base, no_type));
 }
 
+test "a new enum case needs an unknown case in the enum" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const open = try edit(arena, "[\"gui\", \"unknown\"]", "[\"gui\", \"cli\", \"unknown\"]");
+    try testing.expectEqualStrings("", try problems(arena, base, open));
+
+    const closed_old = try edit(arena, "[\"gui\", \"unknown\"]", "[\"gui\"]");
+    const closed_new = try edit(arena, "[\"gui\", \"unknown\"]", "[\"gui\", \"cli\"]");
+    try testing.expectEqualStrings(
+        "enum Role: case cli is new, but the enum has no unknown case\n",
+        try problems(arena, closed_old, closed_new),
+    );
+}
+
 test "the check refuses a changed type, default or since" {
     var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena_state.deinit();
@@ -930,6 +1009,12 @@ test "an addition needs the current level, and a new field needs a default" {
     // The level went up to 2, but the new field says 1.
     const stale = try std.mem.replaceOwned(u8, arena, good, "{\"level\": 1", "{\"level\": 2");
     try testing.expectEqualStrings("Request.hint is new, but its since is 1, not 2\n", try problems(arena, base, stale));
+
+    // A field of a new type has the current level too.
+    const new_type = try std.mem.replaceOwned(u8, arena, try edit(arena, "{\"level\": 1", "{\"level\": 2"), "\"types\": [",
+        \\"types": [{"name": "Size", "kind": "struct", "fields": [{"name": "rows", "type": "u16", "since": 1}]},
+    );
+    try testing.expectEqualStrings("Size.rows is new, but its since is 1, not 2\n", try problems(arena, base, new_type));
 
     const down = try edit(arena, "{\"level\": 1, \"min_level\": 1", "{\"level\": 0, \"min_level\": 0");
     try testing.expectEqualStrings("level went down from 1 to 0\n", try problems(arena, base, down));
