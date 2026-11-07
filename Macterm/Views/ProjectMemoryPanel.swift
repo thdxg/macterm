@@ -69,6 +69,21 @@ struct ProjectMemoryPanel: View {
                 try? await Task.sleep(for: Self.gitRefreshInterval)
             }
         }
+        .task(id: project.id) {
+            // A local repository tells the panel when its git dir changes,
+            // so a switch made anywhere moves the highlight at once
+            // (`GitDirectoryWatcher`). The watch lives as long as the task.
+            guard case let .local(path)? = ProjectPath.parse(project.path) else { return }
+            let projectID = project.id
+            let watcher = GitDirectoryWatcher(projectRoot: ProjectPath.canonicalLocal(path)) { [memory] in
+                memory.refreshGit(projectID, after: ProjectMemory.gitReadAfterDirectoryChange)
+            }
+            guard watcher != nil else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3600))
+            }
+            withExtendedLifetime(watcher) {}
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Back from another app, where the user may have committed or
             // saved files.
@@ -251,7 +266,7 @@ struct ProjectMemoryPanel: View {
             HStack(spacing: 6) {
                 outcomeGlyph(.failure)
                 Text(verbatim: entry.command ?? "")
-                    .font(.callout.monospaced())
+                    .font(.terminal(.callout))
                     .lineLimit(2)
                     .truncationMode(.middle)
             }
@@ -262,7 +277,7 @@ struct ProjectMemoryPanel: View {
             }
             if let tail = entry.failureTail {
                 Text(verbatim: tail)
-                    .font(.caption.monospaced())
+                    .font(.terminal(.caption))
                     .foregroundStyle(MactermTheme.fgMuted)
                     .lineLimit(6)
                     .truncationMode(.head)
@@ -287,7 +302,7 @@ struct ProjectMemoryPanel: View {
                     // A command's middle is its distinctive part; the
                     // reason is a sentence and reads from its start.
                     Text(verbatim: action.title)
-                        .font(.callout.monospaced())
+                        .font(.terminal(.callout))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if let subtitle = action.subtitle {
@@ -358,7 +373,7 @@ struct ProjectMemoryPanel: View {
 
     /// A branch with its latest commit's age, as a card row like the
     /// Suggested ones. The current branch is a row like the others, with the
-    /// accent as its fill, the filled check and a bold name; one style for
+    /// accent as its fill and a bold name; one style for
     /// every row keeps the ages in line. A click switches to the branch: a
     /// tab in its worktree, as the sidebar's Worktrees menu opens (the
     /// current branch's worktree is the project itself), or `git switch`
@@ -376,7 +391,7 @@ struct ProjectMemoryPanel: View {
                     .font(.caption)
                     .foregroundStyle(MactermTheme.fgMuted)
                 Text(verbatim: branch.name)
-                    .font(.caption.monospaced().weight(isCurrent ? .semibold : .regular))
+                    .font(.terminal(.caption, weight: isCurrent ? .semibold : .regular))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
@@ -409,6 +424,9 @@ struct ProjectMemoryPanel: View {
             line = "git switch \(branch.name)"
         }
         ProjectMemoryActions.type(line, in: project, appState: appState)
+        // A remote shell may report no command end, and a remote git dir
+        // has no watch: read the state when the switch should be done.
+        memory.refreshGit(project.id, after: .seconds(1))
     }
 
     private func branchHelp(_ branch: GitStatus.Branch, isCurrent _: Bool) -> String {
@@ -434,7 +452,7 @@ struct ProjectMemoryPanel: View {
             HStack(spacing: 6) {
                 outcomeGlyph(entry.outcome)
                 Text(verbatim: entry.command ?? String(localized: "Unknown command"))
-                    .font(.caption.monospaced())
+                    .font(.terminal(.caption))
                     .foregroundStyle(entry.command == nil ? MactermTheme.fgDim : MactermTheme.fg)
                     .lineLimit(1)
                     .truncationMode(.middle)

@@ -47,6 +47,14 @@ final class ProjectMemory {
     /// summary is written in the background (`scheduleBackgroundSummary`),
     /// so that a panel opened after a break shows it at once.
     @ObservationIgnored var summaryQuietPeriod: Duration = .seconds(600)
+    /// How long after a command finishes the panel reads git: long enough
+    /// for the shell to settle, short enough that a switch typed in a pane
+    /// moves the highlight at once (a local project's git dir watch is
+    /// usually first).
+    static let gitReadAfterCommand: Duration = .milliseconds(300)
+    /// How long the panel waits after a change in the git dir: a burst of
+    /// writes (a rebase, a checkout of many files) is one read.
+    static let gitReadAfterDirectoryChange: Duration = .milliseconds(250)
     @ObservationIgnored var summarizer: ProjectMemorySummarizer = .shared
     @ObservationIgnored var summaryAllowed: () -> Bool = { ProjectMemorySummarizer.isEnabled }
     @ObservationIgnored private var quietTimers: [UUID: Task<Void, Never>] = [:]
@@ -134,6 +142,10 @@ final class ProjectMemory {
     ) {
         // Taken now: the next command's Return can come before the read.
         let submission = submittedCommands.removeValue(forKey: pane.id)
+        // Any command can move the branch (`git switch`, a commit), recorded
+        // or not: memory off, a private command and a command whose text
+        // could not be read change the Git state just as well.
+        if panelShows(pane.projectID) { refreshGit(pane.projectID, after: Self.gitReadAfterCommand) }
         guard Self.isRecording, Self.covers(pane.projectID) else { return }
         let projectID = pane.projectID
         let finishedAt = Date()
@@ -157,7 +169,6 @@ final class ProjectMemory {
             else { return }
             store.append(entry, to: projectID)
             logger.debug("recorded a command in \(projectID, privacy: .public)")
-            if panelShows(projectID) { refreshGit(projectID, after: .seconds(2)) }
             scheduleBackgroundSummary(projectID)
         }
     }
@@ -260,12 +271,18 @@ final class ProjectMemory {
             // A read that a newer one replaced leaves the mark to that one.
             guard !Task.isCancelled else { return }
             readingGit.remove(projectID)
+            let previous = git[projectID]
             apply(result, to: project)
             pendingGitReads[projectID] = nil
             // A Git state the summary has not seen is news as a command is:
             // a commit from another terminal, or a project with no command
-            // yet, whose summary is its Git state alone.
-            if case .read(.some) = result, gitStateIsNews(for: project) {
+            // yet, whose summary is its Git state alone. Only a state that
+            // CHANGED: the panel reads git every 15 s and on every change
+            // in the git dir, and while no summary is on record every read
+            // is "not seen", so a read that found the same state restarted
+            // the 10-minute wait, and with the panel up the background
+            // summary never came.
+            if case let .read(status?) = result, status != previous, gitStateIsNews(for: project) {
                 scheduleBackgroundSummary(projectID)
             }
         }

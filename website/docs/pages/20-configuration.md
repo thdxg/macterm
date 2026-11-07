@@ -64,6 +64,7 @@ Macterm draws the window chrome itself. It ignores or forces these keys:
 | --- | --- |
 | `tab-inherit-working-directory` | `false` (the Macterm default) starts new tabs at the project root. `true` uses the directory of the focused pane. |
 | `split-inherit-working-directory` | The same, for splits. |
+| `font-family` | Also sets the font of the monospaced text in the Macterm UI: commands, paths, logs and keybinds in panels, sheets and Settings. Macterm uses the first family in the list that is installed, with the size and weight of each place. With no installed family, the UI uses the system monospaced font. A `font-family` in a `config-file` include does not change the UI. |
 | `focus-follows-mouse` | `true` focuses the pane under the pointer in the active window, as a click on the pane does. It never takes focus from the command palette, the search bar or a rename field. |
 | `macos-shortcuts` | Controls access to [Shortcuts](/docs/shortcuts): `ask` (default), `allow` or `deny`. |
 | `macos-icon = custom` and `macos-custom-icon` | Replaces the Dock icon. The value is the absolute path to a PNG, JPEG or ICNS file. Macterm ignores other `macos-icon` values. A custom icon replaces the [adaptive icon](/docs/finder-and-dock#adaptive-icon). |
