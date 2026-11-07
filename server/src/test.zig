@@ -12,4 +12,5 @@ comptime {
     _ = @import("client.zig");
     _ = @import("foreground.zig");
     _ = @import("posix.zig");
+    _ = @import("protocol/protocol.zig");
 }
