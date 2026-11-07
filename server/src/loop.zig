@@ -505,11 +505,10 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
                         .Capture => try daemon.handleCapture(gpa, client, &term, msg.payload),
                         .Ack, .LabelData, .Unsupported => {},
                         // `run`, `write`, `print`, `detach` and `print-env`
-                        // are gone: their requests get the reply of a tag
-                        // this daemon does not know.
+                        // are gone: their requests get `Unsupported`.
                         .Output, .DetachAll, .EnvGet, .EnvSet, .EnvData, .Run, .TaskComplete, .Write, _ => {
                             std.log.warn(
-                                "ignoring unknown IPC tag={d}",
+                                "ignoring unsupported IPC tag={d}",
                                 .{@backingInt(msg.header.tag)},
                             );
                             ipc.appendMessage(gpa, &client.write_buf, .Unsupported, "") catch {};
@@ -908,15 +907,6 @@ pub const Daemon = struct {
         // so we can resize the pty and ghostty state.
         try ipc.appendMessage(gpa, &client.write_buf, .Resize, "");
         client.has_pending_output = true;
-    }
-
-    fn getLeaderClient(self: *Daemon) ?*Client {
-        for (self.clients.items) |client| {
-            if (self.leader_client_fd == client.socket_fd) {
-                return client;
-            }
-        }
-        return null;
     }
 
     const PTY_WRITE_BUF_MAX = 256 * 1024;
@@ -1575,15 +1565,15 @@ test "hasTerminalClient follows attach and detach" {
     try std.testing.expect(!daemon.hasTerminalClient());
 
     // A send client doesn't count.
-    const tail_client = try testClient(alloc, a[0], false);
-    try daemon.clients.append(alloc, tail_client);
+    const send_client = try testClient(alloc, a[0], false);
+    try daemon.clients.append(alloc, send_client);
     try std.testing.expect(!daemon.hasTerminalClient());
 
     // An attach client does, until it disconnects.
     const term_client = try testClient(alloc, a[1], true);
     try daemon.clients.append(alloc, term_client);
     try std.testing.expect(daemon.hasTerminalClient());
-    _ = daemon.closeClient(alloc, tail_client, 0, false);
+    _ = daemon.closeClient(alloc, send_client, 0, false);
     try std.testing.expect(daemon.hasTerminalClient());
     _ = daemon.closeClient(alloc, term_client, 0, false);
     try std.testing.expect(!daemon.hasTerminalClient());

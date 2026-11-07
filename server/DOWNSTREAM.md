@@ -112,8 +112,8 @@ path.
 
 ### Removed: the commands Macterm never calls
 
-Macterm calls `attach`, `list`, `kill`, `set`, `version` and `history`, and
-the macOS daemon runs `__daemon`. These went, with their code and tests:
+Macterm calls `attach`, `list`, `kill`, `set` and `version`, and the macOS
+daemon runs `__daemon`. These went, with their code and tests:
 
 - `run`, `wait`, `-d` and the task tracking (the bash wrapper and the exit
   marker). `Info` keeps its `task_*` fields for the wire, at zero.
@@ -127,7 +127,7 @@ A daemon replies `Unsupported` to the requests of the removed commands, as it
 does to any tag it does not know. The tags stay in `ipc.Tag`, so no number is
 used again.
 
-### `/dev/tty` with no controlling terminal is no error
+### ENXIO from `/dev/tty` is `NoDevice`
 
 `posix.open` gave `Unexpected` for `ENXIO`, which printed `unexpected errno:
 6` and a stack trace each time a process with no controlling terminal (the

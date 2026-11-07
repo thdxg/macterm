@@ -183,6 +183,16 @@ load test_helper
 # Rapid session churn (stress test for FD handling)
 # ============================================================================
 
+@test "history: does not truncate a long line" {
+  local long=1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+  start_session test-long-line sh -c "printf '%s\\n' $long; exec sleep 30"
+  wait_for_output test-long-line 12345678901234567890
+  run "$ZMX" history test-long-line
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"<1234567890"* ]]
+  [[ "$output" == *"12345678901234567890"* ]]
+}
+
 @test "churn: create and kill 5 sessions in sequence" {
   for i in 1 2 3 4 5; do
     start_session "churn-$i"

@@ -21,6 +21,10 @@ setup() {
     fi
   fi
 
+  # Inside a zmx session (a Macterm pane), attach would switch that session
+  # and not create one.
+  unset ZMX_SESSION
+
   # Isolate socket dir so tests don't interfere with real sessions or each other
   export ZMX_DIR="$BATS_TEST_TMPDIR/zmx-sockets"
   mkdir -p "$ZMX_DIR"

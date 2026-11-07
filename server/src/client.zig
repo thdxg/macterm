@@ -59,14 +59,11 @@ pub fn attach(alloc: Allocator, io: Io, name: []const u8, opts: AttachOptions) !
     const socket_path = try socket.getSocketPath(alloc, cfg.socket_dir, sesh);
     defer alloc.free(socket_path);
 
-    {
-        var daemon = Daemon.init(io, &cfg, sesh, socket_path);
-        daemon.command = opts.command;
-        if (opts.cwd) |cwd| daemon.setCwd(cwd);
-        if (opts.shell) |sh| daemon.shell = sh;
-        const is_daemon_proc = try daemon.ensureSession(io);
-        if (is_daemon_proc) std.process.exit(0);
-    }
+    var daemon = Daemon.init(io, &cfg, sesh, socket_path);
+    daemon.command = opts.command;
+    if (opts.cwd) |cwd| daemon.setCwd(cwd);
+    if (opts.shell) |sh| daemon.shell = sh;
+    if (try daemon.ensureSession(io)) std.process.exit(0);
 
     if (opts.labels) |kvs| {
         try set(alloc, io, sesh, kvs);

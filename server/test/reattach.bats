@@ -41,11 +41,13 @@ count() { "$ZMX" history "$1" | grep -o "$2" | wc -l | tr -d ' '; }
 }
 
 @test "daemon leaves DA1 to the client while one is attached" {
-  # The session's own command probes after a delay; a client is attached by
-  # then, so the daemon must stay quiet and (with no real terminal behind the
-  # fake client) the probe times out.
-  start_session test-da2 bash -c "sleep 2; $(da1_probe 1); sleep 30"
+  # The session's own command probes when a line arrives, after a client is
+  # attached, so the daemon must stay quiet and (with no real terminal behind
+  # the fake client) the probe times out.
+  start_session test-da2 bash -c "read -r _; $(da1_probe 1); sleep 30"
   fake_attach test-da2 24 80 5 &
+  until "$ZMX" list | grep -F "name=test-da2" | grep -q "clients=1"; do sleep 0.1; done
+  "$ZMX" send test-da2 $'go\n'
   wait_for_output test-da2 "DA1_TIMEOUT" 5
   kill %1 2>/dev/null || true
 }

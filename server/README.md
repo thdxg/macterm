@@ -15,8 +15,9 @@ binary that Macterm ships.
 
 `zmx help` lists them: `attach`, `send`, `list`, `get`, `set`, `clear`,
 `kill`, `history` and `version`. Macterm v1 calls `attach`, `list`, `kill`,
-`set`, `version` and `history`. The macOS daemon runs `__daemon` after it
-starts itself again (change 0004).
+`set` and `version`. The macOS daemon runs `__daemon` after it starts itself
+again (change 0004). `get`, `clear`, `send` and `history` stay for the tests
+and for a user at a shell; v2 replaces them with protocol messages.
 
 ## Build and test
 
