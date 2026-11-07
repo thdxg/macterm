@@ -1,14 +1,13 @@
 name: Test
 
-# Fork-owned (listed in DOWNSTREAM_FILES of sync-upstream.yml and
-# assert-no-drift.yml). Builds zmx and runs its test suite on every pull
-# request and every push to main, so a downstream patch is proven on CI
-# before build-zmx.yml publishes it. Nobody has to build zmx on a dev
-# machine: the macOS 27 SDK breaks the native build there, and a cross
-# build for Linux takes minutes and still needs a container to run.
+# Fork-owned. Builds zmx and runs its Zig tests on every pull request and
+# every push to main, so a change is proven on CI before build-zmx.yml
+# publishes it. Nobody has to build zmx on a dev machine: the macOS 27 SDK
+# breaks the native build there, and a cross build for Linux takes minutes
+# and still needs a container to run.
 #
 # Linux runs the tests natively. macOS is where the published binary runs
-# and where patches 0001, 0002 and 0004 live, so it runs the tests too and
+# and where change 0004 (see DOWNSTREAM.md) runs, so it runs the tests too and
 # compiles the x86_64 slice that build-zmx.yml lipos in.
 
 on:
