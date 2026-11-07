@@ -42,6 +42,20 @@ jobs:
               - ".github/workflows/benchmark.yml"
               # The Xcode pin lives here; a bump must re-measure against it.
               - ".github/actions/select-xcode/**"
+              # The session server that the app bundles.
+              - "server/**"
+              - "protocol/**"
+              - ".github/workflows/server-build.yml"
+
+  # The session server of this commit (server-build.yml), for the app and for
+  # the Linux session benchmark.
+  server:
+    name: Server
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/server-build.yml
 
   # Fetch the latest main baseline in parallel with the build+sample job. It's
   # pure GitHub API + a download with no dependency on the build, so keeping it
@@ -94,13 +108,14 @@ jobs:
 
   benchmark:
     name: Window states
-    needs: [changes, baseline]
+    needs: [changes, baseline, server]
     # `baseline` is skipped on pushes to main (it's PR-only); always() lets this
     # job run anyway, gated on the real condition. A failed baseline fetch must
     # not block the benchmark — the report just falls back to absolute values.
     if: |
       always() && needs.changes.outputs.swift == 'true'
       && needs.baseline.result != 'cancelled'
+      && needs.server.result == 'success'
     runs-on: xcode-27
     timeout-minutes: 40
     # Read-only: the label/comment writes live in benchmark-report.yml, which
@@ -139,8 +154,6 @@ jobs:
             GhosttyKit.xcframework
             Macterm/Resources/ghostty
             Macterm/Resources/terminfo
-            Macterm/Resources/zmx
-            .zmx-tag
             .ghosttykit-tag
           # The tag stamp is cached with the artifacts it describes (test.yml).
           #
@@ -149,6 +162,12 @@ jobs:
           # forever (see test.yml for the full rationale). Without it, a new
           # week starts empty and setup re-downloads the current `latest`.
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
+
+      - name: Download the Server
+        uses: actions/download-artifact@v8
+        with:
+          name: server
+          path: build/server
 
       # Runs BEFORE the DerivedData cache, which keys on what this installs.
       - name: Setup GhosttyKit
@@ -264,7 +283,7 @@ jobs:
   # sshd and netem are an apt install there.
   session-linux:
     name: Session Layer (Linux)
-    needs: changes
+    needs: [changes, server]
     if: needs.changes.outputs.swift == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -274,20 +293,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # The zmx that setup.sh pins, checked against the release's own
-      # SHA-256.
-      - name: Download zmx
+      # The Linux x86_64 server of this commit, checked against its SHA-256.
+      - name: Download the Server
+        uses: actions/download-artifact@v8
+        with:
+          name: server
+          path: build/server
+
+      - name: Unpack the Server
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEY: ${{ needs.server.outputs.key }}
         run: |
-          tag=$(sed -n 's/^ZMX_TAG="${ZMX_TAG:-\(.*\)}"$/\1/p' scripts/setup.sh)
-          echo "zmx $tag"
-          mkdir -p zmx && cd zmx
-          gh release download "$tag" --repo thdxg/zmx \
-            --pattern zmx-x86_64-linux.tar.gz --pattern zmx-x86_64-linux.tar.gz.sha256
-          sha256sum -c zmx-x86_64-linux.tar.gz.sha256
-          tar xzf zmx-x86_64-linux.tar.gz
-          ./zmx version
+          name="macterm-$KEY-x86_64-linux.tar.gz"
+          (cd build/server && sha256sum -c "$name.sha256")
+          mkdir -p zmx
+          tar xzf "build/server/$name" -C zmx zmx
+          zmx/zmx version
 
       - name: Start sshd on localhost
         run: |

@@ -1,0 +1,138 @@
+name: Server Build
+
+# Builds the session server from server/ for every target that the app
+# carries (scripts/build-server.sh: macOS universal, Linux x86_64 and aarch64)
+# and gives the tarballs to the calling workflow as the artifact `server`. A
+# job that builds the app downloads it into build/server before setup, and
+# setup installs it from there.
+#
+# The build key is the tree hash of server/ and protocol/ (build-server.sh).
+# With `prebuilt`, the job takes the build for the key from the
+# `server-prebuilt` release when it is there. Without it (the release
+# workflows), it always builds from the commit.
+#
+# A build that this job made goes to the `server-prebuilt` release, so that
+# setup on a Mac without Zig can download it. A pull request from a fork has
+# a read-only token and uploads nothing. Assets older than 90 days are
+# removed.
+#
+# macos-15: lipo needs macOS, and zig cannot link with Xcode 26.4 or later
+# (zig#31658). The xcode-27 image has nothing older.
+
+on:
+  workflow_call:
+    inputs:
+      prebuilt:
+        description: Take the prebuilt for the key when the release has it.
+        type: boolean
+        default: true
+      ref:
+        description: The commit to build. Empty means the commit of the event.
+        type: string
+        default: ""
+    outputs:
+      key:
+        description: The build key.
+        value: ${{ jobs.build.outputs.key }}
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE: server-prebuilt
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Key
+        id: key
+        run: |
+          key="$(scripts/build-server.sh key)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "zig=$(scripts/build-server.sh zig-version)" >> "$GITHUB_OUTPUT"
+          echo "Server build key: $key" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Download the Prebuilt
+        id: prebuilt
+        if: inputs.prebuilt
+        env:
+          KEY: ${{ steps.key.outputs.key }}
+        run: |
+          mkdir -p build/server
+          found=false
+          if gh release download "$RELEASE" --repo "$GITHUB_REPOSITORY" \
+              --dir build/server --pattern "macterm-$KEY-*"; then
+            found=true
+            for target in universal-macos x86_64-linux aarch64-linux; do
+              name="macterm-$KEY-$target.tar.gz"
+              if ! (cd build/server && shasum -a 256 -c "$name.sha256"); then
+                found=false
+              fi
+            done
+          fi
+          if [[ "$found" != true ]]; then
+            echo "No complete prebuilt for $KEY. Building it."
+            rm -rf build/server
+          fi
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+
+      - name: Install Zig
+        if: steps.prebuilt.outputs.found != 'true'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ steps.key.outputs.zig }}
+
+      - name: Build
+        if: steps.prebuilt.outputs.found != 'true'
+        run: scripts/build-server.sh build build/server
+
+      # A release build replaces the prebuilt of its key with its own bytes
+      # (--clobber), so the checksums in that release's app always name what
+      # the release serves.
+      - name: Upload the Prebuilt
+        if: >-
+          steps.prebuilt.outputs.found != 'true'
+          && (github.event_name != 'pull_request'
+              || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          KEY: ${{ steps.key.outputs.key }}
+        run: |
+          if ! gh release view "$RELEASE" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # A second run can create it at the same time; then use theirs.
+            gh release create "$RELEASE" --repo "$GITHUB_REPOSITORY" \
+              --prerelease --latest=false --target main \
+              --title "Server prebuilts" \
+              --notes "Builds of server/ for scripts/setup.sh, named by build key. CI adds them and removes them after 90 days. They are not a release of Macterm." \
+              || gh release view "$RELEASE" --repo "$GITHUB_REPOSITORY" > /dev/null
+          fi
+          gh release upload "$RELEASE" --repo "$GITHUB_REPOSITORY" --clobber build/server/macterm-"$KEY"-*
+
+      - name: Remove Old Prebuilts
+        if: >-
+          steps.prebuilt.outputs.found != 'true'
+          && (github.event_name != 'pull_request'
+              || github.event.pull_request.head.repo.full_name == github.repository)
+        run: |
+          cutoff="$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ)"
+          release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE" --jq .id)"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" \
+            --jq ".[] | select(.created_at < \"$cutoff\") | \"\(.id) \(.name)\"" |
+            while read -r id name; do
+              echo "Removing $name"
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+            done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: server
+          path: build/server/
+          if-no-files-found: error
+          retention-days: 3

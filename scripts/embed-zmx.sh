@@ -10,7 +10,7 @@ set -euo pipefail
 # Prefer Xcode's SRCROOT (build-phase env); fall back to the repo root so the
 # script is runnable standalone.
 srcroot="${SRCROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-# The prebuilt binary downloaded by setup.sh from the thdxg/zmx release.
+# The server that setup.sh built from server/ or downloaded as its prebuilt.
 zmx_source="${srcroot}/Macterm/Resources/zmx/zmx"
 
 if [[ -z "${TARGET_BUILD_DIR:-}" || -z "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ]]; then
@@ -19,7 +19,7 @@ if [[ -z "${TARGET_BUILD_DIR:-}" || -z "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" 
 fi
 
 if [[ ! -x "${zmx_source}" ]]; then
-  echo "error: ${zmx_source} is not there. Run 'mise run setup' to download it." >&2
+  echo "error: ${zmx_source} is not there. Run 'mise run setup' to get it." >&2
   exit 1
 fi
 

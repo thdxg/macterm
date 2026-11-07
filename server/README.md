@@ -8,8 +8,10 @@ It starts as [zmx](https://github.com/neurosnap/zmx) by Eric Bower, MIT
 (`LICENSE`). Macterm's fork, `thdxg/zmx`, is upstream v1.0.1 plus the changes
 in `DOWNSTREAM.md`. Its history stays in that repository.
 
-The app still bundles the pinned fork release. This folder is not yet the
-binary that Macterm ships.
+The app bundles the build of this folder at the same commit
+(`scripts/build-server.sh`). `mise run setup` downloads the prebuilt of this
+tree from the `server-prebuilt` release, or builds it with Zig when the tree
+has changes that are not committed or no prebuilt exists.
 
 ## Commands
 

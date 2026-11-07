@@ -2,7 +2,6 @@
 set -euo pipefail
 
 FORK_REPO="thdxg/ghostty"
-ZMX_REPO="thdxg/zmx"
 XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # The pinned thdxg/ghostty release supplying BOTH GhosttyKit and the bundled
 # ghostty resources (one release, two assets).
@@ -78,24 +77,6 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # page motion of copy mode eases the viewport under smooth-scroll, as a
 # region scroll of Helix does. No C API change.
 GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-06-4ba748b}"
-# The zmx release supplying the bundled session multiplexer. Pinned for the same
-# reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
-# push to its main, so tracking `latest` meant two builds of ONE Macterm commit
-# could ship different zmx binaries — including a tagged release picking up
-# whatever landed that morning. Bumping the multiplexer is now its own
-# reviewable commit.
-#
-# It is a wire dependency, not just a binary: Macterm sends zmx's leadership
-# claim (ZmxLeadership.claimSequence) and a zmx predating that tag forwards the
-# APC to the user's shell as literal garbage instead of switching leader. That
-# is exactly what a stale CI cache did once — `Macterm/Resources/zmx` rides the
-# GhosttyKit cache, whose key hashes THIS file, so a zmx bump must change it.
-#
-# build-2026-11-07-2d98540: upstream v1.0.1 with every downstream change
-# (thdxg/zmx#19), and the fix for the daemon abort at exit on macOS 26
-# (thdxg/zmx#21). zmx 1.0 cannot talk to a session daemon from before 1.0;
-# see "The terminal core" in AGENTS.md.
-ZMX_TAG="${ZMX_TAG:-build-2026-11-07-2d98540}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.
@@ -103,8 +84,8 @@ ZMX_TAG="${ZMX_TAG:-build-2026-11-07-2d98540}"
 # Written ONLY by a run that downloaded BOTH fork artifacts (see the stamp block
 # at the bottom). It is a single scalar, so it can only honestly describe a tree
 # where both came from one release. Gating it on the two dirs merely EXISTING
-# laundered a stale tree as pinned: a run that downloaded neither (say only zmx
-# was missing) or just one of the two still wrote the current pin over whatever
+# laundered a stale tree as pinned: a run that downloaded neither (say only the
+# session binary was missing) or just one of the two still wrote the current pin over whatever
 # was already there, and from then on every run saw a stamp agreeing with
 # GHOSTTYKIT_TAG and never refreshed. A real tree hit this — resources from one
 # release beside a framework from another, stamped as if both were pinned.
@@ -116,18 +97,12 @@ ZMX_TAG="${ZMX_TAG:-build-2026-11-07-2d98540}"
 # compare against, so an unstamped tree never adopts a bumped pin on its own.
 # That is what the warning is for.
 TAG_STAMP=".ghosttykit-tag"
-# Same idea for zmx, kept separate because the two move independently.
-ZMX_TAG_STAMP=".zmx-tag"
 # Marker for the downloaded upstream resources. The tarball mirrors a real
 # Ghostty.app Resources layout: ghostty/{themes,shell-integration} plus a
 # sibling terminfo/. All come from the tarball — nothing is committed — so its
 # presence signals the download ran. Keyed on terminfo/ so checkouts predating
 # the terminfo bundling (or the flat-layout interim) re-download it.
 RESOURCES_MARKER="Macterm/Resources/terminfo"
-# Prebuilt zmx session multiplexer (session persistence). Built by thdxg/zmx CI
-# and downloaded here, mirroring GhosttyKit — never compiled locally (zig).
-# Embedded into the bundle at Contents/Resources/zmx/zmx by embed-zmx.sh.
-ZMX_BIN="Macterm/Resources/zmx/zmx"
 # Does the xcframework rooted at $1 expose the output-activity ABI Macterm's
 # activity indicator requires? Globs the slice directories rather than naming
 # one: the macOS slice's name is chosen by the fork's build (today
@@ -205,6 +180,109 @@ to_epoch() {
 
 # Resolve the pin up front: the presence checks below need it to spot a bumped
 # pin. A literal tag costs nothing; only an explicit `latest` hits the network.
+# The session server, built from server/ at this commit (scripts/build-server.sh)
+# and embedded at Contents/Resources/zmx/zmx by embed-zmx.sh. The binary keeps
+# the name zmx until the app calls it by another.
+#
+# Its key is the tree hash of server/ and protocol/ (build-server.sh). In order:
+#   1. A build for the key in build/server/: CI downloads its own server build
+#      there before setup.
+#   2. With changes under server/ or protocol/ that are not committed: build
+#      with Zig. A prebuilt never stands in for source that is not committed.
+#   3. The prebuilt for the key from the server-prebuilt release, which CI on
+#      main and on pull requests from this repository uploads.
+#   4. Build with Zig.
+# Every tarball is checked against its .sha256 before it is used.
+SERVER_REPO="thdxg/macterm"
+SERVER_RELEASE="server-prebuilt"
+SERVER_DIR="Macterm/Resources/zmx"
+SERVER_STAMP=".server-key"
+SERVER_DIST="build/server"
+# The release file the app's zmx installer reads (`ZmxRelease`, #699): the key,
+# and the SHA-256 of the Linux builds, so a download for a remote host is
+# checked before it goes over ssh.
+SERVER_RELEASE_FILE="Macterm/Resources/zmx-release.json"
+SERVER_TARGETS=(universal-macos x86_64-linux aarch64-linux)
+
+# Exit 0 when $1 holds a checked tarball for every target of key $2.
+server_dist_complete() {
+  local dir="$1" key="$2" target name
+  for target in "${SERVER_TARGETS[@]}"; do
+    name="macterm-$key-$target.tar.gz"
+    [[ -f "$dir/$name" && -f "$dir/$name.sha256" ]] || return 1
+    (cd "$dir" && shasum -a 256 -c "$name.sha256" >/dev/null) || {
+      echo "error: $dir/$name does not match its SHA-256" >&2
+      return 1
+    }
+  done
+}
+
+install_server() {
+  local dir="$1" key="$2"
+  rm -rf "$SERVER_DIR"
+  mkdir -p "$SERVER_DIR"
+  tar xzf "$dir/macterm-$key-universal-macos.tar.gz" -C "$SERVER_DIR" zmx
+  chmod +x "$SERVER_DIR/zmx"
+  python3 - "$key" "$dir" > "$SERVER_RELEASE_FILE" <<'PY'
+import json, sys
+key, directory = sys.argv[1], sys.argv[2]
+assets = {}
+for target in ("x86_64-linux", "aarch64-linux"):
+    name = f"macterm-{key}-{target}.tar.gz"
+    digest = open(f"{directory}/{name}.sha256").read().split()[0].lower()
+    assert len(digest) == 64, name
+    assets[name] = digest
+print(json.dumps({"tag": key, "assets": assets}, indent=2, sort_keys=True))
+PY
+  printf '%s\n' "$key" > "$SERVER_STAMP"
+  rm -f .zmx-tag
+  echo "Installed the server $key"
+}
+
+build_server() {
+  local key="$1"
+  echo "Building the server $key with Zig"
+  if ! scripts/build-server.sh build "$SERVER_DIST"; then
+    echo "" >&2
+    echo "error: the server build failed. It needs Zig $(scripts/build-server.sh zig-version) and" >&2
+    echo "       an Xcode older than 26.4 (zig#31658). With a newer Xcode, commit and push" >&2
+    echo "       the change: CI uploads a prebuilt for it, and setup then downloads it." >&2
+    exit 1
+  fi
+}
+
+ensure_server() {
+  local key stamped="" fetched
+  key="$(scripts/build-server.sh key)"
+  [[ -f "$SERVER_STAMP" ]] && stamped="$(cat "$SERVER_STAMP")"
+  if [[ -x "$SERVER_DIR/zmx" && -f "$SERVER_RELEASE_FILE" && "$stamped" == "$key" ]]; then
+    return 0
+  fi
+  if server_dist_complete "$SERVER_DIST" "$key" 2>/dev/null; then
+    install_server "$SERVER_DIST" "$key"
+    return 0
+  fi
+  if scripts/build-server.sh dirty; then
+    echo "server/ or protocol/ has changes that are not committed"
+    build_server "$key"
+    install_server "$SERVER_DIST" "$key"
+    return 0
+  fi
+  fetched="$(mktemp -d "${TMPDIR:-/tmp}/macterm-server.XXXXXX")"
+  if gh release download "$SERVER_RELEASE" --repo "$SERVER_REPO" --dir "$fetched" \
+      --pattern "macterm-$key-*" 2>/dev/null &&
+    server_dist_complete "$fetched" "$key"; then
+    echo "Downloaded the prebuilt server $key"
+    install_server "$fetched" "$key"
+    rm -rf "$fetched"
+    return 0
+  fi
+  rm -rf "$fetched"
+  echo "No prebuilt server for $key"
+  build_server "$key"
+  install_server "$SERVER_DIST" "$key"
+}
+
 if [[ "$GHOSTTYKIT_TAG" == "latest" ]]; then
   GHOSTTY_TAG=$(gh release list --repo "$FORK_REPO" --limit 1 --json tagName -q ".[0].tagName")
   if [[ -z "$GHOSTTY_TAG" ]]; then
@@ -249,7 +327,6 @@ fi
 
 need_xcframework=true
 need_resources=true
-need_zmx=true
 if [[ -d "$XCFRAMEWORK_DIR" ]] && ! $tag_changed; then
   if has_output_activity_action "$XCFRAMEWORK_DIR"; then
     need_xcframework=false
@@ -266,73 +343,10 @@ fi
 if [[ -d "$RESOURCES_MARKER" ]] && ! $tag_changed; then
   need_resources=false
 fi
-# Presence alone is not enough: a checkout (or a restored CI cache) can hold a
-# zmx from before the pin moved, and that binary is wrong in a way nothing else
-# notices — it silently lacks wire features Macterm depends on.
-zmx_stamped_tag=""
-[[ -f "$ZMX_TAG_STAMP" ]] && zmx_stamped_tag=$(cat "$ZMX_TAG_STAMP")
-if [[ -x "$ZMX_BIN" ]]; then
-  if [[ -z "$zmx_stamped_tag" ]]; then
-    # Unstamped: provenance unknown, and every checkout predating the pin looks
-    # like this. Refresh once so it becomes knowable, rather than warning
-    # forever about a binary nobody can identify.
-    echo "The bundled zmx has no stamp (its source is unknown). Installing $ZMX_TAG"
-  elif [[ "$zmx_stamped_tag" != "$ZMX_TAG" ]]; then
-    echo "The pinned zmx release changed ($zmx_stamped_tag -> $ZMX_TAG). Refreshing it"
-  else
-    need_zmx=false
-  fi
-fi
+ensure_server
 
-# The release file the app's zmx installer reads (`ZmxRelease`, #699): the tag,
-# and the SHA-256 of every asset that has a `.sha256` beside it, so a download
-# for a remote host is checked before it goes over ssh. A release from before
-# the checksums lists no assets; the installer then says the build has no
-# binary for the host. Written with `python3` so the JSON is well-formed
-# whatever the file names hold.
-#
-# Its own step, not part of the zmx download: CI restores zmx and its stamp
-# from a cache that does not hold this file, so a zmx that needs no refresh
-# must still get its release file. The release build of 1.33.2-tip.27 shipped
-# without one, and the install sheet had nothing to offer.
-ZMX_RELEASE_FILE="Macterm/Resources/zmx-release.json"
-write_zmx_release_file() {
-  local tag="$1" checksum_dir
-  checksum_dir=$(mktemp -d)
-  gh release download "$tag" --pattern "*.sha256" --repo "$ZMX_REPO" --dir "$checksum_dir" 2>/dev/null || true
-  python3 - "$tag" "$checksum_dir" > "$ZMX_RELEASE_FILE" <<'PY'
-import json, os, sys
-tag, directory = sys.argv[1], sys.argv[2]
-assets = {}
-for name in sorted(os.listdir(directory)):
-    if not name.endswith(".sha256"):
-        continue
-    for line in open(os.path.join(directory, name)):
-        parts = line.split()
-        if len(parts) == 2 and len(parts[0]) == 64:
-            assets[parts[1].lstrip("*")] = parts[0].lower()
-print(json.dumps({"tag": tag, "assets": assets}, indent=2, sort_keys=True))
-PY
-  rm -rf "$checksum_dir"
-}
-# The tag the file names, empty when there is no file.
-zmx_release_file_tag() {
-  [[ -f "$ZMX_RELEASE_FILE" ]] || return 0
-  python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("tag",""))' "$ZMX_RELEASE_FILE" 2>/dev/null || true
-}
-# A zmx that is fresh but has no release file, or one that names another tag,
-# gets the file now. `latest` resolves to the stamp the zmx came with.
-if ! $need_zmx; then
-  release_tag="$ZMX_TAG"
-  [[ "$ZMX_TAG" == "latest" ]] && release_tag="$zmx_stamped_tag"
-  if [[ "$(zmx_release_file_tag)" != "$release_tag" ]]; then
-    echo "Writing the zmx release file for $release_tag"
-    write_zmx_release_file "$release_tag"
-  fi
-fi
-
-if ! $need_xcframework && ! $need_resources && ! $need_zmx; then
-  echo "GhosttyKit, resources and zmx are already present"
+if ! $need_xcframework && ! $need_resources; then
+  echo "GhosttyKit and resources are already present"
   # This is the path a settled checkout takes every time, so it is also where an
   # unstamped tree would otherwise sit unnoticed forever.
   warn_unstamped_artifacts
@@ -407,31 +421,4 @@ else
   # No-op when a stamp already exists and agrees: re-fetching one artifact from
   # the same pin leaves that stamp true, so there is nothing to correct.
   warn_unstamped_artifacts
-fi
-
-if $need_zmx; then
-  # Prebuilt universal (arm64+x86_64) zmx binary from the thdxg/zmx release.
-  # Universal so it execs on both Apple Silicon and Intel, matching Macterm's
-  # universal app build. Shipped as a tarball (preserves the executable bit
-  # through the GitHub asset round-trip) holding a single `zmx` binary;
-  # extracted to Macterm/Resources/zmx/zmx (gitignored).
-  if [[ "$ZMX_TAG" == "latest" ]]; then
-    resolved_zmx_tag=$(gh release list --repo "$ZMX_REPO" --limit 1 --json tagName -q ".[0].tagName")
-    if [[ -z "$resolved_zmx_tag" ]]; then
-      echo "Error: no zmx releases found in $ZMX_REPO" >&2
-      exit 1
-    fi
-    echo "ZMX_TAG=latest resolved to $resolved_zmx_tag"
-  else
-    resolved_zmx_tag="$ZMX_TAG"
-  fi
-  gh release download "$resolved_zmx_tag" --pattern "zmx-universal-macos.tar.gz" --repo "$ZMX_REPO"
-  rm -rf Macterm/Resources/zmx
-  mkdir -p Macterm/Resources/zmx
-  tar xzf zmx-universal-macos.tar.gz -C Macterm/Resources/zmx
-  chmod +x Macterm/Resources/zmx/zmx
-  rm zmx-universal-macos.tar.gz
-  write_zmx_release_file "$resolved_zmx_tag"
-  # Stamp only what this run actually installed, mirroring $TAG_STAMP.
-  printf '%s\n' "$resolved_zmx_tag" > "$ZMX_TAG_STAMP"
 fi
