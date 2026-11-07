@@ -44,6 +44,20 @@ struct RemoteZmxInstallTests {
         #expect(ZmxVersion.parse(output)?.isFork == true)
     }
 
+    /// The exact output of the pinned 1.0.1 build's `zmx version`.
+    @Test
+    func a_fork_build_on_zmx_1_0_carries_its_release_tag() {
+        let output = """
+        zmx\t\t1.0.1+thdxg.build-2026-11-07-77fc677
+        ghostty_vt\tghostty-1.4.1-dev-5UdBC-9XmgVchRr0CfxYzSRUiww0EdU1WAR3WwtMsqql
+        socket_dir\t/var/folders/ld/T/zmx-501
+        log_dir\t\t/Users/demo/.local/state/zmx/logs
+        """
+        #expect(ZmxVersion.parse(output) == ZmxVersion(upstream: "1.0.1", forkTag: "build-2026-11-07-77fc677"))
+        let state = ZmxHostState(system: "Linux", machine: "x86_64", zmxPath: "/home/demo/.local/bin/zmx", version: ZmxVersion.parse(output))
+        #expect(ZmxInstallVerdict.decide(state: state, pinnedTag: "build-2026-11-07-77fc677") == .current(ZmxVersion(upstream: "1.0.1", forkTag: "build-2026-11-07-77fc677")))
+    }
+
     @Test
     func an_upstream_version_has_no_tag() {
         #expect(ZmxVersion.parse("zmx\t\t0.8.1\nghostty_vt\t1.3.2\n") == ZmxVersion(upstream: "0.8.1", forkTag: nil))
