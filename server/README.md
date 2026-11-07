@@ -5,8 +5,8 @@ program on a pty) running when no window shows it, and lets a client attach
 to it again.
 
 It starts as [zmx](https://github.com/neurosnap/zmx) by Eric Bower, MIT
-(`LICENSE`), with its history: `git log -- server/` shows it. Macterm's fork,
-`thdxg/zmx`, is upstream v1.0.1 plus the changes in `DOWNSTREAM.md`.
+(`LICENSE`). Macterm's fork, `thdxg/zmx`, is upstream v1.0.1 plus the changes
+in `DOWNSTREAM.md`. Its history stays in that repository.
 
 The app still bundles the pinned fork release. This folder is not yet the
 binary that Macterm ships.

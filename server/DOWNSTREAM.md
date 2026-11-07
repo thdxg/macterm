@@ -1,19 +1,18 @@
 # How this fork differs from upstream zmx
 
 This folder is the session daemon of [Macterm](https://github.com/thdxg/macterm).
-It came from the fork `thdxg/zmx` (main at `2d98540`), with its history. It
-no longer syncs with [upstream zmx](https://github.com/neurosnap/zmx).
+It came from the fork `thdxg/zmx` (main at `2d98540`). The history of the fork
+stays in that repository, which is archived. It no longer syncs with [upstream zmx](https://github.com/neurosnap/zmx).
 
-- **Base:** upstream `v1.0.1` (`a35f00a` upstream; `9f980575` here, where
-  every commit of the fork moved into `server/`).
+- **Base:** upstream `v1.0.1` (`a35f00a`, in upstream and in `thdxg/zmx`).
 - **Upstream fixes** are copied by hand, with their tests, when one is worth
   it. To see what upstream did since the base, in a clone of upstream:
   `git log a35f00a..main`.
 - **Each change below was a patch** (`.github/downstream/00NN-*.patch`) that a
   daily sync applied again on top of upstream. The code now holds the changes
   directly. The numbers stay as names, because Macterm's history cites them.
-  `d03311a3` is the last commit that has the patch files:
-  `git show d03311a3:server/.github/downstream/<name>` prints one.
+  `77fc677` in `thdxg/zmx` is the last commit that has the patch files:
+  in a clone of it, `git show 77fc677:.github/downstream/<name>` prints one.
 
 ## Changes
 
