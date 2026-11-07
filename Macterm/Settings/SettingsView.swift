@@ -2283,7 +2283,7 @@ private struct KeybindButton: View {
             Text(verbatim: isCapturing
                 ? String(localized: "Press keys...", comment: "Settings → Keymaps: the keybind button while it records a chord")
                 : HotkeyRegistry.displayString(for: shortcut))
-                .font(.system(size: 12, design: .monospaced))
+                .font(.terminal(size: 12))
                 .foregroundStyle((isUnmapped && !isCapturing) ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

@@ -82,10 +82,10 @@ struct PasswordEditorSheet: View {
             Form {
                 Section {
                     TextField("Command", text: $command, prompt: Text(isPromptOnly ? "Any command" : "Required"))
-                        .font(.body.monospaced())
+                        .font(.terminal(.body))
                         .focused($focus, equals: .command)
                     TextField("Prompt", text: $prompt, prompt: Text("None — fill from the palette only"))
-                        .font(.body.monospaced())
+                        .font(.terminal(.body))
                     passwordRow
                     if let modified = entry?.modified {
                         LabeledContent("Saved") {
@@ -147,7 +147,7 @@ struct PasswordEditorSheet: View {
     private var passwordRow: some View {
         if entry == nil {
             SecureField("Password", text: Binding(get: { password ?? "" }, set: { password = $0 }))
-                .font(.body.monospaced())
+                .font(.terminal(.body))
                 .focused($focus, equals: .password)
         } else {
             LabeledContent("Password") {
@@ -158,12 +158,12 @@ struct PasswordEditorSheet: View {
                             set: { password = $0 }
                         ))
                         .labelsHidden()
-                        .font(.body.monospaced())
+                        .font(.terminal(.body))
                         .multilineTextAlignment(.trailing)
                         Button("Hide") { password = nil }
                     } else {
                         Text(verbatim: "••••••••")
-                            .font(.body.monospaced())
+                            .font(.terminal(.body))
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                         Button("Show") { reveal() }
