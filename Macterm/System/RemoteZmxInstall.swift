@@ -55,9 +55,9 @@ enum ZmxHostTarget: String, CaseIterable, Equatable {
 /// What `zmx version` on a host says: the upstream version, and the fork's
 /// release tag when the binary is one of ours.
 struct ZmxVersion: Equatable {
-    /// `0.8.1`, as upstream prints it.
+    /// `1.0.1`, as upstream prints it.
     var upstream: String
-    /// `build-2026-11-06-abcdef1` from `0.8.1+thdxg.build-2026-11-06-abcdef1`,
+    /// `build-2026-11-06-abcdef1` from `1.0.1+thdxg.build-2026-11-06-abcdef1`,
     /// nil for an upstream binary or a fork build older than the marker.
     var forkTag: String?
 
