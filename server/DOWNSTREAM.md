@@ -98,6 +98,17 @@ few seconds, and the answer was a round trip old (macterm#695).
   `src/daemonize.zig`, `src/loop.zig`, `src/main.zig`.
 - Tests: `src/foreground.zig`, `src/test.zig`.
 
+### The daemon frees only what it allocated
+
+Upstream's `Daemon.deinit` frees `socket_path`, but the caller of
+`Daemon.init` allocated it with another allocator. In a ReleaseSafe build of
+zig 0.17, `main`'s allocator is zig's `SafeAllocator` and the daemon's is
+`c_allocator`, so each daemon that exited aborted with "pointer being freed
+was not allocated" (macterm#720, Smoke on macOS 26). The caller now frees the
+path.
+
+- Code: `src/loop.zig`, `src/main.zig`. Test: `src/loop.zig`.
+
 ### Retired
 
 - 0001 (cast `log_mode`) and 0002 (portable signal type): upstream fixed both.
