@@ -41,7 +41,7 @@ pub const Error = error{
     NotAMessage,
 };
 
-pub fn writeHeader(buf: *[header_len]u8, channel: u32, kind: Kind, body_len: usize) Error!void {
+fn writeHeader(buf: *[header_len]u8, channel: u32, kind: Kind, body_len: usize) Error!void {
     if (body_len > max_body) return error.FrameTooLarge;
     std.mem.writeInt(u32, buf[0..4], @intCast(body_len), .little);
     std.mem.writeInt(u32, buf[4..8], channel, .little);

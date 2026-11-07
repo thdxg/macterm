@@ -7,9 +7,9 @@ pub const frame = @import("frame.zig");
 pub const msgpack = @import("msgpack.zig");
 pub const messages = @import("messages.zig");
 
-pub const Bin = msgpack.Bin;
-pub const Secret = msgpack.Secret;
-pub const Raw = msgpack.Raw;
+const Bin = msgpack.Bin;
+const Secret = msgpack.Secret;
+const Raw = msgpack.Raw;
 
 /// Encodes `value` and writes it as one `msg` frame.
 pub fn writeMessage(
@@ -194,6 +194,35 @@ test "a hello under min_level is refused with needs_level" {
     try testing.expectEqual(m.Negotiation{ .speak = 4 }, m.negotiate(strict, newer));
 }
 
+test "a CLI refuses any other build, at any level" {
+    var cli = hello;
+    cli.role = .cli;
+    var server = hello;
+    server.role = .server;
+    try testing.expectEqual(m.Negotiation{ .speak = m.level }, m.negotiate(server, cli));
+    server.build = "2.0.0-tip.2";
+    try testing.expectEqualStrings("build_mismatch", m.negotiate(server, cli).refuse.reason);
+    try testing.expectEqualStrings("build_mismatch", m.negotiate(cli, server).refuse.reason);
+    // Two other roles may differ in build.
+    var gui = hello;
+    gui.build = "2.0.0-tip.9";
+    try testing.expectEqual(m.Negotiation{ .speak = m.level }, m.negotiate(server, gui));
+}
+
+test "a response has exactly one of ok and err" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    try testing.expectError(error.WrongType, throughWire(arena, m.Response{ .re = 1 }));
+    try testing.expectError(error.WrongType, throughWire(arena, m.Response{
+        .re = 1,
+        .ok = .{ .bytes = &.{0x80} },
+        .err = .{ .code = "busy", .message = "Busy." },
+    }));
+    const failed = m.Response{ .re = 1, .err = .{ .code = "busy", .message = "Busy." } };
+    try testing.expectError(error.ErrorResponse, m.decodeResult(m.ChannelClose, arena, failed));
+}
+
 test "an oversized message is refused before it is written" {
     const big = try testing.allocator.alloc(u8, frame.max_body);
     defer testing.allocator.free(big);
@@ -213,8 +242,8 @@ test "the schema keeps its own rules" {
         try testing.expect(M.senders.len > 0);
         try testing.expect(!holdsSecret(M.Result));
     }
-    try testing.expect(!holdsSecret(m.Response));
-    try testing.expect(!holdsSecret(m.EventBatch));
+    // Responses and events carry `Raw`: the check is on each method's
+    // `Result` above, and on each event type when events have types.
     try testing.expect(holdsSecret(struct { a: ?[]const struct { s: Secret } }));
 }
 

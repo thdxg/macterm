@@ -90,12 +90,18 @@ pub const Negotiation = union(enum) {
 
 /// Decides the level from our `hello` and the peer's. Each side checks only
 /// its own `min_level`: if the level is under the peer's, the peer refuses.
+///
+/// The CLI is always the same build as its server (design/007), so a CLI on
+/// either side refuses any other build (`build_mismatch`). The CLI names
+/// both builds from the two hellos.
 pub fn negotiate(mine: Hello, theirs: Hello) Negotiation {
     const speak = @min(mine.level, theirs.level);
     if (speak < mine.min_level) return .{ .refuse = .{
         .reason = "level_too_low",
         .needs_level = mine.min_level,
     } };
+    if ((mine.role == .cli or theirs.role == .cli) and !std.mem.eql(u8, mine.build, theirs.build))
+        return .{ .refuse = .{ .reason = "build_mismatch", .needs_level = mine.level } };
     return .{ .speak = speak };
 }
 
@@ -111,7 +117,8 @@ pub const Request = struct {
     a: ?Raw = null,
 };
 
-/// `{re, ok}` or `{re, err}`.
+/// `{re, ok}` or `{re, err}`: exactly one of the two. `decodeControl`
+/// refuses a response with both or neither.
 pub const Response = struct {
     re: u64,
     /// The method's `Result`.
@@ -183,8 +190,14 @@ pub fn decodeArgs(comptime M: type, arena: std.mem.Allocator, req: Request) msgp
     return msgpack.decodeSlice(M.Args, arena, if (req.a) |a| a.bytes else &.{0x80});
 }
 
-pub fn decodeResult(comptime M: type, arena: std.mem.Allocator, res: Response) msgpack.DecodeError!M.Result {
-    return msgpack.decodeSlice(M.Result, arena, if (res.ok) |ok| ok.bytes else &.{0x80});
+/// `error.ErrorResponse` if the response is an error: read `res.err`.
+pub fn decodeResult(
+    comptime M: type,
+    arena: std.mem.Allocator,
+    res: Response,
+) (msgpack.DecodeError || error{ErrorResponse})!M.Result {
+    const ok = res.ok orelse return error.ErrorResponse;
+    return msgpack.decodeSlice(M.Result, arena, ok.bytes);
 }
 
 // ── Reading channel 0 ───────────────────────────────────────────────────────
@@ -226,7 +239,11 @@ pub fn decodeControl(arena: std.mem.Allocator, body: []const u8) msgpack.DecodeE
     }
     return switch (kind) {
         .request => .{ .request = try msgpack.decodeSlice(Request, arena, body) },
-        .response => .{ .response = try msgpack.decodeSlice(Response, arena, body) },
+        .response => {
+            const res = try msgpack.decodeSlice(Response, arena, body);
+            if ((res.ok == null) == (res.err == null)) return error.WrongType;
+            return .{ .response = res };
+        },
         .events => .{ .events = try msgpack.decodeSlice(EventBatch, arena, body) },
         .refuse => .{ .refuse = try msgpack.decodeSlice(Refuse, arena, body) },
         .hello => .{ .hello = try msgpack.decodeSlice(Hello, arena, body) },

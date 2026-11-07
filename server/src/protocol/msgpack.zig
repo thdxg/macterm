@@ -38,7 +38,8 @@ pub const Bin = struct {
 
 /// A password or another secret (design/006 §4). On the wire it is a bin.
 /// The type is its own, so that a check on the schema can find every field
-/// that holds one, and so that a log line prints no secret.
+/// that holds one, and so that `{f}` prints no secret. `{any}` prints the
+/// bytes: never log a message with it.
 pub const Secret = struct {
     bytes: []const u8,
 
@@ -57,6 +58,10 @@ pub const Raw = struct {
 /// not trusted, and each level is a stack frame.
 pub const max_depth = 32;
 
+/// The most memory that one decode may allocate for arrays. The input sets
+/// no useful limit: one byte of input can be a 16-byte slice in memory.
+pub const max_alloc = 1024 * 1024;
+
 pub const DecodeError = error{
     /// The input ends inside a value.
     EndOfInput,
@@ -74,6 +79,10 @@ pub const DecodeError = error{
     DuplicateField,
     /// The value is nested deeper than `max_depth`.
     TooDeep,
+    /// The arrays need more than `max_alloc` bytes.
+    TooLarge,
+    /// Bytes follow the value.
+    TrailingBytes,
     /// A type byte that MessagePack does not define (0xc1).
     InvalidFormat,
     OutOfMemory,
@@ -221,7 +230,7 @@ pub fn encodeAlloc(gpa: std.mem.Allocator, value: anytype) error{OutOfMemory}![]
 pub fn decodeSlice(comptime T: type, arena: std.mem.Allocator, bytes: []const u8) DecodeError!T {
     var r: Reader = .{ .bytes = bytes };
     const value = try r.decode(T, arena);
-    if (r.pos != bytes.len) return error.WrongType;
+    if (r.pos != bytes.len) return error.TrailingBytes;
     return value;
 }
 
@@ -229,6 +238,7 @@ pub const Reader = struct {
     bytes: []const u8,
     pos: usize = 0,
     depth: u8 = 0,
+    allocated: usize = 0,
 
     pub fn decode(r: *Reader, comptime T: type, arena: std.mem.Allocator) DecodeError!T {
         switch (T) {
@@ -269,6 +279,9 @@ pub const Reader = struct {
                 if (len > r.bytes.len - r.pos) return error.EndOfInput;
                 try r.enter();
                 defer r.depth -= 1;
+                const size = std.math.mul(usize, len, @sizeOf(p.child)) catch return error.TooLarge;
+                if (size > max_alloc - r.allocated) return error.TooLarge;
+                r.allocated += size;
                 const items = try arena.alloc(p.child, len);
                 for (items) |*item| item.* = try r.decode(p.child, arena);
                 return items;
@@ -441,18 +454,44 @@ pub const Reader = struct {
 
 const testing = std.testing;
 
-fn roundTrip(comptime T: type, value: T) !T {
+/// Encodes, decodes and encodes again. The two encodings must be equal. The
+/// fixed-byte test below proves that the encoder follows the spec, so equal
+/// bytes here mean that the decoder read the same value.
+fn roundTrip(comptime T: type, value: T) !void {
     const bytes = try encodeAlloc(testing.allocator, value);
     defer testing.allocator.free(bytes);
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const back = try decodeSlice(T, arena.allocator(), bytes);
-    // Encode again: the same bytes mean the same value, also for the slices
-    // that point into the freed input.
     const again = try encodeAlloc(testing.allocator, back);
     defer testing.allocator.free(again);
     try testing.expectEqualSlices(u8, bytes, again);
-    return value;
+}
+
+/// Encodes `value` and compares the start of the bytes with `head`.
+fn expectHead(value: anytype, head: []const u8) !void {
+    const bytes = try encodeAlloc(testing.allocator, value);
+    defer testing.allocator.free(bytes);
+    try testing.expectEqualSlices(u8, head, bytes[0..head.len]);
+}
+
+test "the encoder writes the bytes of the MessagePack spec" {
+    var long: [65536]u8 = undefined;
+    @memset(&long, 'x');
+    try expectHead(true, &.{0xc3});
+    try expectHead(@as(?u8, null), &.{0xc0});
+    try expectHead(@as([]const u8, long[0..31]), &.{0xbf});
+    try expectHead(@as([]const u8, long[0..32]), &.{ 0xd9, 32 });
+    try expectHead(@as([]const u8, long[0..256]), &.{ 0xda, 1, 0 });
+    try expectHead(@as([]const u8, long[0..65536]), &.{ 0xdb, 0, 1, 0, 0 });
+    try expectHead(Bin{ .bytes = long[0..255] }, &.{ 0xc4, 255 });
+    try expectHead(Bin{ .bytes = long[0..256] }, &.{ 0xc5, 1, 0 });
+    try expectHead(Secret{ .bytes = long[0..65536] }, &.{ 0xc6, 0, 1, 0, 0 });
+    const many: [16]u16 = @splat(1);
+    try expectHead(@as([]const u8, ""), &.{0xa0});
+    try expectHead(@as([]const u16, &.{ 1, 2 }), &.{ 0x92, 1, 2 });
+    try expectHead(@as([]const u16, &many), &.{ 0xdc, 0, 16 });
+    try expectHead(.{ .a = @as(u8, 1) }, &.{ 0x81, 0xa1, 'a', 1 });
 }
 
 test "integers use the smallest form and keep their value" {
@@ -489,9 +528,9 @@ test "strings, bin and secrets keep every length form" {
     var long: [70000]u8 = undefined;
     @memset(&long, 'x');
     for ([_]usize{ 0, 31, 32, 255, 256, 65535, 65536 }) |n| {
-        _ = try roundTrip([]const u8, long[0..n]);
-        _ = try roundTrip(Bin, .{ .bytes = long[0..n] });
-        _ = try roundTrip(Secret, .{ .bytes = long[0..n] });
+        try roundTrip([]const u8, long[0..n]);
+        try roundTrip(Bin, .{ .bytes = long[0..n] });
+        try roundTrip(Secret, .{ .bytes = long[0..n] });
     }
 }
 
@@ -501,7 +540,7 @@ test "a str that is not UTF-8 is refused, and bin carries it" {
     var w: std.Io.Writer = .fixed(&buf);
     try writeStr(&w, bad);
     try testing.expectError(error.InvalidUtf8, decodeSlice([]const u8, testing.allocator, w.buffered()));
-    _ = try roundTrip(Bin, .{ .bytes = bad });
+    try roundTrip(Bin, .{ .bytes = bad });
 }
 
 test "a secret prints no bytes" {
@@ -528,7 +567,7 @@ test "a struct round-trips, and a null optional is left out" {
         .tags = &.{ "a", "b" },
         .raw = .{ .bytes = &.{ 0x93, 1, 2, 3 } },
     };
-    _ = try roundTrip(Sample, value);
+    try roundTrip(Sample, value);
     const bytes = try encodeAlloc(testing.allocator, value);
     defer testing.allocator.free(bytes);
     try testing.expectEqual(@as(u8, 0x86), bytes[0]); // 6 keys: no `note`
@@ -578,7 +617,7 @@ test "hostile input fails cleanly" {
     for (0..good.len) |n| {
         try testing.expectError(error.EndOfInput, decodeSlice(S, arena, good[0..n]));
     }
-    // An array that claims more items than there are bytes allocates nothing.
+    // An array that claims more items than there are bytes.
     const huge = [_]u8{ 0x81, 0xa1, 'a', 0xdd, 0xff, 0xff, 0xff, 0xff };
     try testing.expectError(error.EndOfInput, decodeSlice(S, arena, &huge));
     // Deep nesting in a key that is not known.
@@ -587,6 +626,16 @@ test "hostile input fails cleanly" {
     @memset(deep[3..], 0x91);
     deep[deep.len - 1] = 0x90;
     try testing.expectError(error.TooDeep, decodeSlice(S, arena, &deep));
+    // Many small items that need much more memory than their bytes:
+    // 100k empty strings take 100 KB of input and 1.6 MB as slices.
+    const Strs = struct { a: []const []const u8 };
+    const n = 100_000;
+    const wide = try arena.alloc(u8, 3 + 5 + n);
+    wide[0..8].* = .{ 0x81, 0xa1, 'a', 0xdd, 0, 1, 0x86, 0xa0 };
+    @memset(wide[8..], 0xa0);
+    try testing.expectError(error.TooLarge, decodeSlice(Strs, arena, wide));
+    // Trailing bytes.
+    try testing.expectError(error.TrailingBytes, decodeSlice(u8, arena, &.{ 1, 2 }));
     // A key that comes two times.
     const dup = [_]u8{ 0x82, 0xa1, 'a', 0x90, 0xa1, 'a', 0x90 };
     try testing.expectError(error.DuplicateField, decodeSlice(S, arena, &dup));
