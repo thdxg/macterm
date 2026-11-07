@@ -36,7 +36,7 @@ Define a term only when it is Macterm-specific or when it is ambiguous. Do not d
 | **split** | The division of a tab into panes. As a verb, "split a pane" makes a new pane. |
 | **session** | A shell that keeps running in the background, with its programs. Each pane has one session. Use "session" for this only. |
 | **pinned tab** | A tab that belongs to no project. It sits above all projects. |
-| **unload** | End the shells of a project or a pinned tab, but keep its row. |
+| **unload** | Do not use in user text. Macterm starts and stops shells by itself. Say what happens: the processes end, and the row stays. |
 | **layout** | A YAML file that lists the tabs, splits and commands of a project. |
 | **remote project** | A project whose folder is on another machine. Its sessions run on that machine. |
 | **quick terminal** | The drop-down terminal that you open with a global keybind. |

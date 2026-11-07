@@ -601,9 +601,6 @@ struct SidebarContent: View {
             selectionItem: .tab(projectID: project.id, tabID: tab.id),
             presentation: presentation,
             isInteractive: isInteractive,
-            // Background creation can start one tab in an unloaded project;
-            // only that row revives, not the tabs still waiting for shells.
-            isUnloaded: appState.isTabUnloaded(tab, projectID: project.id),
             projectColor: project.color,
             onRename: { newName in
                 tab.customTitle = newName.isEmpty ? nil : newName
@@ -849,8 +846,6 @@ struct SidebarContent: View {
         }
         .disabled(index >= projectStore.projects.count - 1)
         Divider()
-        Button("Unload Project") { appState.requestUnloadProject(project.id) }
-            .disabled(!appState.isProjectLoaded(project.id))
         Button("Remove Project", role: .destructive) {
             appState.requestRemoveProject(project.id) { removeProject(project) }
         }
@@ -1344,10 +1339,6 @@ private struct SidebarTabRow: View {
     @Bindable
     var presentation: SidebarPresentationState
     let isInteractive: Bool
-    /// Dim the row: the tab is a layout with no shells behind it (its project
-    /// was unloaded). Matches the unloaded pinned row's treatment — secondary
-    /// title, tertiary icon, and a tooltip saying what selecting it does.
-    var isUnloaded = false
     /// The owning project's color tag, drawn on whatever glyph this row's
     /// icon slot holds — and on nothing at all when it holds none, since a
     /// tab row never carries a stripe. Nil for an untagged project and for
@@ -1396,13 +1387,10 @@ private struct SidebarTabRow: View {
 
     /// The project tag's color, or nil when the project is untagged — which
     /// is what leaves an untagged row exactly as it was, agent logos in their
-    /// brand colors included. Also nil while the row is unloaded: the dim IS
-    /// the "no shells behind this" signal, and a saturated tag beside a greyed
-    /// title reads as half-live.
+    /// brand colors included.
     @MainActor
     private var tagColor: Color? {
-        guard !isUnloaded else { return nil }
-        return projectColor.map { MactermTheme.color(for: $0) }
+        projectColor.map { MactermTheme.color(for: $0) }
     }
 
     /// The icon's style: the tag when tagged, else the hierarchical
@@ -1441,10 +1429,6 @@ private struct SidebarTabRow: View {
         .onChange(of: appState.renamingTabID) { _, id in
             if id == tab.id { beginRename() }
         }
-        // Applied only when unloaded: a live row must inherit the List's own
-        // styling, and forcing `.primary` back would flatten the white label
-        // AppKit gives a selected row.
-        .modifier(UnloadedRowStyle(isUnloaded: isUnloaded))
     }
 
     private func beginRename() {
@@ -1543,23 +1527,6 @@ private struct PinTabDropZone: View {
 /// won't fit legibly, so that row collapses back to a single title with the
 /// pane count (see `sidebarRowTitle`). The segments are a TITLE variant, not
 /// their own labels: the row carries one tab icon regardless.
-/// The dimmed treatment shared by every "not running" sidebar row: a tab
-/// whose project was unloaded, and — spelled out inline, since it has no live
-/// tab to render — a closed pinned tab.
-private struct UnloadedRowStyle: ViewModifier {
-    let isUnloaded: Bool
-
-    func body(content: Content) -> some View {
-        if isUnloaded {
-            content
-                .foregroundStyle(.secondary)
-                .help("Not running. Select it to load the project again.")
-        } else {
-            content
-        }
-    }
-}
-
 private struct TabRowTitle: View {
     let tab: TerminalTab
 

@@ -219,12 +219,9 @@ struct ScratchTabsTests {
     // MARK: - Guards
 
     @Test
-    func the_scratch_workspace_is_neither_unloaded_nor_removed() throws {
+    func the_scratch_workspace_is_never_removed() throws {
         let state = makeState()
         let id = try #require(state.createScratchTab())
-
-        state.unloadProject(scratchID)
-        #expect(state.scratchWorkspace?.tabs.map(\.id) == [id])
 
         state.removeProject(scratchID)
         #expect(state.scratchWorkspace?.tabs.map(\.id) == [id])

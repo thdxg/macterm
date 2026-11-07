@@ -59,7 +59,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case openProject
     case newRemoteProject
     case renameProject
-    case unloadProject
     case removeProject
     case replaceProjectPathWithCurrentDir
     case applyLayout
@@ -149,7 +148,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .openProject: "Open Project"
         case .newRemoteProject: "New Remote Project"
         case .renameProject: "Rename Current Project"
-        case .unloadProject: "Unload Current Project"
         case .removeProject: "Remove Current Project"
         case .replaceProjectPathWithCurrentDir: "Replace Project Path with Current Directory"
         case .files: "Files"
@@ -221,7 +219,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .openProject,
              .newRemoteProject,
              .renameProject,
-             .unloadProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,
              .applyLayout,
@@ -308,7 +305,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .saveLayout: .saveLayout
         case .newRemoteProject,
              .newDesktopWidget,
-             .unloadProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,
              .checkForUpdate: nil

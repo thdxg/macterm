@@ -251,8 +251,6 @@ private struct ProjectRow: View {
     @Environment(ProjectStore.self)
     private var projectStore
 
-    private var isLoaded: Bool { appState.isProjectLoaded(project.id) }
-
     var body: some View {
         HStack(spacing: 8) {
             // `AnyShapeStyle` because the two arms are different style types
@@ -271,12 +269,6 @@ private struct ProjectRow: View {
             }
 
             Spacer(minLength: 8)
-
-            // Only the exception is worth a badge — a loaded project is the
-            // ordinary state, so labeling every row adds noise, not signal.
-            if !isLoaded {
-                UnloadedBadge()
-            }
 
             Menu {
                 // Every mutation here stages its dialogs on this window
@@ -321,9 +313,6 @@ private struct ProjectRow: View {
 
                 Divider()
 
-                Button("Unload") { appState.requestUnloadProject(project.id, host: .settings) }
-                    .disabled(!isLoaded)
-
                 Button("Remove", role: .destructive) {
                     appState.requestRemoveProject(project.id, host: .settings) {
                         appState.removeProject(project.id)
@@ -353,20 +342,6 @@ private struct ProjectRow: View {
         case .none,
              .emptyTabs: false
         }
-    }
-}
-
-/// Marks a project with no running terminals — the state it sits in before its
-/// first open and after Unload, where the workspace layout exists but no shell
-/// does. Loaded projects carry no badge.
-private struct UnloadedBadge: View {
-    var body: some View {
-        Text("Unloaded")
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(.quaternary))
     }
 }
 

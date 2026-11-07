@@ -1675,9 +1675,7 @@ final class ControlHandler {
             path: project.path,
             active: project.id == appState.activeProjectID,
             // "Loaded" = a workspace exists (tabs/panes addressable over
-            // this protocol) — NOT `AppState.isProjectLoaded`, which asks
-            // whether live terminal *surfaces* exist and is false for a
-            // restored-but-never-shown project.
+            // this protocol), whether or not its panes have started shells.
             loaded: appState.workspaces[project.id] != nil,
             tabCount: appState.workspaces[project.id]?.tabs.count
         )
