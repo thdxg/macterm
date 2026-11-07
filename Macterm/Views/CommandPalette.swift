@@ -235,7 +235,7 @@ struct CommandPalettePanel: View {
                                 PaletteLoadingNotice(loading: loading)
                                     .frame(maxWidth: .infinity, minHeight: viewportHeight)
                             }
-                            if sections.isEmpty, failure == nil, loading == nil, !query.isEmpty {
+                            if sections.isEmpty, failure == nil, loading == nil, !PaletteQuery(raw: query).isEmpty {
                                 PaletteNoMatchesNotice()
                                     .frame(maxWidth: .infinity, minHeight: viewportHeight)
                             }
