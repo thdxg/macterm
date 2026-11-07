@@ -91,10 +91,11 @@ GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-06-4ba748b}"
 # is exactly what a stale CI cache did once — `Macterm/Resources/zmx` rides the
 # GhosttyKit cache, whose key hashes THIS file, so a zmx bump must change it.
 #
-# build-2026-11-07-77fc677: upstream v1.0.1 with every downstream change
-# (thdxg/zmx#19). zmx 1.0 cannot talk to a session daemon from before 1.0;
+# build-2026-11-07-2d98540: upstream v1.0.1 with every downstream change
+# (thdxg/zmx#19), and the fix for the daemon abort at exit on macOS 26
+# (thdxg/zmx#21). zmx 1.0 cannot talk to a session daemon from before 1.0;
 # see "The terminal core" in AGENTS.md.
-ZMX_TAG="${ZMX_TAG:-build-2026-11-07-77fc677}"
+ZMX_TAG="${ZMX_TAG:-build-2026-11-07-2d98540}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.

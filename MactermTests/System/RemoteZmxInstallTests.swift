@@ -48,21 +48,21 @@ struct RemoteZmxInstallTests {
     @Test
     func a_fork_build_on_zmx_1_0_carries_its_release_tag() {
         let output = """
-        zmx\t\t1.0.1+thdxg.build-2026-11-07-77fc677
+        zmx\t\t1.0.1+thdxg.build-2026-11-07-2d98540
         ghostty_vt\tghostty-1.4.1-dev-5UdBC-9XmgVchRr0CfxYzSRUiww0EdU1WAR3WwtMsqql
         socket_dir\t/var/folders/ld/T/zmx-501
         log_dir\t\t/Users/demo/.local/state/zmx/logs
         """
-        #expect(ZmxVersion.parse(output) == ZmxVersion(upstream: "1.0.1", forkTag: "build-2026-11-07-77fc677"))
+        #expect(ZmxVersion.parse(output) == ZmxVersion(upstream: "1.0.1", forkTag: "build-2026-11-07-2d98540"))
         let state = ZmxHostState(
             system: "Linux",
             machine: "x86_64",
             zmxPath: "/home/demo/.local/bin/zmx",
             version: ZmxVersion.parse(output)
         )
-        #expect(ZmxInstallVerdict.decide(state: state, pinnedTag: "build-2026-11-07-77fc677") == .current(ZmxVersion(
+        #expect(ZmxInstallVerdict.decide(state: state, pinnedTag: "build-2026-11-07-2d98540") == .current(ZmxVersion(
             upstream: "1.0.1",
-            forkTag: "build-2026-11-07-77fc677"
+            forkTag: "build-2026-11-07-2d98540"
         )))
     }
 
