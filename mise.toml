@@ -56,7 +56,10 @@ sources = [
   "scripts/build.sh",
   "scripts/setup.sh",
   "scripts/embed-zmx.sh",
+  "scripts/build-server.sh",
   "scripts/_lib.sh",
+  "server/**/*",
+  "protocol/**/*",
 ]
 outputs = { auto = true }
 run = """

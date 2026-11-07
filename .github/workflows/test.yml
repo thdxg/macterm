@@ -66,7 +66,12 @@ jobs:
   unit:
     name: Unit
     needs: [changes, server]
-    if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.extensions == 'true'
+    # !cancelled(), not the default success(): a failed server build must
+    # fail this job (at the artifact download), not skip it. A skipped job
+    # passes a required check.
+    if: >-
+      !cancelled()
+      && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.extensions == 'true')
     runs-on: xcode-27
     steps:
       - name: Checkout
@@ -214,7 +219,8 @@ jobs:
   e2e:
     name: End-to-end
     needs: [changes, server]
-    if: needs.changes.outputs.swift == 'true'
+    # !cancelled(): see the unit job.
+    if: ${{ !cancelled() && needs.changes.outputs.swift == 'true' }}
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
@@ -301,7 +307,8 @@ jobs:
   release-build:
     name: Release Build
     needs: [changes, server]
-    if: needs.changes.outputs.swift == 'true'
+    # !cancelled(): see the unit job.
+    if: ${{ !cancelled() && needs.changes.outputs.swift == 'true' }}
     runs-on: xcode-27
     steps:
       - name: Checkout

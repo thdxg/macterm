@@ -3,6 +3,7 @@
 # or prints the key that names such a build.
 #
 #   scripts/build-server.sh key          print the key of the working tree
+#   scripts/build-server.sh key-of <rev> print the key of a commit
 #   scripts/build-server.sh dirty        exit 0 when server/ or protocol/ has
 #                                        changes that are not committed
 #   scripts/build-server.sh build <dir>  build into <dir>
@@ -35,21 +36,31 @@ existing_sources() {
   done
 }
 
+# The key from the trees of server/, protocol/ and this script.
+key_from_tree() {
+  local tree="$1" server protocol script
+  server="$(git -C "$ROOT" rev-parse "$tree:server")"
+  protocol="$(git -C "$ROOT" rev-parse -q --verify "$tree:protocol" || echo none)"
+  script="$(git -C "$ROOT" rev-parse "$tree:scripts/build-server.sh")"
+  printf 'server %s\nprotocol %s\nbuild %s\n' "$server" "$protocol" "$script" |
+    shasum -a 256 | cut -c1-16
+}
+
+# The key of the working tree. For a clean tree it is the key of HEAD.
 server_key() {
-  local index tree server protocol script
+  local index tree
   # An empty index of our own: `git add` hashes the files as they are on
   # disk, untracked ones too, and respects .gitignore (zig-out, .zig-cache).
   index="$(mktemp -u "${TMPDIR:-/tmp}/macterm-server-index.XXXXXX")"
   local paths=()
   while IFS= read -r p; do paths+=("$p"); done < <(existing_sources)
-  GIT_INDEX_FILE="$index" git -C "$ROOT" add -A -- "${paths[@]}"
-  tree="$(GIT_INDEX_FILE="$index" git -C "$ROOT" write-tree)"
-  server="$(git -C "$ROOT" rev-parse "$tree:server")"
-  protocol="$(git -C "$ROOT" rev-parse -q --verify "$tree:protocol" || echo none)"
-  script="$(git -C "$ROOT" rev-parse "$tree:scripts/build-server.sh")"
+  if ! GIT_INDEX_FILE="$index" git -C "$ROOT" add -A -- "${paths[@]}" ||
+    ! tree="$(GIT_INDEX_FILE="$index" git -C "$ROOT" write-tree)"; then
+    rm -f "$index"
+    return 1
+  fi
   rm -f "$index"
-  printf 'server %s\nprotocol %s\nbuild %s\n' "$server" "$protocol" "$script" |
-    shasum -a 256 | cut -c1-16
+  key_from_tree "$tree"
 }
 
 is_dirty() {
@@ -67,8 +78,12 @@ package() {
   (cd "$(dirname "$out")" && shasum -a 256 "$(basename "$out")" > "$(basename "$out").sha256")
 }
 
+# Global, not local: the EXIT trap runs after build() returns, and under
+# `set -u` bash 3.2 then stops on a local that is gone.
+WORK=""
+
 build() {
-  local out="$1" key version upstream work
+  local out="$1" key version upstream
   [[ "$(uname -s)" == Darwin ]] || { echo "error: the server build needs macOS (lipo)" >&2; exit 1; }
   if ! command -v zig >/dev/null 2>&1; then
     echo "error: the server build needs Zig $ZIG_VERSION, and zig is not on PATH" >&2
@@ -87,8 +102,9 @@ build() {
 
   mkdir -p "$out"
   out="$(cd "$out" && pwd)"
-  work="$(mktemp -d "${TMPDIR:-/tmp}/macterm-server-build.XXXXXX")"
-  trap 'rm -rf "$work"' EXIT
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/macterm-server-build.XXXXXX")"
+  trap 'rm -rf "$WORK"' EXIT
+  local work="$WORK"
 
   local zig_target strip
   for zig_target in aarch64-macos x86_64-macos x86_64-linux-musl aarch64-linux-musl; do
@@ -118,6 +134,10 @@ build() {
 
 case "${1:-}" in
   key) server_key ;;
+  key-of)
+    [[ -n "${2:-}" ]] || { echo "usage: $0 key-of <commit>" >&2; exit 2; }
+    key_from_tree "$2^{tree}"
+    ;;
   dirty) is_dirty ;;
   build)
     [[ -n "${2:-}" ]] || { echo "usage: $0 build <dir>" >&2; exit 2; }
@@ -125,7 +145,7 @@ case "${1:-}" in
     ;;
   zig-version) echo "$ZIG_VERSION" ;;
   *)
-    echo "usage: $0 key | dirty | build <dir> | zig-version" >&2
+    echo "usage: $0 key | key-of <commit> | dirty | build <dir> | zig-version" >&2
     exit 2
     ;;
 esac

@@ -12,9 +12,9 @@ name: Server Build
 # workflows), it always builds from the commit.
 #
 # A build that this job made goes to the `server-prebuilt` release, so that
-# setup on a Mac without Zig can download it. A pull request from a fork has
-# a read-only token and uploads nothing. Assets older than 90 days are
-# removed.
+# setup on a Mac without Zig can download it. An asset is never replaced. A
+# pull request from a fork has a read-only token and uploads nothing. Assets
+# older than 90 days are removed, except the build of main's key.
 #
 # macos-15: lipo needs macOS, and zig cannot link with Xcode 26.4 or later
 # (zig#31658). The xcode-27 image has nothing older.
@@ -94,10 +94,12 @@ jobs:
         if: steps.prebuilt.outputs.found != 'true'
         run: scripts/build-server.sh build build/server
 
-      # A release build replaces the prebuilt of its key with its own bytes
-      # (--clobber), so the checksums in that release's app always name what
-      # the release serves.
+      # Never replaces an asset: an app that is out carries the checksums of
+      # what the release serves. Two runs of one key (test.yml and
+      # benchmark.yml) can both build it; the second finds the first's assets
+      # and keeps them.
       - name: Upload the Prebuilt
+        id: upload
         if: >-
           steps.prebuilt.outputs.found != 'true'
           && (github.event_name != 'pull_request'
@@ -113,19 +115,54 @@ jobs:
               --notes "Builds of server/ for scripts/setup.sh, named by build key. CI adds them and removes them after 90 days. They are not a release of Macterm." \
               || gh release view "$RELEASE" --repo "$GITHUB_REPOSITORY" > /dev/null
           fi
-          gh release upload "$RELEASE" --repo "$GITHUB_REPOSITORY" --clobber build/server/macterm-"$KEY"-*
+          for file in build/server/macterm-"$KEY"-*; do
+            if ! gh release upload "$RELEASE" --repo "$GITHUB_REPOSITORY" "$file" 2> upload.err; then
+              if grep -qi "already exists" upload.err; then
+                echo "$(basename "$file") is already in the release"
+              else
+                cat upload.err >&2
+                exit 1
+              fi
+            fi
+          done
 
-      - name: Remove Old Prebuilts
-        if: >-
-          steps.prebuilt.outputs.found != 'true'
-          && (github.event_name != 'pull_request'
-              || github.event.pull_request.head.repo.full_name == github.repository)
+      # The app's zmx-release.json takes its checksums from build/server, so
+      # the Linux builds there must be the bytes that the release serves. When
+      # another run uploaded the key first, take its builds. The summary says
+      # if the two builds were the same bytes.
+      - name: Use the Served Linux Builds
+        if: steps.upload.outcome == 'success'
+        env:
+          KEY: ${{ steps.key.outputs.key }}
         run: |
+          served="$RUNNER_TEMP/served"
+          rm -rf "$served"
+          mkdir -p "$served"
+          for target in x86_64-linux aarch64-linux; do
+            name="macterm-$KEY-$target.tar.gz"
+            gh release download "$RELEASE" --repo "$GITHUB_REPOSITORY" --dir "$served" \
+              --pattern "$name" --pattern "$name.sha256"
+            (cd "$served" && shasum -a 256 -c "$name.sha256")
+            if cmp -s "$served/$name" "build/server/$name"; then
+              echo "$target: this build is the served build" | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "$target: the served build has other bytes; using it" | tee -a "$GITHUB_STEP_SUMMARY"
+              cp "$served/$name" "$served/$name.sha256" build/server/
+            fi
+          done
+
+      # Keeps main's current key at any age: setup on main downloads it.
+      - name: Remove Old Prebuilts
+        if: steps.upload.outcome == 'success'
+        run: |
+          git fetch --depth=1 origin main
+          main_key="$(scripts/build-server.sh key-of FETCH_HEAD)"
           cutoff="$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ)"
           release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE" --jq .id)"
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" \
             --jq ".[] | select(.created_at < \"$cutoff\") | \"\(.id) \(.name)\"" |
             while read -r id name; do
+              case "$name" in macterm-"$main_key"-*) continue ;; esac
               echo "Removing $name"
               gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
             done

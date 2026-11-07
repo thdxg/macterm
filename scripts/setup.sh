@@ -270,7 +270,7 @@ ensure_server() {
   fi
   fetched="$(mktemp -d "${TMPDIR:-/tmp}/macterm-server.XXXXXX")"
   if gh release download "$SERVER_RELEASE" --repo "$SERVER_REPO" --dir "$fetched" \
-      --pattern "macterm-$key-*" 2>/dev/null &&
+      --pattern "macterm-$key-*" &&
     server_dist_complete "$fetched" "$key"; then
     echo "Downloaded the prebuilt server $key"
     install_server "$fetched" "$key"
