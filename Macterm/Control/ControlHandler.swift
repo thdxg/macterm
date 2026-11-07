@@ -92,6 +92,7 @@ final class ControlHandler {
         case "pane.close": return try paneClose(args)
         case "pane.run": return try paneRun(args)
         case "pane.key": return try paneKey(args)
+        case "pane.latency": return try await paneLatency(args)
         case "pane.zoom": return try paneZoom(args)
         case "pane.resize-split": return try paneResizeSplit(args)
         #if DEBUG
@@ -1038,6 +1039,34 @@ final class ControlHandler {
         // As in paneSendText: a keypress is what zmx switches leader on.
         appState.noteSessionLeader(target.pane)
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+    }
+
+    /// Type a key many times into a pane and time each glyph to the screen
+    /// (`TypingLatencyProbe`). Only debug builds and benchmark runs
+    /// (`MACTERM_BENCHMARK=1`) answer: the benchmark job runs a Release build.
+    /// The line is cleared with ctrl+u after each key.
+    private func paneLatency(_ args: ControlArgs) async throws -> ControlData {
+        #if !DEBUG
+        guard BenchmarkControl.isEnabled else {
+            throw ControlError(code: .unknownCommand, message: "unknown command \"pane.latency\"")
+        }
+        #endif
+        let count = args.count ?? 200
+        guard (1...10000).contains(count) else {
+            throw ControlError(code: .badRequest, message: "count must be from 1 to 10000")
+        }
+        guard let key = HotkeyRegistry.parseShortcut(args.key ?? "x"), key.modifiers.isEmpty,
+              let clear = HotkeyRegistry.parseShortcut("ctrl+u")
+        else {
+            throw ControlError(code: .badRequest, message: "key must be one printable key with no modifiers")
+        }
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        guard let view = target.pane.nsView, view.window != nil else {
+            throw ControlError(code: .noSurface, message: "the pane's terminal is not on screen")
+        }
+        let result = await TypingLatencyProbe.measure(view: view, key: key, clear: clear, count: count)
+        return ControlData(latency: ControlLatencyResult(samples: result.samples, misses: result.misses))
     }
 
     /// Toggle zoom on the target pane (#166) — the same `TerminalTab.toggleZoom`

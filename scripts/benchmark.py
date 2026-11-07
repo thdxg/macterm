@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import re
+import socket
 import statistics
 import subprocess
 import sys
@@ -254,6 +255,55 @@ def spawn_workload(harness, tabs):
         raise HarnessError(f"workload spawned {len(panes)} panes, expected {expected}")
 
 
+def control(harness, command, args, timeout):
+    """Send one request straight to the control socket and return its data.
+    For a verb that has no CLI subcommand (`pane.latency`)."""
+    request = {"v": 1, "id": "bench", "command": command, "args": args}
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+        conn.settimeout(timeout)
+        conn.connect(harness.socket)
+        conn.sendall((json.dumps(request) + "\n").encode())
+        reply = b""
+        while not reply.endswith(b"\n"):
+            chunk = conn.recv(65536)
+            if not chunk:
+                break
+            reply += chunk
+    response = json.loads(reply)
+    if not response.get("ok"):
+        raise HarnessError(f"{command} failed: {response.get('error')}")
+    return response.get("data") or {}
+
+
+def percentile(values, pct):
+    """Nearest-rank percentile of `values` (pct in 0..100)."""
+    ordered = sorted(values)
+    rank = max(1, -(-len(ordered) * pct // 100))
+    return ordered[int(rank) - 1]
+
+
+def measure_typing_latency(harness, keys):
+    """In-app typing latency: the app types `keys` keys into the focused
+    pane on the `pane key` path and times each glyph to the first rendered
+    frame that shows it (Macterm/Views/Terminal/TypingLatencyProbe.swift).
+    The 1-minute load average rides along, because load decides latency."""
+    load = os.getloadavg()[0]
+    # About 0.5 s for each key (the watch window and the settle after it).
+    data = control(harness, "pane.latency", {"count": keys}, timeout=keys + 60)
+    result = data.get("latency") or {}
+    samples = result.get("samples") or []
+    if not samples:
+        raise HarnessError(f"typing latency: no glyph seen in {keys} keys")
+    return {
+        "keys": keys,
+        "misses": result.get("misses", 0),
+        "p50_ms": round(percentile(samples, 50), 2),
+        "p95_ms": round(percentile(samples, 95), 2),
+        "max_ms": round(max(samples), 2),
+        "load_1m": round(load, 2),
+    }
+
+
 def git_sha():
     sha = os.environ.get("GITHUB_SHA")
     if sha:
@@ -290,6 +340,16 @@ def cmd_run(args):
                 results[state] = sample_state(harness, args.seconds, args.samples)
                 print(f"  {results[state]}", flush=True)
 
+            latency = None
+            if args.latency_keys > 0:
+                # The idle focused window, before the workload: one pane, a
+                # shell at its prompt.
+                enter_state(harness.app, "focused")
+                time.sleep(args.settle)
+                print(f"typing latency: {args.latency_keys} keys", flush=True)
+                latency = measure_typing_latency(harness, args.latency_keys)
+                print(f"  {latency}", flush=True)
+
             if args.workload > 0:
                 # Re-run under busy tabs so the numbers reflect an app doing real
                 # terminal work, not an empty window. Spawn while focused (surfaces
@@ -324,6 +384,8 @@ def cmd_run(args):
         "samples_per_state": args.samples,
         "states": results,
     }
+    if latency:
+        payload["typing_latency"] = latency
     if args.workload > 0:
         payload["workload"] = {
             "tabs": args.workload,
@@ -413,6 +475,40 @@ def delta_cell(base, current, floor, min_baseline=None):
     return f"{diff / base * 100:+.0f}% {arrow}".strip()
 
 
+# The typing latency fields the report shows. They are absolute values with
+# no flag and no label: the numbers are a reference for v2, not a gate.
+LATENCY_METRICS = ("p50_ms", "p95_ms")
+
+
+def latency_lines(current, baseline):
+    """The report's typing-latency table, or no lines without a measurement."""
+    cur = current.get("typing_latency")
+    if not cur:
+        return []
+    base = (baseline or {}).get("typing_latency") or {}
+    lines = [
+        "",
+        "### Typing latency",
+        "",
+        "| Metric | main | this branch |" if base else "| Metric | Value |",
+        "|---|---:|---:|" if base else "|---|---:|",
+    ]
+    for key in LATENCY_METRICS:
+        label = key.removesuffix("_ms")
+        if base:
+            lines.append(f"| {label} | {fmt(base.get(key), '{:.1f} ms')} | {fmt(cur.get(key), '{:.1f} ms')} |")
+        else:
+            lines.append(f"| {label} | {fmt(cur.get(key), '{:.1f} ms')} |")
+    lines += [
+        "",
+        f"_{cur['keys']} keys typed on the `pane key` path into the idle focused pane, "
+        "each timed to the first frame that shows its glyph. "
+        f"Keys with no glyph: {cur.get('misses', 0)}. "
+        f"1-minute load average: {cur.get('load_1m')}. Not flagged and not labeled._",
+    ]
+    return lines
+
+
 def pool_baselines(paths):
     """Pool several main-run baselines into one synthetic baseline: for each
     state/metric, the per-metric median across runs. A PR delta is one noisy
@@ -437,11 +533,18 @@ def pool_baselines(paths):
             key: _median_or_none([s.get(key) for s in per_run])
             for key, *_ in METRICS
         }
-    return {
+    pooled = {
         "commit": runs[0].get("commit", "unknown"),
         "runs": len(runs),
         "states": states,
     }
+    latencies = [r["typing_latency"] for r in runs if r.get("typing_latency")]
+    if latencies:
+        pooled["typing_latency"] = {
+            key: _median_or_none([lat.get(key) for lat in latencies])
+            for key in LATENCY_METRICS
+        }
+    return pooled
 
 
 def cmd_report(args):
@@ -584,6 +687,7 @@ def cmd_report(args):
             "have no baseline yet — deltas for them appear once main's baseline "
             "includes a workload run._"
         )
+    lines += latency_lines(current, baseline)
     print("\n".join(lines))
 
     if args.verdict:
@@ -620,6 +724,11 @@ def main():
         "--workload", type=int, default=0, metavar="TABS",
         help="also sample workload-* states after spawning TABS busy tabs "
              "(2x2 grid each) via the bundled macterm CLI (default: off)",
+    )
+    run.add_argument(
+        "--latency-keys", type=int, default=0, metavar="N",
+        help="also measure in-app typing latency over N keys in the idle focused "
+             "pane (p50 and p95 into typing_latency; default: off)",
     )
     run.set_defaults(func=cmd_run)
 
