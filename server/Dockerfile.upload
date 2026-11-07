@@ -1,0 +1,16 @@
+# Dockerfile for uploading release artifacts and docs to pgs.sh
+
+FROM golang:1.23-alpine
+RUN apk add --no-cache rsync openssh-client
+
+WORKDIR /app/docs
+COPY docs/go.mod docs/go.sum ./
+RUN go mod download
+
+WORKDIR /app
+
+CMD ["sh", "-c", " \
+    cd /app/docs && go run ./main.go && \
+    cp ./static/* /app/logo.png ./public/ && \
+    rsync -rv ./public/ pgs.sh:/zmx/ \
+"]

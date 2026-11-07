@@ -1,0 +1,267 @@
+# Changelog
+
+Use spec: https://common-changelog.org/
+
+## Staged
+
+# v1.0.1 - 2026-11-06
+
+### Fixed
+
+- Release binaries translate `src/c.h` for their own target, not the build host's, so macOS binaries built on Linux resize sessions again
+
+## v1.0.0 - 2026-11-06
+
+This release sets a milestone for the maturity of this project. I have been daily driving zmx for almost a year at this point with very minor issues.
+
+Because of the IPC changes made to this project I also want the ABI contract to be more reliably frozen and a v1 release reinforces that contract this project makes with users.
+
+### Breaking
+
+- Standardized IPC header and payloads to 8-byte aligned `extern struct` layouts. Daemons and clients must be on the same version
+- Dropped legacy pre-0.7.0 resize framing
+
+### Added
+
+- zmx as a zig package
+- Completions for [`yash`](https://magicant.github.io/yash/)
+- History command now accepts --screen (print only active screen) and --scrollback (num of rows to print)
+- Support for OpenBSD
+
+### Changed
+
+- Upgraded to zig 0.17
+- IPC messages now carry an explicit `protocol_version` field
+- The daemon now responds with `Tag.Unsupported` (255) when receiving unknown IPC tags
+
+### Fixed
+
+- Stop classifying complete kitty keyboard status replies (`CSI ? flags u`) as user input for leader selection
+- Prevent infinite loop in `mkdirAll` when directory path contains a dangling symlink
+- Prevent terminal and kitty keyboard queries from taking leadership control
+- Fixed missing terminal snapshot when attaching to a session originally started detached or via `zmx run`
+- Don't drop a client's unread input on hangup
+- Restore the terminal when the client gets SIGHUP, SIGTERM, or SIGINT
+- Ability to zmx write files larger than the PTY input buffer
+- Replay cursor style on re-attach
+- Reset colors before clearing the screen on attach
+
+## v0.8.1 - 2026-09-05
+
+### Fixed
+
+- Make ghostty's max_scrollback_lines canonical source of scrollback buffer
+
+## v0.8.0 - 2026-09-03
+
+### Added
+
+- We now track cwd changes via OSC7
+- Replay window title on attach
+- `ZMX_NO_DETACH_KEY` env var to disable `ctrl+\` keybinding
+- Added `--labels` flag to attach command
+  - e.g. `zmx attach --labels "project=pico env=prod" pico`
+  - e.g. `zmx attach --labels "$(zmx get pico)" pico.sub`
+- New command `zmx print-env` which prints the leader's tracked env vars
+
+### Fixed
+
+- Clear screen when switching sessions to prevent term state corruption
+- Stray NUL byte in the OSC 7 sequence replayed on attach
+- The OSC 7 cwd is now decoded before the chdir, so a new session can start in a directory whose name needed percent-encoding
+- CLI commands now respond with correct error exist codes
+- Various re-attach handling bugs
+
+### Changed
+
+- Upgraded to zig v0.16
+- `zmx list` replaced `start_dir` with `cwd`
+- Storing 2k lines of scrollback buffer (like tmux) for each session
+- `ZMX_TASK_COMPLETED` task marker now includes a 4ch hex id to ensure no collisions from nested task runs
+  - `ZMX_TASK_COMPLETED:{id}:0`
+
+## v0.7.1 - 2026-08-27
+
+### Fixed
+
+- Prevent `v0.6.0` daemons from hanging when connecting from `v0.7.0` clients
+
+## v0.7.0 - 2026-07-23
+
+### Added
+
+- Label system for sessions:
+  - `zmx set <name> k=v ...` to attach key=value labels to live sessions
+  - `zmx set <name> key=` to remove a specific label (empty value = delete)
+  - `zmx get <name>` to read labels from a session
+  - `zmx get <name> key` to print a single value
+  - `zmx clear <name>` to remove all labels
+  - `zmx list` now shows labels by default as tab-separated fields
+
+### Fixed
+
+- `zmx run` will now detect heredocs and add the completion marker to a newline
+- Race between `zmx kill X; zmx run X`
+- Improved claim leader detection
+- `zmx send` no longer claims client leadership or triggers a resize probe
+- Improved `ctrl+\` key detection
+- Support for linux kernel < 4.11 by avoiding statx calls
+
+### Changed
+
+- *BREAKING* We now store logs inside of `XDG_STATE_DIR`
+- *BREAKING* `zmx run` when creating session it runs `bash` instead of `$SHELL`
+  - There are just too many edge cases with tracking exit status in other shells which makes `zmx run` much less useful for task management.
+  - This means when using `zmx run` the target shell must have support for `$?` exit code tracking
+- *BREAKING* `zmx tail` now strips ansi escape codes
+
+## v0.6.0 - 2026-05-16
+
+### Added
+
+- `zmx send` send raw bytes to session without ZMX completion marker or auto-newline
+- `zmx print` send raw bytes to client's stdout
+- `zmx ls` is accepted as an alias for `zmx list`
+- Added `--help` flag for all commands (it just returns the main help cmd for now)
+
+### Fixed
+
+- An idle daemon (no clients, no PTY traffic) used to ignore SIGTERM indefinitely.
+- An idle attached client used to ignore SIGWINCH until the next keystroke or daemon output.
+- Don't kill all sessions when `.Info` ipc event changed
+- Reset terminal emulator to default state on detach
+
+### Changed
+
+- `zmx wait` output will tail the last 20 lines of every task that failed
+- Detaching from a session will now do a full terminal reset
+
+## v0.5.0 - 2026-04-16
+
+### Added
+
+- New client leader policy: last client to send user input bytes (non-ansi escape codes) becomes the leader
+  - The client leader controls resizing and any other terminal state changes
+  - Non-leader clients are read-only until they send user input bytes and takeover leadership
+  - When a leader is promoted we immediately resize to their window size
+- `zmx attach` now lets users switch to another session from within a session
+- `zmx tail` will receive all outout from sessions in read-only mode
+- `zmx write` will pipe data from stdin, convert to base64, chunk, and send data through pty to write to a file
+
+### Changed
+
+- *BREAKING* `zmx run` is now synchonous by default and tails the session
+  - Use detached mode (`-d`) for previous behavior
+- *BREAKING* `kill` and `wait` now require "\*" suffix for wildcard match sessions
+  - e.g. `zmx kill "d.*"`, `zmx kill "*"`, `zmx wait "test*"`
+- `zmx run` accepts `--fish` flag to indicate the session's shell is fish
+- `zmx kill` now supports multiple args and it will kill sessions that match a prefix
+  - e.g. `zmx kill "d.*"` will kill all sessions that match that prefix
+
+### Fixed
+
+- `zmx list` will send "no sessions found" to stderr instead of stdout
+- `zmx wait` will send errors to stderr instead of stdout
+- Rewrite OSC `133;A` with `redraw=0` to prevent prompt loss on resize
+
+## v0.4.2 - 2026-03-18
+
+### Changed
+
+- `zmx list` renamed keys and made formatting more stable
+- More accurate fish completions
+
+### Fixed
+
+- Validate session name length against Unix socket path limit
+- Use platform-correct `O_NONBLOCK` for fcntl
+- Daemon ignore `SIGPIPE`, handle `EINTR` in poll
+- Daemon isolate forked child from parent code path and heap-alloc argv
+- `zmx run` stdin regression with `ZMX_TASK_COMPLETED`
+- `zmx run` when no client is attached, send DA response query from daemon
+- `zmx run` re-quote when using shell meta chars
+- `zmx wait` use-after-free
+- `zmx wait` time out after 3 polls if no matching sessions are found
+- `zmx list` clean up socket on `ConnectionRefused`, not `Timeout`
+
+## v0.4.1 - 2026-02-23
+
+### Fixed
+
+- Update `libghostty` to fix `zig build test`
+
+## v0.4.0 - 2026-02-20
+
+### Added
+
+- New environment variable `ZMX_SESSION_PREFIX` which will be inserted before every session name for every command
+- New command `zmx wait` which will stall until all tasks (`zmx run`) are completed.
+
+### Changed
+
+- `zmx version` now returns the socket and log directory locations
+- `zmx run` now inserts a `ZMX_TASK_COMPLETED` marker after every run command to indicate when the task is completed and then returns the aggregate exit status
+
+### Fixed
+
+- `libghostty` had a regression that caused `zmx` to crash
+
+## v0.3.0 - 2026-02-01
+
+### Added
+
+- New flag `--vt` for `zmx [hi]story` which prints raw ansi escape codes for terminal session
+- New flag `--html` for `zmx [hi]story` which prints html representation of terminal session
+- New list flag `zmx [l]ist [--list]` that lists all session names with no extra information
+- New command `zmx [c]ompletions <shell>` that outputs auto-completion scripts for a given shell
+- List command `zmx list` now shows `started_at` showing working directory when creating session
+- List command `zmx list` now shows `cmd` showing command provided when creating session
+- List command `zmx list` now shows `→` arrow indicating the current session
+
+### Fixed
+
+- On restore, background colors for whitespace now properly filled
+- Spawn login shell instead of normal shell
+- Properly cleanup processes (parent and children) during `zmx kill` or SIGTERM
+
+## v0.2.0 - 2025-12-29
+
+### Added
+
+- New command `zmx [hi]story <name>` which prints the session scrollback as plain text
+- New command `zmx [r]un <name> <cmd>...` which sends a command without attaching, creating session if needed
+- Use `XDG_RUNTIME_DIR` environment variable for socket directory (takes precedence over `TMPDIR` and `/tmp`)
+
+### Changed
+
+- Updated `ghostty-vt` to latest HEAD
+
+### Fixed
+
+- Restore mouse terminal modes on detach
+- Restore correct cursor position on re-attach
+
+## v0.1.1 - 2025-12-16
+
+### Changed
+
+- `zmx list`: sort by session name
+
+### Fixed
+
+- Send SIGWINCH to PTY on re-attach
+- Use default terminal size if cols and rows are 0
+
+## v0.1.0 - 2025-12-09
+
+### Changed
+
+- **Breaking:** unix socket and log files have been moved from `/tmp/zmx` to `/tmp/zmx-{uid}` with folder/file perms set to user
+
+If you upgraded and need to kill your previous sessions, run `ZMX_DIR=/tmp/zmx zmx kill {sesion}` for each session.
+
+### Added
+
+- Use `TMPDIR` environment variable instead of `/tmp`
+- Use `ZMX_DIR` environment variable instead of `/tmp/zmx-{uid}`
+- `zmx version` prints the current version of `zmx` and `ghostty-vt`
