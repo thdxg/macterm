@@ -55,7 +55,7 @@ struct ForegroundSample: Equatable {
 enum ForegroundPolicy {
     /// Whether closing must be confirmed because a foreground program is
     /// running — the single verdict behind pane/tab close, project
-    /// unload/remove, the CLI's `busy` error, and the quit dialog rows.
+    /// removal, the CLI's `busy` error, and the quit dialog rows.
     ///
     /// Local panes trust libghostty's own signal (`surfaceBusy`,
     /// `ghostty_surface_needs_confirm_quit`). A remote pane can't: its local
