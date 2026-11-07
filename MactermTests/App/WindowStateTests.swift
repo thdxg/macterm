@@ -232,8 +232,8 @@ struct WindowStateTests {
 
     @Test
     func vacating_a_project_clears_every_window_showing_it() {
-        // Unload tears the shells down; a window still showing the project
-        // would respawn them on the spot through its live surfaces.
+        // Removal tears the shells down; a window still showing the project
+        // would render a workspace that no longer exists.
         let state = makeAppState()
         let project = Project(name: "p", path: "/tmp", sortOrder: 0)
         state.restoreSelection(projects: [project])
@@ -244,7 +244,7 @@ struct WindowStateTests {
         state.registerWindow(b)
         state.noteKeyWindow(a)
 
-        state.unloadProject(project.id)
+        state.removeProject(project.id)
 
         #expect(a.activeProjectID == nil)
         #expect(b.activeProjectID == nil)

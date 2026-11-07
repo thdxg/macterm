@@ -779,22 +779,6 @@
         }
       }
     },
-    "A process is still running in this project. Unloading ends every process in its tabs. Macterm keeps the layout." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 프로젝트에서 프로세스가 아직 실행 중입니다. 언로드하면 탭의 모든 프로세스가 종료됩니다. Macterm은 레이아웃을 유지합니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此项目中仍有进程正在运行。停止会结束其标签页中的所有进程。Macterm 会保留布局。"
-          }
-        }
-      }
-    },
     "A process is still running in this tab. Closing the tab ends it." : {
       "localizations" : {
         "ko" : {
@@ -6280,22 +6264,6 @@
         }
       }
     },
-    "Not running. Select it to load the project again." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "실행 중이 아닙니다. 선택하면 프로젝트를 다시 불러옵니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未运行。选择它以重新载入项目。"
-          }
-        }
-      }
-    },
     "Not running. Select it to restore it from its saved layout." : {
       "localizations" : {
         "ko" : {
@@ -11424,86 +11392,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无限制"
-          }
-        }
-      }
-    },
-    "Unload" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "언로드"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "停止"
-          }
-        }
-      }
-    },
-    "Unload Current Project" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "현재 프로젝트 언로드"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "停止当前项目"
-          }
-        }
-      }
-    },
-    "Unload Project" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "프로젝트 언로드"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "停止项目"
-          }
-        }
-      }
-    },
-    "Unload project with running processes?" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "실행 중인 프로세스가 있는 프로젝트를 언로드하시겠습니까?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要停止有进程正在运行的项目吗？"
-          }
-        }
-      }
-    },
-    "Unloaded" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "언로드됨"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已停止"
           }
         }
       }

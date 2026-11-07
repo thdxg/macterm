@@ -22,8 +22,8 @@ enum FocusRestoration {
     /// started it. Double-clicking an inactive tab's title both switches tabs
     /// and opens the rename field in one gesture: the newly activated pane
     /// transitions to focused, `TerminalSurface.updateNSView` asks for
-    /// restoration, and — when that pane's view isn't in the window yet (an
-    /// unloaded project, a pinned tab rebuilt from its declaration) — the
+    /// restoration, and — when that pane's view isn't in the window yet (a
+    /// project that no window showed yet, a pinned tab rebuilt from its declaration) — the
     /// retry resolves several ticks later and takes first responder back off
     /// the caret. The field stays on screen while the keystrokes go to the
     /// shell. Rename commit and cancel both call `restoreFocusToActivePane()`,

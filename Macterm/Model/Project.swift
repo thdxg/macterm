@@ -80,8 +80,8 @@ extension Project {
     }
 
     /// Whether `id` is a sentinel workspace: it has no directory, no layout
-    /// file and no row in Settings → Projects, and it can be neither renamed,
-    /// unloaded nor removed.
+    /// file and no row in Settings → Projects, and it can be neither renamed
+    /// nor removed.
     static func isSynthetic(_ id: UUID) -> Bool {
         synthetic(for: id) != nil
     }

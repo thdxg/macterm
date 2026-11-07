@@ -43,12 +43,6 @@ final class AppState {
     var activeProjectID: UUID? {
         didSet {
             Preferences.shared.activeProjectID = activeProjectID
-            // Becoming active IS the reload — `warmFocusedProject` only ever
-            // spawns the focused project's shells — so this is the one choke
-            // point every load path passes through, whether it went via
-            // `selectProject` or set the id directly (a cross-project tab
-            // move, a merge, a global tab cycle).
-            if let activeProjectID { unloadedProjectIDs.remove(activeProjectID) }
             // Push into the key window too (#345). Most callers still set this
             // directly — CLI `project select`, notification navigation, a
             // cross-project tab move — and the window the user is looking at
@@ -1094,14 +1088,6 @@ final class AppState {
     var workspaces: [UUID: Workspace] = [:] {
         didSet { attachWorkspaceHooks() }
     }
-
-    /// Projects the user unloaded this session: their shells were killed and
-    /// only the layout kept. The sidebar dims their tab rows the way an
-    /// unloaded pinned record's row is dimmed — same meaning, "not running,
-    /// select to bring it back". Deliberately in-memory: after a relaunch
-    /// every project is lazy again, so a persisted mark would dim rows whose
-    /// sessions are merely detached rather than dead.
-    private(set) var unloadedProjectIDs: Set<UUID> = []
 
     /// Ordered pinned-tab records — the sidebar's pinned section. A record
     /// whose id matches a live tab in the pinned workspace
@@ -2178,7 +2164,7 @@ final class AppState {
     /// mirrors that remain, or closing one view of a session would destroy the
     /// work still on screen in another.
     ///
-    /// Takes the whole batch at once, because the callers that unload a
+    /// Takes the whole batch at once, because the callers that remove a
     /// project, close a tab, or drop a layout's panes release many panes
     /// together — asked one at a time, two mirrors inside one batch would each
     /// see the other still in the tree, both decline to kill, and leak the
@@ -2426,7 +2412,7 @@ final class AppState {
     /// user stands to lose is exactly what that function decides to kill.
     ///
     /// This is the ONE busy-close predicate. Every path that ends sessions —
-    /// pane close, tab close, project unload/remove, the sidebar's bulk
+    /// pane close, tab close, project remove, the sidebar's bulk
     /// remove, the CLI's `busy` refusal and the Close Tab intent — asks one
     /// of the overloads below rather than spelling
     /// `allPanes().contains(where: \.needsConfirmClose)` itself: that raw
@@ -2443,7 +2429,7 @@ final class AppState {
         closeNeedsConfirmation(tab.splitRoot.allPanes())
     }
 
-    /// Whether unloading or removing the whole of project `projectID` needs
+    /// Whether removing the whole of project `projectID` needs
     /// confirmation. Unknown or empty projects need none.
     func closeNeedsConfirmation(projectID: UUID) -> Bool {
         closeNeedsConfirmation(panes(inProject: projectID))
@@ -2620,56 +2606,11 @@ final class AppState {
         projectStore.setPath(id: projectID, to: pwd)
     }
 
-    /// Whether any pane in the project's workspace has a live terminal view —
-    /// i.e. there's something for `unloadProject(_:)` to tear down.
-    func isProjectLoaded(_ projectID: UUID) -> Bool {
-        guard let ws = workspaces[projectID] else { return false }
-        return ws.tabs.flatMap { $0.splitRoot.allPanes() }.contains { $0.nsView != nil }
-    }
-
-    /// Tear down a project's terminal surfaces (ending their shell processes)
-    /// while keeping its tab/split layout — returning it to the lazy state an
-    /// unfocused project is in right after launch, where the workspace exists
-    /// in memory but no pane spawns a shell until the project is selected
-    /// again. Implemented as the same snapshot → restore round-trip a
-    /// quit/relaunch performs, so each pane's live cwd is captured before its
-    /// surface dies. Unloading the active project deselects it; leaving it
-    /// active would let SwiftUI respawn the shells immediately.
-    func unloadProject(_ projectID: UUID) {
-        // The pinned workspace is never unloaded wholesale — pinned tabs are
-        // the durable thing; a tab only unloads when its own sessions die.
-        // The scratch workspace has no row to dim (`unloadedProjectIDs` dims
-        // project rows), so it is not unloaded either.
-        guard !Project.isSynthetic(projectID) else { return }
-        guard let ws = workspaces[projectID] else { return }
-        logger.debug("unloadProject: \(projectID, privacy: .public)")
-        let snapshot = WorkspaceSerializer.snapshot([projectID: ws])
-        let unloading = ws.tabs.flatMap { $0.splitRoot.allPanes() }
-        // Unload KILLS: with quit now a detach, this is the one action that
-        // stops a whole project's shells while keeping its layout (the
-        // group-kill #113 asked for). A detaching unload would be a trap —
-        // "unloaded" shells silently running forever. The snapshot keeps the
-        // layout; reopening spawns fresh shells in the saved cwds (`zmx
-        // attach` upserts over the dead names). A session mirrored outside
-        // this project survives, and its pane keeps it.
-        releaseSessions(unloading)
-        for pane in unloading {
-            pane.destroySurface()
-        }
-        if let restored = WorkspaceSerializer.restore(from: snapshot, validIDs: [projectID]).first {
-            workspaces[projectID] = restored
-        }
-        unloadedProjectIDs.insert(projectID)
-        vacateWindows(showing: projectID)
-        saveWorkspaces()
-    }
-
     /// Point every window showing `projectID` at nothing.
     ///
-    /// Unload and remove both tear the project's shells down. A window left
-    /// showing it would either respawn them on the spot — its live
-    /// `TerminalSurface` rebuilds surfaces as it renders, silently undoing the
-    /// unload — or render a workspace that no longer exists. The key window
+    /// Removal tears the project's shells down. A window left showing it
+    /// would render a workspace that no longer exists, or respawn shells
+    /// through its live `TerminalSurface`. The key window
     /// follows through the `activeProjectID` mirror like any other.
     private func vacateWindows(showing projectID: UUID) {
         for window in windows where window.activeProjectID == projectID {
@@ -2677,22 +2618,6 @@ final class AppState {
         }
         if activeProjectID == projectID { activeProjectID = nil }
         reconcileWindowViews()
-    }
-
-    /// Whether the project retains the unloaded layout from `unloadProject`.
-    /// Background creation may have started individual tabs since then; the
-    /// marker stays until selection loads the rest. Use `isTabUnloaded` for rows.
-    func isProjectUnloaded(_ projectID: UUID) -> Bool {
-        unloadedProjectIDs.contains(projectID)
-    }
-
-    /// Only dim tabs still waiting to start. Creating one background shell
-    /// does not revive the other tabs in an explicitly unloaded project.
-    /// Like `isProjectLoaded`, a pane's surface view marks it as started.
-    /// The view slot is unobserved: creation warms synchronously before the
-    /// structural redraw. Deferring that warm would need an observable signal.
-    func isTabUnloaded(_ tab: TerminalTab, projectID: UUID) -> Bool {
-        isProjectUnloaded(projectID) && tab.splitRoot.allPanes().allSatisfy { $0.nsView == nil }
     }
 
     /// The teardown half of `removeProject`, without the workspace save — so
@@ -2714,7 +2639,6 @@ final class AppState {
             }
         }
         workspaces.removeValue(forKey: projectID)
-        unloadedProjectIDs.remove(projectID)
         for window in windows {
             window.expandedProjects.remove(projectID)
         }
@@ -2738,26 +2662,6 @@ final class AppState {
             removeProjectWithoutSaving(id)
         }
         saveWorkspaces()
-    }
-
-    /// Unload a project, confirming first when any pane is busy — unload
-    /// stops every shell in the project (keeping the layout), so it's
-    /// destructive.
-    func requestUnloadProject(_ projectID: UUID, host: DialogHost = .mainWindow) {
-        guard closeNeedsConfirmation(projectID: projectID) else {
-            unloadProject(projectID)
-            return
-        }
-        present(PendingDialog(
-            kind: .unloadProject(projectID),
-            title: String(localized: "Unload project with running processes?"),
-            message: String(localized: """
-            A process is still running in this project. Unloading ends every process in its tabs. \
-            Macterm keeps the layout.
-            """),
-            confirmTitle: String(localized: "Unload"),
-            host: host
-        ) { [weak self] in self?.unloadProject(projectID) })
     }
 
     /// Run `removal` (the caller's full remove: workspace + project store)
@@ -3509,9 +3413,8 @@ final class AppState {
               let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }),
               let pane = tab.splitRoot.findPane(id: paneID)
         else { return nil }
-        // The CLI can split a never-opened or unloaded remote tab. Stamp the
-        // whole tab before splitting: background creation may revive its other
-        // panes too, and the new sibling inherits the source's path.
+        // The CLI can split a never-opened remote tab. Stamp the whole tab
+        // before splitting, so the new sibling inherits the source's path.
         if let remoteZmxPath {
             for existing in tab.splitRoot.allPanes() {
                 existing.remoteZmxPath = remoteZmxPath
@@ -3542,9 +3445,6 @@ final class AppState {
     /// `command` in the new pane. The control CLI's split path. Returns the
     /// new pane's ID. `focus: false` preserves focus/history/zoom and warms
     /// the new pane, including when its tab or project isn't being displayed.
-    /// In an explicitly unloaded project, start the whole target tab: its row
-    /// must not appear live while the split's source still has no shell. Other
-    /// tabs stay stopped, and neither selection nor the unloaded marker moves.
     @discardableResult
     func splitPane(
         _ paneID: UUID,
@@ -3569,10 +3469,7 @@ final class AppState {
             focus: focus
         )
         if !focus, let newID, let pane = tab.splitRoot.findPane(id: newID) {
-            let starting = isProjectUnloaded(projectID) ? tab.splitRoot.allPanes() : [pane]
-            for candidate in starting {
-                warmIfUnrendered(candidate, in: tab)
-            }
+            warmIfUnrendered(pane, in: tab)
         }
         saveWorkspaces()
         return newID

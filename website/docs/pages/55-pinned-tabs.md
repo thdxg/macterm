@@ -21,7 +21,7 @@ Unpinning moves the tab. The tab goes back to the project that it came from, and
 
 When you pin a tab, Macterm saves its splits and the working directory of each pane. It also saves the program that runs in each pane, as the `run:` of that pane. When you start or stop a process, Macterm updates the saved layout within a few seconds.
 
-## Closing unloads, never removes
+## Closing keeps the row
 
 When you press <kbd>⌘W</kbd> on a pinned tab, its processes end. The row stays, dimmed, with its saved layout. Select the row to start the tab again. The next time that Macterm starts, it starts the tab by itself. The same happens when its sessions end on their own. **Only unpinning removes a pinned tab.**
 
