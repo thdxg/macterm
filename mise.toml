@@ -204,6 +204,27 @@ run = """
   fi
 """
 
+[tasks.protocol]
+description = "Write the Swift side of the protocol from the Zig schema (use --check to verify only)"
+usage = '''
+flag "-v --verbose" help="Stream raw output instead of the spinner"
+flag "--check" help="Fail if a generated file is not current or the schema breaks the add-only rule, and change nothing (CI mode)"
+'''
+run = """
+  source scripts/_lib.sh
+  args=()
+  msg="Writing the protocol files..."
+  if [[ "$usage_check" == "true" ]]; then
+    args+=(--check)
+    msg="Checking the protocol files..."
+  fi
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/protocol.sh "${args[@]}"
+  else
+    run_step "$msg" ./scripts/protocol.sh "${args[@]}"
+  fi
+"""
+
 [tasks.bench]
 description = "Build the release app and run the window-state benchmark"
 usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'

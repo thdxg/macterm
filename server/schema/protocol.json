@@ -1,0 +1,293 @@
+{
+  "level": 1,
+  "min_level": 1,
+  "trust": [
+    "local",
+    "session",
+    "remote"
+  ],
+  "messages": [
+    {
+      "name": "hello",
+      "type": "Hello",
+      "since": 1,
+      "senders": [
+        "local",
+        "session",
+        "remote"
+      ]
+    },
+    {
+      "name": "refuse",
+      "type": "Refuse",
+      "since": 1,
+      "senders": [
+        "local",
+        "session",
+        "remote"
+      ]
+    }
+  ],
+  "envelopes": [
+    "Request",
+    "Response",
+    "EventBatch"
+  ],
+  "methods": [
+    {
+      "name": "channel.open",
+      "type": "ChannelOpen",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "ChannelOpen.Args",
+      "result": "ChannelOpen.Result"
+    },
+    {
+      "name": "channel.close",
+      "type": "ChannelClose",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "ChannelClose.Args",
+      "result": "ChannelClose.Result"
+    }
+  ],
+  "events": [],
+  "types": [
+    {
+      "name": "Hello",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "level",
+          "type": "u32",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "min_level",
+          "type": "u32",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "build",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "role",
+          "type": "Role",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "epoch",
+          "type": "u64",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "caps",
+          "type": "[str]",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Role",
+      "kind": "enum",
+      "fields": [],
+      "cases": [
+        "gui",
+        "cli",
+        "server",
+        "session",
+        "unknown"
+      ]
+    },
+    {
+      "name": "Refuse",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "reason",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "needs_level",
+          "type": "u32",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Request",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "u64",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "m",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "a",
+          "type": "raw",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Response",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "re",
+          "type": "u64",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "ok",
+          "type": "raw",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "err",
+          "type": "ErrorInfo",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ErrorInfo",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "code",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "message",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "level",
+          "type": "u32",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "EventBatch",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "seq",
+          "type": "u64",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "ev",
+          "type": "[Event]",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Event",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "e",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "a",
+          "type": "raw",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ChannelOpen.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "session",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ChannelOpen.Result",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "channel",
+          "type": "u32",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ChannelClose.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "channel",
+          "type": "u32",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ChannelClose.Result",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    }
+  ]
+}
