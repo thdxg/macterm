@@ -2,6 +2,7 @@ const std = @import("std");
 pub const terminal = @import("terminal.zig");
 pub const isUserInput = terminal.isUserInput;
 pub const serializeTerminalState = terminal.serializeTerminalState;
+pub const serializeScreenState = terminal.serializeScreenState;
 pub const serializeTerminal = terminal.serializeTerminal;
 pub const serializeTerminalRange = terminal.serializeTerminalRange;
 const ipc = @import("ipc.zig");

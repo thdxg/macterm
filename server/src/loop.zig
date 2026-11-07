@@ -798,6 +798,7 @@ pub const Daemon = struct {
             cmd,
             &keep_fds_open,
             reexec,
+            .{},
         ) catch |err| {
             switch (err) {
                 error.IsClientProc => {

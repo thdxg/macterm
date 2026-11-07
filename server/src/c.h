@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <termios.h>
+#include <sys/stat.h>
 
 #if defined(__APPLE__)
   #include <sys/ioctl.h>

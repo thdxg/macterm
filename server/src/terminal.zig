@@ -201,6 +201,18 @@ fn writeEffectiveMode(
 }
 
 pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Terminal) ?[]const u8 {
+    return serializeState(alloc, term, true);
+}
+
+/// The visible screen and the terminal's modes, with no scrollback. A client
+/// that fell behind already has the scrollback up to the point where its
+/// output was dropped; the rows that it missed are read by range. The screen
+/// is cleared first, because the client's screen still shows the old rows.
+pub fn serializeScreenState(alloc: std.mem.Allocator, term: *ghostty_vt.Terminal) ?[]const u8 {
+    return serializeState(alloc, term, false);
+}
+
+fn serializeState(alloc: std.mem.Allocator, term: *ghostty_vt.Terminal, with_scrollback: bool) ?[]const u8 {
     var builder: std.Io.Writer.Allocating = .init(alloc);
     defer builder.deinit();
 
@@ -222,6 +234,7 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
     const screen_top = pages.getTopLeft(.screen);
     const active_top = pages.getTopLeft(.active);
     const has_scrollback = !screen_top.eql(active_top);
+    if (!with_scrollback) builder.writer.writeAll("\x1b[H\x1b[2J\x1b[0m") catch return null;
 
     // Two-phase serialization to preserve scrollback without corrupting
     // cursor positions. This matters for nested zmx sessions (zmx→SSH→zmx)
@@ -236,7 +249,7 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
     // See: https://github.com/neurosnap/zmx/issues/31
 
     // Phase 1: scrollback only (if any exists)
-    if (has_scrollback) {
+    if (with_scrollback and has_scrollback) {
         if (active_top.up(1)) |sb_bottom_row| {
             var sb_bottom = sb_bottom_row;
             sb_bottom.x = @intCast(pages.cols - 1);
