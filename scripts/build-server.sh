@@ -39,9 +39,11 @@ existing_sources() {
 # The key from the trees of server/, protocol/ and this script.
 key_from_tree() {
   local tree="$1" server protocol script
-  server="$(git -C "$ROOT" rev-parse "$tree:server")"
+  # A commit from before this script has no build key of its own; "none"
+  # gives it one that matches no prebuilt.
+  server="$(git -C "$ROOT" rev-parse -q --verify "$tree:server" || echo none)"
   protocol="$(git -C "$ROOT" rev-parse -q --verify "$tree:protocol" || echo none)"
-  script="$(git -C "$ROOT" rev-parse "$tree:scripts/build-server.sh")"
+  script="$(git -C "$ROOT" rev-parse -q --verify "$tree:scripts/build-server.sh" || echo none)"
   printf 'server %s\nprotocol %s\nbuild %s\n' "$server" "$protocol" "$script" |
     shasum -a 256 | cut -c1-16
 }
