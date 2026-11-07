@@ -182,8 +182,10 @@ struct ProjectMemoryPanel: View {
     @ViewBuilder
     private func leftOff(_ summary: ProjectMemorySummary) -> some View {
         // With no command, the line explains the empty Recent list, unless
-        // the summary already fills the space from the Git state.
-        let showsNoCommands = summary.lastActivity == nil && summarizer.state(for: project.id).text.isEmpty
+        // the summary already fills the space from the Git state. A stored
+        // summary is not drawn while the model cannot run.
+        let showsNoCommands = summary.lastActivity == nil
+            && (!summaryEnabled || summarizer.state(for: project.id).text.isEmpty)
         if summaryEnabled || showsNoCommands || summary.unresolvedFailure != nil {
             leftOffSection(summary, showsNoCommands: showsNoCommands)
         }
