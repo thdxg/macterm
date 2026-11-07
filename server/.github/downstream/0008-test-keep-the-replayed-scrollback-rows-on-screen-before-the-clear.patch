@@ -1,45 +1,31 @@
-From 1e39c5eb39c55be6cae57b5e40f5b8a32f87686a Mon Sep 17 00:00:00 2001
+From 0a61161428f5450f839c6e021dc8b499abe3efcd Mon Sep 17 00:00:00 2001
 From: Ethan Lee <ethantlee21@gmail.com>
-Date: Tue, 13 Oct 2026 01:17:37 -0400
-Subject: [PATCH] fix: scroll the replayed scrollback off the screen before the
- clear
+Date: Fri, 6 Nov 2026 19:11:02 -0500
+Subject: [PATCH] test: keep the replayed scrollback rows that are on the
+ screen before the clear
 
-The snapshot writes the scrollback, then clears the screen with ESC[2J
-and lays the visible screen out with cursor positioning. ED 2 erases the
-screen in place, and after the scrollback phase its last rows are still
-on the screen, so every reattach lost up to a screenful of scrollback
-right above the visible content.
+The snapshot writes the scrollback, then clears the screen with ESC[2J.
+ED 2 erases the screen in place, and after the scrollback phase its last
+rows are still on the screen, so every reattach lost up to a screenful
+of scrollback right above the visible content.
 
-Write one linefeed per screen row before the clear. Whatever row the
-cursor is on, that scrolls every row the scrollback phase wrote into the
-client's scrollback and leaves the screen blank for the clear.
+Upstream now writes one linefeed per screen row before the clear (in
+the zig-package rework, 186393f), which is what this patch did. The
+patch keeps only its tests, which pin that behavior together with the
+logical-line replay of 0007 and 0009.
 ---
- src/util.zig | 66 ++++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 66 insertions(+)
+ src/terminal.zig | 58 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 58 insertions(+)
 
-diff --git a/src/util.zig b/src/util.zig
-index 0ee9457..2fe2516 100644
---- a/src/util.zig
-+++ b/src/util.zig
-@@ -1010,6 +1010,14 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
-             };
-         }
- 
-+        // Scroll the scrollback off the screen before clearing it. After
-+        // phase 1 its last rows are still on the screen, and \x1b[2J erases
-+        // the screen in place, so the client would lose them. One linefeed
-+        // per screen row scrolls every row that phase 1 wrote into the
-+        // client's scrollback, whatever row the cursor is on, and leaves the
-+        // screen blank.
-+        for (0..pages.rows) |_| builder.writer.writeAll("\r\n") catch {};
-+
-         // Clear visible screen after scrollback. \x1b[2J clears only the visible
-         // rows (not the scrollback buffer). \x1b[H homes the cursor. \x1b[0m resets
-         // SGR style so phase 1 styles don't bleed into phase 2.
-@@ -1811,6 +1819,64 @@ test "serializeTerminalState keeps a soft-wrapped scrollback line whole" {
+diff --git a/src/terminal.zig b/src/terminal.zig
+index 127017a..acc1863 100644
+--- a/src/terminal.zig
++++ b/src/terminal.zig
+@@ -1182,3 +1182,61 @@ test "serializeTerminalState keeps a soft-wrapped scrollback line whole" {
+     try testing.expect(std.mem.indexOf(u8, output, "abcdefghijklmnopqrstuvwxy") != null);
      try testing.expect(std.mem.indexOf(u8, output, "abcdefghij\r\n") == null);
  }
- 
++
 +test "serializeTerminalState keeps the scrollback rows that are on screen before the clear" {
 +    const alloc = testing.allocator;
 +    const io = testing.io;
@@ -97,10 +83,6 @@ index 0ee9457..2fe2516 100644
 +    defer alloc.free(history);
 +    try testing.expect(std.mem.indexOf(u8, history, "abcdefghijklmnopqrstuvwxy\n") != null);
 +}
-+
- test "serializeTerminalState replays the mouse format set last" {
-     const alloc = testing.allocator;
-     const io = testing.io;
 -- 
 2.54.0 (Apple Git-157)
 

@@ -4,9 +4,10 @@ const lib_posix = @import("posix.zig");
 const Cfg = @import("cfg.zig");
 const socket = @import("socket.zig");
 const ipc = @import("ipc.zig");
+const foreground = @import("foreground.zig");
 const assert = std.debug.assert;
 const log = @import("log.zig");
-const cross = @import("cross.zig");
+const cross = @import("cross");
 
 const Cmd = struct {
     file: [*:0]const u8,
@@ -17,27 +18,37 @@ pub fn createCmdZ(def_shell: []const u8, is_task_mode: bool, command: ?[]const [
     const gpa = std.heap.c_allocator;
 
     if (command) |cmd_args| {
-        const argv = try gpa.allocSentinel(?[*:0]const u8, cmd_args.len, null);
-        for (cmd_args, 0..) |arg, i| {
-            argv[i] = try gpa.dupeZ(u8, arg);
+        if (cmd_args.len > 0) {
+            const argv = try gpa.allocSentinel(?[*:0]const u8, cmd_args.len, null);
+            for (cmd_args, 0..) |arg, i| {
+                const s = try gpa.dupeSentinel(u8, arg, 0);
+                argv[i] = s.ptr;
+            }
+            return .{
+                .file = argv[0].?,
+                .argv_ptr = argv.ptr,
+            };
         }
-        return .{
-            .file = argv[0].?,
-            .argv_ptr = argv.ptr,
-        };
     }
 
-    const z = try std.fmt.allocPrintSentinel(gpa, "{s}", .{def_shell}, 0);
-    const shell: [:0]const u8 = if (is_task_mode) "bash" else z;
+    const shell: [:0]const u8 = if (is_task_mode)
+        "bash"
+    else
+        try gpa.dupeSentinel(u8, def_shell, 0);
 
     // Use "-shellname" as argv[0] to signal login shell (traditional method)
-    const login_shell = try std.fmt.allocPrintSentinel(gpa, "-{s}", .{std.fs.path.basename(shell)}, 0);
+    const login_shell = try std.fmt.allocPrintSentinel(
+        gpa,
+        "-{s}",
+        .{std.fs.path.basename(shell)},
+        0,
+    );
     const argv = try gpa.allocSentinel(?[*:0]const u8, 1, null);
     argv[0] = login_shell.ptr;
 
     return .{
         .file = shell,
-        .argv_ptr = argv,
+        .argv_ptr = argv.ptr,
     };
 }
 
@@ -56,20 +67,25 @@ fn exec(sesh_name: []const u8, cmd: Cmd) !noreturn {
     };
     lib_posix.sigaction(lib_posix.SIG.PIPE, &dfl, null);
 
+    // This child execs the shell right below, so it is the one process
+    // that may shorten the environment (see `reexec_env`).
+    unsetReexecEnv();
+    _ = cross.unsetenv(foreground.env_var);
+
     const session_env = try std.fmt.allocPrintSentinel(
         gpa,
         "ZMX_SESSION={s}",
         .{sesh_name},
         0,
     );
-    _ = cross.c.putenv(session_env.ptr);
+    _ = cross.putenv(session_env.ptr);
 
-    if (cross.c.getenv("TERM")) |term_env| {
+    if (cross.getenv("TERM")) |term_env| {
         if (std.mem.eql(u8, std.mem.span(term_env), "dumb")) {
-            _ = cross.c.putenv(@constCast("TERM=xterm-256color"));
+            _ = cross.putenv(@constCast("TERM=xterm-256color"));
         }
     } else {
-        _ = cross.c.putenv(@constCast("TERM=xterm-256color"));
+        _ = cross.putenv(@constCast("TERM=xterm-256color"));
     }
 
     const err = lib_posix.execvpeZ(cmd.file, cmd.argv_ptr, std.c.environ);
@@ -88,7 +104,7 @@ pub const PtyInfo = struct {
 /// This is the second fork in the double-fork technique explained in the
 /// daemonize() comment.
 pub fn spawnPty(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize) !PtyInfo {
-    var ws: cross.c.struct_winsize = .{
+    var ws: cross.struct_winsize = .{
         .ws_row = size.rows,
         .ws_col = size.cols,
         .ws_xpixel = size.xpixel,
@@ -147,8 +163,10 @@ pub const reexec_command = "__daemon";
 
 /// Environment variables that carry the rest of `Reexec` plus the terminal
 /// size across the re-exec (argv carries only what is naturally argv: the
-/// command). `takeReexecState` reads and unsets them before the shell is
-/// spawned, so no program in the session ever sees them.
+/// command). `exec` removes them in the child that runs the shell, so no
+/// program in the session ever sees them. No zmx process that goes on running
+/// removes them: zig's `std.Io` caches the environment block at startup, and
+/// its next scan of a block that `unsetenv` shortened panics.
 pub const reexec_env = struct {
     pub const socket_fd = "ZMX_DAEMON_SOCKET_FD";
     pub const rows = "ZMX_DAEMON_ROWS";
@@ -203,15 +221,15 @@ fn reexecDisclaimed(spec: Reexec, size: ipc.Resize) !void {
     var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
     var exe_len: u32 = exe_buf.len;
     if (std.c._NSGetExecutablePath(&exe_buf, &exe_len) != 0) return error.ExecutablePathTooLong;
-    const exe = try gpa.dupeZ(u8, std.mem.sliceTo(&exe_buf, 0));
+    const exe = try gpa.dupeSentinel(u8, std.mem.sliceTo(&exe_buf, 0), 0);
 
     var argv: std.ArrayList(?[*:0]const u8) = .empty;
     try argv.append(gpa, exe.ptr);
     try argv.append(gpa, reexec_command);
-    try argv.append(gpa, (try gpa.dupeZ(u8, spec.session_name)).ptr);
+    try argv.append(gpa, (try gpa.dupeSentinel(u8, spec.session_name, 0)).ptr);
     if (spec.command) |command| {
         try argv.append(gpa, "--");
-        for (command) |arg| try argv.append(gpa, (try gpa.dupeZ(u8, arg)).ptr);
+        for (command) |arg| try argv.append(gpa, (try gpa.dupeSentinel(u8, arg, 0)).ptr);
     }
     try argv.append(gpa, null);
 
@@ -247,16 +265,16 @@ fn reexecDisclaimed(spec: Reexec, size: ipc.Resize) !void {
 fn setReexecEnv(gpa: std.mem.Allocator, name: [:0]const u8, comptime fmt: []const u8, args: anytype) !void {
     const value = try std.fmt.allocPrintSentinel(gpa, fmt, args, 0);
     defer gpa.free(value);
-    if (cross.c.setenv(name.ptr, value.ptr, 1) != 0) return error.SetEnvFailed;
+    if (cross.setenv(name.ptr, value.ptr, 1) != 0) return error.SetEnvFailed;
 }
 
 pub fn unsetReexecEnv() void {
-    for (reexec_env.all) |name| _ = cross.c.unsetenv(name.ptr);
+    for (reexec_env.all) |name| _ = cross.unsetenv(name.ptr);
 }
 
-/// Reads the state `reexecDisclaimed` left in the environment, then removes
-/// it. Null when this process was not re-exec'd. Strings are copied, since
-/// `unsetenv` may free the originals.
+/// Reads the state `reexecDisclaimed` left in the environment. Null when
+/// this process was not re-exec'd. The variables stay in the environment
+/// until `exec` removes them (see `reexec_env`).
 pub fn takeReexecState(gpa: std.mem.Allocator) !?ReexecState {
     const fd_str = lib_posix.getenv(reexec_env.socket_fd) orelse return null;
     const state: ReexecState = .{
@@ -271,7 +289,6 @@ pub fn takeReexecState(gpa: std.mem.Allocator) !?ReexecState {
         .is_task_mode = std.mem.eql(u8, lib_posix.getenv(reexec_env.task_mode) orelse "0", "1"),
         .cwd = try gpa.dupe(u8, lib_posix.getenv(reexec_env.cwd) orelse ""),
     };
-    unsetReexecEnv();
     return state;
 }
 
@@ -399,7 +416,6 @@ pub fn daemonize(sesh_name: []const u8, cmd: Cmd, keep_fds_open: []i32, reexec: 
         if (reexec) |spec| {
             reexecDisclaimed(spec, term_size) catch |err| {
                 std.log.warn("daemon re-exec failed, continuing in the forked image: {s}", .{@errorName(err)});
-                unsetReexecEnv();
             };
         }
     }

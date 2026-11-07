@@ -86,7 +86,7 @@ jobs:
           # upstream sync can bump out from under this pin — when the build
           # starts failing with stdlib API mismatches right after a sync,
           # check that field first.
-          version: 0.16.0
+          version: 0.17.1
 
       - name: Resolve version
         id: version
@@ -160,7 +160,7 @@ jobs:
       - name: Install Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.16.0
+          version: 0.17.1
 
       - name: Resolve version
         id: version

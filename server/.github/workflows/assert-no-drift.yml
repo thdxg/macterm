@@ -19,7 +19,14 @@ name: Assert No Drift
 #      scheduled sync has stopped, so the artifact is going stale; or
 #   2. the set of files main changes relative to that merge-base includes any
 #      path outside the allowlist (DOWNSTREAM_FILES + the paths each
-#      .github/downstream/*.patch declares) — i.e. it reverted or edited
+#      .github/downstream/0003-feat-let-a-client-claim-leadership-without-sending-i.patch
+    .github/downstream/0004-feat-make-the-session-daemon-its-own-responsible-pro.patch
+    .github/downstream/0005-fix-don-t-announce-a-session-that-attach-creates.patch
+    .github/downstream/0006-fix-replay-the-mouse-mode-a-program-set-last-not-the.patch
+    .github/downstream/0007-fix-replay-scrollback-as-logical-lines-so-the-client-c.patch
+    .github/downstream/0008-test-keep-the-replayed-scrollback-rows-on-screen-before-the-clear.patch
+    .github/downstream/0009-fix-replay-the-visible-screen-as-logical-lines-too.patch
+    .github/downstream/0010-feat-report-the-foreground-process-group-to-a-subscribed-client.patch
 #      upstream source it shouldn't. This file-set check is the real guarantee;
 #      it holds regardless of how the downstream commits are structured.
 #

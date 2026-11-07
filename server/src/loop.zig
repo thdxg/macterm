@@ -1,10 +1,9 @@
 const std = @import("std");
-const ghostty_vt = @import("ghostty-vt");
 const ipc = @import("ipc.zig");
 const log = @import("log.zig");
 const util = @import("util.zig");
+const cross = @import("cross");
 const foreground = @import("foreground.zig");
-const cross = @import("cross.zig");
 const socket = @import("socket.zig");
 const label = @import("label.zig");
 const lib_posix = @import("posix.zig");
@@ -13,6 +12,8 @@ const signal = @import("signal.zig");
 const assert = std.debug.assert;
 const daemonize = @import("daemonize.zig");
 const builtin = @import("builtin");
+const terminal = @import("terminal.zig");
+const ghostty_vt = terminal.ghostty_vt;
 
 /// clientLoop sends ipc commands to its corresponding daemon.  It uses poll() as its non-blocking
 /// mechanism. It will send stdin to the daemon and receive stdout from the daemon.
@@ -21,7 +22,7 @@ const builtin = @import("builtin");
 pub fn clientLoop(client_sock_fd: i32, env_str: []const u8, foreground_events: bool) !ClientResult {
     std.log.info("client loop fd={d}", .{client_sock_fd});
     const gpa: std.mem.Allocator = blk: {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             const GPA = std.heap.DebugAllocator(.{});
             const Static = struct {
                 var gpa: GPA = .{};
@@ -33,7 +34,11 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8, foreground_events: b
     defer lib_posix.close(client_sock_fd);
 
     try signal.openSignalPipe();
-    signal.installWakeHandler(@intFromEnum(lib_posix.SIG.WINCH));
+    defer signal.closeSignalPipe();
+    signal.installWakeHandler(@backingInt(lib_posix.SIG.WINCH));
+    signal.installWakeHandler(@backingInt(lib_posix.SIG.TERM));
+    signal.installWakeHandler(@backingInt(lib_posix.SIG.HUP));
+    signal.installWakeHandler(@backingInt(lib_posix.SIG.INT));
 
     // Make socket non-blocking to avoid blocking on writes
     var sock_flags = try lib_posix.fcntl(client_sock_fd, lib_posix.F.GETFL, 0);
@@ -50,7 +55,7 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8, foreground_events: b
 
     // Send init message with terminal size (buffered)
     const size = ipc.getTerminalSize(lib_posix.STDOUT_FILENO);
-    try ipc.appendSizeMessage(gpa, &sock_write_buf, .Init, size);
+    try ipc.appendMessage(gpa, &sock_write_buf, .Init, std.mem.asBytes(&size));
 
     // After Init, so the first report finds the client's size and leadership
     // settled. An old daemon ignores the tag and never reports.
@@ -113,9 +118,14 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8, foreground_events: b
         _ = try lib_posix.poll(poll_fds.items, -1);
 
         if (poll_fds.items[2].revents & lib_posix.POLL.IN != 0) {
-            signal.drainSignalPipe();
+            try signal.drainSignalPipe();
             const next_size = ipc.getTerminalSize(lib_posix.STDOUT_FILENO);
-            try ipc.appendSizeMessage(gpa, &sock_write_buf, .Resize, next_size);
+            try ipc.appendMessage(
+                gpa,
+                &sock_write_buf,
+                .Resize,
+                std.mem.asBytes(&next_size),
+            );
         }
 
         // Handle stdin -> socket (Input)
@@ -191,7 +201,12 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8, foreground_events: b
                         // daemon is asking for the client's window size usually in response
                         // to this client being set as leader.
                         const next_size = ipc.getTerminalSize(lib_posix.STDOUT_FILENO);
-                        try ipc.appendSizeMessage(gpa, &sock_write_buf, .Resize, next_size);
+                        try ipc.appendMessage(
+                            gpa,
+                            &sock_write_buf,
+                            .Resize,
+                            std.mem.asBytes(&next_size),
+                        );
                     },
                     .Switch => {
                         std.log.info("switch session", .{});
@@ -261,7 +276,7 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
     daemon.pty_fd = pty_fd;
 
     try signal.openSignalPipe();
-    signal.installWakeHandler(@intFromEnum(lib_posix.SIG.TERM));
+    signal.installWakeHandler(@backingInt(lib_posix.SIG.TERM));
     var poll_fds = try std.ArrayList(lib_posix.pollfd).initCapacity(gpa, 8);
     defer poll_fds.deinit(gpa);
 
@@ -329,7 +344,7 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
         daemon.checkForeground(gpa, false);
 
         if (poll_fds.items[2].revents & lib_posix.POLL.IN != 0) {
-            signal.drainSignalPipe();
+            signal.drainSignalPipe() catch {};
             std.log.info(
                 "SIGTERM received, shutting down gracefully session={s}",
                 .{daemon.session_name},
@@ -536,12 +551,16 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
                         .History => try daemon.handleHistory(gpa, client, &term, msg.payload),
                         .Capture => try daemon.handleCapture(gpa, client, &term, msg.payload),
                         .Run => try daemon.handleRun(gpa, io, client, msg.payload),
-                        .Ack, .TaskComplete, .LabelData, .EnvData => {},
+                        .Ack, .TaskComplete, .LabelData, .EnvData, .Unsupported => {},
                         .Write => try daemon.handleWrite(gpa, client, msg.payload),
-                        _ => std.log.warn(
-                            "ignoring unknown IPC tag={d}",
-                            .{@intFromEnum(msg.header.tag)},
-                        ),
+                        _ => {
+                            std.log.warn(
+                                "ignoring unknown IPC tag={d}",
+                                .{@backingInt(msg.header.tag)},
+                            );
+                            ipc.appendMessage(gpa, &client.write_buf, .Unsupported, "") catch {};
+                            client.has_pending_output = true;
+                        },
                     }
                 }
             }
@@ -566,6 +585,12 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
             }
 
             if (revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) {
+                // A client that writes and exits (`zmx send`, `zmx run -d`) is
+                // reported HUP with part of its message still unread: a pass
+                // reads at most 4 KiB. Closing now drops the rest. Leave it to
+                // the next pass, which reads on until EOF closes the client.
+                if (revents & lib_posix.POLL.IN != 0 and
+                    revents & (lib_posix.POLL.ERR | lib_posix.POLL.NVAL) == 0) continue;
                 const last = daemon.closeClient(gpa, client, i, false);
                 if (last) break :daemon_loop;
             }
@@ -644,7 +669,6 @@ pub const Daemon = struct {
     cwd_buf: [std.fs.max_path_bytes]u8 = undefined,
     cwd_path_buf: [std.fs.max_path_bytes]u8 = undefined,
     has_pty_output: bool = false,
-    has_had_client: bool = false,
     created_at: u64, // unix timestamp (ns)
     is_task_mode: bool = false, // flag for when session is run as a task
     task_id: [4]u8 = undefined,
@@ -660,12 +684,7 @@ pub const Daemon = struct {
     etc_shells: ?[]const u8 = null,
     etc_shells_buf: [8192]u8 = undefined,
     shell: []const u8 = "/bin/sh",
-    /// Whether the client that creates the session prints `session "<name>"
-    /// created`. `attach` turns it off: it clears the screen right after, and
-    /// on a terminal only a row or two tall the line's newline scrolls it into
-    /// scrollback, out of the clear's reach, where it survives above the
-    /// session's prompt once the terminal grows.
-    announce_create: bool = true,
+    quiet: bool = false,
 
     /// Create a Daemon. Caller is responsible for freeing all variables passed
     /// into the init fn.
@@ -800,7 +819,7 @@ pub const Daemon = struct {
     fn run(self: *Daemon, io: std.Io, dir: std.Io.Dir, sesh_name: []const u8) !bool {
         std.log.info("creating session={s}", .{sesh_name});
         const server_sock_fd: lib_posix.socket_t = try socket.createSocket(self.socket_path);
-        const log_fd = log.log_system.file.?.handle;
+        const log_fd = if (log.log_system.file) |f| f.handle else -1;
 
         var keep_fds_open = [_]i32{ server_sock_fd, dir.handle, log_fd };
         const cmd = try daemonize.createCmdZ(self.shell, self.is_task_mode, self.command);
@@ -842,7 +861,7 @@ pub const Daemon = struct {
             switch (err) {
                 error.IsClientProc => {
                     // send a msg to the client that the session was created.
-                    if (self.announce_create) {
+                    if (!self.quiet) {
                         var w_buf: [2048]u8 = undefined;
                         var w = std.Io.File.stdout().writer(io, &w_buf);
                         try w.interface.print("session \"{s}\" created\n", .{sesh_name});
@@ -912,7 +931,7 @@ pub const Daemon = struct {
         }
 
         const gpa: std.mem.Allocator = blk: {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 const GPA = std.heap.DebugAllocator(.{});
                 const Static = struct {
                     var gpa: GPA = .{};
@@ -1041,7 +1060,7 @@ pub const Daemon = struct {
         if (!foreground.supported) return;
         if (self.pty_fd < 0 or !self.hasForegroundSubscriber()) return;
         var pgrp: lib_posix.pid_t = 0;
-        if (cross.c.ioctl(self.pty_fd, cross.c.TIOCGPGRP, &pgrp) != 0 or pgrp <= 0) return;
+        if (cross.ioctl(self.pty_fd, cross.TIOCGPGRP, &pgrp) != 0 or pgrp <= 0) return;
         if (!force and self.foreground_pgid == pgrp) return;
         self.foreground_pgid = pgrp;
 
@@ -1131,6 +1150,10 @@ pub const Daemon = struct {
     ) !void {
         if (payload.len != @sizeOf(ipc.Resize)) return;
 
+        if (!client.is_terminal) {
+            client.write_buf.clearRetainingCapacity();
+            client.has_pending_output = false;
+        }
         client.is_terminal = true;
 
         if (self.leader_client_fd == null) {
@@ -1149,9 +1172,7 @@ pub const Daemon = struct {
             try resizeTerm(gpa, term, resize.cols, resize.rows);
         }
 
-        // Only serialize on re-attach (has_had_client), not first attach, to avoid
-        // interfering with shell initialization (DA1 queries, etc.)
-        if (self.has_pty_output and self.has_had_client) {
+        if (self.has_pty_output) {
             const cursor = &term.screens.active.cursor;
             std.log.debug(
                 "cursor before serialize: x={d} y={d} pending_wrap={}",
@@ -1177,21 +1198,18 @@ pub const Daemon = struct {
         // only resize if leader
         if (is_leader) {
             var ws = resize.winsize();
-            _ = cross.c.ioctl(pty_fd, cross.c.TIOCSWINSZ, &ws);
+            _ = cross.ioctl(pty_fd, cross.TIOCSWINSZ, &ws);
 
             // On re-attach, deliver SIGWINCH to the foreground process group so
             // incremental renderers (Ink, Claude Code, etc.) know to repaint.
             // If the size changed, TIOCSWINSZ above already sent SIGWINCH; if the size
             // was unchanged, the kernel suppressed it, so signal the pgrp explicitly.
-            if (self.has_pty_output and self.has_had_client) {
+            if (self.has_pty_output) {
                 var pgrp: lib_posix.pid_t = 0;
-                if (cross.c.ioctl(pty_fd, cross.c.TIOCGPGRP, &pgrp) == 0 and pgrp > 0) {
+                if (cross.ioctl(pty_fd, cross.TIOCGPGRP, &pgrp) == 0 and pgrp > 0) {
                     lib_posix.kill(-pgrp, .WINCH) catch {};
                 }
             }
-
-            // Mark that we've had a client init, so subsequent clients get terminal state
-            self.has_had_client = true;
 
             std.log.debug("init resize rows={d} cols={d}", .{ resize.rows, resize.cols });
         }
@@ -1214,7 +1232,7 @@ pub const Daemon = struct {
 
         const resize = std.mem.bytesToValue(ipc.Resize, payload);
         var ws = resize.winsize();
-        _ = cross.c.ioctl(pty_fd, cross.c.TIOCSWINSZ, &ws);
+        _ = cross.ioctl(pty_fd, cross.TIOCSWINSZ, &ws);
         try resizeTerm(gpa, term, resize.cols, resize.rows);
         std.log.debug("resize rows={d} cols={d}", .{ resize.rows, resize.cols });
     }
@@ -1256,6 +1274,7 @@ pub const Daemon = struct {
         // zeroes() so asBytes() doesn't ship struct padding + unused cmd/cwd
         // tail bytes (daemon stack contents) to clients.
         var info = std.mem.zeroes(ipc.Info);
+        info.protocol_version = ipc.PROTOCOL_VERSION;
         info.clients_len = self.clients.items.len - 1;
         info.pid = self.pid;
         info.created_at = self.created_at;
@@ -1309,7 +1328,7 @@ pub const Daemon = struct {
     ) !void {
         self.setPwd(term);
         const format: util.HistoryFormat = if (payload.len > 0)
-            @enumFromInt(payload[0])
+            @fromBackingInt(@intCast(payload[0]))
         else
             .plain;
         if (util.serializeTerminal(gpa, term, format)) |output| {
@@ -1373,7 +1392,6 @@ pub const Daemon = struct {
 
         try ipc.appendMessage(gpa, &client.write_buf, .Ack, "");
         client.has_pending_output = true;
-        self.has_had_client = true;
         std.log.debug("run command len={d}", .{payload.len});
     }
 
@@ -1450,6 +1468,9 @@ pub const Daemon = struct {
         // Chunk large files to stay under command-line length limits.
         // 48000 is divisible by 3 (clean base64 boundaries) and encodes
         // to ~64KB, well under typical ARG_MAX.
+        // The commands skip queuePtyInput's cap: it would drop the chunks
+        // past PTY_WRITE_BUF_MAX and leave the file cut short. The payload
+        // is already bounded by ipc.MAX_PAYLOAD_LEN.
         const chunk_size = 48000;
         var offset: usize = 0;
         var is_first = true;
@@ -1463,16 +1484,16 @@ pub const Daemon = struct {
             defer gpa.free(encoded);
             _ = std.base64.standard.Encoder.encode(encoded, chunk);
 
-            self.queuePtyInput(gpa, "printf '%s' '");
-            self.queuePtyInput(gpa, encoded);
+            try self.pty_write_buf.appendSlice(gpa, "printf '%s' '");
+            try self.pty_write_buf.appendSlice(gpa, encoded);
             if (is_first) {
-                self.queuePtyInput(gpa, "' | base64 -d > '");
+                try self.pty_write_buf.appendSlice(gpa, "' | base64 -d > '");
             } else {
-                self.queuePtyInput(gpa, "' | base64 -d >> '");
+                try self.pty_write_buf.appendSlice(gpa, "' | base64 -d >> '");
             }
-            self.queuePtyInput(gpa, file_path);
-            self.queuePtyInput(gpa, "'");
-            self.queuePtyInput(gpa, "\r");
+            try self.pty_write_buf.appendSlice(gpa, file_path);
+            try self.pty_write_buf.appendSlice(gpa, "'");
+            try self.pty_write_buf.appendSlice(gpa, "\r");
 
             offset = end;
             is_first = false;
@@ -1480,7 +1501,6 @@ pub const Daemon = struct {
 
         try ipc.appendMessage(gpa, &client.write_buf, .Ack, "");
         client.has_pending_output = true;
-        self.has_had_client = true;
         std.log.debug(
             "write command len={d} file_path={s}",
             .{ file_content.len, file_path },
