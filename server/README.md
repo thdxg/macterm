@@ -19,6 +19,33 @@ binary that Macterm ships.
 again (change 0004). `get`, `clear`, `send` and `history` stay for the tests
 and for a user at a shell; v2 replaces them with protocol messages.
 
+## The v2 session
+
+`zmx session [--cols N] [--rows N] [--cwd DIR] <name> [--] [command...]`
+starts a v2 session process (`src/session.zig`) and returns when its socket
+accepts connections. It is the shell's parent, and it speaks the v2 frames
+(`src/protocol/`), not the zmx IPC above. The server (Macterm issue 0048)
+runs it; `help` does not list it.
+
+- **Socket.** `<dir>/<name>`, mode 0600. `<dir>` is `MACTERM_RUNTIME_DIR`,
+  else `$XDG_RUNTIME_DIR/macterm`, else `$TMPDIR/macterm` on macOS, else
+  `~/.local/state/macterm/run`. The session refuses to start unless `lstat`
+  finds a directory of this user with mode 0700 (`src/runtime.zig`). It
+  closes a connection from another uid before it sends anything. Its log is
+  `<dir>/log/<name>.log`.
+- **Frames.** Each side sends `hello` on channel 0 first. The pane is
+  channel 1: `bytes` in and out, and the messages in
+  `src/protocol/messages.zig` ("A session's pane channel"): `state`,
+  `attach`, `resize`, `claim`, `lead`, `snapshot.start`, `snapshot.end`,
+  `exit` and `take`.
+- **Back-pressure.** Each client has a queue of at most 1 MiB. Over it, the
+  session drops the queue and sends a snapshot of the screen when the client
+  takes data again. The pty is always read.
+- **Exit status.** The session keeps the shell's status and sends `exit` to
+  each client until one sends `take`. Then it ends.
+- On macOS it starts itself again disclaimed (change 0004), as
+  `__session <name>`.
+
 ## Build and test
 
 Zig 0.17.1. Zig cannot link with Xcode 26.4 or later (zig#31658), so on a

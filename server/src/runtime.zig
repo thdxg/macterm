@@ -7,7 +7,6 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const cross = @import("cross");
 
 /// Names the directory. Tests and the server set it.
 pub const dir_env = "MACTERM_RUNTIME_DIR";
@@ -77,19 +76,41 @@ pub fn ensureDir(path: []const u8) DirError!void {
 }
 
 fn exists(path: [:0]const u8) bool {
-    var st: cross.struct_stat = undefined;
-    return cross.lstat(path.ptr, &st) == 0;
+    return lstat(path) != null;
+}
+
+const Lstat = struct { mode: u32, uid: u32 };
+
+// The POSIX values, the same on Linux and macOS.
+const s_ifmt = 0o170000;
+const s_ifdir = 0o040000;
+const s_iflnk = 0o120000;
+
+/// `lstat`: the file itself, not what a link points to. Linux's std.c has no
+/// `fstatat`, and translate-c leaves musl's `struct stat` opaque, so Linux
+/// asks `statx`.
+fn lstat(path: [:0]const u8) ?Lstat {
+    if (comptime builtin.os.tag == .linux) {
+        const linux = std.os.linux;
+        var stx: linux.Statx = undefined;
+        const rc = linux.statx(linux.AT.FDCWD, path.ptr, linux.AT.SYMLINK_NOFOLLOW, .{ .TYPE = true, .MODE = true, .UID = true }, &stx);
+        if (linux.errno(rc) != .SUCCESS) return null;
+        return .{ .mode = stx.mode, .uid = stx.uid };
+    } else {
+        var st: std.c.Stat = undefined;
+        if (std.c.fstatat(std.c.AT.FDCWD, path.ptr, &st, std.c.AT.SYMLINK_NOFOLLOW) != 0) return null;
+        return .{ .mode = st.mode, .uid = st.uid };
+    }
 }
 
 /// The check alone. `uid` is the owner that the directory must have.
 pub fn checkDir(path: [:0]const u8, uid: std.c.uid_t) DirError!void {
-    var st: cross.struct_stat = undefined;
-    if (cross.lstat(path.ptr, &st) != 0) return error.Unreadable;
-    const kind = st.st_mode & cross.S_IFMT;
-    if (kind == cross.S_IFLNK) return error.IsSymlink;
-    if (kind != cross.S_IFDIR) return error.NotADirectory;
-    if (st.st_uid != uid) return error.WrongOwner;
-    if (st.st_mode & 0o7777 != 0o700) return error.WrongMode;
+    const st = lstat(path) orelse return error.Unreadable;
+    const kind = st.mode & s_ifmt;
+    if (kind == s_iflnk) return error.IsSymlink;
+    if (kind != s_ifdir) return error.NotADirectory;
+    if (st.uid != uid) return error.WrongOwner;
+    if (st.mode & 0o7777 != 0o700) return error.WrongMode;
 }
 
 /// The text for a refusal, for people.

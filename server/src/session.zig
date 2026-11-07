@@ -132,7 +132,7 @@ pub fn resumeAfterReexec(dir: []const u8, opts: Options, listen_fd: i32) noretur
 
 fn bindSocket(path: []const u8) !i32 {
     // The socket file is 0600 from the moment it exists.
-    const old_mask = std.c.umask(0o077);
+    const old_mask = std.c.umask(0o177);
     defer _ = std.c.umask(old_mask);
     return socket.createSocket(path);
 }
