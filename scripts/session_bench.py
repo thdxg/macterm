@@ -7,14 +7,15 @@ part of the terminal, so it runs on any CI runner, macOS or Linux.
 
 Arms (each is a program on a pty that this script drives):
 
-  bare       /bin/cat on a pty. The floor: the kernel's own echo.
+  bare       /bin/cat on a pty in line mode: kernel echo only. The floor.
   zmx        `zmx attach <s> /bin/cat`. A local pane of Macterm v1.
   ssh        `ssh -tt <host> /bin/cat`. The floor for a remote pane.
   ssh-zmx    `ssh -tt <host> zmx attach <s> /bin/cat`. A remote pane of v1.
 
 Echo latency: write one key, time until the echo arrives, for --keys keys.
 Remote pane open: time from the start of `ssh … zmx attach` to the first
-echo. v1 makes a new ssh login for each remote pane.
+echo after the session prints its ready marker. v1 makes a new ssh login for
+each remote pane.
 Reattach: fill a session with --reattach-lines lines of 200 columns, detach,
 then time a new `zmx attach` until the echo of a marker line that is sent
 after the client takes the terminal. The echo comes after the replay.
@@ -31,7 +32,6 @@ import argparse
 import fcntl
 import json
 import os
-import platform
 import select
 import shlex
 import shutil
@@ -45,7 +45,7 @@ import termios
 import time
 import uuid
 
-from _harness import wait_for_load
+from _harness import runner_info, wait_for_load
 
 COLUMNS = 200
 ROWS = 50
@@ -54,25 +54,6 @@ DETACH_KEY = b"\x1c"  # ctrl+\: zmx detaches the current client.
 
 class BenchError(Exception):
     pass
-
-
-# ── Runner ──────────────────────────────────────────────────────
-
-
-def runner_info():
-    """The runner image and OS, so that a reader pools only like with like.
-    GitHub's hosted runners export ImageOS and ImageVersion."""
-    info = {
-        "image_os": os.environ.get("ImageOS"),
-        "image_version": os.environ.get("ImageVersion"),
-        "system": platform.system(),
-        "release": platform.release(),
-        "machine": platform.machine(),
-        "cpus": os.cpu_count(),
-    }
-    if platform.system() == "Darwin":
-        info["macos"] = platform.mac_ver()[0]
-    return info
 
 
 # ── The pty driver ───────────────────────────────────────────────────────
@@ -116,10 +97,12 @@ class PtyProgram:
     def read_until(self, needle, timeout, since=None):
         """Read until needle is in the output after offset `since`. Returns
         the time it arrived."""
-        start = len(self.output) if since is None else since
+        position = len(self.output) if since is None else since
         deadline = time.monotonic() + timeout
-        # A needle can arrive split across reads, so look back by its length.
-        while needle not in self.output[max(start, 0):]:
+        while self.output.find(needle, position) < 0:
+            # Search only the new bytes next time. A needle can arrive split
+            # across reads, so look back by its length less one.
+            position = max(position, len(self.output) - len(needle) + 1)
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise BenchError(
@@ -219,12 +202,16 @@ def summarize(samples):
     }
 
 
-def wait_ready(program, takes_terminal=True, timeout=30):
+def wait_ready(program, takes_terminal=True, marker=None, timeout=30):
     """Wait until the program has the terminal and its far end echoes. A
     program that does not take the terminal (bare cat) echoes through the
-    pty's own line discipline."""
+    pty's own line discipline. With a marker, wait for the session to print
+    it first: an ssh client takes the terminal before the remote side runs
+    zmx, and the remote pty would echo a key before zmx has it."""
     if takes_terminal:
         program.wait_raw(timeout)
+    if marker:
+        program.read_until(marker.encode(), timeout, since=0)
     offset = len(program.output)
     program.write(b"@")
     first_echo = program.read_until(b"@", timeout, since=offset)
@@ -251,6 +238,13 @@ class Bench:
         (self.remote_sessions if remote else self.local_sessions).append(name)
         return name
 
+    def ready_cat(self):
+        """The session's program: print a ready marker, then cat. Returns
+        the command and the marker. The marker is two words in the script, so
+        the echo of the command line never matches it."""
+        marker = f"ready-{self.nonce}"
+        return ["/bin/sh", "-c", f"printf '%s-%s\\n' ready {self.nonce}; exec /bin/cat"], marker
+
     def zmx_attach(self, name, command=None):
         return [self.args.zmx, "attach", name, *(command or [])]
 
@@ -262,19 +256,19 @@ class Bench:
 
     def remote_zmx(self, *words):
         return " ".join(
-            [f"ZMX_DIR={shlex.quote(self.zmx_dir)}", shlex.quote(self.args.remote_zmx)]
+            [f"ZMX_DIR={shlex.quote(self.zmx_dir)}", shlex.quote(self.args.zmx)]
             + [shlex.quote(word) for word in words]
         )
 
     def gate(self):
         return wait_for_load(self.args.max_load, self.args.load_timeout)
 
-    def echo_arm(self, name, argv, takes_terminal=True):
+    def echo_arm(self, name, argv, takes_terminal=True, marker=None):
         gate = self.gate()
         print(f"{name}: load {gate['load']}, {self.args.keys} keys", flush=True)
         program = PtyProgram(argv, self.env)
         try:
-            wait_ready(program, takes_terminal)
+            wait_ready(program, takes_terminal, marker)
             result = summarize(echo_latencies(program, self.args.keys))
         finally:
             program.close()
@@ -290,9 +284,10 @@ class Bench:
         samples = []
         for i in range(self.args.panes):
             name = self.session(f"pane{i}", remote=True)
-            program = PtyProgram(self.ssh(self.remote_zmx("attach", name, "/bin/cat")), self.env)
+            command, marker = self.ready_cat()
+            program = PtyProgram(self.ssh(self.remote_zmx("attach", name, *command)), self.env)
             try:
-                first_echo = wait_ready(program)
+                first_echo = wait_ready(program, marker=marker)
                 samples.append((first_echo - program.started) * 1000)
             finally:
                 program.close()
@@ -364,21 +359,31 @@ class Bench:
         shutil.rmtree(self.zmx_dir, ignore_errors=True)
 
 
+def ssh_version():
+    result = subprocess.run(["ssh", "-V"], capture_output=True, text=True, check=False)
+    return (result.stderr or result.stdout).strip() or None
+
+
 def cmd_run(args):
     args.zmx = os.path.abspath(args.zmx)
-    args.remote_zmx = args.remote_zmx or args.zmx
     if args.max_load is None:
         args.max_load = max(1.0, os.cpu_count() / 2)
     bench = Bench(args)
     arms = {}
     try:
         arms["bare"] = bench.echo_arm("bare", ["/bin/cat"], takes_terminal=False)
-        arms["zmx"] = bench.echo_arm("zmx", bench.zmx_attach(bench.session("echo"), ["/bin/cat"]))
+        command, marker = bench.ready_cat()
+        arms["zmx"] = bench.echo_arm(
+            "zmx", bench.zmx_attach(bench.session("echo"), command), marker=marker
+        )
         if args.ssh_host:
-            arms["ssh"] = bench.echo_arm("ssh", bench.ssh("/bin/cat"))
+            arms["ssh"] = bench.echo_arm(
+                "ssh", bench.ssh(" ".join(shlex.quote(word) for word in command)), marker=marker
+            )
             arms["ssh-zmx"] = bench.echo_arm(
                 "ssh-zmx",
-                bench.ssh(bench.remote_zmx("attach", bench.session("echo", remote=True), "/bin/cat")),
+                bench.ssh(bench.remote_zmx("attach", bench.session("echo", remote=True), *command)),
+                marker=marker,
             )
             arms["remote-pane-open"] = bench.remote_pane_open()
         arms["reattach"] = bench.reattach()
@@ -396,6 +401,9 @@ def cmd_run(args):
         "runner": runner_info(),
         "zmx": version.stdout.split("\n", 1)[0].split()[-1] if version.stdout else None,
         "network": args.network,
+        # OpenSSH 9.5 and later delays keystrokes (ObscureKeystrokeTiming), so
+        # the ssh arms depend on the client's version.
+        "ssh": ssh_version() if args.ssh_host else None,
         "arms": arms,
     }
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
@@ -427,16 +435,25 @@ def cmd_report(args):
         lines += [title, ""]
         if result.get("network"):
             lines += [f"Network: {result['network']}.", ""]
-        lines += ["| Measurement | n | p50 ms | p95 ms | p99 ms | Load |", "|---|---:|---:|---:|---:|---:|"]
+        if result.get("ssh"):
+            lines += [f"ssh client: {result['ssh']}.", ""]
+        lines += [
+            "| Measurement | n | p50 ms | p95 ms | p99 ms | max ms | Load |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        ]
         for arm, label in ARM_LABELS.items():
             data = result["arms"].get(arm)
             if not data:
                 continue
             gate = data.get("load_gate", {})
             load = f"{gate.get('load', '—')}" + ("" if gate.get("passed", True) else " ⚠️")
+            # A tail percentile of a few samples is only the max.
+            tail = (
+                f"{data['p95_ms']:.3f} | {data['p99_ms']:.3f}" if data["n"] >= 20 else "— | —"
+            )
             lines.append(
-                f"| {label} | {data['n']} | {data['p50_ms']:.3f} | {data['p95_ms']:.3f} "
-                f"| {data['p99_ms']:.3f} | {load} |"
+                f"| {label} | {data['n']} | {data['p50_ms']:.3f} | {tail} "
+                f"| {data['max_ms']:.3f} | {load} |"
             )
         reattach = result["arms"].get("reattach")
         if reattach:
@@ -462,8 +479,9 @@ def main():
     run.add_argument("--zmx", required=True, help="path to the zmx binary")
     run.add_argument("--out", required=True, help="path for the results JSON")
     run.add_argument("--keys", type=int, default=500, help="keys per echo arm")
-    run.add_argument("--ssh-host", help="also measure the ssh arms against this host")
-    run.add_argument("--remote-zmx", help="path to zmx on the ssh host (default: --zmx)")
+    run.add_argument("--ssh-host",
+                     help="also measure the ssh arms against this host, which has zmx "
+                          "at the same path as --zmx")
     run.add_argument("--network", help="a note on the network to the ssh host, for the report")
     run.add_argument("--panes", type=int, default=5, help="new remote panes to time")
     run.add_argument("--reattach-lines", type=int, default=10000,

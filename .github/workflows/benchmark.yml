@@ -179,6 +179,16 @@ jobs:
       - name: Build and benchmark
         run: mise run bench --verbose
 
+      # Session-layer latency (scripts/session_bench.py), headless, with the
+      # zmx of the built app. A failure here must not cost the window-state
+      # report, so it does not fail the job.
+      - name: Session layer
+        continue-on-error: true
+        run: |
+          python3 scripts/session_bench.py run \
+            --zmx build/DerivedData/Build/Products/Release/Macterm.app/Contents/Resources/zmx/zmx \
+            --out build/benchmark/session-macos.json
+
       # Under the restore-time key, success-only — see test.yml's unit job.
       - name: Save DerivedData (Release)
         uses: actions/cache/save@v6
@@ -193,6 +203,7 @@ jobs:
           path: |
             build/benchmark/results.json
             build/benchmark/session-macos.json
+          if-no-files-found: warn
 
       - name: Upload failure diagnostics
         if: failure()
@@ -223,7 +234,9 @@ jobs:
           fi
           python3 scripts/benchmark.py report "${args[@]}" > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
-          python3 scripts/session_bench.py report build/benchmark/session-macos.json >> "$GITHUB_STEP_SUMMARY"
+          if [ -f build/benchmark/session-macos.json ]; then
+            python3 scripts/session_bench.py report build/benchmark/session-macos.json >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # Hand the rendered report + verdict + PR number to benchmark-report.yml.
       # That companion runs on `workflow_run` with a read/write token (this job

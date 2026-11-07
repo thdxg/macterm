@@ -28,6 +28,7 @@ piece of it earned against real CI runners:
 
 import json
 import os
+import platform
 import re
 import shutil
 import signal
@@ -72,6 +73,23 @@ def wait_for(condition, timeout=30.0, interval=0.25, message="condition"):
         if time.monotonic() >= deadline:
             raise HarnessError(f"timed out after {timeout:.0f}s waiting for {message}")
         time.sleep(interval)
+
+
+def runner_info():
+    """The runner image and OS. A runner image change moves every number, so
+    a reader compares only results of the same image. GitHub's hosted runners
+    export ImageOS and ImageVersion."""
+    info = {
+        "image_os": os.environ.get("ImageOS"),
+        "image_version": os.environ.get("ImageVersion"),
+        "system": platform.system(),
+        "release": platform.release(),
+        "machine": platform.machine(),
+        "cpus": os.cpu_count(),
+    }
+    if platform.system() == "Darwin":
+        info["macos"] = platform.mac_ver()[0]
+    return info
 
 
 def wait_for_load(max_load, timeout):

@@ -121,7 +121,7 @@ Run each task with `mise run <name>`:
 | `e2e` | Builds the Debug app and runs the end-to-end tests against it |
 | `build` | Makes a release build and a DMG |
 | `install` | Builds the release app and installs it in `/Applications` |
-| `bench` | Makes a release build, measures the resources that each window state uses, and measures the session-layer latency |
+| `bench` | Makes a release build and measures the resources that each window state uses |
 | `clean` | Removes `build/` and the generated `Macterm.xcodeproj` |
 
 ### The `--verbose` flag

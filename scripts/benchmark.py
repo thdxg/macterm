@@ -15,7 +15,8 @@ suite (scripts/e2e/) — this file owns only the sampling and reporting.
 
 Per state: settle, then sample several short windows and report the
 per-metric median — each window reads the process's CPU-time delta (the
-primary metric — immune to sampling aliasing) and median RSS. Taking the
+primary metric — immune to sampling aliasing) and the median phys_footprint
+of the process tree. Taking the
 median across windows keeps a single co-scheduled CPU spike on a shared
 runner from skewing a state. When passwordless sudo is available (GitHub
 runners), a concurrent `powermetrics --samplers tasks` window adds
@@ -31,7 +32,6 @@ import argparse
 import ctypes
 import json
 import os
-import platform
 import re
 import statistics
 import struct
@@ -39,7 +39,7 @@ import subprocess
 import sys
 import time
 
-from _harness import HarnessError, MactermHarness, notify, sh, wait_for_load
+from _harness import HarnessError, MactermHarness, notify, runner_info, sh, wait_for_load
 
 # The benchmark samples one idle state as a sanity baseline plus the two
 # workload states that carry the real signal — an app doing terminal work,
@@ -79,12 +79,12 @@ def parse_cputime(value):
 
 
 def ps_sample(pid):
-    """Return (cputime_seconds, rss_kb) or None if the process is gone."""
-    result = sh(["ps", "-p", str(pid), "-o", "cputime=,rss="])
+    """Return the CPU time in seconds, or None if the process is gone."""
+    result = sh(["ps", "-p", str(pid), "-o", "cputime="])
     fields = result.stdout.split()
-    if result.returncode != 0 or len(fields) != 2:
+    if result.returncode != 0 or len(fields) != 1:
         return None
-    return parse_cputime(fields[0]), int(fields[1])
+    return parse_cputime(fields[0])
 
 
 _LIBPROC = ctypes.CDLL("/usr/lib/libproc.dylib") if sys.platform == "darwin" else None
@@ -134,25 +134,15 @@ def tree_footprint(root_pid, zmx_path):
     return total, len(pids)
 
 
-def runner_info():
-    """The runner image and OS. A runner image change moves every number,
-    so the report pools only baselines of the same image. GitHub's hosted
-    runners export ImageOS and ImageVersion."""
-    return {
-        "image_os": os.environ.get("ImageOS"),
-        "image_version": os.environ.get("ImageVersion"),
-        "macos": platform.mac_ver()[0],
-        "machine": platform.machine(),
-        "cpus": os.cpu_count(),
-    }
-
-
 def same_image(a, b):
-    """Whether two results came from the same runner image. A result from
-    before the image was recorded matches any image."""
-    image_a = (a.get("runner") or {}).get("image_version")
-    image_b = (b.get("runner") or {}).get("image_version")
-    return image_a is None or image_b is None or image_a == image_b
+    """Whether two results came from the same runner image: the same image
+    OS and the same macOS version. The image version is not compared: it
+    changes about weekly, and a pool of one or two runs is noise. A result
+    with no record matches nothing, so an unknown image is never pooled."""
+    def key(result):
+        runner = result.get("runner") or {}
+        return runner.get("image_os"), runner.get("macos")
+    return key(a) == key(b) and None not in key(a)
 
 
 def start_powermetrics(seconds):
@@ -239,7 +229,7 @@ def sample_window(harness, seconds):
             power.kill()
 
     return {
-        "cpu_pct": round((end[0] - start[0]) / seconds * 100, 3),
+        "cpu_pct": round((end - start) / seconds * 100, 3),
         "footprint_mb": round(statistics.median(footprint_samples) / 1048576, 1),
         "processes": int(statistics.median(tree_sizes)),
         "cpu_ms_per_s": cpu_ms_per_s,
@@ -435,7 +425,7 @@ THRESHOLD_PCT = 25
 #     by shared-runner scheduling jitter, so a big relative swing off it isn't
 #     a real regression — e.g. a focused-idle app legitimately wanders 0.6–1.4%
 #     CPU depending on what the runner co-schedules. Only the CPU metrics need
-#     it (RSS/wakeups aren't noise-dominated at low values); None disables it.
+#     it (memory/wakeups aren't noise-dominated at low values); None disables it.
 METRICS = (
     # key, table label, format, absolute noise floor, min baseline to flag
     ("cpu_pct", "CPU %", "{:.2f}", 0.5, 1.5),
