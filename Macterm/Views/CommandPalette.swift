@@ -235,6 +235,10 @@ struct CommandPalettePanel: View {
                                 PaletteLoadingNotice(loading: loading)
                                     .frame(maxWidth: .infinity, minHeight: viewportHeight)
                             }
+                            if sections.isEmpty, failure == nil, loading == nil, !PaletteQuery(raw: query).isEmpty {
+                                PaletteNoMatchesNotice()
+                                    .frame(maxWidth: .infinity, minHeight: viewportHeight)
+                            }
                             ForEach(Array(sections.enumerated()), id: \.offset) { sectionIndex, section in
                                 if let header = section.header {
                                     Text(header)
@@ -758,6 +762,16 @@ private struct PaletteLoadingNotice: View {
                 .lineLimit(1)
         }
         .padding(20)
+    }
+}
+
+/// The results when a query matches no row: one muted line, centered.
+private struct PaletteNoMatchesNotice: View {
+    var body: some View {
+        Text("No matches.")
+            .font(.system(size: 13))
+            .foregroundStyle(MactermTheme.fgMuted)
+            .padding(20)
     }
 }
 

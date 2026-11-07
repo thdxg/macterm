@@ -5942,6 +5942,22 @@
         }
       }
     },
+    "No matches." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일치하는 항목이 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配项。"
+          }
+        }
+      }
+    },
     "No node named %@" : {
       "localizations" : {
         "ko" : {
