@@ -59,6 +59,17 @@ fn mainImpl(init: std.process.Init) !void {
     var args = init.minimal.args.iterate();
     defer args.deinit();
     _ = args.next(); // skip program name
+    const first_arg = args.next();
+
+    // The v2 session runs before `Cfg`: it uses none of v1's directories or
+    // its log (see session.zig).
+    if (first_arg) |c| {
+        // No log file until the session opens its own: lines go to stderr.
+        log.log_system.io = io;
+        const shell = init.environ_map.get("SHELL") orelse "/bin/sh";
+        if (std.mem.eql(u8, c, "session")) return sessionCommand(gpa, io, init.environ_map, shell, &args);
+        if (std.mem.eql(u8, c, v2session.reexec_command)) return sessionEntry(gpa, io, init.environ_map, &args);
+    }
 
     var cfg = try Cfg.init(gpa, io);
     defer cfg.deinit(gpa);
@@ -71,7 +82,7 @@ fn mainImpl(init: std.process.Init) !void {
 
     const shell_env = init.environ_map.get("SHELL") orelse "/bin/sh";
 
-    const cmd = args.next() orelse {
+    const cmd = first_arg orelse {
         return list(gpa, io, &cfg, false);
     };
 
@@ -278,10 +289,6 @@ fn mainImpl(init: std.process.Init) !void {
             }
             if (!killed_any) return printError(io, "no matching sessions found", .{});
         }
-    } else if (std.mem.eql(u8, cmd, "session")) {
-        return sessionCommand(gpa, io, init.environ_map, &cfg, shell_env, &args);
-    } else if (std.mem.eql(u8, cmd, v2session.reexec_command)) {
-        return sessionEntry(gpa, io, init.environ_map, &cfg, &args);
     } else if (std.mem.eql(u8, cmd, daemonize.reexec_command)) {
         return daemonEntry(gpa, io, &cfg, &args);
     } else {
@@ -327,8 +334,8 @@ fn daemonEntry(gpa: std.mem.Allocator, io: std.Io, cfg: *Cfg, args: anytype) !vo
 /// `session [--cols N] [--rows N] [--cwd DIR] <name> [--] [command...]`: starts
 /// a v2 session (session.zig) and returns once its socket accepts
 /// connections. Not in `help` yet: the server (issue 0048) runs it.
-fn sessionCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, cfg: *Cfg, shell: []const u8, args: anytype) !void {
-    var opts: v2session.Options = .{ .name = "", .shell = shell, .max_scrollback_lines = cfg.max_scrollback_lines };
+fn sessionCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, shell: []const u8, args: anytype) !void {
+    var opts: v2session.Options = .{ .name = "", .shell = shell };
     var command: std.ArrayList([]const u8) = .empty;
     defer command.deinit(gpa);
     while (args.next()) |arg| {
@@ -373,7 +380,7 @@ fn sessionCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.En
 /// The macOS v2 session after its disclaiming re-exec; not a user command.
 /// argv is `__session <name> [-- command...]`, the rest rides in
 /// `daemonize.reexec_env`, as for `__daemon`.
-fn sessionEntry(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, cfg: *Cfg, args: anytype) !void {
+fn sessionEntry(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, args: anytype) !void {
     const name = args.next() orelse return printError(io, "{s}: session name required", .{v2session.reexec_command});
     var command: std.ArrayList([]const u8) = .empty;
     defer command.deinit(gpa);
@@ -389,7 +396,6 @@ fn sessionEntry(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Envi
         .command = if (command.items.len > 0) command.items else null,
         .shell = state.shell,
         .size = state.size,
-        .max_scrollback_lines = cfg.max_scrollback_lines,
     }, state.server_sock_fd);
 }
 

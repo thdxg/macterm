@@ -834,7 +834,7 @@ pub const Daemon = struct {
         var dir = try std.Io.Dir.openDirAbsolute(io, self.cfg.socket_dir, .{});
         defer dir.close(io);
         const cmd = try daemonize.createCmdZ(self.shell, self.command);
-        const pty_info = daemonize.spawnPty(self.session_name, cmd, size) catch |err| {
+        const pty_info = daemonize.spawnPty(self.session_name, cmd, size, (daemonize.SpawnOpts{}).session_var) catch |err| {
             lib_posix.close(server_sock_fd);
             dir.deleteFile(io, self.session_name) catch {};
             return err;

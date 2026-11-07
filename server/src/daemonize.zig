@@ -115,11 +115,8 @@ pub const SpawnOpts = struct {
 ///
 /// This is the second fork in the double-fork technique explained in the
 /// daemonize() comment.
-pub fn spawnPty(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize) !PtyInfo {
-    return spawnPtyAs(sesh_name, cmd, size, (SpawnOpts{}).session_var);
-}
-
-pub fn spawnPtyAs(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize, session_var: []const u8) !PtyInfo {
+/// `session_var` names the session in the shell's environment.
+pub fn spawnPty(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize, session_var: []const u8) !PtyInfo {
     var ws: cross.struct_winsize = .{
         .ws_row = size.rows,
         .ws_col = size.cols,
@@ -435,5 +432,5 @@ pub fn daemonize(sesh_name: []const u8, cmd: Cmd, keep_fds_open: []i32, reexec: 
         }
     }
 
-    return spawnPtyAs(sesh_name, cmd, term_size, opts.session_var);
+    return spawnPty(sesh_name, cmd, term_size, opts.session_var);
 }

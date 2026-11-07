@@ -37,6 +37,21 @@ pub const reexec_command = "__session";
 /// 0036's benchmark sets it.
 pub const client_cap = 1024 * 1024;
 
+/// The most that may wait for one client in all, messages and snapshots
+/// included. Over it, the client is closed: it asks for more than it reads.
+pub const client_hard_cap = 64 * 1024 * 1024;
+
+/// The largest frame that a client may send. Input over `pty_in_max` is
+/// dropped anyway, and no message needs more.
+pub const client_frame_max = 1024 * 1024;
+
+/// The most clients at one time. A connection over it is closed.
+pub const max_clients = 64;
+
+/// The largest pane size that a client may ask for, in cells. A larger one
+/// is cut to it; a size of 0 is ignored.
+pub const max_cells = 1000;
+
 /// A snapshot goes out in `bytes` frames of at most this size.
 const snapshot_chunk = 64 * 1024;
 
@@ -72,12 +87,14 @@ pub const StartError = error{
 /// accepts connections; the session process itself never returns from here.
 pub fn start(gpa: std.mem.Allocator, io: std.Io, dir: []const u8, opts: Options) !void {
     if (!validName(opts.name)) return error.InvalidName;
-    runtime.ensureDir(dir) catch |err| {
-        std.log.err("runtime dir {s} {s}", .{ dir, runtime.describe(err) });
-        return error.RuntimeDir;
-    };
+    runtime.ensureDir(dir) catch return error.RuntimeDir;
     const path = try socket.getSocketPath(gpa, dir, opts.name);
     defer gpa.free(path);
+
+    // From the check to the bind, so that two starts of one name cannot both
+    // find the socket stale. The lock goes with the fd when the caller exits.
+    const lock_fd = try lockDir(dir);
+    defer lib_posix.close(lock_fd);
 
     if (ipc.connectSession(path)) |fd| {
         lib_posix.close(fd);
@@ -121,13 +138,29 @@ pub fn start(gpa: std.mem.Allocator, io: std.Io, dir: []const u8, opts: Options)
 
 /// The `__session` entry on macOS, after the disclaiming re-exec.
 pub fn resumeAfterReexec(dir: []const u8, opts: Options, listen_fd: i32) noreturn {
+    // The re-exec cleared CLOEXEC so that the socket lived on. Set it again,
+    // or the shell and every program in the pane would hold it, and could
+    // accept the next client in place of the session.
+    _ = lib_posix.fcntl(listen_fd, lib_posix.F.SETFD, std.c.FD_CLOEXEC) catch {};
     const cmd = daemonize.createCmdZ(opts.shell, opts.command) catch std.process.exit(1);
-    const pty = daemonize.spawnPtyAs(opts.name, cmd, opts.size, runtime.session_env) catch |err| {
+    const pty = daemonize.spawnPty(opts.name, cmd, opts.size, runtime.session_env) catch |err| {
         std.log.err("session {s}: pty failed: {s}", .{ opts.name, @errorName(err) });
         unlinkSocket(dir, opts.name);
         std.process.exit(1);
     };
     serveAndExit(dir, opts, listen_fd, pty);
+}
+
+fn lockDir(dir: []const u8) !i32 {
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const path = try std.fmt.bufPrintSentinel(&buf, "{s}/.lock", .{dir}, 0);
+    const fd = std.c.open(path.ptr, .{ .ACCMODE = .RDWR, .CREAT = true, .CLOEXEC = true, .NOFOLLOW = true }, @as(std.c.mode_t, 0o600));
+    if (fd < 0) return error.LockFailed;
+    if (std.c.flock(fd, std.c.LOCK.EX) != 0) {
+        lib_posix.close(fd);
+        return error.LockFailed;
+    }
+    return fd;
 }
 
 fn bindSocket(path: []const u8) !i32 {
@@ -177,12 +210,15 @@ fn openLog(io: std.Io, dir: []const u8, name: []const u8) void {
     log.log_system.init(io, path, std.Io.File.Permissions.fromMode(0o600)) catch {};
 }
 
-/// The bytes that wait for one client, as whole frames.
+/// The bytes that wait for one client, as whole frames. Pane output can be
+/// dropped; messages and snapshots cannot.
 pub const OutQueue = struct {
     buf: std.ArrayList(u8) = .empty,
     /// Where the first whole frame starts. Above 0 when a write sent the
     /// first part of a frame: those bytes must follow, or the stream breaks.
     boundary: usize = 0,
+    /// Where the last frame that must not be dropped ends.
+    keep_end: usize = 0,
 
     pub fn deinit(q: *OutQueue, gpa: std.mem.Allocator) void {
         q.buf.deinit(gpa);
@@ -192,12 +228,23 @@ pub const OutQueue = struct {
         return q.buf.items.len;
     }
 
-    pub fn append(q: *OutQueue, gpa: std.mem.Allocator, channel: u32, kind: frame.Kind, body: []const u8) !void {
+    /// `droppable` is true for pane output only.
+    pub fn append(q: *OutQueue, gpa: std.mem.Allocator, channel: u32, kind: frame.Kind, body: []const u8, droppable: bool) !void {
         var header: [frame.header_len]u8 = undefined;
         try frame.writeHeader(&header, channel, kind, body.len);
         try q.buf.ensureUnusedCapacity(gpa, header.len + body.len);
         q.buf.appendSliceAssumeCapacity(&header);
         q.buf.appendSliceAssumeCapacity(body);
+        if (!droppable) q.keep_end = q.buf.items.len;
+    }
+
+    /// The output that a drop would remove.
+    pub fn droppableLen(q: *const OutQueue) usize {
+        return q.buf.items.len - q.dropPoint();
+    }
+
+    fn dropPoint(q: *const OutQueue) usize {
+        return @max(q.boundary, q.keep_end);
     }
 
     /// Removes the first `n` bytes, which a write sent.
@@ -208,13 +255,15 @@ pub const OutQueue = struct {
             q.boundary += frame.header_len + body_len;
         }
         q.boundary -= n;
+        q.keep_end -|= n;
         q.buf.replaceRangeAssumeCapacity(0, n, &.{});
     }
 
-    /// Drops every frame that has not started to go out. The rest of a frame
-    /// that is half sent stays, so that the stream stays whole.
+    /// Drops the output after the last frame that must stay, and that has
+    /// not started to go out. The rest of a frame that is half sent stays,
+    /// so that the stream stays whole.
     pub fn drop(q: *OutQueue) void {
-        q.buf.shrinkRetainingCapacity(q.boundary);
+        q.buf.shrinkRetainingCapacity(q.dropPoint());
     }
 };
 
@@ -412,6 +461,11 @@ const Session = struct {
             lib_posix.close(fd);
             return;
         }
+        if (s.clients.items.len >= max_clients) {
+            std.log.warn("session {s}: {d} clients, a new one closed", .{ s.name, max_clients });
+            lib_posix.close(fd);
+            return;
+        }
         const c = s.gpa.create(Client) catch {
             lib_posix.close(fd);
             return;
@@ -464,11 +518,11 @@ const Session = struct {
         defer if (out.ptr != data.ptr) s.gpa.free(out);
         for (s.clients.items) |c| {
             if (!c.attached or c.behind or c.dead) continue;
-            c.out.append(s.gpa, m.pane_channel, .bytes, out) catch {
-                c.dead = true;
+            c.out.append(s.gpa, m.pane_channel, .bytes, out, true) catch {
+                s.dropClient(c);
                 continue;
             };
-            if (c.out.len() > client_cap) {
+            if (c.out.droppableLen() > client_cap) {
                 c.out.drop();
                 c.behind = true;
                 std.log.info("session {s}: client fd={d} fell behind, output dropped", .{ s.name, c.fd });
@@ -524,6 +578,11 @@ const Session = struct {
         var used: usize = 0;
         defer c.in.replaceRangeAssumeCapacity(0, used, &.{});
         while (!c.dead and !c.closing) {
+            // A frame larger than any that a client needs closes the client
+            // before its body is read.
+            const rest = c.in.items[used..];
+            if (rest.len >= frame.header_len and std.mem.readInt(u32, rest[0..4], .little) > client_frame_max)
+                return s.dropClient(c);
             const parsed = (frame.parse(c.in.items[used..]) catch return s.dropClient(c)) orelse break;
             used += parsed.len;
             s.handleFrame(c, parsed.frame);
@@ -582,13 +641,17 @@ const Session = struct {
     fn handlePane(s: *Session, c: *Client, arena: std.mem.Allocator, msg: m.PaneMessage) !void {
         if (std.mem.eql(u8, msg.t, m.Attach.name)) {
             const a = try m.decodePane(m.Attach, arena, msg);
-            s.attach(c, .{ .cols = a.cols, .rows = a.rows, .xpixel = a.xpixel, .ypixel = a.ypixel });
+            const size = paneSize(a.cols, a.rows, a.xpixel, a.ypixel) orelse return;
+            s.attach(c, size);
         } else if (std.mem.eql(u8, msg.t, m.Resize.name)) {
+            // Only a client that shows the pane has a size that counts.
+            if (!c.attached) return;
             const r = try m.decodePane(m.Resize, arena, msg);
+            const size = paneSize(r.cols, r.rows, r.xpixel, r.ypixel) orelse return;
             if (s.leader == null) s.setLeader(c);
-            if (s.leader == c) s.resize(.{ .cols = r.cols, .rows = r.rows, .xpixel = r.xpixel, .ypixel = r.ypixel });
+            if (s.leader == c) s.resize(size);
         } else if (std.mem.eql(u8, msg.t, m.Claim.name)) {
-            if (s.leader != c) s.setLeader(c);
+            if (c.attached and s.leader != c) s.setLeader(c);
         } else if (std.mem.eql(u8, msg.t, m.Take.name)) {
             if (s.exited() != null) {
                 std.log.info("session {s}: exit status taken", .{s.name});
@@ -631,6 +694,7 @@ const Session = struct {
         }
     }
 
+    /// `size` comes from `paneSize`: never 0.
     fn resize(s: *Session, size: ipc.Resize) void {
         s.size = size;
         if (!s.pty_closed) {
@@ -666,13 +730,11 @@ const Session = struct {
         var rest = data;
         while (rest.len > 0 and !c.dead) {
             const n = @min(rest.len, snapshot_chunk);
-            c.out.append(s.gpa, m.pane_channel, .bytes, rest[0..n]) catch {
-                c.dead = true;
-                return;
-            };
+            c.out.append(s.gpa, m.pane_channel, .bytes, rest[0..n], false) catch return s.dropClient(c);
             rest = rest[n..];
         }
         s.sendPane(c, m.SnapshotEnd, .{});
+        s.checkHardCap(c);
     }
 
     fn writeClient(s: *Session, c: *Client) void {
@@ -698,7 +760,13 @@ const Session = struct {
     fn dropClient(s: *Session, c: *Client) void {
         if (c.dead) return;
         c.dead = true;
-        if (s.leader == c) s.leader = null;
+        if (s.leader != c) return;
+        s.leader = null;
+        // The client that attached first of those left leads next. It sends
+        // its size when it reads `lead`.
+        for (s.clients.items) |next| {
+            if (next.attached and !next.dead) return s.setLeader(next);
+        }
     }
 
     fn sweep(s: *Session) void {
@@ -716,20 +784,30 @@ const Session = struct {
     fn sendControl(s: *Session, c: *Client, value: anytype) void {
         const body = msgpack.encodeAlloc(s.gpa, value) catch return;
         defer s.gpa.free(body);
-        c.out.append(s.gpa, frame.control_channel, .msg, body) catch {
-            c.dead = true;
-        };
+        c.out.append(s.gpa, frame.control_channel, .msg, body, false) catch return s.dropClient(c);
+        s.checkHardCap(c);
     }
 
     fn sendPane(s: *Session, c: *Client, comptime M: type, value: M) void {
         var out: std.Io.Writer.Allocating = .init(s.gpa);
         defer out.deinit();
         m.encodePane(&out.writer, M, value) catch return;
-        c.out.append(s.gpa, m.pane_channel, .msg, out.written()) catch {
-            c.dead = true;
-        };
+        c.out.append(s.gpa, m.pane_channel, .msg, out.written(), false) catch return s.dropClient(c);
+        s.checkHardCap(c);
+    }
+
+    fn checkHardCap(s: *Session, c: *Client) void {
+        if (c.out.len() <= client_hard_cap) return;
+        std.log.warn("session {s}: client fd={d} does not read, closed", .{ s.name, c.fd });
+        s.dropClient(c);
     }
 };
+
+/// A size from a client, cut to `max_cells`. Null for a size of 0.
+fn paneSize(cols: u16, rows: u16, xpixel: u16, ypixel: u16) ?ipc.Resize {
+    if (cols == 0 or rows == 0) return null;
+    return .{ .cols = @min(cols, max_cells), .rows = @min(rows, max_cells), .xpixel = xpixel, .ypixel = ypixel };
+}
 
 /// Resizes the terminal with the prompt redraw off (see `Daemon.resizeTerm`):
 /// the shell's redraw goes to the pty, not to this terminal.
@@ -765,14 +843,14 @@ test "the out queue drops whole frames and keeps a frame that is half sent" {
     const gpa = testing.allocator;
     var q: OutQueue = .{};
     defer q.deinit(gpa);
-    try q.append(gpa, 1, .bytes, "abcdef");
-    try q.append(gpa, 1, .bytes, "gh");
+    try q.append(gpa, 1, .bytes, "abcdef", true);
+    try q.append(gpa, 1, .bytes, "gh", true);
     try testing.expectEqual(2 * frame.header_len + 8, q.len());
 
     // A write sent the first header and two bytes of the first body.
     q.consume(frame.header_len + 2);
     try testing.expectEqual(4, q.boundary);
-    try q.append(gpa, 1, .msg, "x");
+    try q.append(gpa, 1, .bytes, "x", true);
     q.drop();
     // What is left is the rest of the first frame: "cdef".
     try testing.expectEqualStrings("cdef", q.buf.items);
@@ -781,16 +859,48 @@ test "the out queue drops whole frames and keeps a frame that is half sent" {
     try testing.expectEqual(0, q.boundary);
 
     // At a boundary, a drop leaves nothing.
-    try q.append(gpa, 1, .bytes, "abc");
+    try q.append(gpa, 1, .bytes, "abc", true);
     q.drop();
     try testing.expectEqual(0, q.len());
 
     // A write that ends inside a later frame.
-    try q.append(gpa, 1, .bytes, "ab");
-    try q.append(gpa, 1, .bytes, "cd");
+    try q.append(gpa, 1, .bytes, "ab", true);
+    try q.append(gpa, 1, .bytes, "cd", true);
     q.consume(frame.header_len + 2 + 3);
     try testing.expectEqual(frame.header_len - 3 + 2, q.boundary);
     q.drop();
     try testing.expectEqual(frame.header_len - 3 + 2, q.len());
     try testing.expectEqualStrings("cd", q.buf.items[q.len() - 2 ..]);
+}
+
+test "the out queue never drops a message or a snapshot" {
+    const gpa = testing.allocator;
+    var q: OutQueue = .{};
+    defer q.deinit(gpa);
+    try q.append(gpa, 1, .bytes, "out1", true);
+    try q.append(gpa, 1, .msg, "lead", false);
+    try q.append(gpa, 1, .bytes, "snap", false);
+    try q.append(gpa, 1, .bytes, "out2", true);
+    try testing.expectEqual(frame.header_len + 4, q.droppableLen());
+    q.drop();
+    // Output before the last kept frame stays: it comes first on the wire.
+    try testing.expectEqual(3 * (frame.header_len + 4), q.len());
+    try testing.expectEqualStrings("snap", q.buf.items[q.len() - 4 ..]);
+    try testing.expectEqual(0, q.droppableLen());
+
+    // Sent bytes move the kept end with them.
+    q.consume(frame.header_len + 4);
+    try testing.expectEqual(2 * (frame.header_len + 4), q.keep_end);
+    try q.append(gpa, 1, .bytes, "out3", true);
+    q.drop();
+    try testing.expectEqual(2 * (frame.header_len + 4), q.len());
+}
+
+test "a pane size is cut to the limit, and 0 is ignored" {
+    try testing.expectEqual(null, paneSize(0, 24, 0, 0));
+    try testing.expectEqual(null, paneSize(80, 0, 0, 0));
+    const big = paneSize(65535, 65535, 1, 2).?;
+    try testing.expectEqual(max_cells, big.cols);
+    try testing.expectEqual(max_cells, big.rows);
+    try testing.expectEqual(80, paneSize(80, 24, 0, 0).?.cols);
 }

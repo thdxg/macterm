@@ -139,6 +139,76 @@ assert b"snap-5" in b.output, b.output
 PY
 }
 
+@test "session: an attach snapshot over the cap arrives whole, after the state" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+from v2client import Client
+a = Client("s1")
+a.attach(160, 24)
+# About 1.5 MB of scrollback: more than the 1 MiB cap.
+a.type("head -c 1500000 /dev/zero | tr '\\0' x | fold -w 150; printf 'fill-%s\\n' 1\r")
+a.wait_output("fill-1", timeout=120)
+a.close()
+
+b = Client("s1")
+b.attach(160, 24)
+b.wait_msg("snapshot.end", timeout=60)
+kinds = [v["t"] for v in b.messages()]
+assert kinds[0] == "state", kinds
+start = b.messages("snapshot.start")
+assert start[0]["a"]["scrollback"] is True, start
+assert len(start) == 1, start
+assert len(b.output) > 1000000, len(b.output)
+PY
+}
+
+@test "session: when the leader leaves, the client that remains leads" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+from v2client import Client
+a = Client("s1")
+a.attach(80, 24)
+assert a.wait_msg("lead")["leader"] is True
+b = Client("s1")
+b.attach(60, 20)
+b.wait_msg("state")
+# A client that does not show the pane cannot take the lead.
+s = Client("s1")
+s.wait_msg("state")
+s.pane("claim")
+s.pane("resize", cols=30, rows=5)
+a.close()
+assert b.wait_msg("lead")["leader"] is True
+b.pane("resize", cols=60, rows=20)
+b.type("stty size; printf 'ok-%s\\n' 1\r")
+b.wait_output("ok-1")
+assert b"20 60" in b.output, b.output
+assert not s.messages("lead"), s.messages("lead")
+PY
+}
+
+@test "session: the exit comes after the last output, and an early take is ignored" {
+  "$ZMX" session s1 -- /bin/sh -c 'sleep 1; printf last-%s 1; exit 3'
+  python3 - <<'PY'
+from v2client import Client, PANE, MSG
+c = Client("s1")
+c.attach(80, 24)
+c.wait_msg("state")
+c.pane("take")
+assert c.wait_msg("exit", timeout=10) == {"code": 3}, c.messages()
+assert not c.closed
+seen = b""
+for ch, kind, v in c.frames:
+    if ch == PANE and kind == MSG and v.get("t") == "exit":
+        break
+    if kind != MSG:
+        seen += v
+assert b"last-1" in seen, seen
+c.pane("take")
+c.wait_closed()
+PY
+}
+
 @test "session: a client that stops reading gets a snapshot, and the shell never blocks" {
   "$ZMX" session s1 -- /bin/sh
   python3 - <<'PY'

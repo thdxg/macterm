@@ -238,9 +238,10 @@ pub const State = struct {
     rows: u16,
 };
 
-/// The first message of a client that shows the pane: its size. The session
-/// answers with a snapshot (`SnapshotStart`, `bytes`, `SnapshotEnd`), laid
-/// out for that size when the client leads.
+/// The first message of a client that shows the pane: its size. When the
+/// pane has output, the session answers with a snapshot (`SnapshotStart`,
+/// `bytes`, `SnapshotEnd`), laid out for that size when the client leads.
+/// A size over 1000 cells is cut to 1000; a size of 0 is ignored.
 pub const Attach = struct {
     pub const name = "attach";
     pub const since = 1;
@@ -273,7 +274,8 @@ pub const Claim = struct {
 };
 
 /// Tells a client that it leads (its size is the pty's) or that it does not.
-/// A client that starts to lead sends its size.
+/// When the leader leaves, the client that attached first of those left
+/// leads. A client that starts to lead sends its size.
 pub const Lead = struct {
     pub const name = "lead";
     pub const since = 1;
