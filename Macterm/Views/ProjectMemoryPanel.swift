@@ -69,6 +69,21 @@ struct ProjectMemoryPanel: View {
                 try? await Task.sleep(for: Self.gitRefreshInterval)
             }
         }
+        .task(id: project.id) {
+            // A local repository tells the panel when its git dir changes,
+            // so a switch made anywhere moves the highlight at once
+            // (`GitDirectoryWatcher`). The watch lives as long as the task.
+            guard case let .local(path)? = ProjectPath.parse(project.path) else { return }
+            let projectID = project.id
+            let watcher = GitDirectoryWatcher(projectRoot: ProjectPath.canonicalLocal(path)) { [memory] in
+                memory.refreshGit(projectID, after: ProjectMemory.gitReadAfterDirectoryChange)
+            }
+            guard watcher != nil else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3600))
+            }
+            withExtendedLifetime(watcher) {}
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Back from another app, where the user may have committed or
             // saved files.
@@ -406,6 +421,9 @@ struct ProjectMemoryPanel: View {
             line = "git switch \(branch.name)"
         }
         ProjectMemoryActions.type(line, in: project, appState: appState)
+        // A remote shell may report no command end, and a remote git dir
+        // has no watch: read the state when the switch should be done.
+        memory.refreshGit(project.id, after: .seconds(1))
     }
 
     private func branchHelp(_ branch: GitStatus.Branch, isCurrent _: Bool) -> String {
