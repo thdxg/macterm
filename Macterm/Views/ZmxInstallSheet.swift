@@ -206,7 +206,7 @@ struct ZmxInstallSheet: View {
         ScrollViewReader { proxy in
             ScrollView {
                 Text(verbatim: flow.log.isEmpty ? " " : flow.log)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.terminal(.caption))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                     .id("end")
