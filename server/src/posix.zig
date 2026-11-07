@@ -689,6 +689,10 @@ fn openZ(file_path: [*:0]const u8, flags: O, perm: mode_t) OpenError!fd_t {
             .NAMETOOLONG => return error.NameTooLong,
             .NFILE => return error.SystemFdQuotaExceeded,
             .NODEV => return error.NoDevice,
+            // `/dev/tty` with no controlling terminal (a daemon after
+            // setsid, a CI job). Without this arm the error is
+            // `Unexpected`, which prints a stack trace (thdxg/zmx#22).
+            .NXIO => return error.NoDevice,
             .NOENT => return error.FileNotFound,
             .SRCH => return error.ProcessNotFound,
             .NOMEM => return error.SystemResources,
@@ -1313,4 +1317,19 @@ pub fn kill(pid: pid_t, sig: SIG) KillError!void {
         .SRCH => return error.ProcessNotFound,
         else => |err| return unexpectedErrno(err),
     }
+}
+
+extern "c" fn mkfifo(path: [*:0]const u8, mode: mode_t) c_int;
+extern "c" fn unlink(path: [*:0]const u8) c_int;
+
+test "open reports ENXIO as NoDevice" {
+    // A FIFO opened write-only and non-blocking with no reader fails with
+    // ENXIO on Linux and macOS, as `/dev/tty` does with no controlling
+    // terminal.
+    var buf: [64]u8 = undefined;
+    const path = try std.fmt.bufPrintSentinel(&buf, "/tmp/zmx-enxio-{d}", .{std.c.getpid()}, 0);
+    _ = unlink(path.ptr);
+    try std.testing.expectEqual(@as(c_int, 0), mkfifo(path.ptr, 0o600));
+    defer _ = unlink(path.ptr);
+    try std.testing.expectError(error.NoDevice, open(path, .{ .ACCMODE = .WRONLY, .NONBLOCK = true }, 0));
 }
