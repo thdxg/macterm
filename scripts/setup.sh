@@ -92,10 +92,8 @@ GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-06-4ba748b}"
 # GhosttyKit cache, whose key hashes THIS file, so a zmx bump must change it.
 #
 # build-2026-11-07-77fc677: upstream v1.0.1 with every downstream change
-# (thdxg/zmx#19). The fork no longer syncs with upstream; its DOWNSTREAM.md
-# names each change by its old patch number. zmx 1.0 changed the IPC header,
-# so it cannot talk to a session daemon from before 1.0: a pane whose session
-# an older build started stays blank until the user closes it.
+# (thdxg/zmx#19). zmx 1.0 cannot talk to a session daemon from before 1.0;
+# see "The terminal core" in AGENTS.md.
 ZMX_TAG="${ZMX_TAG:-build-2026-11-07-77fc677}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the

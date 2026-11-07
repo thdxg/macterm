@@ -44,7 +44,7 @@ struct RemoteZmxInstallTests {
         #expect(ZmxVersion.parse(output)?.isFork == true)
     }
 
-    /// The exact output of the pinned 1.0.1 build's `zmx version`.
+    /// The format of the pinned 1.0.1 build's `zmx version`.
     @Test
     func a_fork_build_on_zmx_1_0_carries_its_release_tag() {
         let output = """
