@@ -308,10 +308,15 @@ PY
   # The test opens the directory and the socket to everyone, so that only
   # the session's own peer check stands between that user and the pane.
   if ! sudo -n true 2>/dev/null; then skip "needs sudo to run a client as another user"; fi
+  # Under /tmp: the runner's own temp folder is in a home that `nobody`
+  # cannot pass through.
+  rm -rf "$RT"
+  RT="$(mktemp -d /tmp/rt.XXXXXX)"
+  export MACTERM_RUNTIME_DIR="$RT/run"
   "$ZMX" session s1 -- /bin/sh
   chmod 711 "$RT" "$MACTERM_RUNTIME_DIR"
   chmod 666 "$MACTERM_RUNTIME_DIR/s1"
-  run sudo -n -u nobody python3 - "$MACTERM_RUNTIME_DIR/s1" <<'PY'
+  run sudo -n -u nobody sh -c 'cd / && exec python3 - "$1"' sh "$MACTERM_RUNTIME_DIR/s1" <<'PY'
 import socket, sys
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.connect(sys.argv[1])
@@ -319,6 +324,7 @@ s.settimeout(5)
 print("got %d bytes" % len(s.recv(65536)))
 PY
   chmod 700 "$MACTERM_RUNTIME_DIR"
+  echo "$output"
   [ "$status" -eq 0 ]
   [ "$output" = "got 0 bytes" ]
   # The owner still gets in.
