@@ -1,0 +1,91 @@
+name: Server
+
+# Builds the session server in server/ and runs its Zig tests and its bats
+# tests where it runs: macOS, Linux x86_64 and Linux aarch64. Only a change to
+# server/ or to this file starts it.
+#
+# macOS runs on macos-15: zig cannot link with Xcode 26.4 or later
+# (zig#31658), and the xcode-27 image has nothing older.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/server.yml"
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/server.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            runner: macos-15
+          - name: Linux x86_64
+            runner: ubuntu-latest
+          - name: Linux aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          # Keep in step with minimum_zig_version in server/build.zig.zon.
+          version: 0.17.1
+
+      - name: Install Bats
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            brew install bats-core
+          else
+            sudo apt-get update -q
+            sudo apt-get install -y -q bats
+          fi
+
+      - name: Run the Zig Tests
+        run: zig build test --summary all
+
+      - name: Build
+        run: zig build
+
+      # A skipped test fails the step, so a missing tool cannot hide a test.
+      # daemon_responsibility.bats tests a macOS concept, so Linux leaves it
+      # out. The short TMPDIR keeps the socket paths under the macOS limit of
+      # 104 bytes.
+      - name: Run the Bats Tests
+        shell: bash
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          files=()
+          for f in test/*.bats; do
+            if [ "$RUNNER_OS" != macOS ] && [ "$f" = test/daemon_responsibility.bats ]; then
+              continue
+            fi
+            files+=("$f")
+          done
+          bats --tap "${files[@]}" | tee bats.tap
+          if grep -qE '^ok [0-9]+ .* # skip' bats.tap; then
+            echo "::error::A bats test was skipped."
+            exit 1
+          fi
