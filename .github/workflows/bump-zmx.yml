@@ -4,8 +4,8 @@ name: Bump zmx
 # same reason GhosttyKit is, and goes stale the same way without a way back off
 # the pin: this opens the PR, weekly, and CI is the gate. It is
 # bump-ghosttykit.yml with the API review swapped for a review of the fork's
-# commits and its DOWNSTREAM.md —
-# read that file for why each step is shaped the way it is.
+# commits and its DOWNSTREAM.md — read that file for why each step is shaped
+# the way it is.
 #
 # The PR is a real test. `Macterm/Resources/zmx` rides the GhosttyKit cache,
 # whose key hashes scripts/setup.sh, so the run downloads the NEW zmx from
@@ -94,9 +94,9 @@ jobs:
       # commits are the fork's own. DOWNSTREAM.md names each change Macterm
       # depends on; a diff in it is a change to that behavior. A tag from before
       # the freeze has no DOWNSTREAM.md, so its side of the diff is empty.
-      # Upstream PR numbers are written as neurosnap/zmx PRs in code spans,
-      # never bare: a bare #N links to a Macterm PR, and an auto-linked
-      # neurosnap/zmx#N backlinks every bump onto the upstream PR.
+      # PR numbers in commit subjects are the fork's, so they are written as
+      # thdxg/zmx PRs in code spans, never bare: a bare #N links to a Macterm
+      # PR, and an auto-linked thdxg/zmx#N backlinks every bump onto that PR.
       - name: Build the change review
         id: review
         if: steps.check.outputs.proceed == 'true'
@@ -108,15 +108,16 @@ jobs:
           # how the new pin gets tested at all.
           downstream() {
             # Prints DOWNSTREAM.md at a ref, or nothing when the ref has none.
-            # Any other failure fails the function.
-            local out
-            if out=$(gh api -H 'Accept: application/vnd.github.raw+json' \
-              "repos/thdxg/zmx/contents/DOWNSTREAM.md?ref=$1" 2>&1); then
-              printf '%s\n' "$out"
-            elif [[ "$out" == *"HTTP 404"* ]]; then
+            # Any other failure fails the function. On an error, gh prints the
+            # JSON body on stdout, so stdout goes to a file first.
+            if gh api -H 'Accept: application/vnd.github.raw+json' \
+              "repos/thdxg/zmx/contents/DOWNSTREAM.md?ref=$1" \
+              > downstream-out.txt 2> downstream-err.txt; then
+              cat downstream-out.txt
+            elif grep -q 'HTTP 404' downstream-err.txt; then
               :
             else
-              echo "$out" >&2
+              cat downstream-err.txt >&2
               return 1
             fi
           }
@@ -132,19 +133,23 @@ jobs:
           {
             echo "### Commits"
             echo
-            jq -r '.commits[] | "- `\(.sha[0:7])` \(.commit.message | split("\n")[0] | gsub("`"; "'"'"'") | gsub("\\(#(?<n>[0-9]+)\\)"; "(`neurosnap/zmx#\(.n)`)"))"' compare.json
+            jq -r '.commits[] | "- `\(.sha[0:7])` \(.commit.message | split("\n")[0] | gsub("`"; "'"'"'") | gsub("\\(#(?<n>[0-9]+)\\)"; "(`thdxg/zmx#\(.n)`)"))"' compare.json
             echo
             echo "### DOWNSTREAM.md"
             echo
-            if diff -q old-downstream.md new-downstream.md > /dev/null; then
+            if [[ ! -s old-downstream.md && ! -s new-downstream.md ]]; then
+              echo "_Neither tag has a DOWNSTREAM.md. Review the commits by hand._"
+            elif diff -q old-downstream.md new-downstream.md > /dev/null; then
               echo "_No change: the fork changes that Macterm depends on did not move._"
             else
-              echo "A change here is a change to behavior that Macterm depends on: 0003 is the leadership claim (\`ZmxLeadership.claimSequence\`), 0004 the responsible-process disclaim (#419), 0010 the foreground report. Read the code diffs of those changes, not only CI."
+              echo "A change here is a change to behavior that Macterm depends on. Read the code diffs of those changes, not only CI."
               echo
-              echo '```diff'
+              # A tilde fence, because DOWNSTREAM.md is Markdown: a backtick
+              # fence in it would close a backtick fence here.
+              echo '~~~diff'
               diff -u --label "${CURRENT}/DOWNSTREAM.md" --label "${LATEST}/DOWNSTREAM.md" \
                 old-downstream.md new-downstream.md || true
-              echo '```'
+              echo '~~~'
             fi
           } > review.md
           echo "ok=true" >> "$GITHUB_OUTPUT"
