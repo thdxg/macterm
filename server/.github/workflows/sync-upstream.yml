@@ -11,20 +11,17 @@ name: Sync Upstream
 #      Every .patch must ALSO be listed in DOWNSTREAM_FILES: the reset to
 #      pristine upstream deletes anything not snapshotted, so an unlisted
 #      patch would silently vanish on the next sync.
-#      Current, both macOS-only breaks from upstream's zig 0.16 + daemonize
-#      work, to retire when upstream fixes them: 0001 casts Cfg.log_mode
-#      (u32) to mode_t at the two fromMode call sites that miss the cast
-#      (mode_t is u16 on macOS); 0002 types wakeSignalPipe's first param
-#      with the platform SIG enum instead of a hardcoded std.os.linux.SIG.
-#      Neither changes upstream's Linux behavior. 0004 makes the session
-#      daemon its own responsible process on macOS (re-exec disclaimed),
-#      so pane programs keep their Local Network and TCC grants after the
-#      app that spawned them quits (macterm#419). Linux is untouched.
-#      (Previous patch, the OSC
-#      8 state-tracking strip —
-#      zmx#182 workaround, thdxg/zmx#1 — was retired when upstream bumped
-#      libghostty past ghostty#13394, which fixes the HyperlinkSetOutOfMemory
-#      abort properly.)
+#      Current (v1.0.1 base): 0003 Claim and 0010 Foreground add the two
+#      downstream wire tags (192 and 193, a block far from upstream's
+#      sequence, so upstream's next tag can never take one); 0004 makes
+#      the session daemon its own responsible process on macOS (re-exec
+#      disclaimed), so pane programs keep their Local Network and TCC
+#      grants after the app that spawned them quits (macterm#419); 0005
+#      creates a session quietly on attach; 0006, 0007 and 0009 fix the
+#      reattach replay (mouse modes, logical lines); 0008 keeps the
+#      tests of a replay fix that upstream adopted. 0001, 0002 and 0011
+#      were retired: upstream fixed the first two, and 0011 was folded
+#      into 0004.
 #
 # Why not `git diff upstream..HEAD` like the old workflow: it captured the whole
 # tree difference (including any accidental drift) and re-applied it every run,
@@ -59,17 +56,14 @@ env:
     .github/workflows/sync-upstream.yml
     .github/workflows/assert-no-drift.yml
     .github/workflows/test.yml
-    .github/downstream/0001-cast-log_mode-to-mode_t-for-macos.patch
-    .github/downstream/0002-use-portable-sig-type-in-wake-handler.patch
     .github/downstream/0003-feat-let-a-client-claim-leadership-without-sending-i.patch
     .github/downstream/0004-feat-make-the-session-daemon-its-own-responsible-pro.patch
     .github/downstream/0005-fix-don-t-announce-a-session-that-attach-creates.patch
     .github/downstream/0006-fix-replay-the-mouse-mode-a-program-set-last-not-the.patch
     .github/downstream/0007-fix-replay-scrollback-as-logical-lines-so-the-client-c.patch
-    .github/downstream/0008-fix-scroll-the-replayed-scrollback-off-the-screen-befo.patch
+    .github/downstream/0008-test-keep-the-replayed-scrollback-rows-on-screen-before-the-clear.patch
     .github/downstream/0009-fix-replay-the-visible-screen-as-logical-lines-too.patch
     .github/downstream/0010-feat-report-the-foreground-process-group-to-a-subscribed-client.patch
-    .github/downstream/0011-fix-build-on-linux-again.patch
 
 jobs:
   sync:

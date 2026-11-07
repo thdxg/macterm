@@ -1,6 +1,6 @@
-From 645838b6c62308c8cc5d32ae937bb992e5c229f2 Mon Sep 17 00:00:00 2001
+From 6e0aef38d3d0f51d0f7d7146494b6f272e3625b3 Mon Sep 17 00:00:00 2001
 From: Ethan Lee <ethantlee21@gmail.com>
-Date: Fri, 6 Nov 2026 11:37:53 -0500
+Date: Fri, 6 Nov 2026 19:11:02 -0500
 Subject: [PATCH] feat: report the foreground process group to a client that
  asks, so that a frontend follows a remote session without polling the host
 
@@ -22,11 +22,11 @@ keyboard produces one, a terminal that does not know it discards it,
 and it rides the client's own connection.
 
 Only a client started with `ZMX_FOREGROUND_EVENTS` in its environment
-subscribes. It removes the variable before the session starts, so a
-shell in the session does not inherit it: a nested `zmx attach` would
-otherwise report its own foreground into the outer session. An old
-daemon ignores the tag, and an old client ignores the report, so the
-two versions mix.
+subscribes. The daemon removes the variable in the child that execs the
+session's shell, so a shell in the session does not inherit it: a nested
+`zmx attach` would otherwise report its own foreground into the outer
+session. A daemon that does not know the tag replies `Unsupported`, which the
+client ignores, so the client also works with an upstream daemon.
 
 The report carries the host's verdicts (the foreground is the session's
 own shell; the name is in /etc/shells), the process name and the
@@ -35,22 +35,67 @@ sequence always ends where the client ends it. The name comes from
 proc_pidpath on macOS and /proc on Linux; on any other platform the
 daemon never reports, and the frontend keeps its old way.
 
-The tag is 24, after the downstream Claim.
+The tag is 193, next to the downstream Claim (see 0003).
 ---
- src/foreground.zig | 307 +++++++++++++++++++++++++++++++++++++++++++++
- src/ipc.zig        |   5 +
+ src/client.zig     |   5 +-
+ src/daemonize.zig  |   2 +
+ src/foreground.zig | 309 +++++++++++++++++++++++++++++++++++++++++++++
+ src/ipc.zig        |   6 +-
  src/loop.zig       | 186 ++++++++++++++++++++++++++-
- src/main.zig       |  14 ++-
+ src/main.zig       |   6 +
  src/test.zig       |   1 +
- 5 files changed, 506 insertions(+), 7 deletions(-)
+ 7 files changed, 510 insertions(+), 5 deletions(-)
  create mode 100644 src/foreground.zig
 
+diff --git a/src/client.zig b/src/client.zig
+index a4e1f10..828131d 100644
+--- a/src/client.zig
++++ b/src/client.zig
+@@ -35,6 +35,9 @@ pub const AttachOptions = struct {
+     shell: ?[]const u8 = null,
+     labels: ?[]const u8 = null,
+     tracked_env: ?[]const u8 = null,
++    /// Subscribe to foreground reports and write each one to stdout as an
++    /// APC sequence (see foreground.zig).
++    foreground_events: bool = false,
+ };
+ 
+ pub const RunOptions = struct {
+@@ -193,7 +196,7 @@ pub fn attach(alloc: Allocator, io: Io, name: []const u8, opts: AttachOptions) !
+     _ = try lib_posix.write(lib_posix.STDOUT_FILENO, clear_seq);
+ 
+     const env_str = opts.tracked_env orelse "";
+-    const looper = try loop.clientLoop(client_sock, env_str);
++    const looper = try loop.clientLoop(client_sock, env_str, opts.foreground_events);
+     switch (looper.kind) {
+         .detach => return,
+         .switch_session => {
+diff --git a/src/daemonize.zig b/src/daemonize.zig
+index c203141..0635913 100644
+--- a/src/daemonize.zig
++++ b/src/daemonize.zig
+@@ -4,6 +4,7 @@ const lib_posix = @import("posix.zig");
+ const Cfg = @import("cfg.zig");
+ const socket = @import("socket.zig");
+ const ipc = @import("ipc.zig");
++const foreground = @import("foreground.zig");
+ const assert = std.debug.assert;
+ const log = @import("log.zig");
+ const cross = @import("cross");
+@@ -69,6 +70,7 @@ fn exec(sesh_name: []const u8, cmd: Cmd) !noreturn {
+     // This child execs the shell right below, so it is the one process
+     // that may shorten the environment (see `reexec_env`).
+     unsetReexecEnv();
++    _ = cross.unsetenv(foreground.env_var);
+ 
+     const session_env = try std.fmt.allocPrintSentinel(
+         gpa,
 diff --git a/src/foreground.zig b/src/foreground.zig
 new file mode 100644
-index 0000000..f04853a
+index 0000000..bd2bd76
 --- /dev/null
 +++ b/src/foreground.zig
-@@ -0,0 +1,307 @@
+@@ -0,0 +1,309 @@
 +//! Foreground reports: the daemon tells a client that asked which process
 +//! group holds its pty, each time that changes.
 +//!
@@ -72,10 +117,12 @@ index 0000000..f04853a
 +//!
 +//! Only a client started with `ZMX_FOREGROUND_EVENTS` in its environment
 +//! subscribes and writes the sequence, so no other terminal ever sees it.
-+//! The client removes the variable from its environment before the session
-+//! starts, so a shell in the session does not inherit it: a nested
++//! The daemon removes the variable in the child that execs the session's
++//! shell, so a shell in the session does not inherit it: a nested
 +//! `zmx attach` would otherwise report its own session's foreground into
-+//! the outer one.
++//! the outer one. No zmx process that goes on running removes it: zig's
++//! `std.Io` caches the environment block at startup, and its next scan of a
++//! block that `unsetenv` shortened panics.
 +//!
 +//! The report is `zmx;foreground;<idle>;<shell>;<comm>;<args>`:
 +//!   - `idle` is `1` when the foreground group is the session's own shell
@@ -359,34 +406,42 @@ index 0000000..f04853a
 +    try testing.expectEqualStrings("", joinCmdline("", &out));
 +}
 diff --git a/src/ipc.zig b/src/ipc.zig
-index b7f3505..2e89e65 100644
+index daaf0a4..28b5dcc 100644
 --- a/src/ipc.zig
 +++ b/src/ipc.zig
-@@ -36,6 +36,11 @@ pub const Tag = enum(u8) {
-     /// It was 22 until upstream took that for Capture; a daemon receiving the
-     /// old value sees a Capture with no payload and drops it.
-     Claim = 23,
-+    /// Foreground reports (see foreground.zig). From a client with no
-+    /// payload: subscribe. From the daemon: one report, the payload is the
-+    /// text the client writes as an APC. Downstream, numbered after Claim
-+    /// for the same reason.
-+    Foreground = 24,
+@@ -40,6 +40,10 @@ pub const Tag = enum(u8) {
+     /// A client asking to become the session's leader without sending input
+     /// (see util.ClaimFilter). No payload.
+     Claim = 192,
++    /// Foreground reports (see foreground.zig). From a client, no payload:
++    /// subscribe. From the daemon: one report; the payload is the text that
++    /// `zmx attach` writes to its terminal as an APC.
++    Foreground = 193,
      // Non-exhaustive: this enum comes off the wire via bytesToValue and
      // @enumFromInt, so out-of-range values are representable
      // rather than UB. Switches must handle `_` (unknown tag).
+@@ -370,7 +374,7 @@ test "Tag wire values are frozen" {
+ 
+ test "Downstream tag wire values are frozen" {
+     inline for (.{
+-        .{ Tag.Claim, 192 },
++        .{ Tag.Claim, 192 }, .{ Tag.Foreground, 193 },
+     }) |p| try std.testing.expectEqual(@as(u8, p[1]), @backingInt(p[0]));
+ }
+ 
 diff --git a/src/loop.zig b/src/loop.zig
-index cd481aa..1446670 100644
+index 207cebd..3095437 100644
 --- a/src/loop.zig
 +++ b/src/loop.zig
-@@ -3,6 +3,7 @@ const ghostty_vt = @import("ghostty-vt");
- const ipc = @import("ipc.zig");
+@@ -3,6 +3,7 @@ const ipc = @import("ipc.zig");
  const log = @import("log.zig");
  const util = @import("util.zig");
+ const cross = @import("cross");
 +const foreground = @import("foreground.zig");
- const cross = @import("cross.zig");
  const socket = @import("socket.zig");
  const label = @import("label.zig");
-@@ -15,7 +16,9 @@ const builtin = @import("builtin");
+ const lib_posix = @import("posix.zig");
+@@ -16,7 +17,9 @@ const ghostty_vt = terminal.ghostty_vt;
  
  /// clientLoop sends ipc commands to its corresponding daemon.  It uses poll() as its non-blocking
  /// mechanism. It will send stdin to the daemon and receive stdout from the daemon.
@@ -396,10 +451,10 @@ index cd481aa..1446670 100644
 +pub fn clientLoop(client_sock_fd: i32, env_str: []const u8, foreground_events: bool) !ClientResult {
      std.log.info("client loop fd={d}", .{client_sock_fd});
      const gpa: std.mem.Allocator = blk: {
-         if (builtin.mode == .Debug) {
-@@ -49,6 +52,12 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
+         if (builtin.mode == .debug) {
+@@ -54,6 +57,12 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
      const size = ipc.getTerminalSize(lib_posix.STDOUT_FILENO);
-     try ipc.appendSizeMessage(gpa, &sock_write_buf, .Init, size);
+     try ipc.appendMessage(gpa, &sock_write_buf, .Init, std.mem.asBytes(&size));
  
 +    // After Init, so the first report finds the client's size and leadership
 +    // settled. An old daemon ignores the tag and never reports.
@@ -410,7 +465,7 @@ index cd481aa..1446670 100644
      var poll_fds = try std.ArrayList(lib_posix.pollfd).initCapacity(gpa, 4);
      defer poll_fds.deinit(gpa);
  
-@@ -169,6 +178,15 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
+@@ -179,6 +188,15 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
                              try stdout_buf.appendSlice(gpa, msg.payload);
                          }
                      },
@@ -426,15 +481,15 @@ index cd481aa..1446670 100644
                      .Resize => {
                          // daemon is asking for the client's window size usually in response
                          // to this client being set as leader.
-@@ -240,6 +258,7 @@ fn initTerminal(gpa: std.mem.Allocator, io: std.Io, size: ipc.Resize, cfg: *cons
+@@ -255,6 +273,7 @@ fn initTerminal(gpa: std.mem.Allocator, io: std.Io, size: ipc.Resize, cfg: *cons
  /// clients.  It uses poll() as its non-blocking mechanism.
  fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_fd: lib_posix.socket_t, pty_fd: i32) !void {
      std.log.info("daemon started session={s} pty_fd={d}", .{ daemon.session_name, pty_fd });
 +    daemon.pty_fd = pty_fd;
  
      try signal.openSignalPipe();
-     signal.installWakeHandler(@intFromEnum(lib_posix.SIG.TERM));
-@@ -302,7 +321,12 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
+     signal.installWakeHandler(@backingInt(lib_posix.SIG.TERM));
+@@ -317,7 +336,12 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
              });
          }
  
@@ -447,8 +502,8 @@ index cd481aa..1446670 100644
 +        daemon.checkForeground(gpa, false);
  
          if (poll_fds.items[2].revents & lib_posix.POLL.IN != 0) {
-             signal.drainSignalPipe();
-@@ -409,6 +433,11 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
+             signal.drainSignalPipe() catch {};
+@@ -424,6 +448,11 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
                          );
                      }
  
@@ -460,7 +515,7 @@ index cd481aa..1446670 100644
                      // Broadcast data to all clients.
                      // Rewrite OSC 133;A to include redraw=0 so the outer terminal
                      // does not clear prompt lines on resize (issue #111).
-@@ -486,6 +515,7 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
+@@ -501,6 +530,7 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
                          .Switch => try daemon.handleSwitch(gpa, msg.payload),
                          .Resize => try daemon.handleResize(gpa, client, pty_fd, &term, msg.payload),
                          .Claim => try daemon.handleClaim(gpa, client),
@@ -468,7 +523,7 @@ index cd481aa..1446670 100644
                          .Detach => {
                              daemon.handleDetach(gpa, client, i);
                              break :clients_loop;
-@@ -560,6 +590,8 @@ pub const Client = struct {
+@@ -585,6 +615,8 @@ pub const Client = struct {
      socket_fd: i32,
      has_pending_output: bool = false,
      is_terminal: bool = false, // sent .Init (a `zmx attach`), not a run/send/tail client
@@ -477,7 +532,7 @@ index cd481aa..1446670 100644
      read_buf: ipc.SocketBuffer,
      write_buf: std.ArrayList(u8),
      env_str: ?[]u8 = null,
-@@ -618,7 +650,15 @@ pub const Daemon = struct {
+@@ -642,7 +674,15 @@ pub const Daemon = struct {
      task_id: [4]u8 = undefined,
      task_exit_code: ?u8 = null, // null = running or n/a, set when task completes
      task_ended_at: ?u64 = null, // timestamp when task exited
@@ -492,9 +547,9 @@ index cd481aa..1446670 100644
 +    etc_shells: ?[]const u8 = null,
 +    etc_shells_buf: [8192]u8 = undefined,
      shell: []const u8 = "/bin/sh",
-     /// Whether the client that creates the session prints `session "<name>"
-     /// created`. `attach` turns it off: it clears the screen right after, and
-@@ -978,6 +1018,71 @@ pub const Daemon = struct {
+     quiet: bool = false,
+ 
+@@ -997,6 +1037,71 @@ pub const Daemon = struct {
          try self.setLeader(gpa, client);
      }
  
@@ -521,7 +576,7 @@ index cd481aa..1446670 100644
 +        if (!foreground.supported) return;
 +        if (self.pty_fd < 0 or !self.hasForegroundSubscriber()) return;
 +        var pgrp: lib_posix.pid_t = 0;
-+        if (cross.c.ioctl(self.pty_fd, cross.c.TIOCGPGRP, &pgrp) != 0 or pgrp <= 0) return;
++        if (cross.ioctl(self.pty_fd, cross.TIOCGPGRP, &pgrp) != 0 or pgrp <= 0) return;
 +        if (!force and self.foreground_pgid == pgrp) return;
 +        self.foreground_pgid = pgrp;
 +
@@ -566,7 +621,7 @@ index cd481aa..1446670 100644
      /// Queue input from `zmx send` without changing interactive client leadership.
      pub fn handleSend(self: *Daemon, gpa: std.mem.Allocator, payload: []const u8) void {
          self.queuePtyInput(gpa, payload);
-@@ -1509,6 +1614,81 @@ test "claim by the existing leader is a no-op" {
+@@ -1529,6 +1634,81 @@ test "claim by the existing leader is a no-op" {
      try std.testing.expectEqual(@as(usize, 0), client.write_buf.items.len);
  }
  
@@ -649,65 +704,45 @@ index cd481aa..1446670 100644
      const alloc = std.testing.allocator;
      const cfg = Cfg{ .socket_dir = "", .log_dir = "" };
 diff --git a/src/main.zig b/src/main.zig
-index 3fc9653..61dace9 100644
+index b02011b..cc6e1fe 100644
 --- a/src/main.zig
 +++ b/src/main.zig
-@@ -14,6 +14,7 @@ const lib_posix = @import("posix.zig");
- const signal = @import("signal.zig");
+@@ -14,6 +14,7 @@ const signal = @import("signal.zig");
  const Cfg = @import("cfg.zig");
  const loop = @import("loop.zig");
-+const foreground = @import("foreground.zig");
  const daemonize = @import("daemonize.zig");
- const Client = loop.Client;
++const foreground = @import("foreground.zig");
  const Daemon = loop.Daemon;
-@@ -199,7 +200,12 @@ pub fn main(init: std.process.Init) !void {
+ const version = build_options.version;
+ const ghostty_version = build_options.ghostty_version;
+@@ -194,12 +195,17 @@ fn mainImpl(init: std.process.Init) !void {
          const env_str = try getTrackedEnvStr(gpa, env_keys, init.environ_map);
          defer gpa.free(env_str);
  
--        return attach(gpa, io, &daemon, env_str, parsed.labels);
-+        // Read before the session starts and removed, so the session's shell
-+        // does not inherit it (see foreground.zig).
++        // The session's shell does not inherit it: the daemon removes it in
++        // the child that execs the shell (see foreground.zig).
 +        const foreground_events = lib_posix.getenv(foreground.env_var) != null;
-+        if (foreground_events) _ = cross.c.unsetenv(foreground.env_var);
 +
-+        return attach(gpa, io, &daemon, env_str, parsed.labels, foreground_events);
-     } else if (std.mem.eql(u8, cmd, "run") or std.mem.eql(u8, cmd, "r")) {
-         const session_name = args.next() orelse "";
-         if (std.mem.eql(u8, session_name, "--help") or std.mem.eql(u8, session_name, "-h")) {
-@@ -1641,7 +1647,7 @@ fn parseAttachArgs(argv: []const []const u8) AttachArgs {
-     return parsed;
- }
- 
--fn attach(gpa: std.mem.Allocator, io: std.Io, daemon: *Daemon, env_str: []const u8, labels: ?[]const u8) !void {
-+fn attach(gpa: std.mem.Allocator, io: std.Io, daemon: *Daemon, env_str: []const u8, labels: ?[]const u8, foreground_events: bool) !void {
-     const sesh = socket.getSeshNameFromEnv();
-     if (sesh.len > 0) {
-         return switchSesh(gpa, io, daemon, sesh);
-@@ -1713,7 +1719,7 @@ fn attach(gpa: std.mem.Allocator, io: std.Io, daemon: *Daemon, env_str: []const
-     const clear_seq = "\x1b[2J\x1b[H";
-     _ = try lib_posix.write(lib_posix.STDOUT_FILENO, clear_seq);
- 
--    const looper = try loop.clientLoop(client_sock, env_str);
-+    const looper = try loop.clientLoop(client_sock, env_str, foreground_events);
-     switch (looper.kind) {
-         .detach => return,
-         .switch_session => {
-@@ -1741,7 +1747,7 @@ fn attach(gpa: std.mem.Allocator, io: std.Io, daemon: *Daemon, env_str: []const
-                 std.log.info("switching to new session cwd={s}", .{switch_cwd});
-                 target_daemon.setCwd(switch_cwd);
-                 target_daemon.shell = daemon.shell;
--                return attach(gpa, io, &target_daemon, env_str, null);
-+                return attach(gpa, io, &target_daemon, env_str, null, foreground_events);
-             }
-         },
-     }
+         zmx.attach(gpa, io, parsed.session_name, .{
+             .command = command,
+             .cwd = cwd,
+             .shell = shell_env,
+             .labels = parsed.labels,
+             .tracked_env = env_str,
++            .foreground_events = foreground_events,
+         }) catch |err| switch (err) {
+             error.Sighup, error.Sigint, error.Sigterm => return err,
+             else => return printError(io, "cannot connect to session \"{s}\": {s}", .{ parsed.session_name, @errorName(err) }),
 diff --git a/src/test.zig b/src/test.zig
-index c68b806..c440489 100644
+index 33334d1..154ebb5 100644
 --- a/src/test.zig
 +++ b/src/test.zig
-@@ -8,4 +8,5 @@ comptime {
-     _ = @import("loop.zig");
-     _ = @import("cfg.zig");
+@@ -11,4 +11,5 @@ comptime {
      _ = @import("daemonize.zig");
+     _ = @import("lib.zig");
+     _ = @import("client.zig");
 +    _ = @import("foreground.zig");
  }
+-- 
+2.54.0 (Apple Git-157)
+

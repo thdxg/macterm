@@ -1,6 +1,6 @@
-From 717b87a33d505f51a9bb84587f8e94799537d67e Mon Sep 17 00:00:00 2001
+From 6582049e725bd04855d46209c90c2c2af73a47e1 Mon Sep 17 00:00:00 2001
 From: Ethan Lee <ethantlee21@gmail.com>
-Date: Tue, 13 Oct 2026 01:17:37 -0400
+Date: Fri, 6 Nov 2026 19:11:02 -0500
 Subject: [PATCH] fix: replay scrollback as logical lines so the client can
  reflow them
 
@@ -18,14 +18,14 @@ Soft-wrapped rows reach the client as one logical line, which it wraps
 at its own width and reflows on every later resize. The visible-screen
 phase is unchanged: its cursor position depends on the row layout.
 ---
- src/util.zig | 25 +++++++++++++++++++++++++
+ src/terminal.zig | 25 +++++++++++++++++++++++++
  1 file changed, 25 insertions(+)
 
-diff --git a/src/util.zig b/src/util.zig
-index 5ef2a55..0ee9457 100644
---- a/src/util.zig
-+++ b/src/util.zig
-@@ -998,6 +998,13 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
+diff --git a/src/terminal.zig b/src/terminal.zig
+index 92edbcf..127017a 100644
+--- a/src/terminal.zig
++++ b/src/terminal.zig
+@@ -258,6 +258,13 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
                  ),
              };
              scroll_fmt.extra = .none; // no modes, cursor, keyboard — just content
@@ -39,10 +39,11 @@ index 5ef2a55..0ee9457 100644
              scroll_fmt.format(&builder.writer) catch |err| {
                  std.log.warn("failed to format scrollback err={s}", .{@errorName(err)});
              };
-@@ -1786,6 +1793,24 @@ test "serializeTerminalState excludes synchronized output replay" {
-     try testing.expect(std.mem.indexOf(u8, output, "\x1b[?2026h") == null);
+@@ -1157,3 +1164,21 @@ test "serializeTerminalState adds no mouse modes when mouse reporting is off" {
+         try testing.expect(std.mem.indexOf(u8, output, prefix) == null);
+     }
  }
- 
++
 +test "serializeTerminalState keeps a soft-wrapped scrollback line whole" {
 +    const alloc = testing.allocator;
 +    const io = testing.io;
@@ -60,10 +61,6 @@ index 5ef2a55..0ee9457 100644
 +    try testing.expect(std.mem.indexOf(u8, output, "abcdefghijklmnopqrstuvwxy") != null);
 +    try testing.expect(std.mem.indexOf(u8, output, "abcdefghij\r\n") == null);
 +}
-+
- test "serializeTerminalState replays the mouse format set last" {
-     const alloc = testing.allocator;
-     const io = testing.io;
 -- 
 2.54.0 (Apple Git-157)
 

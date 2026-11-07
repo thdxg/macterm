@@ -1,7 +1,9 @@
 const std = @import("std");
-const cross = @import("cross.zig");
+const cross = @import("cross");
 const socket = @import("socket.zig");
 const lib_posix = @import("posix.zig");
+
+pub const PROTOCOL_VERSION: u8 = 1;
 
 pub const Tag = enum(u8) {
     Input = 0,
@@ -29,18 +31,19 @@ pub const Tag = enum(u8) {
     /// Scoped history: the active screen plus a bounded number of
     /// preceding scrollback rows. Request payload is `Capture`.
     Capture = 22,
+    Unsupported = 255,
+    // Downstream tags (thdxg/zmx) live in their own block from 192 up, far
+    // from upstream's sequence: upstream adds a new tag as its next free
+    // integer, so a downstream tag numbered after upstream's newest is taken
+    // by the next upstream release (Claim was 22, then 23, for that reason).
+    // A daemon that does not know one replies `Unsupported`.
     /// A client asking to become the session's leader without sending input
-    /// (see util.ClaimFilter). Numbered after upstream's newest tag: these are
-    /// wire values, so a downstream tag must never squat on a number upstream
-    /// has since taken — a claim decoding as EnvGet would be silent corruption.
-    /// It was 22 until upstream took that for Capture; a daemon receiving the
-    /// old value sees a Capture with no payload and drops it.
-    Claim = 23,
-    /// Foreground reports (see foreground.zig). From a client with no
-    /// payload: subscribe. From the daemon: one report, the payload is the
-    /// text the client writes as an APC. Downstream, numbered after Claim
-    /// for the same reason.
-    Foreground = 24,
+    /// (see util.ClaimFilter). No payload.
+    Claim = 192,
+    /// Foreground reports (see foreground.zig). From a client, no payload:
+    /// subscribe. From the daemon: one report; the payload is the text that
+    /// `zmx attach` writes to its terminal as an APC.
+    Foreground = 193,
     // Non-exhaustive: this enum comes off the wire via bytesToValue and
     // @enumFromInt, so out-of-range values are representable
     // rather than UB. Switches must handle `_` (unknown tag).
@@ -48,56 +51,65 @@ pub const Tag = enum(u8) {
 };
 
 comptime {
-    if (@typeInfo(Tag).@"enum".is_exhaustive) @compileError(
+    if (@typeInfo(Tag).@"enum".mode == .exhaustive) @compileError(
         "ipc.Tag must stay non-exhaustive -- old daemons rely on `_` to ignore unknown tags",
     );
 }
 
-pub const Header = packed struct {
+pub const Header = extern struct {
     tag: Tag,
+    protocol_version: u8 = PROTOCOL_VERSION,
+    _reserved: u16 = 0,
     len: u32,
 };
 
-pub const Resize = packed struct {
+pub const Resize = extern struct {
     rows: u16,
     cols: u16,
     xpixel: u16 = 0,
     ypixel: u16 = 0,
 
-    pub fn winsize(self: Resize) cross.c.struct_winsize {
-        return .{ .ws_row = self.rows, .ws_col = self.cols, .ws_xpixel = self.xpixel, .ws_ypixel = self.ypixel };
+    pub fn winsize(self: Resize) cross.struct_winsize {
+        return .{
+            .ws_row = self.rows,
+            .ws_col = self.cols,
+            .ws_xpixel = self.xpixel,
+            .ws_ypixel = self.ypixel,
+        };
     }
 };
 
 /// Request payload for `Tag.Capture`. `format` is a `util.HistoryFormat`
 /// and `rows` is how many scrollback rows to include above the active
 /// screen; zero returns only the screen.
-pub const Capture = packed struct {
+pub const Capture = extern struct {
     format: u8,
+    _reserved: [3]u8 = @splat(0),
     rows: u32,
 };
 
 pub fn getTerminalSize(fd: i32) Resize {
-    var ws: cross.c.struct_winsize = undefined;
-    if (cross.c.ioctl(fd, cross.c.TIOCGWINSZ, &ws) == 0 and ws.ws_row > 0 and ws.ws_col > 0) {
+    var ws: cross.struct_winsize = undefined;
+    if (cross.ioctl(fd, cross.TIOCGWINSZ, &ws) == 0 and ws.ws_row > 0 and ws.ws_col > 0) {
         return .{ .rows = ws.ws_row, .cols = ws.ws_col, .xpixel = ws.ws_xpixel, .ypixel = ws.ws_ypixel };
     }
     inline for (.{ lib_posix.STDOUT_FILENO, lib_posix.STDIN_FILENO, lib_posix.STDERR_FILENO }) |fallback_fd| {
         if (fallback_fd != fd) {
-            if (cross.c.ioctl(fallback_fd, cross.c.TIOCGWINSZ, &ws) == 0 and ws.ws_row > 0 and ws.ws_col > 0) {
+            if (cross.ioctl(fallback_fd, cross.TIOCGWINSZ, &ws) == 0 and ws.ws_row > 0 and ws.ws_col > 0) {
                 return .{ .rows = ws.ws_row, .cols = ws.ws_col, .xpixel = ws.ws_xpixel, .ypixel = ws.ws_ypixel };
             }
         }
     }
     if (lib_posix.open("/dev/tty", .{ .ACCMODE = .RDWR }, 0)) |tty_fd| {
         defer lib_posix.close(tty_fd);
-        if (cross.c.ioctl(tty_fd, cross.c.TIOCGWINSZ, &ws) == 0 and ws.ws_row > 0 and ws.ws_col > 0) {
+        if (cross.ioctl(tty_fd, cross.TIOCGWINSZ, &ws) == 0 and ws.ws_row > 0 and ws.ws_col > 0) {
             return .{ .rows = ws.ws_row, .cols = ws.ws_col, .xpixel = ws.ws_xpixel, .ypixel = ws.ws_ypixel };
         }
     } else |_| {}
     return .{ .rows = 24, .cols = 120 };
 }
 
+pub const MAX_PAYLOAD_LEN: usize = 64 * 1024 * 1024;
 pub const MAX_CMD_LEN = 256;
 pub const MAX_CWD_LEN = 256;
 
@@ -114,15 +126,9 @@ pub const Info = extern struct {
     created_at: u64,
     task_ended_at: u64,
     task_exit_code: u8,
+    protocol_version: u8 = PROTOCOL_VERSION,
+    _reserved: [6]u8 = @splat(0),
 };
-
-pub fn expectedLength(data: []const u8) ?usize {
-    if (data.len < @sizeOf(Header)) return null;
-    const header = std.mem.bytesToValue(Header, data[0..@sizeOf(Header)]);
-    // header.len comes off the wire; widen to usize before adding so a
-    // near-u32-max value can't wrap (panic in safe mode, UB in release).
-    return @as(usize, @sizeOf(Header)) + @as(usize, header.len);
-}
 
 pub fn send(fd: i32, tag: Tag, data: []const u8) !void {
     const header = Header{
@@ -153,23 +159,6 @@ pub fn appendMessage(
     if (data.len > 0) {
         list.appendSliceAssumeCapacity(data);
     }
-}
-
-/// Pre-0.7.0 daemons expect a 4-byte Init/Resize payload (rows+cols, no
-/// pixel size) and silently drop the 8-byte form, hanging `zmx attach`
-/// against a running old daemon (#211). Append both encodings: every daemon
-/// drops the length it doesn't expect and processes the other exactly once.
-pub const LEGACY_RESIZE_LEN = 4;
-
-pub fn appendSizeMessage(
-    alloc: std.mem.Allocator,
-    list: *std.ArrayList(u8),
-    tag: Tag,
-    size: Resize,
-) !void {
-    const bytes = std.mem.asBytes(&size);
-    try appendMessage(alloc, list, tag, bytes);
-    try appendMessage(alloc, list, tag, bytes[0..LEGACY_RESIZE_LEN]);
 }
 
 fn writeAll(fd: i32, data: []const u8) !void {
@@ -243,12 +232,21 @@ pub const SocketBuffer = struct {
     /// valid until the following `next()` (or `deinit`).
     pub fn next(self: *SocketBuffer) ?SocketMsg {
         const available = self.buf.items[self.head..];
-        const total = expectedLength(available) orelse return null;
-        if (available.len < total) return null;
+        if (available.len < @sizeOf(Header)) return null;
 
         const hdr = std.mem.bytesToValue(Header, available[0..@sizeOf(Header)]);
-        const pay = available[@sizeOf(Header)..total];
+        if (hdr.len > MAX_PAYLOAD_LEN or hdr.protocol_version != PROTOCOL_VERSION) {
+            // framing error / corrupted stream: clear buffer to avoid
+            // infinite alloc
+            self.buf.clearRetainingCapacity();
+            self.head = 0;
+            return null;
+        }
 
+        const total = @sizeOf(Header) + @as(usize, hdr.len);
+        if (available.len < total) return null;
+
+        const pay = available[@sizeOf(Header)..total];
         self.head += total;
         return .{ .header = hdr, .payload = pay };
     }
@@ -273,6 +271,7 @@ const SessionProbeError = error{
     ConnectionRefused,
     Unexpected,
     InfoSizeMismatch,
+    Unsupported,
 };
 
 const SessionProbeResult = struct {
@@ -355,8 +354,9 @@ pub fn probeSession(
 //  Need to remove one? → don't. Reserve the integer, stop sending it.
 test "Info wire size is frozen" {
     try std.testing.expectEqual(@as(usize, 552), @sizeOf(Info));
-    // packed struct{u8,u32} backs to u40 → @sizeOf rounds to 8, not 5.
     try std.testing.expectEqual(@as(usize, 8), @sizeOf(Header));
+    try std.testing.expectEqual(@as(usize, 8), @sizeOf(Resize));
+    try std.testing.expectEqual(@as(usize, 8), @sizeOf(Capture));
 }
 
 test "Tag wire values are frozen" {
@@ -368,8 +368,14 @@ test "Tag wire values are frozen" {
         .{ Tag.Write, 12 },    .{ Tag.TaskComplete, 13 }, .{ Tag.LabelGet, 14 },
         .{ Tag.LabelSet, 15 }, .{ Tag.LabelClear, 16 },   .{ Tag.LabelData, 17 },
         .{ Tag.Send, 18 },     .{ Tag.EnvGet, 19 },       .{ Tag.EnvSet, 20 },
-        .{ Tag.EnvData, 21 },  .{ Tag.Capture, 22 },      .{ Tag.Claim, 23 },
-    }) |p| try std.testing.expectEqual(@as(u8, p[1]), @intFromEnum(p[0]));
+        .{ Tag.EnvData, 21 },  .{ Tag.Capture, 22 },      .{ Tag.Unsupported, 255 },
+    }) |p| try std.testing.expectEqual(@as(u8, p[1]), @backingInt(p[0]));
+}
+
+test "Downstream tag wire values are frozen" {
+    inline for (.{
+        .{ Tag.Claim, 192 }, .{ Tag.Foreground, 193 },
+    }) |p| try std.testing.expectEqual(@as(u8, p[1]), @backingInt(p[0]));
 }
 
 pub fn roundTripForTag(
@@ -396,35 +402,12 @@ pub fn roundTripForTag(
     if (n == 0) return error.Unexpected;
 
     while (sb.next()) |msg| {
+        if (msg.header.tag == .Unsupported) return error.Unsupported;
         if (msg.header.tag == expected_tag) {
             return alloc.dupe(u8, msg.payload) catch return error.Unexpected;
         }
     }
     return error.Unexpected;
-}
-
-test "appendSizeMessage emits current and legacy encodings" {
-    const alloc = std.testing.allocator;
-    var list = try std.ArrayList(u8).initCapacity(alloc, 64);
-    defer list.deinit(alloc);
-
-    const size = Resize{ .rows = 45, .cols = 170, .xpixel = 900, .ypixel = 1800 };
-    try appendSizeMessage(alloc, &list, .Init, size);
-
-    const h1 = std.mem.bytesToValue(Header, list.items[0..@sizeOf(Header)]);
-    try std.testing.expectEqual(Tag.Init, h1.tag);
-    try std.testing.expectEqual(@as(u32, @sizeOf(Resize)), h1.len);
-    const p1 = list.items[@sizeOf(Header)..][0..@sizeOf(Resize)];
-    try std.testing.expectEqual(size, std.mem.bytesToValue(Resize, p1));
-
-    const off2 = @sizeOf(Header) + @sizeOf(Resize);
-    const h2 = std.mem.bytesToValue(Header, list.items[off2..][0..@sizeOf(Header)]);
-    try std.testing.expectEqual(Tag.Init, h2.tag);
-    try std.testing.expectEqual(@as(u32, LEGACY_RESIZE_LEN), h2.len);
-    // Legacy payload is the rows+cols prefix of the current encoding.
-    const p2 = list.items[off2 + @sizeOf(Header) ..][0..LEGACY_RESIZE_LEN];
-    try std.testing.expectEqualSlices(u8, p1[0..LEGACY_RESIZE_LEN], p2);
-    try std.testing.expectEqual(off2 + @sizeOf(Header) + LEGACY_RESIZE_LEN, list.items.len);
 }
 
 test "zeroed Info has no stack garbage in wire bytes" {

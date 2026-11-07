@@ -43,7 +43,7 @@ jobs:
         with:
           # Keep in step with build-zmx.yml and minimum_zig_version in
           # build.zig.zon.
-          version: 0.16.0
+          version: 0.17.1
 
       - name: Run the tests
         run: zig build test --summary all

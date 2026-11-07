@@ -19,10 +19,12 @@
 //!
 //! Only a client started with `ZMX_FOREGROUND_EVENTS` in its environment
 //! subscribes and writes the sequence, so no other terminal ever sees it.
-//! The client removes the variable from its environment before the session
-//! starts, so a shell in the session does not inherit it: a nested
+//! The daemon removes the variable in the child that execs the session's
+//! shell, so a shell in the session does not inherit it: a nested
 //! `zmx attach` would otherwise report its own session's foreground into
-//! the outer one.
+//! the outer one. No zmx process that goes on running removes it: zig's
+//! `std.Io` caches the environment block at startup, and its next scan of a
+//! block that `unsetenv` shortened panics.
 //!
 //! The report is `zmx;foreground;<idle>;<shell>;<comm>;<args>`:
 //!   - `idle` is `1` when the foreground group is the session's own shell

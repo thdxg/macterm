@@ -1,6 +1,6 @@
-From 118f0bb83af7224c315ec065e00c77a8ae6245c2 Mon Sep 17 00:00:00 2001
+From 963260215c6722a2eb07c5f3efd22eed488155fd Mon Sep 17 00:00:00 2001
 From: Ethan Lee <ethantlee21@gmail.com>
-Date: Sun, 6 Sep 2026 15:25:40 -0400
+Date: Fri, 6 Nov 2026 19:11:02 -0500
 Subject: [PATCH] feat: let a client claim leadership without sending input
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -32,61 +32,61 @@ claim split within its first two bytes being dropped rather than rejoined,
 which needs the split to land exactly there and which the next keystroke
 recovers from anyway.
 
-Also fixes handleDetachAll leaving a stale leader_client_fd. closeClient nils
-it per client, but that path clears the list wholesale, so the next client to
-attach found it non-null: handleInit neither made it leader nor resized the
-pty, and the session stayed at the detached client's size until someone typed.
-Worse if the kernel recycled the fd number, which makes an unrelated client
-leader by coincidence.
-
 test/claim_leader.py drives two real PTYs at different sizes to prove the two
 properties the in-process tests cannot reach: a second client attaching does
 not resize the pty, and a claim does — with no keystroke reaching the program.
-The tag is 23: it was 22 until upstream took that number for Capture
-(neurosnap/zmx 20c0d5e). A daemon handed the old value sees a Capture with
-no payload and drops it, so the collision is safe to leave behind.
+The tag is 192, in a block for downstream tags far from upstream's
+sequence. Upstream adds a tag as its next free integer, so a downstream tag
+numbered after upstream's newest was taken twice (22 by Capture, then 23
+was next). Since v1.0.0 a daemon that does not know a tag replies
+`Unsupported`, which the client ignores.
 ---
- src/ipc.zig          |   9 ++-
+ src/ipc.zig          |  14 ++++
  src/loop.zig         |  91 ++++++++++++++++++++++++-
  src/util.zig         | 155 +++++++++++++++++++++++++++++++++++++++++++
  test/claim_leader.py |  97 +++++++++++++++++++++++++++
  test/leader.bats     |  20 ++++++
- 5 files changed, 370 insertions(+), 2 deletions(-)
+ 5 files changed, 376 insertions(+), 1 deletion(-)
  create mode 100644 test/claim_leader.py
  create mode 100644 test/leader.bats
 
 diff --git a/src/ipc.zig b/src/ipc.zig
-index ac8be60..b7f3505 100644
+index ad05c2b..daaf0a4 100644
 --- a/src/ipc.zig
 +++ b/src/ipc.zig
-@@ -29,6 +29,13 @@ pub const Tag = enum(u8) {
-     /// Scoped history: the active screen plus a bounded number of
+@@ -32,6 +32,14 @@ pub const Tag = enum(u8) {
      /// preceding scrollback rows. Request payload is `Capture`.
      Capture = 22,
+     Unsupported = 255,
++    // Downstream tags (thdxg/zmx) live in their own block from 192 up, far
++    // from upstream's sequence: upstream adds a new tag as its next free
++    // integer, so a downstream tag numbered after upstream's newest is taken
++    // by the next upstream release (Claim was 22, then 23, for that reason).
++    // A daemon that does not know one replies `Unsupported`.
 +    /// A client asking to become the session's leader without sending input
-+    /// (see util.ClaimFilter). Numbered after upstream's newest tag: these are
-+    /// wire values, so a downstream tag must never squat on a number upstream
-+    /// has since taken — a claim decoding as EnvGet would be silent corruption.
-+    /// It was 22 until upstream took that for Capture; a daemon receiving the
-+    /// old value sees a Capture with no payload and drops it.
-+    Claim = 23,
++    /// (see util.ClaimFilter). No payload.
++    Claim = 192,
      // Non-exhaustive: this enum comes off the wire via bytesToValue and
      // @enumFromInt, so out-of-range values are representable
      // rather than UB. Switches must handle `_` (unknown tag).
-@@ -356,7 +363,7 @@ test "Tag wire values are frozen" {
-         .{ Tag.Write, 12 },    .{ Tag.TaskComplete, 13 }, .{ Tag.LabelGet, 14 },
-         .{ Tag.LabelSet, 15 }, .{ Tag.LabelClear, 16 },   .{ Tag.LabelData, 17 },
-         .{ Tag.Send, 18 },     .{ Tag.EnvGet, 19 },       .{ Tag.EnvSet, 20 },
--        .{ Tag.EnvData, 21 },  .{ Tag.Capture, 22 },
-+        .{ Tag.EnvData, 21 },  .{ Tag.Capture, 22 },      .{ Tag.Claim, 23 },
-     }) |p| try std.testing.expectEqual(@as(u8, p[1]), @intFromEnum(p[0]));
+@@ -360,6 +368,12 @@ test "Tag wire values are frozen" {
+     }) |p| try std.testing.expectEqual(@as(u8, p[1]), @backingInt(p[0]));
  }
  
++test "Downstream tag wire values are frozen" {
++    inline for (.{
++        .{ Tag.Claim, 192 },
++    }) |p| try std.testing.expectEqual(@as(u8, p[1]), @backingInt(p[0]));
++}
++
+ pub fn roundTripForTag(
+     alloc: std.mem.Allocator,
+     socket_path: []const u8,
 diff --git a/src/loop.zig b/src/loop.zig
-index 30310da..611017e 100644
+index f5d6708..7333ce2 100644
 --- a/src/loop.zig
 +++ b/src/loop.zig
-@@ -68,6 +68,8 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
+@@ -73,6 +73,8 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
      defer _ = lib_posix.fcntl(stdin_fd, lib_posix.F.SETFL, stdin_orig_flags) catch {};
  
      const detach_key_disabled = util.isDetachKeyDisabled();
@@ -95,7 +95,7 @@ index 30310da..611017e 100644
  
      while (true) {
          poll_fds.clearRetainingCapacity();
-@@ -123,7 +125,18 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
+@@ -133,7 +135,18 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
                          std.log.info("detach key detected", .{});
                          try ipc.appendMessage(gpa, &sock_write_buf, .Detach, "");
                      } else {
@@ -115,7 +115,7 @@ index 30310da..611017e 100644
                      }
                  } else {
                      std.log.info("eof stdin", .{});
-@@ -472,6 +485,7 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
+@@ -487,6 +500,7 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
                          .Init => try daemon.handleInit(gpa, client, pty_fd, &term, msg.payload),
                          .Switch => try daemon.handleSwitch(gpa, msg.payload),
                          .Resize => try daemon.handleResize(gpa, client, pty_fd, &term, msg.payload),
@@ -123,7 +123,7 @@ index 30310da..611017e 100644
                          .Detach => {
                              daemon.handleDetach(gpa, client, i);
                              break :clients_loop;
-@@ -909,6 +923,18 @@ pub const Daemon = struct {
+@@ -936,6 +950,18 @@ pub const Daemon = struct {
          }
      }
  
@@ -142,7 +142,7 @@ index 30310da..611017e 100644
      /// Queue input from `zmx send` without changing interactive client leadership.
      pub fn handleSend(self: *Daemon, gpa: std.mem.Allocator, payload: []const u8) void {
          self.queuePtyInput(gpa, payload);
-@@ -1377,6 +1403,69 @@ pub const Daemon = struct {
+@@ -1405,6 +1431,69 @@ pub const Daemon = struct {
      }
  };
  
@@ -213,10 +213,10 @@ index 30310da..611017e 100644
      const alloc = std.testing.allocator;
      const cfg = Cfg{ .socket_dir = "", .log_dir = "" };
 diff --git a/src/util.zig b/src/util.zig
-index c3ba418..0d7ba34 100644
+index d036f13..c619791 100644
 --- a/src/util.zig
 +++ b/src/util.zig
-@@ -519,6 +519,89 @@ pub fn stripAnsi(alloc: std.mem.Allocator, data: []const u8) ![]const u8 {
+@@ -554,6 +554,89 @@ pub fn stripAnsi(alloc: std.mem.Allocator, data: []const u8) ![]const u8 {
  }
  
  /// Dcts Ctrl+\ across raw, Kitty CSI u, and xterm modifyOtherKeys encodings.
@@ -306,9 +306,9 @@ index c3ba418..0d7ba34 100644
  pub fn isCtrlBackslash(buf: []const u8) bool {
      if (buf.len == 0) return false;
      return buf[0] == 0x1C or isKeyPressed(buf, 0x5c, 0b100) or isModifyOtherKey(buf, 0x5c, 0b100);
-@@ -2305,3 +2388,75 @@ test "isUserInput: kitty keyboard status reply is a terminal response" {
-     try testing.expect(isUserInput("\x1b[?1u\x1b[97;1u"));
-     try testing.expect(!isUserInput("\x1b[?1u\x1b[97;1:3u"));
+@@ -1417,3 +1500,75 @@ test "stripAnsi: UTF-8 bytes do not start escape sequences" {
+     defer alloc.free(result);
+     try testing.expectEqualStrings("Ýmir\nline two\n", result);
  }
 +
 +test "ClaimFilter: a lone claim is consumed and forwards nothing" {
@@ -512,5 +512,5 @@ index 0000000..9586948
 +  [[ "$output" == *"ok"* ]]
 +}
 -- 
-2.53.0
+2.54.0 (Apple Git-157)
 

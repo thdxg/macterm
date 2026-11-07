@@ -4,16 +4,47 @@ Use spec: https://common-changelog.org/
 
 ## Staged
 
+# v1.0.1 - 2026-11-06
+
+### Fixed
+
+- Release binaries translate `src/c.h` for their own target, not the build host's, so macOS binaries built on Linux resize sessions again
+
+## v1.0.0 - 2026-11-06
+
+This release sets a milestone for the maturity of this project. I have been daily driving zmx for almost a year at this point with very minor issues.
+
+Because of the IPC changes made to this project I also want the ABI contract to be more reliably frozen and a v1 release reinforces that contract this project makes with users.
+
+### Breaking
+
+- Standardized IPC header and payloads to 8-byte aligned `extern struct` layouts. Daemons and clients must be on the same version
+- Dropped legacy pre-0.7.0 resize framing
+
 ### Added
 
+- zmx as a zig package
 - Completions for [`yash`](https://magicant.github.io/yash/)
 - History command now accepts --screen (print only active screen) and --scrollback (num of rows to print)
+- Support for OpenBSD
+
+### Changed
+
+- Upgraded to zig 0.17
+- IPC messages now carry an explicit `protocol_version` field
+- The daemon now responds with `Tag.Unsupported` (255) when receiving unknown IPC tags
 
 ### Fixed
 
 - Stop classifying complete kitty keyboard status replies (`CSI ? flags u`) as user input for leader selection
 - Prevent infinite loop in `mkdirAll` when directory path contains a dangling symlink
 - Prevent terminal and kitty keyboard queries from taking leadership control
+- Fixed missing terminal snapshot when attaching to a session originally started detached or via `zmx run`
+- Don't drop a client's unread input on hangup
+- Restore the terminal when the client gets SIGHUP, SIGTERM, or SIGINT
+- Ability to zmx write files larger than the PTY input buffer
+- Replay cursor style on re-attach
+- Reset colors before clearing the screen on attach
 
 ## v0.8.1 - 2026-09-05
 

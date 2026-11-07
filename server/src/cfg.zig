@@ -5,7 +5,7 @@ pub const Cfg = @This();
 
 const std = @import("std");
 const lib_posix = @import("posix.zig");
-const cross = @import("cross.zig");
+const cross = @import("cross");
 
 socket_dir: []const u8,
 log_dir: []const u8,
@@ -113,8 +113,8 @@ test "Cfg.init uses default modes when env vars are not set" {
     const alloc = std.testing.allocator;
 
     // Ensure they are not set
-    _ = cross.c.unsetenv("ZMX_DIR_MODE");
-    _ = cross.c.unsetenv("ZMX_LOG_MODE");
+    _ = cross.unsetenv("ZMX_DIR_MODE");
+    _ = cross.unsetenv("ZMX_LOG_MODE");
 
     var cfg = try Cfg.init(alloc, std.testing.io);
     defer cfg.deinit(alloc);
@@ -127,11 +127,11 @@ test "Cfg.init uses custom modes from env vars" {
     const alloc = std.testing.allocator;
 
     // Set custom octal values
-    _ = cross.c.setenv("ZMX_DIR_MODE", "770", 1);
-    _ = cross.c.setenv("ZMX_LOG_MODE", "660", 1);
+    _ = cross.setenv("ZMX_DIR_MODE", "770", 1);
+    _ = cross.setenv("ZMX_LOG_MODE", "660", 1);
     defer {
-        _ = cross.c.unsetenv("ZMX_DIR_MODE");
-        _ = cross.c.unsetenv("ZMX_LOG_MODE");
+        _ = cross.unsetenv("ZMX_DIR_MODE");
+        _ = cross.unsetenv("ZMX_LOG_MODE");
     }
 
     var cfg = try Cfg.init(alloc, std.testing.io);
@@ -146,7 +146,11 @@ test "mkdirAll fails on dangling symlink instead of looping" {
     defer tmp.cleanup();
 
     const alloc = std.testing.allocator;
-    const tmp_path = try tmp.dir.realPathFileAlloc(std.testing.io, ".", alloc);
+    // Dir.realPathFile is unsupported on OpenBSD, so build the absolute path
+    // from the cwd instead.
+    const cwd_path = try std.process.currentPathAlloc(std.testing.io, alloc);
+    defer alloc.free(cwd_path);
+    const tmp_path = try std.fs.path.join(alloc, &.{ cwd_path, ".zig-cache", "tmp", &tmp.sub_path });
     defer alloc.free(tmp_path);
 
     try tmp.dir.symLink(std.testing.io, "nonexistent", "broken_link", .{});

@@ -1,6 +1,6 @@
-From af47d295d82c825ca2b984e1c1fac7dc144eadaa Mon Sep 17 00:00:00 2001
+From e7c1bdafa05267c20e13c644919944bd351a0149 Mon Sep 17 00:00:00 2001
 From: Ethan Lee <ethantlee21@gmail.com>
-Date: Tue, 6 Oct 2026 22:30:55 -0400
+Date: Fri, 6 Nov 2026 19:11:02 -0500
 Subject: [PATCH] fix: replay the mouse mode a program set last, not the
  highest-numbered
 
@@ -17,15 +17,15 @@ serializeTerminalState now sets the effective event mode and format again
 after the formatter's replay. Drop this once ghostty's formatter replays
 term.flags itself.
 ---
- src/util.zig | 149 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/terminal.zig | 149 +++++++++++++++++++++++++++++++++++++++++++++++
  1 file changed, 149 insertions(+)
 
-diff --git a/src/util.zig b/src/util.zig
-index 0d7ba34..5ef2a55 100644
---- a/src/util.zig
-+++ b/src/util.zig
-@@ -870,6 +870,85 @@ fn writeColorOverrides(writer: *std.Io.Writer, term: *const ghostty_vt.Terminal)
-     writeDynamicColor(writer, .cursor, colors.cursor);
+diff --git a/src/terminal.zig b/src/terminal.zig
+index 786764e..92edbcf 100644
+--- a/src/terminal.zig
++++ b/src/terminal.zig
+@@ -129,6 +129,85 @@ fn writeCursorStyle(writer: *std.Io.Writer, term: *ghostty_vt.Terminal) !void {
+     try writer.print("\x1b[{d} q", .{style});
  }
  
 +/// Replays the mouse event mode and mouse format the program is actually
@@ -110,7 +110,7 @@ index 0d7ba34..5ef2a55 100644
  pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Terminal) ?[]const u8 {
      var builder: std.Io.Writer.Allocating = .init(alloc);
      defer builder.deinit();
-@@ -968,6 +1047,7 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
+@@ -236,6 +315,7 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
          return null;
      };
  
@@ -118,10 +118,11 @@ index 0d7ba34..5ef2a55 100644
      writePwd(&builder.writer, term);
  
      // The formatter has no title extra and never emits OSC 0/1/2, so the title
-@@ -1706,6 +1786,75 @@ test "serializeTerminalState excludes synchronized output replay" {
-     try testing.expect(std.mem.indexOf(u8, output, "\x1b[?2026h") == null);
+@@ -1008,3 +1088,72 @@ test "isUserInput: kitty keyboard status reply is a terminal response" {
+     try testing.expect(isUserInput("\x1b[?1u\x1b[97;1u"));
+     try testing.expect(!isUserInput("\x1b[?1u\x1b[97;1:3u"));
  }
- 
++
 +test "serializeTerminalState replays the mouse format set last" {
 +    const alloc = testing.allocator;
 +    const io = testing.io;
@@ -190,10 +191,6 @@ index 0d7ba34..5ef2a55 100644
 +        try testing.expect(std.mem.indexOf(u8, output, prefix) == null);
 +    }
 +}
-+
- test "serializeTerminalState replays the title" {
-     const alloc = testing.allocator;
-     const io = testing.io;
 -- 
-2.53.0
+2.54.0 (Apple Git-157)
 

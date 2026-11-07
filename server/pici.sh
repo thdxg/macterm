@@ -8,10 +8,16 @@ BRANCH="${PICI_BRANCH:-tmp}"
 echo "running ci event=${EVENT} session=${ZMX_SESSION_PREFIX}"
 
 zmx run build docker build -t zig-zmx .
-zmx run build-release docker run --rm -v "$(pwd):/app" -t zig-zmx:latest zig build release
+zmx run build-release docker run --rm \
+  --ulimit stack=67108864:67108864 \
+  -v "$(pwd):/app" \
+  -t zig-zmx:latest bash -c "zig build release -j8 && mkdir -p zig-out/bin && tar -xzf zig-out/dist/zmx-*-linux-\$(uname -m).tar.gz -C zig-out/bin"
 
 zmx run fmt -d docker run --rm -v "$(pwd):/app" -t zig-zmx:latest zig fmt --check .
-zmx run test -d docker run --rm -v "$(pwd):/app" -t zig-zmx:latest zig build test
+zmx run test -d docker run --rm \
+  --ulimit stack=67108864:67108864 \
+  -v "$(pwd):/app" \
+  -t zig-zmx:latest zig build test
 zmx run integration -d docker run --rm -v "$(pwd):/app" -t zig-zmx:latest bats --jobs 1 test/*.bats
 zmx wait "*"
 
@@ -19,9 +25,8 @@ zmx run upload-build docker build -t zmx-upload -f Dockerfile.upload .
 
 if [[ $BRANCH = "main" ]]; then
   zmx run upload docker run --rm \
-    -v "$(pwd)/README.md:/app/README.md:ro" \
+    -v "$(pwd)/docs:/app/docs" \
     -v "$(pwd)/logo.png:/app/logo.png:ro" \
-    -v "$(pwd)/index.tmpl:/app/index.tmpl:ro" \
     -v ~/.ssh:/root/.ssh:ro \
     zmx-upload
 fi
