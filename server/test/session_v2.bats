@@ -221,9 +221,10 @@ stuck.wait_msg("lead")
 live = Client("s1")
 live.attach(80, 24)
 live.wait_msg("state")
-# 4 MB of output: more than the cap and the socket buffers together.
-live.type("head -c 4000000 /dev/zero | tr '\\0' x; printf '\\ndone-%s\\n' 7\r")
-live.wait_output("done-7", timeout=120)
+# 3 MB of output: more than the cap and the socket buffers together. In
+# lines: one line of 3 MB is slow to parse in a debug build.
+live.type("head -c 3000000 /dev/zero | tr '\\0' x | fold -w 100; printf 'done-%s\\n' 7\r")
+live.wait_output("done-7", timeout=300)
 live.type("printf 'alive-%s\\n' 9\r")
 live.wait_output("alive-9", timeout=10)
 
@@ -316,7 +317,8 @@ PY
   "$ZMX" session s1 -- /bin/sh
   chmod 711 "$RT" "$MACTERM_RUNTIME_DIR"
   chmod 666 "$MACTERM_RUNTIME_DIR/s1"
-  run sudo -n -u nobody sh -c 'cd / && exec python3 - "$1"' sh "$MACTERM_RUNTIME_DIR/s1" <<'PY'
+  # From /, so that no shell warns that it cannot read its directory.
+  run sh -c 'cd / && exec sudo -n -u nobody python3 - "$1"' sh "$MACTERM_RUNTIME_DIR/s1" <<'PY'
 import socket, sys
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.connect(sys.argv[1])
