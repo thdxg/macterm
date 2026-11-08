@@ -134,7 +134,7 @@ struct BundledResourcesTests {
     }
 
     /// The app carries a gzip server build for every host target, named for
-    /// the bundled build key, for an install on a host (design/007 §3A). The
+    /// the bundled build key, for an install on a host with no download. The
     /// macOS one is the bundled zmx itself, so it has the signature that
     /// `bundled_zmx_is_signed_as_the_app` pins. Each Linux one is an ELF
     /// binary for the machine that its name says.

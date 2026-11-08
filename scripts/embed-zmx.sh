@@ -48,11 +48,15 @@ codesign --force --sign "${signing_identity}" --identifier "${PRODUCT_BUNDLE_IDE
   --timestamp=none "${destination_dir}/zmx"
 echo "✓ embedded zmx → ${destination_dir}/zmx (signed as ${PRODUCT_BUNDLE_IDENTIFIER}: ${signing_identity})"
 
-# The server builds for an install on a host (design/007 §3A), one gzip file
+# The server builds for an install on a host with no download, one gzip file
 # for each target, named for the build key: macOS universal from the signed
 # copy above, the Linux builds as setup.sh made them. The app's own signature
 # seals them, as every file in Contents/Resources.
 release_file="${srcroot}/Macterm/Resources/zmx-release.json"
+if [[ ! -f "${release_file}" ]]; then
+  echo "error: ${release_file} is not there. Run 'mise run setup' to get it." >&2
+  exit 1
+fi
 key="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag"])' "${release_file}")"
 server_dir="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/server"
 rm -rf "${server_dir}"

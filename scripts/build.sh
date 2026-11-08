@@ -142,7 +142,7 @@ if ! grep -qF "+thdxg.$ZMX_KEY" <<<"$ZMX_VERSION_OUTPUT"; then
   echo "ERROR: $ZMX_BINARY does not report build $ZMX_KEY" >&2
   exit 1
 fi
-# The server builds for an install on a host (design/007 §3A): one gzip file
+# The server builds for an install on a host with no download: one gzip file
 # for each target, named for this build. The macOS one must be the bundled zmx
 # itself, so it carries the same signature that the checks above require.
 SERVER_BUILDS="$APP_BUNDLE/Contents/Resources/server"
@@ -156,6 +156,21 @@ if ! gzip -dc "$SERVER_BUILDS/macterm-$ZMX_KEY-universal-macos.gz" | cmp -s - "$
   echo "ERROR: $SERVER_BUILDS/macterm-$ZMX_KEY-universal-macos.gz is not the bundled zmx" >&2
   exit 1
 fi
+# Each Linux file must be an ELF binary for the machine its name says
+# (e_machine at offset 18: 62 is x86_64, 183 is aarch64), so an empty or wrong
+# build never ships.
+for entry in x86_64-linux:62 aarch64-linux:183; do
+  target="${entry%%:*}"
+  if ! gzip -dc "$SERVER_BUILDS/macterm-$ZMX_KEY-$target.gz" | python3 -c '
+import sys
+head = sys.stdin.buffer.read(20)
+sys.stdin.buffer.read()
+sys.exit(0 if head[:4] == b"\x7fELF" and len(head) == 20 and int.from_bytes(head[18:20], "little") == int(sys.argv[1]) else 1)
+' "${entry##*:}"; then
+    echo "ERROR: $SERVER_BUILDS/macterm-$ZMX_KEY-$target.gz is not a Linux build for $target" >&2
+    exit 1
+  fi
+done
 # The adaptive icon's renderer is copied into Contents/Helpers with the
 # signature that its own target gave it. When a stable identity was requested,
 # an ad-hoc helper means that target was signed apart from the app, so refuse

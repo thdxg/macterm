@@ -220,12 +220,15 @@ server_dist_complete() {
 
 install_server() {
   local dir="$1" key="$2"
+  # The stamp goes first and comes back last, so an install that stops in the
+  # middle is never taken as complete.
+  rm -f "$SERVER_STAMP"
   rm -rf "$SERVER_DIR"
   mkdir -p "$SERVER_DIR"
   tar xzf "$dir/macterm-$key-universal-macos.tar.gz" -C "$SERVER_DIR" zmx
   chmod +x "$SERVER_DIR/zmx"
   # The Linux builds go into the bundle as gzip files of the bare binary, for
-  # an install on a host (design/007 §3A). embed-zmx.sh adds the macOS one from
+  # an install on a host with no download. embed-zmx.sh adds the macOS one from
   # the signed copy.
   local target
   for target in x86_64-linux aarch64-linux; do
