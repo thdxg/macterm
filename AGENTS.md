@@ -680,6 +680,20 @@ Rules:
 - `pane run` types through the paste path (`sendText`). `--no-submit` withholds the newline and keeps the evidence of a submission armed. `pane key <chord>` uses the key-encoding path (`sendKey`) and **bypasses `keyDown`**, so the interceptions of `keyDown` do not apply. A bare printable key must carry `.text`, or it encodes to nothing. `pane resize` exists only under `#if DEBUG`.
 - `pane.latency` is a socket command with no CLI subcommand (`TypingLatencyProbe`). It types `x` into a pane, times each glyph to the first frame that shows it, and clears the line with ctrl+u. Only a Debug build or an app with `MACTERM_BENCHMARK=1` answers it; any other build answers `unknown_command`. `benchmark.py --latency-keys` sends it straight to the socket.
 
+### The v2 protocol (`Macterm/Protocol/`)
+
+The frames and messages between the app, the server and the session processes (design/003). Nothing in the app calls it yet.
+
+- **The Zig messages are the one source** (`server/src/protocol/messages.zig`). The server binary's hidden `__schema` command writes the Swift types (`Macterm/Protocol/MactermProtocol.generated.swift`), the metadata (`server/schema/protocol.json`) and frames that Zig encoded (`server/schema/frames.json`). `mise run protocol` writes all three. Never edit them by hand.
+- `MessagePack.swift` and `ProtocolFrame.swift` follow the Zig codec byte for byte. The cap on array memory differs: Swift counts its stride. `ProtocolFixtureTests` decodes each Zig frame and encodes it again to the same bytes.
+- **CI checks the schema** (`scripts/protocol.sh --check` in the Server workflow; `mise run protocol --check` locally):
+  - The generated files are current.
+  - Against the metadata on main: no message, method, type, field or enum case is removed; no type, default or `since` changes; each addition has the current level; a new enum case needs an `unknown` case in the enum.
+  - No method result and no event holds a `secret`.
+- The base is main, not the last release, until v2 has a release. A new field in an older type names its level in `field_since`.
+- Field names and enum tags are snake_case ASCII (`checkName`), so the Swift String compare is the Zig byte compare.
+- `scripts/protocol.sh` needs Zig 0.17 on PATH or in `$ZIG`.
+
 ### Ghostty config pipeline
 
 In automatic mode, Macterm delegates the user layer to `ghostty_config_load_default_files`. Settings can append custom files. `GhosttyApp.loadConfig` loads `macterm-defaults.conf`, then the user files, then `macterm-overrides.conf` (the last one wins). It regenerates both private files (`MactermConfig.regenerate()`) before every load, because the overrides depend on the content of the user. `GhosttyConfigSource` is the seam for raw text, for keys that the C API cannot expose.
@@ -919,6 +933,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
     - The built-in screens are not extensions, and they have no card. There is no switch for on and off. To remove an extension, uninstall it.
   - `PasswordsSettings`.
   - `IntelligenceSettings` (Settings → Intelligence, macOS 26 and later): project memory, its summary, and the status of Apple's on-device model.
+- `Macterm/Protocol/`: the v2 protocol. `MessagePack`, `ProtocolFrame`, `ProtocolControl`, and the generated `MactermProtocol`.
 - `Macterm/Control/`: `ControlProtocol` (shared with the CLI), `ControlSocketServer`, `ControlHandler`, and `AgentSkills/` (the text of `macterm skills`, shared with the CLI).
 - `Macterm/Intents/`: the surface of App Intents. `MactermIntentHost` and `IntentTargets` (`IntentHost.swift`), `IntentPermission`, `MactermIntentError`, `Entities`, `ProjectIntents`, `TabIntents`, `PaneIntents`, `CommandIntents` and `MactermShortcuts` (`AppShortcutsProvider`).
 - `Macterm/Palette/`: `PaletteEngine` with `CommandSource`, `ProjectSource` and `DirectorySource`. `PaletteIcon` is the glyph of a row or a pill: an SF Symbol or the icon file of an extension.

@@ -14,6 +14,7 @@ const Cfg = @import("cfg.zig");
 const loop = @import("loop.zig");
 const daemonize = @import("daemonize.zig");
 const foreground = @import("foreground.zig");
+const schema = @import("protocol/schema.zig");
 const v2session = @import("session.zig");
 const runtime = @import("runtime.zig");
 const Daemon = loop.Daemon;
@@ -60,6 +61,11 @@ fn mainImpl(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next(); // skip program name
     const first_arg = args.next();
+
+    // Needs no config, no log and no session directory: CI runs it.
+    if (first_arg != null and std.mem.eql(u8, first_arg.?, "__schema")) {
+        return schemaCommand(gpa, io, args.next(), args.next());
+    }
 
     // The v2 session runs before `Cfg`: it uses none of v1's directories or
     // its log (see session.zig).
@@ -490,6 +496,41 @@ fn help(io: std.Io) !void {
     var w = std.Io.File.stdout().writer(io, &buf);
     try w.interface.print(help_text, .{});
     try w.interface.flush();
+}
+
+/// `__schema swift | metadata | fixtures` writes that file of the protocol
+/// schema to stdout. `__schema check [old-metadata.json]` checks this build's
+/// schema against an older one and exits 1 on a problem (design/003 §3).
+/// Hidden: `scripts/protocol.sh` runs it.
+fn schemaCommand(gpa: std.mem.Allocator, io: std.Io, what: ?[]const u8, path: ?[]const u8) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var buf: [4096]u8 = undefined;
+    var out = std.Io.File.stdout().writer(io, &buf);
+    const w = &out.interface;
+    const kind = what orelse printError(io, "__schema needs swift, metadata, fixtures or check", .{});
+    if (std.mem.eql(u8, kind, "swift")) {
+        try schema.writeSwift(w, schema.metadata);
+    } else if (std.mem.eql(u8, kind, "metadata")) {
+        try schema.writeMetadata(w, schema.metadata);
+    } else if (std.mem.eql(u8, kind, "fixtures")) {
+        try schema.writeFixtures(arena, w);
+    } else if (std.mem.eql(u8, kind, "check")) {
+        const old: ?schema.Metadata = if (path) |p| blk: {
+            const text = std.Io.Dir.cwd().readFileAlloc(io, p, arena, .limited(16 * 1024 * 1024)) catch |err|
+                printError(io, "cannot read {s}: {s}", .{ p, @errorName(err) });
+            break :blk std.json.parseFromSliceLeaky(schema.Metadata, arena, text, .{ .ignore_unknown_fields = true }) catch |err|
+                printError(io, "cannot parse {s}: {s}", .{ p, @errorName(err) });
+        } else null;
+        const problems = try schema.check(w, old, schema.metadata);
+        try w.flush();
+        if (problems > 0) printError(io, "{d} problems in the protocol schema", .{problems});
+    } else {
+        printError(io, "unknown __schema output {s}", .{kind});
+    }
+    try w.flush();
 }
 
 fn printVersion(io: std.Io, cfg: *Cfg) !void {
