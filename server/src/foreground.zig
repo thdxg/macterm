@@ -178,16 +178,19 @@ const macos = struct {
     /// The command line of `pid` from `KERN_PROCARGS2`, or "" when it
     /// cannot be read. The data holds the environment after the arguments,
     /// and the kernel fills a buffer that is too short from the end of the
-    /// data, so the size is asked first.
+    /// data, so the size is asked first. The buffer is one byte longer than
+    /// that size: a read that fills it was cut short (the process ran a new
+    /// program in between), and gets no args rather than wrong ones.
     fn procArgs(gpa: std.mem.Allocator, pid: lib_posix.pid_t, args_buf: []u8, scratch: []u8) []const u8 {
         var mib = [_]c_int{ CTL_KERN, KERN_PROCARGS2, @intCast(pid) };
         var size: usize = 0;
         if (std.c.sysctl(&mib, mib.len, null, &size, null, 0) != 0) return "";
-        const heap = if (size > scratch.len) gpa.alloc(u8, size) catch return "" else null;
+        const heap = if (size >= scratch.len) gpa.alloc(u8, size + 1) catch return "" else null;
         defer if (heap) |h| gpa.free(h);
         const raw = heap orelse scratch;
         var len: usize = raw.len;
         if (std.c.sysctl(&mib, mib.len, @as(*anyopaque, @ptrCast(raw.ptr)), &len, null, 0) != 0) return "";
+        if (len == raw.len) return "";
         return parseProcArgs2(raw[0..len], args_buf);
     }
 };

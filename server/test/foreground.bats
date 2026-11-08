@@ -11,7 +11,8 @@ setup_file() {
 # On macOS, KERN_PROCARGS2 holds the environment after the arguments, and a
 # buffer that is too short gets the end of that data. The foreground here is
 # a nested `zmx attach`, because the kernel shows no environment for a
-# platform binary such as /bin/sleep.
+# platform binary such as /bin/sleep. Linux reads /proc/<pid>/cmdline, which
+# has no environment, so there the test passes with or without the fix.
 @test "foreground: a process with an environment over 8 KB reports its args" {
   command -v python3 >/dev/null || skip "python3 needed to allocate test PTYs"
   export ZMX
