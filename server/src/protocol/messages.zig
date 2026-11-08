@@ -201,6 +201,7 @@ pub const SessionState = enum {
     /// The session and the server have no level in common. The server
     /// cannot read its state or end it.
     refused,
+    /// A state that a later build added.
     unknown,
 };
 
@@ -213,10 +214,10 @@ pub const SessionCreate = struct {
 
     pub const Args = struct {
         /// Made by the client, so that a request sent again finds the session
-        /// that the first one started, and starts no second one. Letters,
-        /// digits, `-`, `_` and `.`, not first.
+        /// that the first one started, and starts no second one. Only
+        /// letters, digits, `-`, `_` and `.`; not `.` first.
         id: []const u8,
-        /// The session's folder. Null keeps the server's.
+        /// The session's folder, an absolute path. Null is the home folder.
         cwd: ?msgpack.Bin = null,
         /// The command in place of a login shell.
         command: ?[]const msgpack.Bin = null,
@@ -244,9 +245,9 @@ pub const SessionInfo = struct {
     pub const Result = Session;
 };
 
-/// Ends a session. A running session's shell gets SIGHUP to its process
-/// group, then SIGKILL. An exited session gives its status to no one more
-/// and ends. The server answers when the session process is gone.
+/// Ends a session. A running session ends its shell (SIGHUP to the shell's
+/// process group, then SIGKILL). An exited session gives its status to no
+/// one more and ends. The server answers when the session process is gone.
 pub const SessionKill = struct {
     pub const name = "session.kill";
     pub const since = 1;

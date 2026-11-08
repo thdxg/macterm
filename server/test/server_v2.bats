@@ -79,8 +79,10 @@ assert c.call("session.list") == {"sessions": []}
 
 # Each start has a new epoch.
 import os, signal
-os.kill(c.peer_pid(), signal.SIGKILL)
-c.wait_closed()
+from v2client import wait_dead
+pid = c.peer_pid()
+os.kill(pid, signal.SIGKILL)
+wait_dead(pid)
 os.system(os.environ["ZMX"] + " server")
 again = ServerClient()
 again.wait(lambda: again.control(), what="hello")
@@ -111,12 +113,21 @@ assert os.path.realpath(os.environ["RT"]).encode() in a.output, a.output
 again = c.call("session.create", id="s1", command=[b"/bin/sh"])
 assert again["pid"] == s["pid"], again
 
+# Two creates of one new id at the same time start one session.
+from v2client import CONTROL
+c.send_msg(CONTROL, {"id": 900, "m": "session.create", "a": {"id": "s2", "command": [b"/bin/sh"]}})
+c.send_msg(CONTROL, {"id": 901, "m": "session.create", "a": {"id": "s2", "command": [b"/bin/sh"]}})
+both = lambda: [v for v in c.control() if isinstance(v, dict) and v.get("re") in (900, 901)]
+c.wait(lambda: len(both()) == 2, what="two responses")
+assert both()[0]["ok"]["pid"] == both()[1]["ok"]["pid"], both()
+c.call("session.kill", id="s2")
+
 assert list(c.sessions()) == ["s1"], c.sessions()
 assert c.call("session.info", id="s1")["pid"] == s["pid"]
 assert c.request("session.info", id="nope")["err"]["code"] == "not_found"
 
 assert c.call("session.kill", id="s1") == {}
-assert c.wait_event("session.exit")["id"] == "s1"
+c.wait_event("session.exit", lambda a: a["id"] == "s1")
 assert c.sessions() == {}, c.sessions()
 assert not os.path.exists(os.path.join(os.environ["MACTERM_RUNTIME_DIR"], "s1"))
 wait_dead(s["pid"])
@@ -176,8 +187,9 @@ done = c.call("session.create", id="done", command=[b"/bin/sh", b"-c", b"exit 3"
 later = c.call("session.create", id="later", command=[b"/bin/sh"])
 c.wait_event("session.exit", lambda a: a["id"] == "done")
 
-os.kill(c.peer_pid(), signal.SIGKILL)
-c.wait_closed()
+server = c.peer_pid()
+os.kill(server, signal.SIGKILL)
+wait_dead(server)
 
 # With no server, a shell exits, and its session keeps the status.
 a = Client("later")
@@ -215,8 +227,11 @@ c = ServerClient()
 s = c.call("session.create", id="keep", command=[b"/bin/sh"])
 old = c.peer_pid()
 assert c.call("server.exit") == {}
-c.wait_closed()
+# The socket is gone when the reply comes, so a start right after it
+# starts a new server.
 assert not os.path.exists(os.path.join(os.environ["MACTERM_RUNTIME_DIR"], ".server"))
+assert os.system(os.environ["ZMX"] + " server") == 0
+c.wait_closed()
 assert alive(s["pid"])
 
 a = Client("keep")
@@ -224,7 +239,6 @@ a.attach()
 a.type("printf 'still-%s\\n' here\r")
 a.wait_output("still-here")
 
-os.system(os.environ["ZMX"] + " server")
 n = ServerClient()
 assert n.peer_pid() != old
 assert n.sessions()["keep"]["pid"] == s["pid"]
@@ -255,14 +269,18 @@ while True:
                                             "epoch": 9, "caps": ["later-cap"], "later": True})))
     conn.sendall(frame(PANE, MSG, pack({"t": "state", "a": {"pid": os.getpid(), "shell_pid": os.getpid(),
                                          "pty": b"/dev/ttys999", "cols": 80, "rows": 24, "later": 1}})))
-    data = conn.recv(4096)
+    data = b""
+    while len(data) < 9 or len(data) < 9 + int.from_bytes(data[:4], "little"):
+        data += conn.recv(4096)
     hello, _ = unpack(data, 9)
-    open(os.path.join(rt, "fake.hello"), "w").write(hello["role"])
+    open(os.path.join(rt, "fake.hello.tmp"), "w").write(hello["role"])
+    os.rename(os.path.join(rt, "fake.hello.tmp"), os.path.join(rt, "fake.hello"))
 PY
   for _ in $(seq 50); do [[ -f "$RT/fake.ready" ]] && break; sleep 0.1; done
   # The server reads sessions at start: a new server finds the fake.
   pid=$(python3 "$BATS_TEST_DIRNAME/v2client.py" server-pid)
   kill -KILL "$pid"
+  while kill -0 "$pid" 2>/dev/null; do sleep 0.05; done
   "$ZMX" server
   python3 - <<'PY'
 from v2client import ServerClient
@@ -271,6 +289,7 @@ s = c.sessions()["old1"]
 assert s["state"] == "running" and s["build"] == "1.0.0-old" and s["level"] == 1, s
 assert s["pty"] == b"/dev/ttys999", s
 PY
+  for _ in $(seq 50); do [[ -f "$RT/fake.hello" ]] && break; sleep 0.1; done
   [ "$(<"$RT/fake.hello")" = "server" ]
 }
 
@@ -288,8 +307,65 @@ time.sleep(6)
 assert alive(pid)
 c = ServerClient()
 c.call("session.kill", id="s1")
+# A client alone keeps it running.
+time.sleep(6)
+assert alive(pid)
 c.close()
 wait_dead(pid, timeout=10)
 assert not os.path.exists(os.path.join(os.environ["MACTERM_RUNTIME_DIR"], ".server"))
+PY
+}
+
+@test "server: a kill ends a shell that ignores SIGHUP" {
+  "$ZMX" server
+  python3 - <<'PY'
+from v2client import ServerClient, wait_dead
+c = ServerClient()
+s = c.call("session.create", id="stubborn", command=[b"/bin/sh", b"-c", b"trap '' HUP; while :; do sleep 1; done"])
+c.call("session.kill", id="stubborn")
+wait_dead(s["pid"])
+wait_dead(s["shell_pid"])
+assert c.sessions() == {}
+PY
+}
+
+@test "server: a session whose level is too low is listed as refused, until it ends" {
+  # A session that speaks only level 0: the server refuses it.
+  python3 - "$RT" <<'PY' &
+import os, socket, sys
+sys.path.insert(0, os.environ["PYTHONPATH"])
+from v2client import pack, frame, MSG, CONTROL
+rt = sys.argv[1]
+open(os.path.join(rt, "fake.pid"), "w").write(str(os.getpid()))
+os.makedirs(os.environ["MACTERM_RUNTIME_DIR"], mode=0o700, exist_ok=True)
+path = os.path.join(os.environ["MACTERM_RUNTIME_DIR"], "old0")
+l = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+l.bind(path)
+l.listen(4)
+open(os.path.join(rt, "fake.ready"), "w").close()
+while True:
+    conn, _ = l.accept()
+    try:
+        conn.sendall(frame(CONTROL, MSG, pack({"level": 0, "min_level": 0, "build": "0.9.0", "role": "session",
+                                                "epoch": 9, "caps": []})))
+    except OSError:
+        pass  # The server's check connects and closes at once.
+    conn.close()
+PY
+  for _ in $(seq 50); do [[ -f "$RT/fake.ready" ]] && break; sleep 0.1; done
+  "$ZMX" server
+  python3 - <<'PY'
+import os, signal
+from v2client import ServerClient, wait_dead
+c = ServerClient()
+s = c.sessions()["old0"]
+assert s["state"] == "refused" and s["build"] == "0.9.0" and s["level"] == 0, s
+assert "pid" not in s, s
+assert c.request("session.kill", id="old0")["err"]["code"] == "refused"
+
+pid = int(open(os.path.join(os.environ["RT"], "fake.pid")).read())
+os.kill(pid, signal.SIGKILL)
+wait_dead(pid)
+assert c.sessions() == {}, c.sessions()
 PY
 }

@@ -71,9 +71,16 @@ start it (design/001, A). Nothing calls it yet.
   `session.kill`. So a server that crashes, or exits for an update with
   `server.exit`, ends no session and loses no status: the next server reads
   them again.
-- **Kill.** SIGHUP to the shell's process group, then SIGKILL after 3 s. The
-  reply comes when the session process is gone.
-- **Exit.** With no session and no client for 5 s, the server exits.
+- **Kill.** SIGTERM to the session process, which sends SIGHUP to the
+  shell's process group and SIGKILL 0.5 s later. If the session process
+  still runs after 3 s, it gets SIGKILL. The reply comes when the session
+  process is gone. The server signals only a pid above 1.
+- **Folder.** A session with no folder starts in the home folder. The
+  server's environment goes to every session.
+- **Exit.** With no session and no client for 5 s, the server exits. It
+  closes and unlinks its socket under the directory's lock, and on
+  `server.exit` it does this before it replies, so a start that follows
+  always finds the socket gone.
 
 ## Build and test
 
