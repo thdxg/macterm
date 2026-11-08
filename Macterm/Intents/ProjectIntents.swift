@@ -151,7 +151,7 @@ struct GetMactermProjectMemoryIntent: AppIntent {
         guard ProjectMemory.isSupported else {
             throw MactermIntentError.unavailable(String(localized: "Project Insights needs macOS 26 or later."))
         }
-        guard Preferences.shared.projectMemory else {
+        guard ProjectMemory.isEnabled else {
             throw MactermIntentError.unavailable(String(localized: "Project Insights is off. Turn it on in Settings → Intelligence."))
         }
         let target = try IntentTargets.project(project.id, in: ctx)

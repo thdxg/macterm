@@ -13,7 +13,7 @@ private let logger = Logger(subsystem: appBundleID, category: "ProjectMemory")
 /// - Reads the project's git state (`ProjectGit`), cached for each project.
 ///
 /// macOS 26 and later only (`isSupported`), and off until the user turns it
-/// on (`Preferences.projectMemory`). The pinned and scratch workspaces, the
+/// on (`isEnabled`). The pinned and scratch workspaces, the
 /// quick terminal and desktop widgets are not projects, and are never
 /// recorded.
 @MainActor @Observable
@@ -152,8 +152,8 @@ final class ProjectMemory {
         // Taken now: the next command's Return can come before the read.
         let submission = submittedCommands.removeValue(forKey: pane.id)
         // Any command can move the branch (`git switch`, a commit), recorded
-        // or not: memory off, a private command and a command whose text
-        // could not be read change the Git state just as well.
+        // or not: a private command and a command whose text could not be
+        // read change the Git state just as well.
         if panelShows(pane.projectID) { refreshGit(pane.projectID, after: Self.gitReadAfterCommand) }
         guard Self.isEnabled, Self.covers(pane.projectID) else { return }
         let projectID = pane.projectID
