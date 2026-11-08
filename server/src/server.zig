@@ -2,9 +2,11 @@
 //!
 //! One for each user and machine. It holds the registry of sessions and
 //! serves channel 0 to the GUI and the CLI: `session.create`, `list`,
-//! `info`, `kill`, `server.exit`, and the `session.exit` event. It holds no
-//! pty and is not on the local byte path: a client attaches to a session's
-//! own socket.
+//! `info`, `kill`, `server.exit`, `ping`, and the `session.exit` event. It
+//! holds no pty. On the Mac it is not on the byte path: a client attaches to
+//! a session's own socket. On a host, the app reaches every pane through one
+//! stream (`macterm proxy`), and the server relays each pane on a channel of
+//! that stream (`channel.open`, `close`, `pause`, `resume`; `relay.zig`).
 //!
 //! It stores nothing. Each session process holds its state and its exit
 //! status, and keeps the status until a client sends `session.kill`. So a
@@ -21,6 +23,7 @@ const socket = @import("socket.zig");
 const ipc = @import("ipc.zig");
 const runtime = @import("runtime.zig");
 const session = @import("session.zig");
+const relay = @import("relay.zig");
 const protocol = @import("protocol/protocol.zig");
 const frame = protocol.frame;
 const msgpack = protocol.msgpack;
@@ -47,6 +50,12 @@ pub const spawn_ms = 10_000;
 pub const settle_ms = 2000;
 
 const max_clients = 64;
+
+/// The send buffer of a client's socket (`SO_SNDBUF`).
+const peer_sndbuf = 32 * 1024;
+
+/// The most channels that one client can have open.
+const max_channels = 256;
 
 /// A client that sends no `hello` this long after it connects is closed, so
 /// that idle connections cannot take every place.
@@ -180,11 +189,67 @@ const Peer = struct {
     fd: i32,
     connected_at: i64,
     in: std.ArrayList(u8) = .empty,
+    /// The frames that `write` sends now. `relay.fill` moves them in from
+    /// `control` and the channels.
     out: session.OutQueue = .{},
+    /// Channel 0's frames that wait.
+    control: relay.Queue = .{},
+    channels: std.ArrayList(*Channel) = .empty,
+    next_channel: u32 = 1,
+    /// The channel that goes first in the next fill (`relay.fill`).
+    turn: usize = 0,
     greeted: bool = false,
     /// Close it when its queue is empty (after a refusal).
     closing: bool = false,
     dead: bool = false,
+
+    fn findChannel(p: *Peer, id: u32) ?*Channel {
+        for (p.channels.items) |ch| if (ch.id == id and !ch.closed) return ch;
+        return null;
+    }
+
+    /// Everything that waits for this client.
+    fn pending(p: *const Peer) usize {
+        var n = p.out.len() + p.control.bytes;
+        for (p.channels.items) |ch| n += ch.q.bytes;
+        return n;
+    }
+
+    /// What waits for this client and that no skip can drop. Output has a
+    /// cap for each channel (`relay.skip_bytes`).
+    fn kept(p: *const Peer) usize {
+        var n = p.out.len() + p.control.bytes;
+        for (p.channels.items) |ch| n += ch.q.bytes - ch.q.output;
+        return n;
+    }
+};
+
+/// A pane that the server relays to a client: the server's own connection to
+/// the session, and the frames that wait for the client.
+const Channel = struct {
+    /// The channel number on the client's stream.
+    id: u32,
+    session: []u8,
+    /// The connection to the session. -1 when the session closed it: the
+    /// channel goes when its last frames went to the client.
+    fd: i32,
+    in: std.ArrayList(u8) = .empty,
+    /// The client's frames to the session, on the session's pane channel.
+    to_session: session.OutQueue = .{},
+    q: relay.Queue = .{},
+    flow: relay.Flow = .{},
+    greeted: bool = false,
+    /// The client closed it, or the client is gone.
+    closed: bool = false,
+
+    fn deinit(ch: *Channel, gpa: std.mem.Allocator) void {
+        if (ch.fd >= 0) lib_posix.close(ch.fd);
+        ch.in.deinit(gpa);
+        ch.to_session.deinit(gpa);
+        ch.q.deinit(gpa);
+        gpa.free(ch.session);
+        gpa.destroy(ch);
+    }
 };
 
 /// A request that waits for a session: a create, a kill, or an info or a list
@@ -331,15 +396,22 @@ const Server = struct {
 
         var fds: std.ArrayList(lib_posix.pollfd) = .empty;
         defer fds.deinit(s.gpa);
+        var chans: std.ArrayList(struct { peer: *Peer, ch: *Channel }) = .empty;
+        defer chans.deinit(s.gpa);
         while (!s.exiting) {
             if (s.idleExpired()) return;
             fds.clearRetainingCapacity();
             try fds.append(s.gpa, .{ .fd = s.listen_fd, .events = lib_posix.POLL.IN, .revents = 0 });
             try fds.append(s.gpa, .{ .fd = signal.sig_pipe[0], .events = lib_posix.POLL.IN, .revents = 0 });
             const npeers = s.peers.items.len;
-            for (s.peers.items) |p| try fds.append(s.gpa, .{ .fd = p.fd, .events = pollEvents(&p.out), .revents = 0 });
+            for (s.peers.items) |p| try fds.append(s.gpa, .{ .fd = p.fd, .events = peerEvents(p), .revents = 0 });
             const nentries = s.entries.items.len;
             for (s.entries.items) |e| try fds.append(s.gpa, .{ .fd = e.fd, .events = pollEvents(&e.out), .revents = 0 });
+            chans.clearRetainingCapacity();
+            for (s.peers.items) |p| for (p.channels.items) |ch| if (ch.fd >= 0) {
+                try chans.append(s.gpa, .{ .peer = p, .ch = ch });
+                try fds.append(s.gpa, .{ .fd = ch.fd, .events = pollEvents(&ch.to_session), .revents = 0 });
+            };
 
             _ = try lib_posix.poll(fds.items, s.pollTimeout());
 
@@ -368,6 +440,14 @@ const Server = struct {
                 if (!e.dead and pfd.revents & lib_posix.POLL.IN == 0 and
                     pfd.revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) s.entryGone(e);
             }
+            for (chans.items, fds.items[2 + npeers + nentries ..][0..chans.items.len]) |c, pfd| {
+                if (c.peer.dead or c.ch.closed or c.ch.fd < 0) continue;
+                if (pfd.revents & lib_posix.POLL.IN != 0) s.readChannel(c.peer, c.ch);
+                if (c.ch.fd < 0 or c.ch.closed or c.peer.dead) continue;
+                if (pfd.revents & lib_posix.POLL.OUT != 0) s.writeChannel(c.ch);
+                if (c.ch.fd >= 0 and pfd.revents & lib_posix.POLL.IN == 0 and
+                    pfd.revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) s.channelGone(c.ch);
+            }
             s.timers();
             s.sweep();
         }
@@ -378,7 +458,7 @@ const Server = struct {
 
     fn flushFor(s: *Server, p: *Peer, ms: i64) void {
         const deadline = s.now() + ms;
-        while (p.out.len() > 0 and !p.dead) {
+        while (p.out.len() + p.control.bytes > 0 and !p.dead) {
             const left = deadline - s.now();
             if (left <= 0) return;
             var pfd = [_]lib_posix.pollfd{.{ .fd = p.fd, .events = lib_posix.POLL.OUT, .revents = 0 }};
@@ -390,6 +470,12 @@ const Server = struct {
     fn pollEvents(out: *const session.OutQueue) i16 {
         var events: i16 = lib_posix.POLL.IN;
         if (out.len() > 0) events |= lib_posix.POLL.OUT;
+        return events;
+    }
+
+    fn peerEvents(p: *const Peer) i16 {
+        var events: i16 = lib_posix.POLL.IN;
+        if (p.pending() > 0) events |= lib_posix.POLL.OUT;
         return events;
     }
 
@@ -413,6 +499,9 @@ const Server = struct {
                 next = @min(next orelse d, d);
             }
         }
+        for (s.peers.items) |p| for (p.channels.items) |ch| if (ch.fd >= 0) {
+            if (ch.flow.deadline(&ch.q)) |d| next = @min(next orelse d, d);
+        };
         const d = next orelse return -1;
         return @intCast(std.math.clamp(d - t, 0, std.math.maxInt(i32)));
     }
@@ -463,7 +552,10 @@ const Server = struct {
     /// Closes everything. Sessions see a client leave and keep running.
     fn shutdown(s: *Server) void {
         s.closeListen();
-        for (s.peers.items) |p| lib_posix.close(p.fd);
+        for (s.peers.items) |p| {
+            lib_posix.close(p.fd);
+            for (p.channels.items) |ch| if (ch.fd >= 0) lib_posix.close(ch.fd);
+        }
         for (s.entries.items) |e| if (e.fd >= 0) lib_posix.close(e.fd);
     }
 
@@ -661,6 +753,10 @@ const Server = struct {
                 };
             }
         }
+        for (s.peers.items) |p| for (p.channels.items) |ch| {
+            if (ch.fd < 0 or ch.closed) continue;
+            if (ch.flow.mustSkip(&ch.q, t)) s.skip(ch, t) else if (ch.flow.mustAskAgain(t)) s.askSnapshot(ch, t);
+        };
         for (s.peers.items) |p| if (!p.greeted and !p.dead and t - p.connected_at >= hello_ms) {
             std.log.info("server: a client sent no hello, closed", .{});
             p.dead = true;
@@ -814,6 +910,11 @@ const Server = struct {
             lib_posix.close(fd);
             return;
         }
+        // Output that waits in the kernel goes before channel 0, whatever
+        // order the relay chose: keep that buffer small (Linux gives about
+        // 200 KiB by default, macOS 8 KiB).
+        const sndbuf: c_int = peer_sndbuf;
+        _ = std.c.setsockopt(fd, std.c.SOL.SOCKET, std.c.SO.SNDBUF, std.mem.asBytes(&sndbuf), @sizeOf(c_int));
         const p = s.gpa.create(Peer) catch {
             lib_posix.close(fd);
             return;
@@ -869,8 +970,10 @@ const Server = struct {
     }
 
     fn handlePeerFrame(s: *Server, p: *Peer, f: frame.Frame) void {
-        // The server relays no pane on this machine: only channel 0.
-        if (f.channel != frame.control_channel) return;
+        if (f.channel != frame.control_channel) {
+            if (p.greeted) s.relayToSession(p, f);
+            return;
+        }
         var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
         defer arena_state.deinit();
         const arena = arena_state.allocator();
@@ -942,7 +1045,30 @@ const Server = struct {
                 s.exit_peer = p.id;
                 s.exiting = true;
             },
-            m.ChannelOpen, m.ChannelClose => s.replyError(p.id, re, "unsupported", "On this machine a client connects to the session's own socket."),
+            m.ChannelOpen => s.openChannel(p, re, args.session),
+            m.ChannelClose => {
+                const ch = p.findChannel(args.channel) orelse
+                    return s.replyError(p.id, re, "not_found", "No channel has this number.");
+                ch.closed = true;
+                s.reply(p.id, re, m.ChannelClose, .{});
+            },
+            m.ChannelPause => {
+                const ch = p.findChannel(args.channel) orelse
+                    return s.replyError(p.id, re, "not_found", "No channel has this number.");
+                ch.flow.paused = true;
+                ch.q.dropOutput(s.gpa);
+                s.reply(p.id, re, m.ChannelPause, .{});
+            },
+            m.ChannelResume => {
+                const ch = p.findChannel(args.channel) orelse
+                    return s.replyError(p.id, re, "not_found", "No channel has this number.");
+                if (ch.flow.paused) {
+                    ch.flow.paused = false;
+                    s.askSnapshot(ch, s.now());
+                }
+                s.reply(p.id, re, m.ChannelResume, .{});
+            },
+            m.Ping => s.reply(p.id, re, m.Ping, .{}),
             else => s.replyError(p.id, re, "unknown_method", "The server has no such method."),
         }
     }
@@ -1064,18 +1190,36 @@ const Server = struct {
     }
 
     fn sendBody(s: *Server, p: *Peer, body: []const u8) void {
-        p.out.append(s.gpa, frame.control_channel, .msg, body, false) catch {
+        p.control.push(s.gpa, frame.control_channel, .msg, body, s.now(), false) catch {
             p.dead = true;
             return;
         };
-        if (p.out.len() > session.client_hard_cap) {
+        s.checkPeerCap(p);
+    }
+
+    fn checkPeerCap(s: *Server, p: *Peer) void {
+        _ = s;
+        if (p.kept() > session.client_hard_cap) {
             std.log.warn("server: client fd={d} does not read, closed", .{p.fd});
             p.dead = true;
         }
     }
 
     fn writePeer(s: *Server, p: *Peer) void {
-        _ = s;
+        if (p.out.len() == 0) {
+            var queues: std.ArrayList(*relay.Queue) = .empty;
+            defer queues.deinit(s.gpa);
+            for (p.channels.items) |ch| queues.append(s.gpa, &ch.q) catch {
+                p.dead = true;
+                return;
+            };
+            relay.fill(s.gpa, &p.out.buf, &p.control, queues.items, &p.turn) catch {
+                p.dead = true;
+                return;
+            };
+            // Whole frames, none of which may be dropped.
+            p.out.keep_end = p.out.len();
+        }
         if (p.out.len() > 0) {
             const n = lib_posix.write(p.fd, p.out.buf.items) catch |err| switch (err) {
                 error.WouldBlock => return,
@@ -1086,7 +1230,160 @@ const Server = struct {
             };
             p.out.consume(n);
         }
-        if (p.out.len() == 0 and p.closing) p.dead = true;
+        if (p.pending() == 0 and p.closing) p.dead = true;
+    }
+
+    // ── The relay (relay.zig) ───────────────────────────────────────────────
+
+    fn openChannel(s: *Server, p: *Peer, re: u64, id: []const u8) void {
+        const e = s.findEntry(id) orelse return s.replyError(p.id, re, "not_found", "No session has this id.");
+        if (e.refused) return s.replyError(p.id, re, "refused", "The session runs a build that this server cannot speak to.");
+        if (e.state == null) return s.replyError(p.id, re, "starting", "The session is not ready.");
+        if (p.channels.items.len >= max_channels)
+            return s.replyError(p.id, re, "busy", "This connection has too many open channels.");
+        const path = socket.getSocketPath(s.gpa, s.dir, id) catch
+            return s.replyError(p.id, re, "unavailable", "The server is out of memory.");
+        defer s.gpa.free(path);
+        const fd = connectNonblocking(path) catch |err| {
+            std.log.warn("server: cannot connect to session {s} for a channel: {s}", .{ id, @errorName(err) });
+            return s.replyError(p.id, re, "unavailable", "The session does not answer.");
+        };
+        const ch = s.gpa.create(Channel) catch {
+            lib_posix.close(fd);
+            return s.replyError(p.id, re, "unavailable", "The server is out of memory.");
+        };
+        ch.* = .{ .id = p.next_channel, .session = s.gpa.dupe(u8, id) catch {
+            lib_posix.close(fd);
+            s.gpa.destroy(ch);
+            return s.replyError(p.id, re, "unavailable", "The server is out of memory.");
+        }, .fd = fd };
+        p.channels.append(s.gpa, ch) catch {
+            ch.deinit(s.gpa);
+            return s.replyError(p.id, re, "unavailable", "The server is out of memory.");
+        };
+        p.next_channel +%= 1;
+        if (p.next_channel == frame.control_channel) p.next_channel = 1;
+        s.sendChannelControl(ch, s.hello());
+        s.reply(p.id, re, m.ChannelOpen, .{ .channel = ch.id });
+    }
+
+    /// A frame from the client on a pane channel goes to the session, never
+    /// dropped. A frame for a channel that is not open is ignored.
+    fn relayToSession(s: *Server, p: *Peer, f: frame.Frame) void {
+        const ch = p.findChannel(f.channel) orelse return;
+        if (ch.fd < 0) return;
+        ch.to_session.append(s.gpa, m.pane_channel, f.kind, f.body, false) catch return s.channelGone(ch);
+        if (ch.to_session.len() > session.client_hard_cap) {
+            std.log.warn("server: session {s} does not read its channel, closed", .{ch.session});
+            s.channelGone(ch);
+        }
+    }
+
+    fn readChannel(s: *Server, p: *Peer, ch: *Channel) void {
+        var buf: [16 * 1024]u8 = undefined;
+        const n = lib_posix.read(ch.fd, &buf) catch |err| switch (err) {
+            error.WouldBlock => return,
+            else => return s.channelGone(ch),
+        };
+        if (n == 0) return s.channelGone(ch);
+        ch.in.appendSlice(s.gpa, buf[0..n]) catch return s.channelGone(ch);
+
+        const t = s.now();
+        var used: usize = 0;
+        defer if (ch.fd >= 0) ch.in.replaceRangeAssumeCapacity(0, used, &.{});
+        while (ch.fd >= 0 and !p.dead) {
+            const rest = ch.in.items[used..];
+            if (rest.len >= frame.header_len and std.mem.readInt(u32, rest[0..4], .little) > frame_max) {
+                std.log.warn("server: session {s} sent a frame over 1 MiB on a channel, closed", .{ch.session});
+                return s.channelGone(ch);
+            }
+            const parsed = (frame.parse(rest) catch return s.channelGone(ch)) orelse break;
+            used += parsed.len;
+            s.handleChannelFrame(p, ch, parsed.frame, t);
+        }
+        if (ch.fd >= 0 and ch.flow.mustSkip(&ch.q, t)) s.skip(ch, t);
+        s.checkPeerCap(p);
+    }
+
+    fn handleChannelFrame(s: *Server, p: *Peer, ch: *Channel, f: frame.Frame, t: i64) void {
+        _ = p;
+        var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+
+        if (f.channel == frame.control_channel) {
+            const msg = m.decodeControl(arena, f.body) catch return s.channelGone(ch);
+            switch (msg) {
+                .hello => |h| if (!ch.greeted) switch (m.negotiate(s.hello(), h)) {
+                    .speak => ch.greeted = true,
+                    .refuse => |r| {
+                        std.log.info("server: session {s} speaks level {d}, channel closed", .{ ch.session, h.level });
+                        s.sendChannelControl(ch, r);
+                        _ = lib_posix.write(ch.fd, ch.to_session.buf.items) catch {};
+                        s.channelGone(ch);
+                    },
+                },
+                .refuse => s.channelGone(ch),
+                else => {},
+            }
+            return;
+        }
+        if (!ch.greeted or f.channel != m.pane_channel) return;
+        const action: relay.Inbound = switch (f.kind) {
+            .msg => blk: {
+                const msg = msgpack.decodeSlice(m.PaneMessage, arena, f.body) catch return s.channelGone(ch);
+                break :blk ch.flow.message(
+                    std.mem.eql(u8, msg.t, m.SnapshotStart.name),
+                    std.mem.eql(u8, msg.t, m.SnapshotEnd.name),
+                );
+            },
+            .bytes => ch.flow.bytes(),
+            _ => return,
+        };
+        if (action == .drop) return;
+        ch.q.push(s.gpa, ch.id, f.kind, f.body, t, action == .output) catch s.channelGone(ch);
+    }
+
+    /// The channel's output is too old or too large: drop it, and show the
+    /// screen as it is now (design/003 §6).
+    fn skip(s: *Server, ch: *Channel, t: i64) void {
+        std.log.info("server: channel {d} (session {s}) fell behind, output dropped", .{ ch.id, ch.session });
+        ch.q.dropOutput(s.gpa);
+        s.askSnapshot(ch, t);
+    }
+
+    /// Output stops until the session's snapshot starts.
+    fn askSnapshot(s: *Server, ch: *Channel, t: i64) void {
+        ch.flow.want_snapshot = true;
+        ch.flow.asked_at = t;
+        var out: std.Io.Writer.Allocating = .init(s.gpa);
+        defer out.deinit();
+        m.encodePane(&out.writer, m.Refresh, .{}) catch return;
+        ch.to_session.append(s.gpa, m.pane_channel, .msg, out.written(), false) catch s.channelGone(ch);
+    }
+
+    fn writeChannel(s: *Server, ch: *Channel) void {
+        if (ch.to_session.len() == 0) return;
+        const n = lib_posix.write(ch.fd, ch.to_session.buf.items) catch |err| switch (err) {
+            error.WouldBlock => return,
+            else => return s.channelGone(ch),
+        };
+        ch.to_session.consume(n);
+    }
+
+    /// The session closed the channel's connection. The frames that wait
+    /// still go to the client (a last `exit`), then the channel goes.
+    fn channelGone(s: *Server, ch: *Channel) void {
+        _ = s;
+        if (ch.fd < 0) return;
+        lib_posix.close(ch.fd);
+        ch.fd = -1;
+    }
+
+    fn sendChannelControl(s: *Server, ch: *Channel, value: anytype) void {
+        const body = msgpack.encodeAlloc(s.gpa, value) catch return;
+        defer s.gpa.free(body);
+        ch.to_session.append(s.gpa, frame.control_channel, .msg, body, false) catch s.channelGone(ch);
     }
 
     fn sweep(s: *Server) void {
@@ -1097,9 +1394,26 @@ const Server = struct {
                 lib_posix.close(p.fd);
                 p.in.deinit(s.gpa);
                 p.out.deinit(s.gpa);
+                p.control.deinit(s.gpa);
+                for (p.channels.items) |ch| ch.deinit(s.gpa);
+                p.channels.deinit(s.gpa);
                 s.gpa.destroy(p);
                 _ = s.peers.orderedRemove(i);
-            } else i += 1;
+            } else {
+                // A channel that the client closed goes now. A channel whose
+                // session left goes when its last frames went out.
+                var j: usize = 0;
+                while (j < p.channels.items.len) {
+                    const ch = p.channels.items[j];
+                    if (ch.closed or (ch.fd < 0 and ch.q.empty())) {
+                        ch.deinit(s.gpa);
+                        _ = p.channels.orderedRemove(j);
+                        if (p.turn > j) p.turn -= 1;
+                    } else j += 1;
+                }
+                if (p.channels.items.len > 0) p.turn %= p.channels.items.len else p.turn = 0;
+                i += 1;
+            }
         }
         i = 0;
         while (i < s.entries.items.len) {

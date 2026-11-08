@@ -33,6 +33,30 @@ extension MactermProtocol {
 }
 
 extension MactermProtocol {
+    enum ChannelPause: ProtocolMethod {
+        static let name = "channel.pause"
+        static let since: UInt32 = 1
+        static let senders: [MactermProtocol.Trust] = [.local]
+    }
+}
+
+extension MactermProtocol {
+    enum ChannelResume: ProtocolMethod {
+        static let name = "channel.resume"
+        static let since: UInt32 = 1
+        static let senders: [MactermProtocol.Trust] = [.local]
+    }
+}
+
+extension MactermProtocol {
+    enum Ping: ProtocolMethod {
+        static let name = "ping"
+        static let since: UInt32 = 1
+        static let senders: [MactermProtocol.Trust] = [.local, .session, .remote]
+    }
+}
+
+extension MactermProtocol {
     enum SessionCreate: ProtocolMethod {
         static let name = "session.create"
         static let since: UInt32 = 1
@@ -497,6 +521,114 @@ extension MactermProtocol.ChannelClose {
 }
 
 extension MactermProtocol.ChannelClose.Result: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        try reader.readMap { _, _ in false }
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(0)
+    }
+}
+
+extension MactermProtocol.ChannelPause {
+    struct Args: Equatable {
+        var channel: UInt32
+    }
+}
+
+extension MactermProtocol.ChannelPause.Args: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var channel: UInt32?
+        try reader.readMap { key, reader in
+            switch key {
+            case "channel": channel = try UInt32(from: &reader)
+            default: return false
+            }
+            return true
+        }
+        self.channel = try MessagePackReader.required(channel, "channel")
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(1)
+        writer.writeString("channel")
+        channel.encode(to: &writer)
+    }
+}
+
+extension MactermProtocol.ChannelPause {
+    struct Result: Equatable {}
+}
+
+extension MactermProtocol.ChannelPause.Result: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        try reader.readMap { _, _ in false }
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(0)
+    }
+}
+
+extension MactermProtocol.ChannelResume {
+    struct Args: Equatable {
+        var channel: UInt32
+    }
+}
+
+extension MactermProtocol.ChannelResume.Args: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var channel: UInt32?
+        try reader.readMap { key, reader in
+            switch key {
+            case "channel": channel = try UInt32(from: &reader)
+            default: return false
+            }
+            return true
+        }
+        self.channel = try MessagePackReader.required(channel, "channel")
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(1)
+        writer.writeString("channel")
+        channel.encode(to: &writer)
+    }
+}
+
+extension MactermProtocol.ChannelResume {
+    struct Result: Equatable {}
+}
+
+extension MactermProtocol.ChannelResume.Result: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        try reader.readMap { _, _ in false }
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(0)
+    }
+}
+
+extension MactermProtocol.Ping {
+    struct Args: Equatable {}
+}
+
+extension MactermProtocol.Ping.Args: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        try reader.readMap { _, _ in false }
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(0)
+    }
+}
+
+extension MactermProtocol.Ping {
+    struct Result: Equatable {}
+}
+
+extension MactermProtocol.Ping.Result: ProtocolValue {
     init(from reader: inout MessagePackReader) throws {
         try reader.readMap { _, _ in false }
     }
@@ -1207,6 +1339,20 @@ extension MactermProtocol.End: ProtocolValue {
     }
 }
 
+extension MactermProtocol {
+    struct Refresh: Equatable {}
+}
+
+extension MactermProtocol.Refresh: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        try reader.readMap { _, _ in false }
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(0)
+    }
+}
+
 extension MactermProtocol.Hello: ProtocolMessage {
     static let name = "hello"
     static let since: UInt32 = 1
@@ -1281,6 +1427,12 @@ extension MactermProtocol.Take: ProtocolMessage {
 
 extension MactermProtocol.End: ProtocolMessage {
     static let name = "end"
+    static let since: UInt32 = 1
+    static let senders: [MactermProtocol.Trust] = [.local]
+}
+
+extension MactermProtocol.Refresh: ProtocolMessage {
+    static let name = "refresh"
     static let since: UInt32 = 1
     static let senders: [MactermProtocol.Trust] = [.local]
 }

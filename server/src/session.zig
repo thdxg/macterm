@@ -656,6 +656,8 @@ const Session = struct {
         } else if (std.mem.eql(u8, msg.t, m.End.name)) {
             std.log.info("session {s}: end", .{s.name});
             s.ending = true;
+        } else if (std.mem.eql(u8, msg.t, m.Refresh.name)) {
+            s.refresh(c);
         } else if (std.mem.eql(u8, msg.t, m.Take.name)) {
             if (s.exited() != null) {
                 std.log.info("session {s}: exit status taken", .{s.name});
@@ -739,6 +741,17 @@ const Session = struct {
         }
         s.sendPane(c, m.SnapshotEnd, .{});
         s.checkHardCap(c);
+    }
+
+    /// A client asks for the screen again (`m.Refresh`). A client that is
+    /// behind gets its snapshot when it catches up.
+    fn refresh(s: *Session, c: *Client) void {
+        if (!c.attached or c.behind) return;
+        c.out.drop();
+        if (s.has_output) return s.sendSnapshot(c, false);
+        // An empty snapshot, so that a relay that waits for one stops waiting.
+        s.sendPane(c, m.SnapshotStart, .{ .scrollback = false });
+        s.sendPane(c, m.SnapshotEnd, .{});
     }
 
     fn writeClient(s: *Session, c: *Client) void {
