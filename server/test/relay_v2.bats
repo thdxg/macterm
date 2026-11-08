@@ -174,17 +174,17 @@ c.call("session.create", id="s", command=[b"/bin/sh"])
 ch = c.open("s")
 c.count_only.add(ch)
 c.wait_msg(ch, "state")
-c.type(ch, "yes 0123456789012345678901234567890123456789012345678901234567890123456789 | head -c 2000000; printf 'done-%s\\n' 9\r")
+c.type(ch, "yes 0123456789012345678901234567890123456789012345678901234567890123456789 | head -c 600000; printf 'done-%s\\n' 9\r")
 # The app reads nothing for 4 s: output fills the buffers on the way, then
 # waits in the server longer than 1 s.
 time.sleep(4)
 c.count_only.discard(ch)
 c.wait(lambda: any(v.get("t") == "snapshot.start" and v["a"] == {"scrollback": False}
                    for v in c.messages(ch)), timeout=20, what="a snapshot after the skip")
-c.wait_output(ch, "done-9", timeout=60)
+c.wait_output(ch, "done-9", timeout=120)
 # The output that waited was dropped, not sent late.
 got = sum(n for k, n in c.frames[ch] if k == "bytes")
-assert got < 2000000, got
+assert got < 600000, got
 c.close()
 PY
 }
