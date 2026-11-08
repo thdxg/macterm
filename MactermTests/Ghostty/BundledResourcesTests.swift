@@ -133,6 +133,56 @@ struct BundledResourcesTests {
         )
     }
 
+    /// The app carries a gzip server build for every host target, named for
+    /// the bundled build key, for an install on a host with no download. The
+    /// macOS one is the bundled zmx itself, so it has the signature that
+    /// `bundled_zmx_is_signed_as_the_app` pins. Each Linux one is an ELF
+    /// binary for the machine that its name says.
+    @Test
+    func server_builds_ship_for_every_host_target() throws {
+        let release = try #require(
+            ZmxRelease.bundled,
+            "zmx-release.json missing from the built bundle — run `mise run setup`"
+        )
+        let zmx = try #require(Bundle.main.url(forResource: "zmx", withExtension: nil, subdirectory: "zmx"))
+        let bundledZmx = try Data(contentsOf: zmx)
+        for target in ZmxHostTarget.allCases {
+            let check: (Data) -> Bool = switch target {
+            case .macOS: { $0 == bundledZmx }
+            case .linuxX86_64: { Self.isELF($0, machine: 62) }
+            case .linuxAarch64: { Self.isELF($0, machine: 183) }
+            }
+            let name = "macterm-\(release.tag)-\(target.rawValue)"
+            let url = try #require(
+                Bundle.main.url(forResource: name, withExtension: "gz", subdirectory: "server"),
+                "server/\(name).gz missing from the built bundle — run `mise run setup`"
+            )
+            let binary = try Self.gunzip(url)
+            #expect(check(binary), "server/\(name).gz is not the build for \(target)")
+        }
+    }
+
+    /// True for an ELF file whose `e_machine` (little endian, offset 18) is
+    /// `machine`: 62 is x86_64, 183 is aarch64.
+    private static func isELF(_ data: Data, machine: UInt16) -> Bool {
+        guard data.count > 20, data.prefix(4) == Data([0x7F, 0x45, 0x4C, 0x46]) else { return false }
+        let index = data.startIndex
+        return UInt16(data[index + 18]) | UInt16(data[index + 19]) << 8 == machine
+    }
+
+    private static func gunzip(_ url: URL) throws -> Data {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
+        process.arguments = ["-dc", url.path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        #expect(process.terminationStatus == 0, "gzip could not read \(url.lastPathComponent)")
+        return data
+    }
+
     private static func run(_ tool: String, _ arguments: [String]) throws -> (status: Int32, output: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: tool)
