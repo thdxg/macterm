@@ -1255,6 +1255,9 @@ final class AppState {
     /// pure bookkeeping, no UI reads it.
     @ObservationIgnored
     private var reconnectPolicy = RemoteReconnectPolicy()
+    /// See `endV1SessionsOnce`.
+    @ObservationIgnored
+    var v1SessionsEnded = OnceFlag.preferences
     /// Orphan-sweep throttle (#281): destination (`user@host`) → when it
     /// was last swept.
     @ObservationIgnored
@@ -2106,11 +2109,24 @@ final class AppState {
     /// names is not ours to judge. Remote sessions stay (their names are not
     /// in the local folder). The flag is set only when the kill ran.
     private func endV1SessionsOnce(names: Set<String>) {
-        guard !Preferences.shared.endedV1Sessions else { return }
+        guard !v1SessionsEnded.read() else { return }
+        let flag = v1SessionsEnded
         Task { [zmx] in
             guard await zmx.endV1Sessions(names.sorted()) else { return }
-            await MainActor.run { Preferences.shared.endedV1Sessions = true }
+            await MainActor.run { flag.write() }
         }
+    }
+
+    /// The once-flag of `endV1SessionsOnce`: `Preferences.endedV1Sessions`.
+    /// Tests hand in their own, so that two tests never share it.
+    struct OnceFlag {
+        var read: @MainActor () -> Bool
+        var write: @MainActor () -> Void
+
+        static let preferences = OnceFlag(
+            read: { Preferences.shared.endedV1Sessions },
+            write: { Preferences.shared.endedV1Sessions = true }
+        )
     }
 
     // MARK: - Orphan session sweep (#281)

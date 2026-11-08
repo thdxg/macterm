@@ -2913,23 +2913,41 @@ struct AppStateTests {
             }
             return true
         }
-        Preferences.shared.endedV1Sessions = false
-        defer { Preferences.shared.endedV1Sessions = false }
+        let endedFlag = LockedBox(false)
         let state = AppState(
             workspaceStore: WorkspaceStore(fileURL: storeURL),
             projectFiles: makeProjectFileStore(),
             quickTerminal: QuickTerminalSplitState()
         )
         state.zmx = zmx
+        state.v1SessionsEnded = .init(read: { endedFlag.value }, write: { endedFlag.mutate { $0 = true } })
         state.restoreSelection(projects: [])
 
         await ended.settle(expecting: quickNames.count)
         #expect(await Set(ended.names) == quickNames)
         let deadline = Date().addingTimeInterval(5)
-        while !Preferences.shared.endedV1Sessions, Date() < deadline {
+        while !endedFlag.value, Date() < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
-        #expect(Preferences.shared.endedV1Sessions)
+        #expect(endedFlag.value)
+
+        // Once: a second launch ends nothing.
+        let again = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: QuickTerminalSplitState()
+        )
+        let calls = LockedBox(0)
+        var counting = ZmxClient.noop
+        counting.endV1Sessions = { _ in
+            calls.mutate { $0 += 1 }
+            return true
+        }
+        again.zmx = counting
+        again.v1SessionsEnded = state.v1SessionsEnded
+        again.restoreSelection(projects: [])
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(calls.value == 0)
     }
 }
 
