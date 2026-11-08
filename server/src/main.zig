@@ -16,6 +16,7 @@ const daemonize = @import("daemonize.zig");
 const foreground = @import("foreground.zig");
 const schema = @import("protocol/schema.zig");
 const v2session = @import("session.zig");
+const v2server = @import("server.zig");
 const runtime = @import("runtime.zig");
 const v2attach = @import("attach.zig");
 const Daemon = loop.Daemon;
@@ -76,6 +77,7 @@ fn mainImpl(init: std.process.Init) !void {
         const shell = init.environ_map.get("SHELL") orelse "/bin/sh";
         if (std.mem.eql(u8, c, "session")) return sessionCommand(gpa, io, init.environ_map, shell, &args);
         if (std.mem.eql(u8, c, v2session.reexec_command)) return sessionEntry(gpa, io, init.environ_map, &args);
+        if (std.mem.eql(u8, c, "server")) return serverCommand(gpa, io, init.environ_map, &args);
         if (std.mem.eql(u8, c, "connect")) return connectCommand(gpa, io, init.environ_map, &args);
     }
 
@@ -382,6 +384,22 @@ fn sessionCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.En
             return printError(io, "runtime directory {s} {s}", .{ dir, reason });
         },
         else => return printError(io, "cannot start session \"{s}\": {s}", .{ opts.name, @errorName(err) }),
+    };
+}
+
+/// `server`: starts the v2 server (src/server.zig) unless one answers, and
+/// returns when its socket accepts connections.
+fn serverCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, args: anytype) !void {
+    if (args.next()) |arg| return printError(io, "unexpected argument \"{s}\"", .{arg});
+    const dir = runtime.resolveDir(gpa, env) catch return printError(io, "no runtime directory: set {s}", .{runtime.dir_env});
+    defer gpa.free(dir);
+    v2server.start(gpa, dir) catch |err| switch (err) {
+        error.AlreadyRunning => {},
+        error.RuntimeDir => {
+            const reason = if (runtime.ensureDir(dir)) |_| "failed the check" else |e| runtime.describe(e);
+            return printError(io, "runtime directory {s} {s}", .{ dir, reason });
+        },
+        else => return printError(io, "cannot start the server: {s}", .{@errorName(err)}),
     };
 }
 

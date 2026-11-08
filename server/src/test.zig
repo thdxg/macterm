@@ -15,5 +15,6 @@ comptime {
     _ = @import("protocol/protocol.zig");
     _ = @import("runtime.zig");
     _ = @import("session.zig");
+    _ = @import("server.zig");
     _ = @import("attach.zig");
 }

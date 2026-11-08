@@ -7,6 +7,7 @@ Only what the tests need: no floats, no ext types.
 
 import os
 import select
+import sys
 import socket
 import struct
 import time
@@ -206,10 +207,71 @@ class Client:
         self.sock.close()
 
 
-if __name__ == "__main__":
-    import sys
+class ServerClient(Client):
+    """A GUI on the server's socket (src/server.zig): requests and events on
+    channel 0."""
 
+    def __init__(self, role="gui", build="test", level=1, min_level=1):
+        self.role, self.build = role, build
+        self.next_id = 1
+        super().__init__(".server", greet=False)
+        self.send_msg(CONTROL, dict(hello(level, min_level, role), build=build))
+
+    def request(self, method, timeout=10, **args):
+        rid = self.next_id
+        self.next_id += 1
+        self.send_msg(CONTROL, {"id": rid, "m": method, "a": args})
+        found = lambda: [v for v in self.control() if isinstance(v, dict) and v.get("re") == rid]
+        self.wait(lambda: found(), timeout, "a response to %s" % method)
+        return found()[0]
+
+    def call(self, method, timeout=10, **args):
+        """The result, or an AssertionError that holds the error."""
+        res = self.request(method, timeout, **args)
+        assert "ok" in res, "%s failed: %r" % (method, res)
+        return res["ok"]
+
+    def events(self, e=None):
+        out = []
+        for v in self.control():
+            if isinstance(v, dict) and "seq" in v:
+                out += [x for x in v["ev"] if e is None or x["e"] == e]
+        return out
+
+    def wait_event(self, e, pred=lambda a: True, timeout=10):
+        match = lambda: [x["a"] for x in self.events(e) if pred(x["a"])]
+        self.wait(lambda: match(), timeout, "event %s" % e)
+        return match()[0]
+
+    def sessions(self):
+        return {x["id"]: x for x in self.call("session.list")["sessions"]}
+
+    def peer_pid(self):
+        if sys.platform == "darwin":
+            # SOL_LOCAL, LOCAL_PEERPID
+            return struct.unpack("i", self.sock.getsockopt(0, 2, 4))[0]
+        return struct.unpack("3i", self.sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))[0]
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
+def wait_dead(pid, timeout=5):
+    deadline = time.time() + timeout
+    while alive(pid):
+        assert time.time() < deadline, "process %d still runs" % pid
+        time.sleep(0.05)
+
+
+if __name__ == "__main__":
     # `v2client.py pid <name>`: the session process's pid, for a teardown.
-    if sys.argv[1] == "pid":
+    if sys.argv[1] == "server-pid":
+        print(ServerClient().peer_pid())
+    elif sys.argv[1] == "pid":
         c = Client(sys.argv[2])
         print(c.wait_msg("state", timeout=5)["pid"])

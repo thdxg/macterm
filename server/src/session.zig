@@ -66,8 +66,10 @@ pub const Options = struct {
 
 /// A session name names a file in the runtime directory, so it may not hold
 /// a slash or start with a dot (the directory's own files start with one).
+/// It may not start with `-` either.
 pub fn validName(name: []const u8) bool {
-    if (name.len == 0 or name[0] == '.') return false;
+    // Not `-` first: the name is an argument of `session`, not an option.
+    if (name.len == 0 or name[0] == '.' or name[0] == '-') return false;
     for (name) |c| switch (c) {
         'a'...'z', 'A'...'Z', '0'...'9', '-', '_', '.' => {},
         else => return false,
@@ -151,7 +153,7 @@ pub fn resumeAfterReexec(dir: []const u8, opts: Options, listen_fd: i32) noretur
     serveAndExit(dir, opts, listen_fd, pty);
 }
 
-fn lockDir(dir: []const u8) !i32 {
+pub fn lockDir(dir: []const u8) !i32 {
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = try std.fmt.bufPrintSentinel(&buf, "{s}/.lock", .{dir}, 0);
     const fd = std.c.open(path.ptr, .{ .ACCMODE = .RDWR, .CREAT = true, .CLOEXEC = true, .NOFOLLOW = true }, @as(std.c.mode_t, 0o600));
@@ -163,14 +165,14 @@ fn lockDir(dir: []const u8) !i32 {
     return fd;
 }
 
-fn bindSocket(path: []const u8) !i32 {
+pub fn bindSocket(path: []const u8) !i32 {
     // The socket file is 0600 from the moment it exists.
     const old_mask = std.c.umask(0o177);
     defer _ = std.c.umask(old_mask);
     return socket.createSocket(path);
 }
 
-fn unlinkSocket(dir: []const u8, name: []const u8) void {
+pub fn unlinkSocket(dir: []const u8, name: []const u8) void {
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = std.fmt.bufPrintSentinel(&buf, "{s}/{s}", .{ dir, name }, 0) catch return;
     _ = std.c.unlink(path.ptr);
@@ -200,7 +202,7 @@ fn serveAndExit(dir: []const u8, opts: Options, listen_fd: i32, pty: daemonize.P
 }
 
 /// `<dir>/log/<name>.log`. A failure leaves the session with no log.
-fn openLog(io: std.Io, dir: []const u8, name: []const u8) void {
+pub fn openLog(io: std.Io, dir: []const u8, name: []const u8) void {
     log.log_system.deinit();
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const log_dir = std.fmt.bufPrintSentinel(&buf, "{s}/log", .{dir}, 0) catch return;
@@ -325,6 +327,8 @@ const Session = struct {
     announced: bool = false,
     /// A client took the exit status.
     taken: bool = false,
+    /// A client sent `end`.
+    ending: bool = false,
 
     const pty_in_max = 256 * 1024;
 
@@ -370,7 +374,7 @@ const Session = struct {
         defer fds.deinit(s.gpa);
         std.log.info("session {s} started pid={d} shell={d} pty={s}", .{ s.name, std.c.getpid(), s.shell_pid, s.pty_name });
 
-        while (!s.taken) {
+        while (!s.taken and !s.ending) {
             s.updateFocus();
             fds.clearRetainingCapacity();
             try fds.append(s.gpa, .{ .fd = s.listen_fd, .events = lib_posix.POLL.IN, .revents = 0 });
@@ -652,6 +656,9 @@ const Session = struct {
             if (s.leader == c) s.resize(size);
         } else if (std.mem.eql(u8, msg.t, m.Claim.name)) {
             if (c.attached and s.leader != c) s.setLeader(c);
+        } else if (std.mem.eql(u8, msg.t, m.End.name)) {
+            std.log.info("session {s}: end", .{s.name});
+            s.ending = true;
         } else if (std.mem.eql(u8, msg.t, m.Take.name)) {
             if (s.exited() != null) {
                 std.log.info("session {s}: exit status taken", .{s.name});
@@ -828,6 +835,7 @@ test "a session name is one plain file name" {
     try testing.expect(validName("a.b_c"));
     try testing.expect(!validName(""));
     try testing.expect(!validName(".hidden"));
+    try testing.expect(!validName("--cwd"));
     try testing.expect(!validName("a/b"));
     try testing.expect(!validName("a b"));
 }
