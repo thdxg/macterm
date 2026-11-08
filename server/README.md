@@ -26,7 +26,7 @@ and for a user at a shell; v2 replaces them with protocol messages.
 `zmx session [--cols N] [--rows N] [--cwd DIR] <name> [--] [command...]`
 starts a v2 session process (`src/session.zig`) and returns when its socket
 accepts connections. It is the shell's parent, and it speaks the v2 frames
-(`src/protocol/`), not the zmx IPC above. The server (Macterm issue 0048)
+(`src/protocol/`), not the zmx IPC above. The server (below)
 runs it; `help` does not list it.
 
 - **Socket.** `<dir>/<name>`, mode 0600. `<dir>` is `MACTERM_RUNTIME_DIR`,
@@ -47,6 +47,33 @@ runs it; `help` does not list it.
   each client until one sends `take`. Then it ends.
 - On macOS it starts itself again disclaimed (change 0004), as
   `__session <name>`.
+
+## The v2 server
+
+`zmx server` starts the server (`src/server.zig`) unless one answers on its
+socket, and returns when the socket accepts connections. There is one for
+each user and machine. It holds no pty, and local pane bytes do not go
+through it: a client attaches to the session's own socket. The app will
+start it (design/001, A). Nothing calls it yet.
+
+- **Socket.** `<dir>/.server`, mode 0600, in the runtime directory of the
+  sessions, with the same checks. A session name cannot start with a dot.
+  Its log is `<dir>/log/.server.log`.
+- **Channel 0.** `session.create` (with an id that the client makes; the
+  same id again finds the same session), `session.list`, `session.info`,
+  `session.kill` and `server.exit`, and the event `session.exit`. The types
+  are in `src/protocol/messages.zig`.
+- **Sessions.** `session.create` runs `zmx session` (fork and exec of the
+  same binary, which does the `setsid` and the disclaim). At start the
+  server connects to every session socket in the directory and reads each
+  session's state from its `hello` and `state`.
+- **Stores nothing.** A session keeps its exit status until a client sends
+  `session.kill`. So a server that crashes, or exits for an update with
+  `server.exit`, ends no session and loses no status: the next server reads
+  them again.
+- **Kill.** SIGHUP to the shell's process group, then SIGKILL after 3 s. The
+  reply comes when the session process is gone.
+- **Exit.** With no session and no client for 5 s, the server exits.
 
 ## Build and test
 

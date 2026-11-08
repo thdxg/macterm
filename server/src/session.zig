@@ -151,7 +151,7 @@ pub fn resumeAfterReexec(dir: []const u8, opts: Options, listen_fd: i32) noretur
     serveAndExit(dir, opts, listen_fd, pty);
 }
 
-fn lockDir(dir: []const u8) !i32 {
+pub fn lockDir(dir: []const u8) !i32 {
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = try std.fmt.bufPrintSentinel(&buf, "{s}/.lock", .{dir}, 0);
     const fd = std.c.open(path.ptr, .{ .ACCMODE = .RDWR, .CREAT = true, .CLOEXEC = true, .NOFOLLOW = true }, @as(std.c.mode_t, 0o600));
@@ -163,14 +163,14 @@ fn lockDir(dir: []const u8) !i32 {
     return fd;
 }
 
-fn bindSocket(path: []const u8) !i32 {
+pub fn bindSocket(path: []const u8) !i32 {
     // The socket file is 0600 from the moment it exists.
     const old_mask = std.c.umask(0o177);
     defer _ = std.c.umask(old_mask);
     return socket.createSocket(path);
 }
 
-fn unlinkSocket(dir: []const u8, name: []const u8) void {
+pub fn unlinkSocket(dir: []const u8, name: []const u8) void {
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = std.fmt.bufPrintSentinel(&buf, "{s}/{s}", .{ dir, name }, 0) catch return;
     _ = std.c.unlink(path.ptr);
@@ -200,7 +200,7 @@ fn serveAndExit(dir: []const u8, opts: Options, listen_fd: i32, pty: daemonize.P
 }
 
 /// `<dir>/log/<name>.log`. A failure leaves the session with no log.
-fn openLog(io: std.Io, dir: []const u8, name: []const u8) void {
+pub fn openLog(io: std.Io, dir: []const u8, name: []const u8) void {
     log.log_system.deinit();
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const log_dir = std.fmt.bufPrintSentinel(&buf, "{s}/log", .{dir}, 0) catch return;

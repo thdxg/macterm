@@ -168,8 +168,125 @@ pub const ChannelClose = struct {
     pub const Result = struct {};
 };
 
+/// What the server knows of one session (design/001). The session process
+/// holds all of it, so a new server reads it again from each session.
+pub const Session = struct {
+    /// The session's name: the file name of its socket. The client that
+    /// asked for the session made it.
+    id: []const u8,
+    state: SessionState,
+    /// The session's build and level, from its `hello`.
+    build: []const u8,
+    level: u32,
+    /// The session process. Null when `state` is `refused`.
+    pid: ?i64 = null,
+    /// The shell (or the command) of the session.
+    shell_pid: ?i64 = null,
+    /// The path of the pty's slave side.
+    pty: ?msgpack.Bin = null,
+    cols: ?u16 = null,
+    rows: ?u16 = null,
+    /// The exit code, when `state` is `exited` and the shell exited.
+    code: ?u8 = null,
+    /// The signal number, when `state` is `exited` and a signal ended the
+    /// shell.
+    signal: ?u8 = null,
+};
+
+pub const SessionState = enum {
+    running,
+    /// The shell ended. The session keeps the status until a client sends
+    /// `session.kill`.
+    exited,
+    /// The session and the server have no level in common. The server
+    /// cannot read its state or end it.
+    refused,
+    unknown,
+};
+
+/// Starts a session process (design/001). The server answers when the
+/// session's socket accepts connections and the session sent its state.
+pub const SessionCreate = struct {
+    pub const name = "session.create";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct {
+        /// Made by the client, so that a request sent again finds the session
+        /// that the first one started, and starts no second one. Letters,
+        /// digits, `-`, `_` and `.`, not first.
+        id: []const u8,
+        /// The session's folder. Null keeps the server's.
+        cwd: ?msgpack.Bin = null,
+        /// The command in place of a login shell.
+        command: ?[]const msgpack.Bin = null,
+        cols: u16 = 80,
+        rows: u16 = 24,
+    };
+    pub const Result = Session;
+};
+
+pub const SessionList = struct {
+    pub const name = "session.list";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct {};
+    pub const Result = struct { sessions: []const Session };
+};
+
+pub const SessionInfo = struct {
+    pub const name = "session.info";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { id: []const u8 };
+    pub const Result = Session;
+};
+
+/// Ends a session. A running session's shell gets SIGHUP to its process
+/// group, then SIGKILL. An exited session gives its status to no one more
+/// and ends. The server answers when the session process is gone.
+pub const SessionKill = struct {
+    pub const name = "session.kill";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { id: []const u8 };
+    pub const Result = struct {};
+};
+
+/// The server exits and leaves every session running, so that a newer app
+/// can start its own server (design/002).
+pub const ServerExit = struct {
+    pub const name = "server.exit";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct {};
+    pub const Result = struct {};
+};
+
 /// Every request method. A new method goes here.
-pub const methods = .{ ChannelOpen, ChannelClose };
+pub const methods = .{ ChannelOpen, ChannelClose, SessionCreate, SessionList, SessionInfo, SessionKill, ServerExit };
+
+// ── Events ──────────────────────────────────────────────────────────────────
+
+/// A session stopped running: its shell exited, or the session process is
+/// gone. Sent once for each session. A session process that ended with no
+/// exit message gives no code and no signal.
+pub const SessionExit = struct {
+    pub const name = "session.exit";
+    pub const since = 1;
+    pub const senders = everyone;
+
+    id: []const u8,
+    code: ?u8 = null,
+    signal: ?u8 = null,
+};
+
+/// Every event. A new event goes here.
+pub const events = .{SessionExit};
 
 /// True if a connection with this trust may send message `M`. A message from
 /// a sender outside the list gets an error reply and a log line; the link

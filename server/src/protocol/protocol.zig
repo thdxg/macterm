@@ -242,8 +242,12 @@ test "the schema keeps its own rules" {
         try testing.expect(M.senders.len > 0);
         try testing.expect(!holdsSecret(M.Result));
     }
-    // Responses and events carry `Raw`: the check is on each method's
-    // `Result` above, and on each event type when events have types.
+    inline for (m.events) |E| {
+        try testing.expect(E.since <= m.level);
+        try testing.expect(!holdsSecret(E));
+    }
+    // Responses and events carry `Raw`: the checks are on each method's
+    // `Result` and on each event type above.
     try testing.expect(holdsSecret(struct { a: ?[]const struct { s: Secret } }));
 }
 
