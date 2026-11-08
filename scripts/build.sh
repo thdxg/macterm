@@ -130,6 +130,18 @@ if ! python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d.get("
   echo "ERROR: $ZMX_RELEASE_JSON is missing or names no release. Run scripts/setup.sh" >&2
   exit 1
 fi
+# The bundled server must be the one built from server/ at this commit: its
+# key is the tree's, and `zmx version` names that key.
+ZMX_KEY="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag"])' "$ZMX_RELEASE_JSON")"
+if [[ "$ZMX_KEY" != "$(scripts/build-server.sh key)" ]]; then
+  echo "ERROR: the bundled server is build $ZMX_KEY, not the build of this tree. Run scripts/setup.sh" >&2
+  exit 1
+fi
+ZMX_VERSION_OUTPUT="$("$ZMX_BINARY" version 2>&1 || true)"
+if ! grep -qF "+thdxg.$ZMX_KEY" <<<"$ZMX_VERSION_OUTPUT"; then
+  echo "ERROR: $ZMX_BINARY does not report build $ZMX_KEY" >&2
+  exit 1
+fi
 # The adaptive icon's renderer is copied into Contents/Helpers with the
 # signature that its own target gave it. When a stable identity was requested,
 # an ad-hoc helper means that target was signed apart from the app, so refuse

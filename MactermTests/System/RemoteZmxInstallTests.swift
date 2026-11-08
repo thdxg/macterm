@@ -30,9 +30,10 @@ struct RemoteZmxInstallTests {
 
     @Test
     func every_target_names_a_release_asset() {
-        #expect(ZmxHostTarget.linuxX86_64.assetName == "zmx-x86_64-linux.tar.gz")
-        #expect(ZmxHostTarget.linuxAarch64.assetName == "zmx-aarch64-linux.tar.gz")
-        #expect(ZmxHostTarget.macOS.assetName == "zmx-universal-macos.tar.gz")
+        let release = ZmxRelease(tag: "69675ad0a3327175", assets: [:])
+        #expect(release.assetName(for: .linuxX86_64) == "macterm-69675ad0a3327175-x86_64-linux.tar.gz")
+        #expect(release.assetName(for: .linuxAarch64) == "macterm-69675ad0a3327175-aarch64-linux.tar.gz")
+        #expect(release.assetName(for: .macOS) == "macterm-69675ad0a3327175-universal-macos.tar.gz")
     }
 
     // MARK: - zmx version
@@ -158,23 +159,22 @@ struct RemoteZmxInstallTests {
     // MARK: - The bundled release
 
     @Test
-    func the_release_file_comes_from_the_checksum_lines() {
-        let release = ZmxRelease.make(tag: "build-2026-11-06-abcdef1", checksumLines: [
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  zmx-x86_64-linux.tar.gz",
-            "FEDCBA9876543210FEDCBA9876543210FEDCBA9876543210FEDCBA9876543210 *zmx-universal-macos.tar.gz",
-            "not a checksum line",
-            "abc  too-short.tar.gz",
+    func the_release_file_names_the_checksum_and_the_download_of_each_target() {
+        let release = ZmxRelease(tag: "69675ad0a3327175", assets: [
+            "macterm-69675ad0a3327175-x86_64-linux.tar.gz": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+            "macterm-0000000000000000-aarch64-linux.tar.gz": String(repeating: "f", count: 64),
         ])
         #expect(release.sha256(for: .linuxX86_64) == "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-        #expect(release.sha256(for: .macOS) == "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210")
+        // An asset of another build key is not this build's.
         #expect(release.sha256(for: .linuxAarch64) == nil)
+        #expect(release.sha256(for: .macOS) == nil)
         #expect(release.downloadURL(for: .linuxAarch64)?.absoluteString
-            == "https://github.com/thdxg/zmx/releases/download/build-2026-11-06-abcdef1/zmx-aarch64-linux.tar.gz")
+            == "https://github.com/thdxg/macterm/releases/download/server-prebuilt/macterm-69675ad0a3327175-aarch64-linux.tar.gz")
     }
 
     @Test
     func the_release_file_round_trips_through_json() throws {
-        let release = ZmxRelease(tag: "build-2026-11-06-abcdef1", assets: ["zmx-x86_64-linux.tar.gz": "00ff"])
+        let release = ZmxRelease(tag: "69675ad0a3327175", assets: ["macterm-69675ad0a3327175-x86_64-linux.tar.gz": "00ff"])
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("zmx-release-\(UUID().uuidString).json")
         try JSONEncoder().encode(release).write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
@@ -244,7 +244,7 @@ struct RemoteZmxInstallFlowTests {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let asset = try makeAsset(in: directory)
-        let release = ZmxRelease(tag: "build-test", assets: [ZmxHostTarget.linuxX86_64.assetName: asset.sha256])
+        let release = ZmxRelease(tag: "build-test", assets: ["macterm-build-test-x86_64-linux.tar.gz": asset.sha256])
         let fetches = LockedBox(0)
         let provider = ZmxBinaryProvider(
             cacheDirectory: directory.appendingPathComponent("cache"),
@@ -274,7 +274,7 @@ struct RemoteZmxInstallFlowTests {
             cacheDirectory: directory.appendingPathComponent("cache"),
             fetch: { [data = asset.data] _ in data }
         )
-        let wrong = ZmxRelease(tag: "build-test", assets: [ZmxHostTarget.linuxX86_64.assetName: String(repeating: "0", count: 64)])
+        let wrong = ZmxRelease(tag: "build-test", assets: ["macterm-build-test-x86_64-linux.tar.gz": String(repeating: "0", count: 64)])
         await #expect(throws: ZmxInstallError.checksumMismatch) {
             _ = try await provider.binary(for: .linuxX86_64, release: wrong)
         }
@@ -319,7 +319,7 @@ struct RemoteZmxInstallFlowTests {
     func the_check_decides_the_offer_from_the_host_answer() async {
         let seen = LockedBox<[[String]]>([])
         let request = ZmxInstallRequest(path: remote, projectID: nil, zmxPath: nil)
-        let release = ZmxRelease(tag: "build-test", assets: [ZmxHostTarget.linuxX86_64.assetName: String(repeating: "a", count: 64)])
+        let release = ZmxRelease(tag: "build-test", assets: ["macterm-build-test-x86_64-linux.tar.gz": String(repeating: "a", count: 64)])
         let flow = RemoteZmxInstallFlow(
             request: request, release: release,
             runner: scripted([(0, "system=Linux\nmachine=x86_64\npath=/usr/local/bin/zmx\nversion=zmx\t\t0.8.1\n")], seen: seen)
@@ -374,7 +374,7 @@ struct RemoteZmxInstallFlowTests {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let asset = try makeAsset(in: directory)
-        let release = ZmxRelease(tag: "build-test", assets: [ZmxHostTarget.linuxX86_64.assetName: asset.sha256])
+        let release = ZmxRelease(tag: "build-test", assets: ["macterm-build-test-x86_64-linux.tar.gz": asset.sha256])
         let seen = LockedBox<[[String]]>([])
         let flow = RemoteZmxInstallFlow(
             request: ZmxInstallRequest(path: remote, projectID: UUID(), zmxPath: nil),
@@ -410,7 +410,7 @@ struct RemoteZmxInstallFlowTests {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let asset = try makeAsset(in: directory)
-        let release = ZmxRelease(tag: "build-test", assets: [ZmxHostTarget.linuxX86_64.assetName: asset.sha256])
+        let release = ZmxRelease(tag: "build-test", assets: ["macterm-build-test-x86_64-linux.tar.gz": asset.sha256])
         let seen = LockedBox<[[String]]>([])
         let flow = RemoteZmxInstallFlow(
             request: ZmxInstallRequest(path: remote, projectID: nil, zmxPath: nil),

@@ -94,13 +94,13 @@ struct ZmxBinaryProvider {
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         guard digest == expected else {
             logger.error("""
-            zmx asset \(target.assetName, privacy: .public) hashed \(digest, privacy: .public), \
+            zmx asset \(release.assetName(for: target), privacy: .public) hashed \(digest, privacy: .public), \
             release says \(expected, privacy: .public)
             """)
             throw ZmxInstallError.checksumMismatch
         }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        let archive = directory.appendingPathComponent(target.assetName)
+        let archive = directory.appendingPathComponent(release.assetName(for: target))
         try data.write(to: archive, options: .atomic)
         defer { try? FileManager.default.removeItem(at: archive) }
         let unpacked = try Self.unpack(archive, into: directory)

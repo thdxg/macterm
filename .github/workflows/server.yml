@@ -3,7 +3,8 @@ name: Server
 # Builds the session server in server/ and runs its Zig tests and its bats
 # tests where it runs: macOS, Linux x86_64 and Linux aarch64. On macOS it also
 # checks the files that the protocol schema makes (scripts/protocol.sh). Only
-# a change to server/, to those files or to this file starts it.
+# a change to server/, protocol/, those files, the build script or this file
+# starts it. The builds that the app bundles come from server-build.yml.
 #
 # macOS runs on macos-15: zig cannot link with Xcode 26.4 or later
 # (zig#31658), and the xcode-27 image has nothing older.
@@ -13,14 +14,18 @@ on:
     branches: [main]
     paths:
       - "server/**"
+      - "protocol/**"
       - "Macterm/Protocol/**"
+      - "scripts/build-server.sh"
       - "scripts/protocol.sh"
       - ".github/workflows/server.yml"
   push:
     branches: [main]
     paths:
       - "server/**"
+      - "protocol/**"
       - "Macterm/Protocol/**"
+      - "scripts/build-server.sh"
       - "scripts/protocol.sh"
       - ".github/workflows/server.yml"
 
@@ -52,11 +57,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Zig Version
+        id: zig
+        working-directory: .
+        run: echo "version=$(scripts/build-server.sh zig-version)" >> "$GITHUB_OUTPUT"
+
       - name: Install Zig
         uses: mlugg/setup-zig@v2
         with:
-          # Keep in step with minimum_zig_version in server/build.zig.zon.
-          version: 0.17.1
+          version: ${{ steps.zig.outputs.version }}
 
       - name: Install Bats
         run: |

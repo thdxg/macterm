@@ -84,26 +84,16 @@ struct BundledResourcesTests {
         #expect(exists("ghostty/themes/\(theme)"), "default theme \(theme) is not bundled")
     }
 
-    /// The zmx inside the built bundle must be signed as the app itself. Each
-    /// session daemon disclaims the app at spawn and is the *responsible
-    /// process* for every program in its session, and macOS identifies a
-    /// responsible process by its code signature's identifier: with the app's,
-    /// the daemon resolves to Macterm's name, usage descriptions and existing
-    /// Local Network / TCC grants (#419). The release download is only
-    /// linker-signed as `zmx`, and Xcode never re-signs a Mach-O it copies into
-    /// Resources/, so `scripts/embed-zmx.sh` does it — this pins that a build
-    /// phase edit can't silently turn every pane prompt into one for "zmx".
     /// `scripts/setup.sh` writes the release file the zmx installer reads
-    /// (#699) next to the binary it unpacked, and its tag is the stamp of
-    /// that download. A release from before the checksums lists no assets;
-    /// the tag must still be there.
+    /// (#699) next to the server it installed, and its tag is the build key
+    /// of that server (`.server-key`). It lists both Linux builds.
     @Test
-    func zmx_release_file_names_the_pinned_build() throws {
+    func zmx_release_file_names_the_bundled_build() throws {
         guard let resourcesDir = Self.resourcesDir else { return }
         let stamp = resourcesDir
             .deletingLastPathComponent() // Macterm
             .deletingLastPathComponent() // repo root
-            .appendingPathComponent(".zmx-tag")
+            .appendingPathComponent(".server-key")
         guard let tag = try? String(contentsOf: stamp, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
               !tag.isEmpty
         else { return }
@@ -112,12 +102,21 @@ struct BundledResourcesTests {
             "zmx-release.json missing from the built bundle — run `mise run setup`"
         )
         #expect(release.tag == tag)
-        for (asset, sha) in release.assets {
-            #expect(asset.hasPrefix("zmx-") && asset.hasSuffix(".tar.gz"), "unexpected asset \(asset)")
-            #expect(sha.count == 64, "not a SHA-256: \(sha)")
+        for target in [ZmxHostTarget.linuxX86_64, .linuxAarch64] {
+            let sha = release.sha256(for: target)
+            #expect(sha?.count == 64, "no SHA-256 for \(release.assetName(for: target))")
         }
     }
 
+    /// The zmx inside the built bundle must be signed as the app itself. Each
+    /// session daemon disclaims the app at spawn and is the *responsible
+    /// process* for every program in its session, and macOS identifies a
+    /// responsible process by its code signature's identifier: with the app's,
+    /// the daemon resolves to Macterm's name, usage descriptions and existing
+    /// Local Network / TCC grants (#419). Zig's linker signs the build
+    /// only as `zmx`, and Xcode never re-signs a Mach-O it copies into
+    /// Resources/, so `scripts/embed-zmx.sh` does it — this pins that a build
+    /// phase edit can't silently turn every pane prompt into one for "zmx".
     /// Read from the test host's own bundle, which is the built app.
     @Test
     func bundled_zmx_is_signed_as_the_app() throws {
