@@ -174,6 +174,18 @@ pub fn readProcess(pid: lib_posix.pid_t, comm_buf: []u8, args_buf: []u8, scratch
     }
 }
 
+/// The size of the `scratch` that `readProcess` needs. On macOS,
+/// `KERN_PROCARGS2` returns the environment with the arguments, and fails
+/// when the buffer is too small for both: a large environment then gave an
+/// empty command line. So the buffer is `kern.argmax` long there.
+pub fn scratchLen() usize {
+    if (builtin.os.tag != .macos) return 8192;
+    var argmax: c_int = 0;
+    var len: usize = @sizeOf(c_int);
+    if (std.c.sysctlbyname("kern.argmax", &argmax, &len, null, 0) != 0 or argmax <= 0) return 1024 * 1024;
+    return @intCast(argmax);
+}
+
 const macos = struct {
     const CTL_KERN: c_int = 1;
     const KERN_PROCARGS2: c_int = 49;

@@ -899,8 +899,9 @@ const Session = struct {
         // next change sends again.
         var comm_buf: [std.fs.max_path_bytes]u8 = undefined;
         var args_buf: [foreground.args_max]u8 = undefined;
-        var scratch: [8192]u8 = undefined;
-        const process = foreground.readProcess(pgrp, &comm_buf, &args_buf, &scratch) orelse {
+        const scratch = s.gpa.alloc(u8, foreground.scratchLen()) catch return;
+        defer s.gpa.free(scratch);
+        const process = foreground.readProcess(pgrp, &comm_buf, &args_buf, scratch) orelse {
             std.log.info("session {s}: foreground pgid={d} has no readable leader", .{ s.name, pgrp });
             return;
         };
