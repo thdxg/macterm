@@ -1,0 +1,326 @@
+//! The attach client of a v2 session (`zmx connect`, later `macterm attach`;
+//! design/007 §6). It joins the terminal on its stdin and stdout to one
+//! session socket in the runtime directory (`runtime.zig`): keys go in as
+//! `bytes` on the pane channel, output comes back the same way.
+//!
+//! A libghostty surface runs it as its command, as it runs `zmx attach` for
+//! v1. Until the GUI feeds a surface from a channel itself (m3), v1's claim
+//! APC on stdin becomes the `claim` message (design/004 §5). Ctrl-\
+//! detaches, as in v1. It never makes a session: the server does that.
+
+const std = @import("std");
+const cross = @import("cross");
+const build_options = @import("build_options");
+const ipc = @import("ipc.zig");
+const util = @import("util.zig");
+const lib_posix = @import("posix.zig");
+const signal = @import("signal.zig");
+const socket = @import("socket.zig");
+const runtime = @import("runtime.zig");
+const session = @import("session.zig");
+const protocol = @import("protocol/protocol.zig");
+const frame = protocol.frame;
+const msgpack = protocol.msgpack;
+const m = protocol.messages;
+
+pub const protocol_level = m.level;
+
+/// How long the session may take to answer the handshake.
+const handshake_timeout_ms = 5000;
+
+pub const Outcome = union(enum) {
+    /// The user pressed Ctrl-\.
+    detached,
+    /// The shell exited.
+    exited: session.ExitStatus,
+    /// The session closed the connection with no exit status.
+    closed,
+    /// The session speaks a level under ours: `min_level` is what we need.
+    session_too_old: struct { level: u32, min_level: u32 },
+    /// The session refused our level.
+    refused: m.Refuse,
+};
+
+pub const Error = error{
+    InvalidName,
+    /// The runtime directory failed `runtime.checkDir`.
+    RuntimeDir,
+    NoSession,
+    /// The socket's peer is another user.
+    WrongPeer,
+    /// The session broke the protocol or did not answer.
+    Protocol,
+};
+
+/// The exit code of the process for an outcome: the shell's code, or 128
+/// plus the signal, as a shell reports it.
+pub fn exitCode(outcome: Outcome) u8 {
+    return switch (outcome) {
+        .detached, .closed => 0,
+        .exited => |s| if (s.code) |c| c else 128 +| (s.signal orelse 0),
+        .session_too_old, .refused => 1,
+    };
+}
+
+pub fn run(gpa: std.mem.Allocator, dir: []const u8, name: []const u8) (Error || error{ OutOfMemory, Sighup, Sigint, Sigterm })!Outcome {
+    if (!session.validName(name)) return error.InvalidName;
+    var dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const dir_z = std.fmt.bufPrintSentinel(&dir_buf, "{s}", .{dir}, 0) catch return error.RuntimeDir;
+    runtime.checkDir(dir_z, std.c.getuid()) catch return error.RuntimeDir;
+    const path = socket.getSocketPath(gpa, dir, name) catch return error.InvalidName;
+    defer gpa.free(path);
+
+    signal.ignoreSigpipe();
+    const fd = ipc.connectSession(path) catch return error.NoSession;
+    defer lib_posix.close(fd);
+    if (!runtime.allowPeer(runtime.peerUid(fd), std.c.getuid())) return error.WrongPeer;
+
+    var c: Client = .{ .gpa = gpa, .fd = fd };
+    defer c.in.deinit(gpa);
+    if (try c.handshake()) |outcome| return outcome;
+    return c.loop();
+}
+
+const Client = struct {
+    gpa: std.mem.Allocator,
+    fd: i32,
+    in: std.ArrayList(u8) = .empty,
+    /// The bytes at the start of `in` that `nextFrame` returned last.
+    consumed: usize = 0,
+
+    /// Hello in each direction, then the session's `state`. Null when the
+    /// pane may start; an outcome when the two levels refuse each other.
+    fn handshake(c: *Client) (Error || error{OutOfMemory})!?Outcome {
+        const mine: m.Hello = .{
+            .level = m.level,
+            .min_level = m.min_level,
+            .build = build_options.version,
+            // The pane's client acts for the GUI. Not `cli`: a session of an
+            // older build must still attach.
+            .role = .gui,
+            .epoch = 0,
+            .caps = &.{},
+        };
+        try c.sendControl(mine);
+
+        var arena_state: std.heap.ArenaAllocator = .init(c.gpa);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+
+        var greeted = false;
+        while (true) {
+            const f = try c.nextFrame(handshake_timeout_ms) orelse return error.Protocol;
+            if (f.channel == frame.control_channel) {
+                const msg = m.decodeControl(arena, f.body) catch return error.Protocol;
+                switch (msg) {
+                    .hello => |theirs| {
+                        if (greeted) return error.Protocol;
+                        greeted = true;
+                        switch (m.negotiate(mine, theirs)) {
+                            .refuse => |r| {
+                                c.sendControl(r) catch {};
+                                return .{ .session_too_old = .{ .level = theirs.level, .min_level = r.needs_level } };
+                            },
+                            .speak => {},
+                        }
+                    },
+                    .refuse => |r| return .{ .refused = .{
+                        .reason = try c.gpa.dupe(u8, r.reason),
+                        .needs_level = r.needs_level,
+                    } },
+                    else => {},
+                }
+            } else if (greeted and f.channel == m.pane_channel and f.kind == .msg) {
+                const msg = msgpack.decodeSlice(m.PaneMessage, arena, f.body) catch return error.Protocol;
+                if (std.mem.eql(u8, msg.t, m.State.name)) return null;
+            }
+        }
+    }
+
+    fn loop(c: *Client) (Error || error{ OutOfMemory, Sighup, Sigint, Sigterm })!Outcome {
+        const stdin = lib_posix.STDIN_FILENO;
+        const stdout = lib_posix.STDOUT_FILENO;
+
+        signal.openSignalPipe() catch return error.Protocol;
+        defer signal.closeSignalPipe();
+        signal.installWakeHandler(@backingInt(lib_posix.SIG.WINCH));
+        signal.installWakeHandler(@backingInt(lib_posix.SIG.TERM));
+        signal.installWakeHandler(@backingInt(lib_posix.SIG.HUP));
+        signal.installWakeHandler(@backingInt(lib_posix.SIG.INT));
+
+        var orig: cross.termios = undefined;
+        const is_tty = cross.tcgetattr(stdin, &orig) == 0;
+        if (is_tty) {
+            var raw = orig;
+            cross.cfmakeraw(&raw);
+            raw.c_cc[cross.VLNEXT] = cross._POSIX_VDISABLE;
+            raw.c_cc[cross.VQUIT] = cross._POSIX_VDISABLE;
+            raw.c_cc[cross.VMIN] = 1;
+            raw.c_cc[cross.VTIME] = 0;
+            _ = cross.tcsetattr(stdin, cross.TCSANOW, &raw);
+        }
+        defer {
+            if (is_tty) _ = cross.tcsetattr(stdin, cross.TCSAFLUSH, &orig);
+            // Reset the terminal and its colors, as v1's attach does.
+            writeAll(stdout, "\x1bc\x1b]110\x1b\\\x1b]111\x1b\\\x1b]112\x1b\\") catch {};
+        }
+        writeAll(stdout, "\x1b[0m\x1b[2J\x1b[H") catch {};
+
+        try c.sendPane(m.Attach, attachSize(ipc.getTerminalSize(stdout)));
+
+        const detach_disabled = util.isDetachKeyDisabled();
+        var claims: util.ClaimFilter = .{};
+        // The handshake may have read more than it used: an exit, at least.
+        if (try c.drain(stdout)) |outcome| return outcome;
+
+        while (true) {
+            var fds = [_]lib_posix.pollfd{
+                .{ .fd = stdin, .events = lib_posix.POLL.IN, .revents = 0 },
+                .{ .fd = c.fd, .events = lib_posix.POLL.IN, .revents = 0 },
+                .{ .fd = signal.sig_pipe[0], .events = lib_posix.POLL.IN, .revents = 0 },
+            };
+            _ = lib_posix.poll(&fds, -1) catch return error.Protocol;
+
+            if (fds[2].revents & lib_posix.POLL.IN != 0) {
+                try signal.drainSignalPipe();
+                try c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout)));
+            }
+
+            if (fds[0].revents & (lib_posix.POLL.IN | lib_posix.POLL.HUP | lib_posix.POLL.ERR) != 0) {
+                var buf: [4096]u8 = undefined;
+                const n = lib_posix.read(stdin, &buf) catch |err| switch (err) {
+                    error.WouldBlock => 0,
+                    else => return .detached,
+                };
+                if (n == 0) return .detached;
+                const data = buf[0..n];
+                if (!detach_disabled and util.isCtrlBackslash(data)) return .detached;
+                const filtered = claims.feed(data);
+                for (0..filtered.claims) |_| try c.sendPane(m.Claim, .{});
+                if (filtered.forward.len > 0) try c.sendFrame(m.pane_channel, .bytes, filtered.forward);
+            }
+
+            if (fds[1].revents & (lib_posix.POLL.IN | lib_posix.POLL.HUP | lib_posix.POLL.ERR) != 0) {
+                if (!try c.fill()) return .closed;
+                if (try c.drain(stdout)) |outcome| return outcome;
+            }
+        }
+    }
+
+    /// Handles every whole frame in `in`. An outcome ends the pane.
+    fn drain(c: *Client, stdout: i32) (Error || error{OutOfMemory})!?Outcome {
+        while (try c.nextFrame(0)) |f| {
+            if (f.channel != m.pane_channel) continue;
+            switch (f.kind) {
+                .bytes => writeAll(stdout, f.body) catch return .detached,
+                .msg => {
+                    var arena_state: std.heap.ArenaAllocator = .init(c.gpa);
+                    defer arena_state.deinit();
+                    const arena = arena_state.allocator();
+                    const msg = msgpack.decodeSlice(m.PaneMessage, arena, f.body) catch return error.Protocol;
+                    if (std.mem.eql(u8, msg.t, m.Lead.name)) {
+                        const lead = m.decodePane(m.Lead, arena, msg) catch return error.Protocol;
+                        // A client that starts to lead sends its size.
+                        if (lead.leader) try c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout)));
+                    } else if (std.mem.eql(u8, msg.t, m.Exit.name)) {
+                        const e = m.decodePane(m.Exit, arena, msg) catch return error.Protocol;
+                        // The server takes the status (`take`), not the pane.
+                        return .{ .exited = .{ .code = e.code, .signal = e.signal } };
+                    }
+                },
+                _ => {},
+            }
+        }
+        return null;
+    }
+
+    /// Reads what the socket has. False at the end of the stream.
+    fn fill(c: *Client) (Error || error{OutOfMemory})!bool {
+        var buf: [64 * 1024]u8 = undefined;
+        const n = lib_posix.read(c.fd, &buf) catch |err| switch (err) {
+            error.WouldBlock => return true,
+            else => return false,
+        };
+        if (n == 0) return false;
+        try c.in.appendSlice(c.gpa, buf[0..n]);
+        return true;
+    }
+
+    /// The next whole frame, waiting at most `timeout_ms` for it. Null on a
+    /// timeout or at the end of the stream. The body stays valid until the
+    /// next call.
+    fn nextFrame(c: *Client, timeout_ms: i32) (Error || error{OutOfMemory})!?frame.Frame {
+        c.consume();
+        while (true) {
+            if (frame.parse(c.in.items) catch return error.Protocol) |p| {
+                c.consumed = p.len;
+                return p.frame;
+            }
+            var fds = [_]lib_posix.pollfd{.{ .fd = c.fd, .events = lib_posix.POLL.IN, .revents = 0 }};
+            const ready = lib_posix.poll(&fds, timeout_ms) catch return error.Protocol;
+            if (ready == 0) return null;
+            if (!try c.fill()) return null;
+        }
+    }
+
+    fn consume(c: *Client) void {
+        c.in.replaceRangeAssumeCapacity(0, c.consumed, &.{});
+        c.consumed = 0;
+    }
+
+    fn sendFrame(c: *Client, channel: u32, kind: frame.Kind, body: []const u8) (Error || error{OutOfMemory})!void {
+        var header: [frame.header_len]u8 = undefined;
+        frame.writeHeader(&header, channel, kind, body.len) catch return error.Protocol;
+        writeAll(c.fd, &header) catch return error.Protocol;
+        writeAll(c.fd, body) catch return error.Protocol;
+    }
+
+    fn sendControl(c: *Client, value: anytype) (Error || error{OutOfMemory})!void {
+        const body = try msgpack.encodeAlloc(c.gpa, value);
+        defer c.gpa.free(body);
+        try c.sendFrame(frame.control_channel, .msg, body);
+    }
+
+    fn sendPane(c: *Client, comptime M: type, value: M) (Error || error{OutOfMemory})!void {
+        var out: std.Io.Writer.Allocating = .init(c.gpa);
+        defer out.deinit();
+        m.encodePane(&out.writer, M, value) catch return error.OutOfMemory;
+        try c.sendFrame(m.pane_channel, .msg, out.written());
+    }
+};
+
+fn attachSize(size: ipc.Resize) m.Attach {
+    return .{ .cols = size.cols, .rows = size.rows, .xpixel = size.xpixel, .ypixel = size.ypixel };
+}
+
+fn resizeOf(size: ipc.Resize) m.Resize {
+    return .{ .cols = size.cols, .rows = size.rows, .xpixel = size.xpixel, .ypixel = size.ypixel };
+}
+
+/// Writes all of `bytes`, and waits when the fd is full.
+fn writeAll(fd: i32, bytes: []const u8) !void {
+    var rest = bytes;
+    while (rest.len > 0) {
+        const n = lib_posix.write(fd, rest) catch |err| switch (err) {
+            error.WouldBlock => {
+                var fds = [_]lib_posix.pollfd{.{ .fd = fd, .events = lib_posix.POLL.OUT, .revents = 0 }};
+                _ = try lib_posix.poll(&fds, -1);
+                continue;
+            },
+            else => return err,
+        };
+        rest = rest[n..];
+    }
+}
+
+// ── Tests ───────────────────────────────────────────────────────────────────
+
+const testing = std.testing;
+
+test "the exit code is the shell's, or 128 plus its signal" {
+    try testing.expectEqual(0, exitCode(.detached));
+    try testing.expectEqual(0, exitCode(.closed));
+    try testing.expectEqual(3, exitCode(.{ .exited = .{ .code = 3 } }));
+    try testing.expectEqual(137, exitCode(.{ .exited = .{ .signal = 9 } }));
+    try testing.expectEqual(1, exitCode(.{ .refused = .{ .reason = "level_too_low", .needs_level = 9 } }));
+}
