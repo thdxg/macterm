@@ -289,14 +289,11 @@ pub const SessionExit = struct {
     signal: ?u8 = null,
 };
 
-/// Every event. A new event goes here.
-pub const events = .{SessionExit};
-
 /// Every event type. A new event goes here. Each one declares `name`,
 /// `since` and `senders`, as a method does, and its fields are the event's
 /// `a`. No event may hold a `Secret` (design/006 §1); `schema.check` refuses
 /// one.
-pub const events = .{};
+pub const events = .{SessionExit};
 
 /// True if a connection with this trust may send message `M`. A message from
 /// a sender outside the list gets an error reply and a log line; the link
