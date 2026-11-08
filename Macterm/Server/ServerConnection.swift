@@ -9,12 +9,11 @@ private let logger = Logger(subsystem: appBundleID, category: "ServerConnection"
 ///
 /// A thread of its own reads the socket. A request waits for its response,
 /// matched by id. When the connection ends, every waiting request fails with
-/// `ServerClientError.disconnected` and `events` finishes.
+/// `ServerClientError.disconnected` and `events` finishes. The reader holds
+/// the connection until the connection ends: call `close()` when done.
 final class ServerConnection: @unchecked Sendable {
     /// The server's `hello`.
     let serverHello: MactermProtocol.Hello
-    /// The level that both sides speak.
-    let level: UInt32
     /// The server's pid, from the socket's peer. Nil when the kernel did not
     /// say.
     let serverPID: pid_t?
@@ -25,7 +24,10 @@ final class ServerConnection: @unchecked Sendable {
     private let fd: Int32
     private let eventSink: AsyncStream<[ServerEvent]>.Continuation
     private let lock = NSLock()
-    private let writeLock = NSLock()
+    /// Held for each write and for the close, so that no write goes to an
+    /// fd number that the close gave back to the system.
+    private let fdLock = NSLock()
+    private var fdIsOpen = true
     private var nextID: UInt64 = 1
     private var pending: [UInt64: CheckedContinuation<MactermProtocol.Response, Error>] = [:]
     private var isClosed = false
@@ -33,9 +35,11 @@ final class ServerConnection: @unchecked Sendable {
     /// How long the handshake waits for the server's `hello`.
     static let handshakeTimeout: TimeInterval = 5
 
-    /// Connects to the socket at `path` and does the handshake as `role`.
-    /// Throws `ServerClientError.noAnswer` when nothing listens there.
-    static func connect(path: String, role: MactermProtocol.Role) throws -> ServerConnection {
+    /// Connects to the socket at `path` and does the handshake as the GUI.
+    /// Throws `ServerClientError.noAnswer` when nothing listens there, or
+    /// when the server closes before its `hello` (it exits when idle). It
+    /// blocks: call it off the main thread.
+    static func connect(path: String) throws -> ServerConnection {
         let fd = try openSocket(path: path)
         do {
             var reader = FrameReader(fd: fd)
@@ -44,27 +48,32 @@ final class ServerConnection: @unchecked Sendable {
                 level: MactermProtocol.level,
                 minLevel: MactermProtocol.minLevel,
                 build: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
-                role: role,
+                role: .gui,
                 epoch: 0,
                 caps: []
             )
             try write(fd, ProtocolControl.hello(mine))
-            // The server sends its `hello` first. A refusal comes in its place
-            // when our level is under the server's lowest.
+            // The server sends its `hello` at the accept. When it refuses
+            // this build, a `refuse` follows after our `hello`: the same
+            // check is done here, from its `min_level`.
             let theirs: MactermProtocol.Hello
-            switch try ProtocolControl.decode(reader.next().body) {
-            case let .hello(hello): theirs = hello
-            case let .refuse(refuse):
-                throw ServerClientError.refused(reason: refuse.reason, needsLevel: refuse.needsLevel)
-            default: throw ServerClientError.protocolError
+            do {
+                guard case let .hello(hello) = try ProtocolControl.decode(reader.next().body) else {
+                    throw ServerClientError.protocolError
+                }
+                theirs = hello
+            } catch ServerClientError.disconnected {
+                throw ServerClientError.noAnswer
             }
-            let level = min(mine.level, theirs.level)
-            guard level >= MactermProtocol.minLevel else {
+            guard mine.level >= theirs.minLevel else {
+                throw ServerClientError.refused(needsLevel: theirs.minLevel)
+            }
+            guard min(mine.level, theirs.level) >= MactermProtocol.minLevel else {
                 try? write(fd, ProtocolControl.refuse(.init(reason: "level_too_low", needsLevel: MactermProtocol.minLevel)))
                 throw ServerClientError.serverTooOld(level: theirs.level)
             }
             setReceiveTimeout(fd, seconds: 0)
-            let connection = ServerConnection(fd: fd, hello: theirs, level: level, pid: peerPID(fd))
+            let connection = ServerConnection(fd: fd, hello: theirs, pid: peerPID(fd))
             connection.startReading(reader)
             return connection
         } catch {
@@ -73,16 +82,11 @@ final class ServerConnection: @unchecked Sendable {
         }
     }
 
-    private init(fd: Int32, hello: MactermProtocol.Hello, level: UInt32, pid: pid_t?) {
+    private init(fd: Int32, hello: MactermProtocol.Hello, pid: pid_t?) {
         self.fd = fd
         serverHello = hello
-        self.level = level
         serverPID = pid
         (events, eventSink) = AsyncStream.makeStream(of: [ServerEvent].self)
-    }
-
-    deinit {
-        close()
     }
 
     /// Sends one request and waits for its response. A response with `err`
@@ -113,14 +117,17 @@ final class ServerConnection: @unchecked Sendable {
 
     /// Ends the connection. Requests that wait fail with `disconnected`.
     func close() {
-        // The reader thread owns the fd and closes it when its read ends.
-        Darwin.shutdown(fd, SHUT_RDWR)
+        // The reader thread closes the fd when its read ends.
+        fdLock.lock()
+        if fdIsOpen { Darwin.shutdown(fd, SHUT_RDWR) }
+        fdLock.unlock()
         finish()
     }
 
     private func send(_ message: ProtocolControl) throws {
-        writeLock.lock()
-        defer { writeLock.unlock() }
+        fdLock.lock()
+        defer { fdLock.unlock() }
+        guard fdIsOpen else { throw ServerClientError.disconnected }
         try Self.write(fd, message)
     }
 
@@ -139,7 +146,10 @@ final class ServerConnection: @unchecked Sendable {
                 }
             }
             finish()
+            fdLock.lock()
+            fdIsOpen = false
             Darwin.close(fd)
+            fdLock.unlock()
         }
         thread.name = "ServerConnection"
         thread.start()
@@ -200,8 +210,9 @@ enum ServerClientError: Error, Equatable {
     case noAnswer
     /// `macterm server` did not start. The text is its error output.
     case startFailed(String)
-    /// The server refused this build: its level is too low for the server.
-    case refused(reason: String, needsLevel: UInt32)
+    /// The server refuses this build: its level is under the server's
+    /// lowest. Update Macterm.
+    case refused(needsLevel: UInt32)
     /// The server speaks a level under this build's lowest.
     case serverTooOld(level: UInt32)
     /// The server sent a message that has no place here.

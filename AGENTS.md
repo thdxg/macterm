@@ -700,8 +700,12 @@ The frames and messages between the app, the server and the session processes (d
 `LocalServer` and `ServerConnection` connect the app to `macterm server` (design/001 A, design/002). Nothing in the app calls them yet: v1's panes still run their own zmx.
 
 - **The app starts the server.** `LocalServer.connect` connects to `<runtime dir>/.server`. When nothing answers, it runs the bundled `zmx server` with `MACTERM_RUNTIME_DIR` set, so that the app and the server use one directory. `runtimeDirectory(environment:)` finds it as `resolveDir` in `server/src/runtime.zig` does.
-- **A newer app replaces an older server** with `server.exit`, then starts its own. The sessions keep running. A lower level is older. A higher level is never replaced. At the same level, another build is replaced only when it runs from this app's own `zmx` path, or from a file that an update removed (`proc_pidpath` of the socket's peer follows a moved bundle and fails after a delete, measured). A build from another app (Debug next to Release) stays: the order of two builds of one level is not known. One `connect` replaces at most once, so two apps never replace each other's server in a loop.
-- `ServerConnection` reads the socket on a thread of its own. A request waits for its response by id. `events` gives one element for each event batch. When the connection ends, each request that waits fails with `ServerClientError.disconnected`.
+- **A newer app replaces an older server** with `server.exit`, then starts its own. The sessions keep running.
+  - A lower level is older. A higher level is never replaced.
+  - At the same level, another build is replaced only when it runs from this app's own `zmx` path, or from a file that an update removed. `proc_pidpath` of the socket's peer follows a bundle that moved, and gives no path after a delete (measured). A real Sparkle update is not measured yet.
+  - A build from another app (Debug next to Release) stays. The order of two builds of one level is not known.
+  - One `connect` replaces at most once, so two apps never replace each other's server in a loop.
+- `ServerConnection` reads the socket on a thread of its own. A request waits for its response by id. `events` gives one element for each event batch. When the connection ends, each request that waits fails with `ServerClientError.disconnected`. Only the reader thread closes the fd, under the lock that each write holds.
 - `LocalServerTests` runs the bundled server in a runtime directory under `/tmp` (a socket path has at most 103 bytes).
 
 ### Ghostty config pipeline

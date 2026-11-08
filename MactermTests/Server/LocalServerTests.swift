@@ -15,9 +15,9 @@ struct LocalServerTests {
             let connection = try await server.connect()
             defer { connection.close() }
             #expect(connection.serverHello.role == .server)
-            #expect(connection.level == MactermProtocol.level)
+            #expect(connection.serverHello.level == MactermProtocol.level)
             #expect(FileManager.default.fileExists(atPath: server.socketPath))
-            try await exit(connection)
+            try await stopServer(connection)
         }
     }
 
@@ -30,7 +30,7 @@ struct LocalServerTests {
             defer { second.close() }
             #expect(first.serverHello.epoch == second.serverHello.epoch)
             #expect(first.serverPID == second.serverPID)
-            try await exit(second)
+            try await stopServer(second)
         }
     }
 
@@ -54,7 +54,7 @@ struct LocalServerTests {
             #expect(sessions.map(\.id) == [id])
             #expect(sessions.first?.state == .running)
             _ = try await connection.call(MactermProtocol.SessionKill.self, .init(id: id))
-            try await exit(connection)
+            try await stopServer(connection)
         }
     }
 
@@ -84,7 +84,7 @@ struct LocalServerTests {
             await #expect(throws: ProtocolControlError.self) {
                 try await connection.call(MactermProtocol.SessionInfo.self, .init(id: id))
             }
-            try await self.exit(connection)
+            try await stopServer(connection)
         }
     }
 
@@ -109,7 +109,7 @@ struct LocalServerTests {
                 try await Task.sleep(for: .milliseconds(20))
             }
             #expect(Darwin.kill(pid_t(pid), 0) != 0)
-            try await exit(connection)
+            try await stopServer(connection)
         }
     }
 
@@ -117,7 +117,7 @@ struct LocalServerTests {
     func a_closed_connection_fails_its_requests_and_ends_its_events() async throws {
         try await withServer { server in
             let connection = try await server.connect()
-            try await exit(connection)
+            try await stopServer(connection)
             connection.close()
             for await _ in connection.events {}
             await #expect(throws: ServerClientError.disconnected) {
@@ -175,7 +175,7 @@ struct LocalServerTests {
     /// A server of the bundled build in a new runtime directory. The
     /// directory is short: a socket path has at most 103 bytes.
     private func withServer(_ body: (LocalServer) async throws -> Void) async throws {
-        let bundled = try #require(LocalServer.bundled, "zmx/zmx missing from the built bundle — run `mise run setup`")
+        let bundled = try #require(LocalServer.bundled, "zmx/zmx missing from the built bundle. Run `mise run setup`.")
         let root = URL(fileURLWithPath: "/tmp", isDirectory: true)
             .appending(path: "mt-\(UInt32.random(in: 0 ... .max))", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
@@ -185,19 +185,23 @@ struct LocalServerTests {
         do {
             try await body(server)
         } catch {
-            // Leave no server or session behind.
-            if let connection = try? ServerConnection.connect(path: server.socketPath, role: .gui) {
-                for session in await (try? connection.call(MactermProtocol.SessionList.self, .init()).sessions) ?? [] {
-                    _ = try? await connection.call(MactermProtocol.SessionKill.self, .init(id: session.id))
-                }
-                _ = try? await connection.call(MactermProtocol.ServerExit.self, .init())
-                connection.close()
-            }
+            await Self.cleanUp(server)
             throw error
         }
+        await Self.cleanUp(server)
     }
 
-    private func exit(_ connection: ServerConnection) async throws {
+    /// Leaves no session and no server behind, also after a failed check.
+    private static func cleanUp(_ server: LocalServer) async {
+        guard let connection = try? ServerConnection.connect(path: server.socketPath) else { return }
+        for session in await (try? connection.call(MactermProtocol.SessionList.self, .init()).sessions) ?? [] {
+            _ = try? await connection.call(MactermProtocol.SessionKill.self, .init(id: session.id))
+        }
+        _ = try? await connection.call(MactermProtocol.ServerExit.self, .init())
+        connection.close()
+    }
+
+    private func stopServer(_ connection: ServerConnection) async throws {
         _ = try await connection.call(MactermProtocol.ServerExit.self, .init())
     }
 

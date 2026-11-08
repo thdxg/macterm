@@ -53,16 +53,17 @@ struct LocalServer {
 
     /// A connection to the server, started or replaced first when that is
     /// needed. A server is replaced at most once for each call, so two apps
-    /// never replace each other's server in a loop.
+    /// never replace each other's server in a loop. Call it one at a time:
+    /// two calls can both send `server.exit`.
     func connect() async throws -> ServerConnection {
         var replaced = false
         while true {
             let connection: ServerConnection
             do {
-                connection = try ServerConnection.connect(path: socketPath, role: .gui)
+                connection = try await open()
             } catch ServerClientError.noAnswer {
                 try await start()
-                return try ServerConnection.connect(path: socketPath, role: .gui)
+                return try await open()
             }
             let executable: ServerExecutable = connection.serverPID.map {
                 ProcessInspector.executablePath(pid: $0).map { .path($0) } ?? .gone
@@ -79,10 +80,20 @@ struct LocalServer {
         }
     }
 
+    private func open() async throws -> ServerConnection {
+        let path = socketPath
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(with: Result { try ServerConnection.connect(path: path) })
+            }
+        }
+    }
+
     /// Where the running server's binary is.
     enum ServerExecutable: Equatable {
         case path(String)
-        /// The process runs a file that is gone: an update replaced it.
+        /// The kernel gives no path for the process. A process whose file
+        /// was deleted (an update removed the old bundle) has none: measured.
         case gone
         /// The kernel did not name the server's process.
         case unknown
@@ -93,9 +104,9 @@ struct LocalServer {
     /// - A lower level is older.
     /// - A higher level is newer: never downgrade it.
     /// - At the same level, another build is older when it runs from this
-    ///   app's own path, or from a file that an update removed. A build that
-    ///   runs from another app (a Debug build next to a Release build) stays:
-    ///   the order of two builds of one level is not known, so fail closed.
+    ///   app's own path, or from a file that an update removed.
+    /// - A build that runs from another app (a Debug build next to a Release
+    ///   build) stays. The order of two builds of one level is not known.
     func shouldReplace(_ hello: MactermProtocol.Hello, executable: ServerExecutable) -> Bool {
         if hello.level != MactermProtocol.level { return hello.level < MactermProtocol.level }
         guard let buildTag, ZmxVersion.parse(hello.build)?.forkTag != buildTag else { return false }
