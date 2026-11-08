@@ -39,7 +39,7 @@ runs it; `help` does not list it.
   channel 1: `bytes` in and out, and the messages in
   `src/protocol/messages.zig` ("A session's pane channel"): `state`,
   `attach`, `resize`, `claim`, `lead`, `snapshot.start`, `snapshot.end`,
-  `exit` and `take`.
+  `exit`, `take` and `end`.
 - **Back-pressure.** Each client has a queue of at most 1 MiB. Over it, the
   session drops the queue and sends a snapshot of the screen when the client
   takes data again. The pty is always read.
@@ -71,16 +71,21 @@ start it (design/001, A). Nothing calls it yet.
   `session.kill`. So a server that crashes, or exits for an update with
   `server.exit`, ends no session and loses no status: the next server reads
   them again.
-- **Kill.** SIGTERM to the session process, which sends SIGHUP to the
-  shell's process group and SIGKILL 0.5 s later. If the session process
-  still runs after 3 s, it gets SIGKILL. The reply comes when the session
-  process is gone. The server signals only a pid above 1.
+- **Kill.** The server sends `end` to the session, which sends SIGHUP to
+  the shell's process group and SIGKILL 0.5 s later. If the session process
+  still runs after 3 s, the server sends it SIGKILL: only the first pid that
+  the session reported, and only a pid above 1. The reply comes when the
+  session process is gone.
 - **Folder.** A session with no folder starts in the home folder. The
   server's environment goes to every session.
+- **One server.** The server holds `<dir>/.server.lock` locked while it
+  runs. Only the holder binds or unlinks the socket, so a start never takes
+  the socket of a live server.
 - **Exit.** With no session and no client for 5 s, the server exits. It
-  closes and unlinks its socket under the directory's lock, and on
-  `server.exit` it does this before it replies, so a start that follows
-  always finds the socket gone.
+  unlinks its socket and then lets the lock go; on `server.exit` it does
+  this before it replies, so a start that follows starts a new server. A
+  client that connects at the moment of an idle exit gets EOF before
+  `hello`: it starts a server and connects again.
 
 ## Build and test
 

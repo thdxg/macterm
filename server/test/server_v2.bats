@@ -142,7 +142,8 @@ PY
   python3 - <<'PY'
 from v2client import ServerClient
 c = ServerClient()
-for args in ({"id": "a/b"}, {"id": ".hidden"}, {"id": "ok", "cwd": b"relative"}):
+for args in ({"id": "a/b"}, {"id": ".hidden"}, {"id": "--cwd"}, {"id": "ok", "cwd": b"relative"},
+             {"id": "ok", "cwd": b"/tmp\x00x"}, {"id": "ok", "command": [b"sh\x00"]}, {"id": "ok", "cols": 0}):
     res = c.request("session.create", **args)
     assert res["err"]["code"] == "invalid_args", (args, res)
 res = c.request("session.create", id="x", cwd=b"/no/such/folder")

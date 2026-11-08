@@ -439,8 +439,17 @@ pub const Take = struct {
     pub const senders = from_client;
 };
 
+/// The client ends the session: the session sends SIGHUP to the shell's
+/// process group, SIGKILL 0.5 s later if it still runs, and then ends. It
+/// sends no `exit`.
+pub const End = struct {
+    pub const name = "end";
+    pub const since = 1;
+    pub const senders = from_client;
+};
+
 /// Every message on a pane channel. A new one goes here.
-pub const pane_messages = .{ State, Attach, Resize, Claim, Lead, SnapshotStart, SnapshotEnd, Exit, Take };
+pub const pane_messages = .{ State, Attach, Resize, Claim, Lead, SnapshotStart, SnapshotEnd, Exit, Take, End };
 
 pub fn encodePane(w: *std.Io.Writer, comptime M: type, value: M) std.Io.Writer.Error!void {
     try msgpack.encode(w, struct { t: []const u8, a: M }{ .t = M.name, .a = value });

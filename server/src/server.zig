@@ -47,6 +47,10 @@ pub const spawn_ms = 10_000;
 pub const settle_ms = 2000;
 
 const max_clients = 64;
+
+/// A client that sends no `hello` this long after it connects is closed, so
+/// that idle connections cannot take every place.
+const hello_ms = 5000;
 const frame_max = 1024 * 1024;
 
 /// The `server` command. Starts the server and returns once its socket
@@ -78,11 +82,13 @@ pub fn start(gpa: std.mem.Allocator, dir: []const u8) !void {
         };
     }
     lib_posix.close(pipe[0]);
-    const listen_fd = bindOnce(dir, path) catch |err| {
+    var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const bound = if (selfExe(&exe_buf)) |_| bindOnce(dir, path) else |err| err;
+    const fds = bound catch |err| {
         const result: Started = if (err == error.AlreadyRunning) .already_running else .failed;
-        if (result == .failed) std.log.err("server: cannot listen on {s}: {s}", .{ path, @errorName(err) });
+        if (result == .failed) std.log.err("server: cannot start on {s}: {s}", .{ path, @errorName(err) });
         _ = lib_posix.write(pipe[1], &.{@backingInt(result)}) catch {};
-        lib_posix.exit(0);
+        std.c._exit(0);
     };
     _ = lib_posix.write(pipe[1], &.{@backingInt(Started.listening)}) catch {};
     // The server: no terminal, no stdio, and no fd of the caller.
@@ -90,27 +96,49 @@ pub fn start(gpa: std.mem.Allocator, dir: []const u8) !void {
     detachStdio();
     var fd: i32 = 3;
     while (fd < 256) : (fd += 1) {
-        if (fd != listen_fd) _ = std.c.close(fd);
+        if (fd != fds.listen and fd != fds.lock) _ = std.c.close(fd);
     }
-    serveAndExit(dir, listen_fd);
+    serveAndExit(dir, fds);
 }
 
 const Started = enum(u8) { listening, already_running, failed };
 
-/// Binds the server's socket unless a server answers on it. From the check
-/// to the bind it holds the directory's lock, as a session start does; an
-/// exiting server takes the lock to unlink its socket.
-fn bindOnce(dir: []const u8, path: []const u8) !i32 {
-    const lock_fd = try session.lockDir(dir);
-    defer lib_posix.close(lock_fd);
-    if (ipc.connectSession(path)) |fd| {
-        lib_posix.close(fd);
-        return error.AlreadyRunning;
-    } else |err| switch (err) {
-        error.ConnectionRefused => session.unlinkSocket(dir, socket_name),
-        error.Unexpected => {},
+/// The file that a server holds locked for its whole life. Only the holder
+/// binds or unlinks the socket, so a start never takes the socket of a live
+/// server, also when that server's backlog is full and a connect is refused.
+pub const lock_name = ".server.lock";
+
+const Bound = struct { listen: i32, lock: i32 };
+
+fn bindOnce(dir: []const u8, path: []const u8) !Bound {
+    const lock_fd = try takeServerLock(dir, path);
+    errdefer lib_posix.close(lock_fd);
+    // No server runs: a socket here is a crashed server's.
+    session.unlinkSocket(dir, socket_name);
+    return .{ .listen = try session.bindSocket(path), .lock = lock_fd };
+}
+
+/// `error.AlreadyRunning` when a server holds the lock. A server that exits
+/// unlinks its socket and then lets the lock go, so while the socket does
+/// not answer, the start waits up to 1 s for the lock.
+fn takeServerLock(dir: []const u8, path: []const u8) !i32 {
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const lock_path = try std.fmt.bufPrintSentinel(&buf, "{s}/{s}", .{ dir, lock_name }, 0);
+    const fd = std.c.open(lock_path.ptr, .{ .ACCMODE = .RDWR, .CREAT = true, .CLOEXEC = true, .NOFOLLOW = true }, @as(std.c.mode_t, 0o600));
+    if (fd < 0) return error.LockFailed;
+    errdefer lib_posix.close(fd);
+    var tries: u32 = 0;
+    while (std.c.flock(fd, std.c.LOCK.EX | std.c.LOCK.NB) != 0) : (tries += 1) {
+        if (std.c._errno().* != @intFromEnum(std.c.E.AGAIN)) return error.LockFailed;
+        if (tries >= 100) return error.AlreadyRunning;
+        if (ipc.connectSession(path)) |conn| {
+            lib_posix.close(conn);
+            return error.AlreadyRunning;
+        } else |_| {}
+        var ts: std.c.timespec = .{ .sec = 0, .nsec = 10 * std.time.ns_per_ms };
+        _ = std.c.nanosleep(&ts, null);
     }
-    return session.bindSocket(path);
+    return fd;
 }
 
 fn detachStdio() void {
@@ -120,18 +148,19 @@ fn detachStdio() void {
     if (devnull > 2) lib_posix.close(devnull);
 }
 
-fn serveAndExit(dir: []const u8, listen_fd: i32) noreturn {
+fn serveAndExit(dir: []const u8, fds: Bound) noreturn {
     // After a fork: no allocator or io of the parent.
     var threaded: std.Io.Threaded = .init_single_threaded;
     const io = threaded.io();
     const gpa = std.heap.c_allocator;
     session.openLog(io, dir, socket_name);
-    var server = Server.init(gpa, io, dir, listen_fd) catch |err| {
+    var server = Server.init(gpa, io, dir, fds) catch |err| {
         std.log.err("server: start failed: {s}", .{@errorName(err)});
         session.unlinkSocket(dir, socket_name);
         std.process.exit(1);
     };
     // After `init` read the path of this binary, which can be relative.
+    // The server lock is held: the unlink at a failed `init` above is safe.
     // Not the folder of the process that started the server: a session with
     // no folder starts in the home folder, and no volume stays busy.
     const home = lib_posix.getenv("HOME") orelse "/";
@@ -149,6 +178,7 @@ fn serveAndExit(dir: []const u8, listen_fd: i32) noreturn {
 const Peer = struct {
     id: u64,
     fd: i32,
+    connected_at: i64,
     in: std.ArrayList(u8) = .empty,
     out: session.OutQueue = .{},
     greeted: bool = false,
@@ -248,6 +278,8 @@ const Server = struct {
     io: std.Io,
     dir: []const u8,
     listen_fd: i32,
+    /// The server lock (`lock_name`), held until the socket is unlinked.
+    lock_fd: i32,
     epoch: u64,
     /// Counts event batches in this epoch.
     seq: u64 = 0,
@@ -259,14 +291,15 @@ const Server = struct {
     list_waiters: std.ArrayList(Waiter) = .empty,
     exe_buf: [std.fs.max_path_bytes]u8 = undefined,
     exe: [:0]const u8 = "",
-    /// Set by `server.exit`.
+    /// The client that sent `server.exit`.
+    exit_peer: ?u64 = null,
     exiting: bool = false,
     idle_since: ?i64 = null,
 
-    fn init(gpa: std.mem.Allocator, io: std.Io, dir: []const u8, listen_fd: i32) !Server {
+    fn init(gpa: std.mem.Allocator, io: std.Io, dir: []const u8, fds: Bound) !Server {
         var epoch: u64 = undefined;
         io.random(std.mem.asBytes(&epoch));
-        var s: Server = .{ .gpa = gpa, .io = io, .dir = dir, .listen_fd = listen_fd, .epoch = epoch };
+        var s: Server = .{ .gpa = gpa, .io = io, .dir = dir, .listen_fd = fds.listen, .lock_fd = fds.lock, .epoch = epoch };
         _ = try selfExe(&s.exe_buf);
         return s;
     }
@@ -338,16 +371,19 @@ const Server = struct {
             s.timers();
             s.sweep();
         }
-        // `server.exit`: the reply goes out before the server closes.
-        for (s.peers.items) |p| if (!p.dead) flushBlocking(p);
+        // `server.exit`: the reply goes out before the server closes, for at
+        // most 1 s. Other clients' queues are dropped.
+        if (s.findPeer(s.exit_peer orelse return)) |p| s.flushFor(p, 1000);
     }
 
-    fn flushBlocking(p: *Peer) void {
-        const flags = lib_posix.fcntl(p.fd, lib_posix.F.GETFL, 0) catch return;
-        _ = lib_posix.fcntl(p.fd, lib_posix.F.SETFL, flags & ~lib_posix.O_NONBLOCK) catch return;
-        while (p.out.len() > 0) {
-            const n = lib_posix.write(p.fd, p.out.buf.items) catch return;
-            p.out.consume(n);
+    fn flushFor(s: *Server, p: *Peer, ms: i64) void {
+        const deadline = s.now() + ms;
+        while (p.out.len() > 0 and !p.dead) {
+            const left = deadline - s.now();
+            if (left <= 0) return;
+            var pfd = [_]lib_posix.pollfd{.{ .fd = p.fd, .events = lib_posix.POLL.OUT, .revents = 0 }};
+            _ = lib_posix.poll(&pfd, @intCast(left)) catch return;
+            s.writePeer(p);
         }
     }
 
@@ -366,6 +402,10 @@ const Server = struct {
             const d = sp.started_at + spawn_ms;
             next = @min(next orelse d, d);
         }
+        for (s.peers.items) |p| if (!p.greeted) {
+            const d = p.connected_at + hello_ms;
+            next = @min(next orelse d, d);
+        };
         for (s.entries.items) |e| {
             if (e.kill_deadline) |d| next = @min(next orelse d, d);
             if (!e.settled(t)) {
@@ -382,7 +422,8 @@ const Server = struct {
     /// True when the server has had no session, no client and no start in
     /// flight for `idle_exit_ms`, and no client waits in the backlog.
     fn idleExpired(s: *Server) bool {
-        s.checkRefused();
+        // A refused session has no connection: see if it still runs.
+        if (s.peers.items.len == 0 and s.spawns.items.len == 0) s.checkRefused();
         const idle = s.peers.items.len == 0 and s.entries.items.len == 0 and s.spawns.items.len == 0;
         if (!idle) {
             s.idle_since = null;
@@ -394,36 +435,29 @@ const Server = struct {
             return false;
         };
         if (t - since < idle_exit_ms) return false;
-        // A start connects while it holds the lock, so with the lock held,
-        // every client that wants this server is in the backlog. One that is
-        // there is accepted, and the server stays.
-        const lock_fd = session.lockDir(s.dir) catch return false;
-        defer lib_posix.close(lock_fd);
+        // A client in the backlog is accepted, and the server stays. One that
+        // connects after the close gets EOF before `hello`: it starts a
+        // server and connects again.
         s.accept();
         if (s.peers.items.len > 0) {
             s.idle_since = null;
             return false;
         }
         std.log.info("server: no session and no client, exiting", .{});
-        s.closeListenLocked();
+        s.closeListen();
         return true;
     }
 
-    /// Closes the socket and unlinks it, under the directory's lock, so that
-    /// a new server's socket is never the one that goes. A start that runs
-    /// after this finds no server and starts one.
+    /// Closes the socket, unlinks it, then lets the server lock go. Only the
+    /// holder of the lock unlinks, so the socket that goes is this server's.
+    /// A start after this finds no server and starts one.
     fn closeListen(s: *Server) void {
-        if (s.listen_fd < 0) return;
-        const lock_fd = session.lockDir(s.dir) catch -1;
-        defer if (lock_fd >= 0) lib_posix.close(lock_fd);
-        s.closeListenLocked();
-    }
-
-    fn closeListenLocked(s: *Server) void {
         if (s.listen_fd < 0) return;
         lib_posix.close(s.listen_fd);
         s.listen_fd = -1;
         session.unlinkSocket(s.dir, socket_name);
+        lib_posix.close(s.lock_fd);
+        s.lock_fd = -1;
     }
 
     /// Closes everything. Sessions see a client leave and keep running.
@@ -479,7 +513,10 @@ const Server = struct {
         var used: usize = 0;
         defer if (!e.dead) e.in.replaceRangeAssumeCapacity(0, used, &.{});
         while (!e.dead and e.fd >= 0) {
-            const parsed = (frame.parse(e.in.items[used..]) catch return s.entryGone(e)) orelse break;
+            const rest = e.in.items[used..];
+            if (rest.len >= frame.header_len and std.mem.readInt(u32, rest[0..4], .little) > frame_max)
+                return s.brokenEntry(e, "a frame over 1 MiB");
+            const parsed = (frame.parse(rest) catch return s.brokenEntry(e, "a bad frame")) orelse break;
             used += parsed.len;
             s.handleEntryFrame(e, parsed.frame);
         }
@@ -491,11 +528,11 @@ const Server = struct {
         const arena = arena_state.allocator();
 
         if (f.channel == frame.control_channel) {
-            const msg = m.decodeControl(arena, f.body) catch return s.entryGone(e);
+            const msg = m.decodeControl(arena, f.body) catch return s.brokenEntry(e, "a bad message");
             switch (msg) {
                 .hello => |h| {
                     if (e.greeted or e.refused) return;
-                    e.build = s.gpa.dupe(u8, h.build) catch return s.entryGone(e);
+                    e.build = s.gpa.dupe(u8, buildName(h.build)) catch return s.entryGone(e);
                     e.level = h.level;
                     switch (m.negotiate(s.hello(), h)) {
                         .speak => e.greeted = true,
@@ -517,15 +554,16 @@ const Server = struct {
             return;
         }
         if (!e.greeted or f.channel != m.pane_channel or f.kind != .msg) return;
-        const msg = msgpack.decodeSlice(m.PaneMessage, arena, f.body) catch return s.entryGone(e);
+        const msg = msgpack.decodeSlice(m.PaneMessage, arena, f.body) catch return s.brokenEntry(e, "a bad message");
         if (std.mem.eql(u8, msg.t, m.State.name)) {
-            const st = m.decodePane(m.State, arena, msg) catch return s.entryGone(e);
-            // The server signals this pid. 0, 1 and -1 would reach a process
-            // group or every process of the user: fail closed.
-            if (!validPid(st.pid) or !validPid(st.shell_pid)) {
-                std.log.warn("server: session {s} reports pid={d} shell={d}, closed", .{ e.id, st.pid, st.shell_pid });
-                return s.entryGone(e);
-            }
+            const st = m.decodePane(m.State, arena, msg) catch return s.brokenEntry(e, "a bad state");
+            // The server may SIGKILL this pid. 0, 1 and -1 would reach a
+            // process group or every process of the user, and a session's pid
+            // never changes: fail closed.
+            if (!validPid(st.pid) or !validPid(st.shell_pid))
+                return s.brokenEntry(e, "a pid that the server cannot signal");
+            if (e.state) |old| if (old.pid != st.pid or old.shell_pid != st.shell_pid)
+                return s.brokenEntry(e, "a pid other than its first");
             const first = e.state == null;
             var state: Entry.State = .{ .pid = st.pid, .shell_pid = st.shell_pid, .cols = st.cols, .rows = st.rows };
             state.pty_len = @min(st.pty.bytes.len, state.pty_buf.len);
@@ -533,7 +571,7 @@ const Server = struct {
             e.state = state;
             if (first) s.settle(e);
         } else if (std.mem.eql(u8, msg.t, m.Exit.name)) {
-            const x = m.decodePane(m.Exit, arena, msg) catch return s.entryGone(e);
+            const x = m.decodePane(m.Exit, arena, msg) catch return s.brokenEntry(e, "a bad exit");
             if (e.exit != null) return;
             e.exit = .{ .code = x.code, .signal = x.signal };
             std.log.info("server: session {s} exited code={?d} signal={?d}", .{ e.id, x.code, x.signal });
@@ -555,8 +593,17 @@ const Server = struct {
         s.answerLists();
     }
 
+    /// A session that breaks the protocol. Its connection closes, and it is
+    /// listed as `refused`: the server can say nothing true of it. No exit
+    /// goes out, because nothing says that it ended.
+    fn brokenEntry(s: *Server, e: *Entry, what: []const u8) void {
+        std.log.warn("server: session {s} sent {s}, closed", .{ e.id, what });
+        s.refuseEntry(e);
+    }
+
     fn refuseEntry(s: *Server, e: *Entry) void {
         e.refused = true;
+        e.state = null;
         lib_posix.close(e.fd);
         e.fd = -1;
         s.settle(e);
@@ -596,6 +643,7 @@ const Server = struct {
             if (e.dead) continue;
             if (e.kill_deadline) |d| if (t >= d) {
                 std.log.warn("server: session {s} did not end, SIGKILL", .{e.id});
+                // The pid is the first that the session reported (`validPid`).
                 // The pty closes with it, and the kernel hangs up the shell.
                 if (e.state) |st| lib_posix.kill(@intCast(st.pid), lib_posix.SIG.KILL) catch {};
                 e.kill_deadline = null;
@@ -613,6 +661,10 @@ const Server = struct {
                 };
             }
         }
+        for (s.peers.items) |p| if (!p.greeted and !p.dead and t - p.connected_at >= hello_ms) {
+            std.log.info("server: a client sent no hello, closed", .{});
+            p.dead = true;
+        };
         for (s.spawns.items) |sp| if (t >= sp.started_at + spawn_ms and sp.started_at >= 0) {
             std.log.warn("server: session {s} start takes too long, SIGKILL", .{sp.id});
             lib_posix.kill(sp.pid, lib_posix.SIG.KILL) catch {};
@@ -649,6 +701,7 @@ const Server = struct {
     /// Forks and execs this binary as `session`. That command starts the
     /// session process (setsid, and on macOS the disclaim, `session.zig`)
     /// and exits when its socket accepts connections.
+    /// The size is cut to `session.max_cells`, as a session cuts a resize.
     fn spawn(s: *Server, id: []const u8, args: m.SessionCreate.Args) !*Spawn {
         var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
         defer arena_state.deinit();
@@ -658,9 +711,9 @@ const Server = struct {
         try argv.append(arena, s.exe.ptr);
         try argv.append(arena, "session");
         try argv.append(arena, "--cols");
-        try argv.append(arena, (try std.fmt.allocPrintSentinel(arena, "{d}", .{args.cols}, 0)).ptr);
+        try argv.append(arena, (try std.fmt.allocPrintSentinel(arena, "{d}", .{@min(args.cols, session.max_cells)}, 0)).ptr);
         try argv.append(arena, "--rows");
-        try argv.append(arena, (try std.fmt.allocPrintSentinel(arena, "{d}", .{args.rows}, 0)).ptr);
+        try argv.append(arena, (try std.fmt.allocPrintSentinel(arena, "{d}", .{@min(args.rows, session.max_cells)}, 0)).ptr);
         if (args.cwd) |cwd| {
             try argv.append(arena, "--cwd");
             try argv.append(arena, (try arena.dupeSentinel(u8, cwd.bytes, 0)).ptr);
@@ -687,9 +740,9 @@ const Server = struct {
         };
         if (pid == 0) {
             // The child: stderr to the pipe, then this binary again.
-            lib_posix.dup2(pipe[1], lib_posix.STDERR_FILENO) catch lib_posix.exit(127);
+            lib_posix.dup2(pipe[1], lib_posix.STDERR_FILENO) catch std.c._exit(127);
             _ = std.c.execve(s.exe.ptr, @ptrCast(argv.items.ptr), @ptrCast(std.c.environ));
-            lib_posix.exit(127);
+            std.c._exit(127);
         }
         lib_posix.close(pipe[1]);
         sp.pid = pid;
@@ -737,8 +790,20 @@ const Server = struct {
 
     // ── Clients ─────────────────────────────────────────────────────────────
 
+    /// Accepts every client in the backlog.
     fn accept(s: *Server) void {
-        const fd = lib_posix.accept(s.listen_fd, null, null, lib_posix.SOCK.NONBLOCK | lib_posix.SOCK.CLOEXEC) catch return;
+        var n: usize = 0;
+        while (n < max_clients and s.acceptOne()) : (n += 1) {}
+    }
+
+    /// False when the backlog is empty.
+    fn acceptOne(s: *Server) bool {
+        const fd = lib_posix.accept(s.listen_fd, null, null, lib_posix.SOCK.NONBLOCK | lib_posix.SOCK.CLOEXEC) catch return false;
+        s.addPeer(fd);
+        return true;
+    }
+
+    fn addPeer(s: *Server, fd: i32) void {
         if (!runtime.allowPeer(runtime.peerUid(fd), std.c.getuid())) {
             std.log.warn("server: refused a peer of another user", .{});
             lib_posix.close(fd);
@@ -753,7 +818,7 @@ const Server = struct {
             lib_posix.close(fd);
             return;
         };
-        p.* = .{ .id = s.next_peer, .fd = fd };
+        p.* = .{ .id = s.next_peer, .fd = fd, .connected_at = s.now() };
         s.next_peer += 1;
         s.peers.append(s.gpa, p) catch {
             s.gpa.destroy(p);
@@ -874,6 +939,7 @@ const Server = struct {
                 // reply finds no server (design/002).
                 s.closeListen();
                 s.reply(p.id, re, m.ServerExit, .{});
+                s.exit_peer = p.id;
                 s.exiting = true;
             },
             m.ChannelOpen, m.ChannelClose => s.replyError(p.id, re, "unsupported", "On this machine a client connects to the session's own socket."),
@@ -883,9 +949,13 @@ const Server = struct {
 
     fn create(s: *Server, p: *Peer, re: u64, args: m.SessionCreate.Args) void {
         if (!session.validName(args.id))
-            return s.replyError(p.id, re, "invalid_args", "A session id can have only letters, digits, '-', '_' and '.'. It cannot start with '.'.");
-        if (args.cwd) |cwd| if (cwd.bytes.len == 0 or cwd.bytes[0] != '/')
+            return s.replyError(p.id, re, "invalid_args", "A session id can have only letters, digits, '-', '_' and '.'. It cannot start with '.' or '-'.");
+        if (args.cwd) |cwd| if (cwd.bytes.len == 0 or cwd.bytes[0] != '/' or std.mem.findScalar(u8, cwd.bytes, 0) != null)
             return s.replyError(p.id, re, "invalid_args", "The folder must be an absolute path.");
+        if (args.command) |command| for (command) |arg| if (std.mem.findScalar(u8, arg.bytes, 0) != null)
+            return s.replyError(p.id, re, "invalid_args", "A command argument cannot hold a NUL byte.");
+        if (args.cols == 0 or args.rows == 0)
+            return s.replyError(p.id, re, "invalid_args", "The size must be at least 1 by 1.");
         const waiter: Waiter = .{ .peer = p.id, .re = re, .kind = .create };
         // The same id again: the session that the first request started.
         if (s.findEntry(args.id)) |e| {
@@ -914,8 +984,8 @@ const Server = struct {
             // The session ends its shell itself: SIGHUP to the shell's process
             // group, then SIGKILL (`Session.end`). It alone knows if the shell
             // was reaped, so it never signals a pid that is used again.
-            std.log.info("server: kill session {s}, SIGTERM to {d}", .{ e.id, st.pid });
-            lib_posix.kill(@intCast(st.pid), lib_posix.SIG.TERM) catch {};
+            std.log.info("server: kill session {s} pid={d}", .{ e.id, st.pid });
+            s.sendEntryPane(e, m.End, .{});
         }
     }
 
@@ -1075,6 +1145,14 @@ fn connectNonblocking(path: []const u8) !i32 {
     return fd;
 }
 
+/// A session's build as the server keeps it: at most 64 bytes of printable
+/// ASCII, or `unknown`.
+fn buildName(build: []const u8) []const u8 {
+    if (build.len == 0 or build.len > 64) return "unknown";
+    for (build) |c| if (c < 0x20 or c > 0x7e) return "unknown";
+    return build;
+}
+
 /// A pid that the server may signal: above 1, and a `pid_t`.
 fn validPid(pid: i64) bool {
     return pid > 1 and pid <= std.math.maxInt(lib_posix.pid_t);
@@ -1110,6 +1188,15 @@ test "the server signals no pid that reaches a group or every process" {
     try testing.expect(!validPid(@as(i64, std.math.maxInt(lib_posix.pid_t)) + 1));
 }
 
+test "a session's build is kept only as short printable text" {
+    try testing.expectEqualStrings("1.0.1+thdxg.abc", buildName("1.0.1+thdxg.abc"));
+    try testing.expectEqualStrings("unknown", buildName(""));
+    try testing.expectEqualStrings("unknown", buildName("a\x1b[2Jb"));
+    const long: [65]u8 = @splat('x');
+    try testing.expectEqualStrings("unknown", buildName(&long));
+}
+
 test "the server's socket name is no session name" {
     try testing.expect(!session.validName(socket_name));
+    try testing.expect(!session.validName(lock_name));
 }
