@@ -656,6 +656,8 @@ const Session = struct {
         } else if (std.mem.eql(u8, msg.t, m.End.name)) {
             std.log.info("session {s}: end", .{s.name});
             s.ending = true;
+        } else if (std.mem.eql(u8, msg.t, m.Refresh.name)) {
+            s.refresh(c);
         } else if (std.mem.eql(u8, msg.t, m.Take.name)) {
             if (s.exited() != null) {
                 std.log.info("session {s}: exit status taken", .{s.name});
@@ -685,7 +687,7 @@ const Session = struct {
         const leads = s.leader == c;
         // The snapshot is laid out for the size the leader renders at.
         if (leads) resizeTerm(s.gpa, &s.term, size) catch {};
-        if (s.has_output) s.sendSnapshot(c, true);
+        if (s.has_output) _ = s.sendSnapshot(c, true);
         if (leads) {
             s.resize(size);
             // A repaint for incremental renderers: TIOCSWINSZ with the same
@@ -725,8 +727,9 @@ const Session = struct {
         };
     }
 
-    fn sendSnapshot(s: *Session, c: *Client, scrollback: bool) void {
-        const raw = (if (scrollback) util.serializeTerminalState(s.gpa, &s.term) else util.serializeScreenState(s.gpa, &s.term)) orelse return;
+    /// False when the terminal state could not be read: nothing was sent.
+    fn sendSnapshot(s: *Session, c: *Client, scrollback: bool) bool {
+        const raw = (if (scrollback) util.serializeTerminalState(s.gpa, &s.term) else util.serializeScreenState(s.gpa, &s.term)) orelse return false;
         defer s.gpa.free(raw);
         const data = util.rewritePromptRedraw(s.gpa, raw) orelse raw;
         defer if (data.ptr != raw.ptr) s.gpa.free(data);
@@ -734,11 +737,27 @@ const Session = struct {
         var rest = data;
         while (rest.len > 0 and !c.dead) {
             const n = @min(rest.len, snapshot_chunk);
-            c.out.append(s.gpa, m.pane_channel, .bytes, rest[0..n], false) catch return s.dropClient(c);
+            c.out.append(s.gpa, m.pane_channel, .bytes, rest[0..n], false) catch {
+                s.dropClient(c);
+                return true;
+            };
             rest = rest[n..];
         }
         s.sendPane(c, m.SnapshotEnd, .{});
         s.checkHardCap(c);
+        return true;
+    }
+
+    /// A client asks for the screen again (`m.Refresh`). A client that is
+    /// behind gets its snapshot when it catches up.
+    fn refresh(s: *Session, c: *Client) void {
+        if (!c.attached or c.behind) return;
+        c.out.drop();
+        if (s.has_output and s.sendSnapshot(c, false)) return;
+        // With no output, or no memory for the snapshot: an empty one, so
+        // that a relay that waits for one stops waiting.
+        s.sendPane(c, m.SnapshotStart, .{ .scrollback = false });
+        s.sendPane(c, m.SnapshotEnd, .{});
     }
 
     fn writeClient(s: *Session, c: *Client) void {
@@ -757,7 +776,7 @@ const Session = struct {
             std.log.info("session {s}: client fd={d} caught up, snapshot sent", .{ s.name, c.fd });
             // A drop can take a `lead` that waited: say it again.
             s.sendPane(c, m.Lead, .{ .leader = s.leader == c });
-            s.sendSnapshot(c, false);
+            _ = s.sendSnapshot(c, false);
         }
     }
 
