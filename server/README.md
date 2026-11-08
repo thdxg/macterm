@@ -87,6 +87,22 @@ start it (design/001, A). Nothing calls it yet.
   client that connects at the moment of an idle exit gets EOF before
   `hello`: it starts a server and connects again.
 
+## The v2 attach client
+
+`zmx connect <name>` (`src/attach.zig`) joins the terminal on its stdin and
+stdout to a v2 session, as `zmx attach` does for v1. It becomes `macterm
+attach` when v1's `attach` goes (design/007 §6). It never starts a session.
+`help` does not list it.
+
+- It sends its size at attach, on SIGWINCH, and when it starts to lead.
+- v1's claim APC (`ESC _ zmx;claim ESC \`) on stdin becomes the `claim`
+  message and never reaches the shell. This is interim, until the GUI feeds
+  the surface itself (design/004 §5).
+- Ctrl-\ detaches with status 0, unless `ZMX_NO_DETACH_KEY` is set.
+- When the shell exits, it exits with the shell's code, or 128 plus the
+  signal. It does not send `take`: the exit status is the server's.
+- It refuses a session whose level it cannot speak, and says which levels.
+
 ## Build and test
 
 Zig 0.17.1. Zig cannot link with Xcode 26.4 or later (zig#31658), so on a

@@ -16,4 +16,5 @@ comptime {
     _ = @import("runtime.zig");
     _ = @import("session.zig");
     _ = @import("server.zig");
+    _ = @import("attach.zig");
 }
