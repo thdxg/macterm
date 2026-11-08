@@ -79,7 +79,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v5.2.4
+      - uses: jdx/mise-action@v5.2.6
 
       # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
       # currently ships, which is how macterm#340's type-check failure stayed
@@ -229,7 +229,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v5.2.4
+      - uses: jdx/mise-action@v5.2.6
 
       # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
       # currently ships, which is how macterm#340's type-check failure stayed
