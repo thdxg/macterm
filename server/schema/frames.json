@@ -1,0 +1,67 @@
+[
+  {
+    "name": "hello",
+    "frame": "54000000000000000086a56c6576656c01a96d696e5f6c6576656c01a56275696c64ab322e302e302d7469702e31a4726f6c65a3677569a565706f6368cf123456789abcdef0a46361707392a3746363ac70617373776f72642d747479",
+    "reencodes": true
+  },
+  {
+    "name": "refuse",
+    "frame": "23000000000000000082a6726561736f6ead6c6576656c5f746f6f5f6c6f77ab6e656564735f6c6576656c04",
+    "reencodes": true
+  },
+  {
+    "name": "channel.open request",
+    "frame": "2b000000000000000083a2696407a16dac6368616e6e656c2e6f70656ea16181a773657373696f6eab6d61637465726d2d616263",
+    "reencodes": true
+  },
+  {
+    "name": "channel.open result",
+    "frame": "12000000000000000082a2726507a26f6b81a76368616e6e656c02",
+    "reencodes": true
+  },
+  {
+    "name": "channel.close request",
+    "frame": "21000000000000000083a2696408a16dad6368616e6e656c2e636c6f7365a16181a76368616e6e656c02",
+    "reencodes": true
+  },
+  {
+    "name": "channel.close result",
+    "frame": "09000000000000000082a2726508a26f6b80",
+    "reencodes": true
+  },
+  {
+    "name": "error",
+    "frame": "41000000000000000082a2726509a365727283a4636f6465ae756e6b6e6f776e5f6d6574686f64a76d657373616765b34e6f206d6574686f642070616e652e666c792ea56c6576656c03",
+    "reencodes": true
+  },
+  {
+    "name": "events",
+    "frame": "2d000000000000000082a373657129a265769282a165aa70616e652e7469746c65a16181a174a2687881a165a970616e652e62656c6c",
+    "reencodes": true
+  },
+  {
+    "name": "later hello",
+    "frame": "5f000000000000000087a56c6576656c09a96d696e5f6c6576656c01a56275696c64a5332e302e30a4726f6c65a572656c6179a565706f636801a46361707392a3746363a874656c65706f7274a6726567696f6e82a46e616d65a26575a36964739201ce00011170",
+    "reencodes": false
+  },
+  {
+    "name": "attach",
+    "frame": "29000000010000000082a174a6617474616368a16184a4636f6c7378a4726f777328a678706978656c00a679706978656c00",
+    "reencodes": true
+  },
+  {
+    "name": "exit",
+    "frame": "12000000010000000082a174a465786974a16181a4636f6465cc82",
+    "reencodes": true
+  },
+  {
+    "name": "claim",
+    "frame": "0c000000010000000082a174a5636c61696da16180",
+    "reencodes": true
+  },
+  {
+    "name": "pane bytes",
+    "frame": "0300000003000000016c730d",
+    "reencodes": true
+  }
+]

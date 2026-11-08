@@ -1,9 +1,15 @@
 name: Server
 
 # Builds the session server in server/ and runs its Zig tests and its bats
-# tests where it runs: macOS, Linux x86_64 and Linux aarch64. Only a change to
-# server/, protocol/, the build script or this file starts it. The builds that
-# the app bundles come from server-build.yml.
+# tests where it runs: macOS, Linux x86_64 and Linux aarch64. On macOS it also
+# checks the files that the protocol schema makes (scripts/protocol.sh). The
+# builds that the app bundles come from server-build.yml.
+#
+# The three Test checks are required on main, and a required check must report
+# on every pull request. So the workflow starts on every pull request, and each
+# job skips its steps when no file in its paths-filter changed. The skip is at
+# step level: a matrix job that a job-level if: skips reports its unexpanded
+# name, which never matches the required name.
 #
 # macOS runs on macos-15: zig cannot link with Xcode 26.4 or later
 # (zig#31658), and the xcode-27 image has nothing older.
@@ -11,21 +17,20 @@ name: Server
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "server/**"
-      - "protocol/**"
-      - "scripts/build-server.sh"
-      - ".github/workflows/server.yml"
   push:
     branches: [main]
     paths:
       - "server/**"
       - "protocol/**"
+      - "Macterm/Protocol/**"
       - "scripts/build-server.sh"
+      - "scripts/protocol.sh"
       - ".github/workflows/server.yml"
 
 permissions:
   contents: read
+  # paths-filter reads the files of a pull request through the API.
+  pull-requests: read
 
 concurrency:
   group: server-${{ github.event.pull_request.number || github.sha }}
@@ -52,17 +57,32 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: dorny/paths-filter@v4
+        id: changes
+        with:
+          filters: |
+            server:
+              - "server/**"
+              - "protocol/**"
+              - "Macterm/Protocol/**"
+              - "scripts/build-server.sh"
+              - "scripts/protocol.sh"
+              - ".github/workflows/server.yml"
+
       - name: Zig Version
+        if: steps.changes.outputs.server == 'true'
         id: zig
         working-directory: .
         run: echo "version=$(scripts/build-server.sh zig-version)" >> "$GITHUB_OUTPUT"
 
       - name: Install Zig
+        if: steps.changes.outputs.server == 'true'
         uses: mlugg/setup-zig@v2
         with:
           version: ${{ steps.zig.outputs.version }}
 
       - name: Install Bats
+        if: steps.changes.outputs.server == 'true'
         run: |
           if [ "$RUNNER_OS" = macOS ]; then
             brew install bats-core
@@ -72,16 +92,31 @@ jobs:
           fi
 
       - name: Run the Zig Tests
+        if: steps.changes.outputs.server == 'true'
         run: zig build test --summary all
 
       - name: Build
+        if: steps.changes.outputs.server == 'true'
         run: zig build
+
+      # The Swift side of the protocol is generated from the Zig schema
+      # (design/003 §3). This step fails in three cases:
+      # - a generated file is not current, or someone edited it;
+      # - the schema breaks the add-only rule against the metadata on main;
+      # - a reply or an event holds a secret (design/006 §1).
+      - name: Check the Generated Protocol Files
+        if: steps.changes.outputs.server == 'true' && runner.os == 'macOS'
+        working-directory: .
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          PROTOCOL_BASE=FETCH_HEAD scripts/protocol.sh --check
 
       # A skipped test fails the step, so a missing tool cannot hide a test.
       # daemon_responsibility.bats tests a macOS concept, so Linux leaves it
       # out. The short TMPDIR keeps the socket paths under the macOS limit of
       # 104 bytes.
       - name: Run the Bats Tests
+        if: steps.changes.outputs.server == 'true'
         shell: bash
         env:
           TMPDIR: ${{ runner.temp }}
