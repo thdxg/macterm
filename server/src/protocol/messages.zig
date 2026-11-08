@@ -200,6 +200,139 @@ pub fn decodeResult(
     return msgpack.decodeSlice(M.Result, arena, ok.bytes);
 }
 
+// ── A session's pane channel ────────────────────────────────────────────────
+
+/// A `msg` frame on a pane channel: `{t, a}`. `t` names one of
+/// `pane_messages`, `a` holds its fields. A receiver ignores a `t` that it
+/// does not know.
+///
+/// On a direct session socket the pane channel is `pane_channel`
+/// (design/003 §1). A client sends `Attach` before it gets any pane output;
+/// a client that never sends it (a server that reads the exit status) gets
+/// only the session's messages.
+pub const PaneMessage = struct {
+    t: []const u8,
+    a: ?Raw = null,
+};
+
+/// The channel of the pane on a direct session socket.
+pub const pane_channel: u32 = 1;
+
+const from_client: []const Trust = &.{.local};
+const from_session: []const Trust = &.{.session};
+
+/// The session's state, sent once after `hello`, and again when it changes.
+pub const State = struct {
+    pub const name = "state";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    /// The session process.
+    pid: i64,
+    /// The shell (or the command) that the session started. Its parent is
+    /// the session, so the session reads its exit status.
+    shell_pid: i64,
+    /// The path of the pty's slave side. Not UTF-8 on every system.
+    pty: msgpack.Bin,
+    cols: u16,
+    rows: u16,
+};
+
+/// The first message of a client that shows the pane: its size. When the
+/// pane has output, the session answers with a snapshot (`SnapshotStart`,
+/// `bytes`, `SnapshotEnd`), laid out for that size when the client leads.
+/// A size over 1000 cells is cut to 1000; a size of 0 is ignored.
+pub const Attach = struct {
+    pub const name = "attach";
+    pub const since = 1;
+    pub const senders = from_client;
+
+    cols: u16,
+    rows: u16,
+    xpixel: u16 = 0,
+    ypixel: u16 = 0,
+};
+
+/// The client's new size. Only the leader's size reaches the pty.
+pub const Resize = struct {
+    pub const name = "resize";
+    pub const since = 1;
+    pub const senders = from_client;
+
+    cols: u16,
+    rows: u16,
+    xpixel: u16 = 0,
+    ypixel: u16 = 0,
+};
+
+/// The client takes leadership without input (zmx 0003). It then sends its
+/// size with `Resize`.
+pub const Claim = struct {
+    pub const name = "claim";
+    pub const since = 1;
+    pub const senders = from_client;
+};
+
+/// Tells a client that it leads (its size is the pty's) or that it does not.
+/// When the leader leaves, the client that attached first of those left
+/// leads. A client that starts to lead sends its size.
+pub const Lead = struct {
+    pub const name = "lead";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    leader: bool,
+};
+
+/// The `bytes` frames up to `SnapshotEnd` are a snapshot of the terminal,
+/// not output. `scrollback` is false for a snapshot after dropped output:
+/// it holds the screen only, and clears the old screen first.
+pub const SnapshotStart = struct {
+    pub const name = "snapshot.start";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    scrollback: bool,
+};
+
+pub const SnapshotEnd = struct {
+    pub const name = "snapshot.end";
+    pub const since = 1;
+    pub const senders = from_session;
+};
+
+/// The shell exited. The session keeps the status, and sends this to every
+/// client that connects, until one sends `Take`.
+pub const Exit = struct {
+    pub const name = "exit";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    /// The exit code, when the shell exited.
+    code: ?u8 = null,
+    /// The signal number, when a signal ended the shell.
+    signal: ?u8 = null,
+};
+
+/// The client has the exit status. The session then ends.
+pub const Take = struct {
+    pub const name = "take";
+    pub const since = 1;
+    pub const senders = from_client;
+};
+
+/// Every message on a pane channel. A new one goes here.
+pub const pane_messages = .{ State, Attach, Resize, Claim, Lead, SnapshotStart, SnapshotEnd, Exit, Take };
+
+pub fn encodePane(w: *std.Io.Writer, comptime M: type, value: M) std.Io.Writer.Error!void {
+    try msgpack.encode(w, struct { t: []const u8, a: M }{ .t = M.name, .a = value });
+}
+
+/// Decodes the fields of a pane message whose `t` is `M.name`.
+pub fn decodePane(comptime M: type, arena: std.mem.Allocator, msg: PaneMessage) msgpack.DecodeError!M {
+    return msgpack.decodeSlice(M, arena, if (msg.a) |a| a.bytes else &.{0x80});
+}
+
 // ── Reading channel 0 ───────────────────────────────────────────────────────
 
 pub const Control = union(enum) {
