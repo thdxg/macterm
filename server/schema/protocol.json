@@ -129,6 +129,70 @@
       "senders": [
         "local"
       ]
+    },
+    {
+      "name": "title",
+      "type": "Title",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "cwd",
+      "type": "Cwd",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "foreground",
+      "type": "Foreground",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "mark",
+      "type": "Mark",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "progress",
+      "type": "Progress",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "bell",
+      "type": "Bell",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "activity",
+      "type": "Activity",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "status",
+      "type": "Status",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
     }
   ],
   "types": [
@@ -548,6 +612,175 @@
       "kind": "struct",
       "fields": [],
       "cases": []
+    },
+    {
+      "name": "Title",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "title",
+          "type": "bin",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Cwd",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "url",
+          "type": "bin",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Foreground",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "idle",
+          "type": "bool",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "shell",
+          "type": "bool",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "comm",
+          "type": "bin",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "args",
+          "type": "bin",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Mark",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "kind",
+          "type": "MarkKind",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "command",
+          "type": "bin",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "exit_code",
+          "type": "i32",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "MarkKind",
+      "kind": "enum",
+      "fields": [],
+      "cases": [
+        "prompt",
+        "input",
+        "output",
+        "end",
+        "unknown"
+      ]
+    },
+    {
+      "name": "Progress",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "state",
+          "type": "ProgressState",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "percent",
+          "type": "u8",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ProgressState",
+      "kind": "enum",
+      "fields": [],
+      "cases": [
+        "remove",
+        "set",
+        "error",
+        "indeterminate",
+        "pause",
+        "unknown"
+      ]
+    },
+    {
+      "name": "Bell",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "Activity",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "Status",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "state",
+          "type": "RunState",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "failed",
+          "type": "bool",
+          "optional": false,
+          "default": "false",
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "RunState",
+      "kind": "enum",
+      "fields": [],
+      "cases": [
+        "idle",
+        "running",
+        "done",
+        "unknown"
+      ]
     }
   ]
 }

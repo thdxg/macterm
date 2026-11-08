@@ -5,8 +5,11 @@
 //!
 //! A libghostty surface runs it as its command, as it runs `zmx attach` for
 //! v1. Until the GUI feeds a surface from a channel itself (m3), v1's claim
-//! APC on stdin becomes the `claim` message (design/004 §5). Ctrl-\
-//! detaches, as in v1. It never makes a session: the server does that.
+//! APC on stdin becomes the `claim` message (design/004 §5), and with
+//! `ZMX_FOREGROUND_EVENTS` in its environment the session's `foreground`
+//! message becomes v1's foreground APC on stdout (`foregroundApc`), so the
+//! app's `ZmxForegroundEvents` reads it as before. Ctrl-\ detaches, as in
+//! v1. It never makes a session: the server does that.
 
 const std = @import("std");
 const cross = @import("cross");
@@ -18,6 +21,7 @@ const signal = @import("signal.zig");
 const socket = @import("socket.zig");
 const runtime = @import("runtime.zig");
 const session = @import("session.zig");
+const foreground = @import("foreground.zig");
 const protocol = @import("protocol/protocol.zig");
 const frame = protocol.frame;
 const msgpack = protocol.msgpack;
@@ -83,7 +87,7 @@ pub fn run(gpa: std.mem.Allocator, dir: []const u8, name: []const u8) (Error || 
     defer lib_posix.close(fd);
     if (!runtime.allowPeer(runtime.peerUid(fd), std.c.getuid())) return error.WrongPeer;
 
-    var c: Client = .{ .gpa = gpa, .fd = fd };
+    var c: Client = .{ .gpa = gpa, .fd = fd, .foreground_events = lib_posix.getenv(foreground.env_var) != null };
     defer c.in.deinit(gpa);
     if (try c.handshake()) |outcome| return outcome;
     return c.loop();
@@ -95,6 +99,8 @@ const Client = struct {
     in: std.ArrayList(u8) = .empty,
     /// The bytes at the start of `in` that `nextFrame` returned last.
     consumed: usize = 0,
+    /// Write the session's foreground as v1's APC (interim, until m3).
+    foreground_events: bool = false,
 
     /// Hello in each direction, then the session's `state`. Null when the
     /// pane may start; an outcome when the two levels refuse each other.
@@ -233,6 +239,12 @@ const Client = struct {
                         const lead = m.decodePane(m.Lead, arena, msg) catch return error.Protocol;
                         // A client that starts to lead sends its size.
                         if (lead.leader) try c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout)));
+                    } else if (c.foreground_events and std.mem.eql(u8, msg.t, m.Foreground.name)) {
+                        const fg = m.decodePane(m.Foreground, arena, msg) catch return error.Protocol;
+                        var buf: [apc_max]u8 = undefined;
+                        // In the output stream, so it lands in front of the
+                        // output that the session sent after it.
+                        writeAll(stdout, foregroundApc(&buf, fg)) catch return .detached;
                     } else if (std.mem.eql(u8, msg.t, m.Exit.name)) {
                         const e = m.decodePane(m.Exit, arena, msg) catch return error.Protocol;
                         // The server takes the status (`take`), not the pane.
@@ -305,6 +317,43 @@ const Client = struct {
     }
 };
 
+/// A buffer this long holds any APC that `foregroundApc` writes.
+pub const apc_max = foreground.report_max + 4;
+
+/// v1's foreground report as an APC, `ESC _ zmx;foreground;… ESC \`
+/// (foreground.zig), from the session's `foreground` message.
+pub fn foregroundApc(buf: []u8, f: m.Foreground) []const u8 {
+    std.debug.assert(buf.len >= apc_max);
+    buf[0..2].* = "\x1b_".*;
+    const report = foreground.write(buf[2..], .{
+        .idle = f.idle,
+        .shell = f.shell,
+        .comm = f.comm.bytes,
+        .args = f.args.bytes,
+    });
+    buf[2 + report.len ..][0..2].* = "\x1b\\".*;
+    return buf[0 .. report.len + 4];
+}
+
+/// The APCs that the app's tests parse with `ZmxForegroundEvents.parse`
+/// (`server/schema/foreground.json`, `__schema foreground`): each case's
+/// message, and the APC that this client writes for it, in hex.
+pub fn writeForegroundFixtures(w: *std.Io.Writer) !void {
+    const cases = [_]struct { name: []const u8, msg: m.Foreground }{
+        .{ .name = "program", .msg = .{ .idle = false, .shell = false, .comm = .{ .bytes = "/usr/bin/hx" }, .args = .{ .bytes = "hx a;b.md" } } },
+        .{ .name = "idle shell", .msg = .{ .idle = true, .shell = true, .comm = .{ .bytes = "-zsh" }, .args = .{ .bytes = "" } } },
+        .{ .name = "no /etc/shells", .msg = .{ .idle = false, .shell = null, .comm = .{ .bytes = "claude" }, .args = .{ .bytes = "claude --resume" } } },
+        .{ .name = "control bytes", .msg = .{ .idle = false, .shell = false, .comm = .{ .bytes = "ev;il\x1b" }, .args = .{ .bytes = "printf '\x1b\\'" } } },
+    };
+    try w.writeAll("[\n");
+    for (cases, 0..) |case, i| {
+        var buf: [apc_max]u8 = undefined;
+        const apc = foregroundApc(&buf, case.msg);
+        try w.print("  {{\"name\": \"{s}\", \"apc\": \"{x}\"}}{s}\n", .{ case.name, apc, if (i + 1 < cases.len) "," else "" });
+    }
+    try w.writeAll("]\n");
+}
+
 fn attachSize(size: ipc.Resize) m.Attach {
     return .{ .cols = size.cols, .rows = size.rows, .xpixel = size.xpixel, .ypixel = size.ypixel };
 }
@@ -332,6 +381,12 @@ fn writeAll(fd: i32, bytes: []const u8) !void {
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 const testing = std.testing;
+
+test "the foreground APC is v1's report between ESC _ and ESC \\" {
+    var buf: [apc_max]u8 = undefined;
+    const apc = foregroundApc(&buf, .{ .idle = false, .shell = null, .comm = .{ .bytes = "/usr/bin/hx" }, .args = .{ .bytes = "hx a;b" } });
+    try testing.expectEqualStrings("\x1b_zmx;foreground;0;;/usr/bin/hx;hx a;b\x1b\\", apc);
+}
 
 test "the exit code is the shell's, or 128 plus its signal" {
     try testing.expectEqual(0, exitCode(.detached));

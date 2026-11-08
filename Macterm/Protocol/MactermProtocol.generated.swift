@@ -737,6 +737,310 @@ extension MactermProtocol.Take: ProtocolValue {
     }
 }
 
+extension MactermProtocol {
+    struct Title: Equatable {
+        var title: ProtocolBin
+    }
+}
+
+extension MactermProtocol.Title: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var title: ProtocolBin?
+        try reader.readMap { key, reader in
+            switch key {
+            case "title": title = try ProtocolBin(from: &reader)
+            default: return false
+            }
+            return true
+        }
+        self.title = try MessagePackReader.required(title, "title")
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(1)
+        writer.writeString("title")
+        title.encode(to: &writer)
+    }
+}
+
+extension MactermProtocol {
+    struct Cwd: Equatable {
+        var url: ProtocolBin
+    }
+}
+
+extension MactermProtocol.Cwd: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var url: ProtocolBin?
+        try reader.readMap { key, reader in
+            switch key {
+            case "url": url = try ProtocolBin(from: &reader)
+            default: return false
+            }
+            return true
+        }
+        self.url = try MessagePackReader.required(url, "url")
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(1)
+        writer.writeString("url")
+        url.encode(to: &writer)
+    }
+}
+
+extension MactermProtocol {
+    struct Foreground: Equatable {
+        var idle: Bool
+        var shell: Bool?
+        var comm: ProtocolBin
+        var args: ProtocolBin
+    }
+}
+
+extension MactermProtocol.Foreground: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var idle: Bool?
+        var shell: Bool?
+        var comm: ProtocolBin?
+        var args: ProtocolBin?
+        try reader.readMap { key, reader in
+            switch key {
+            case "idle": idle = try Bool(from: &reader)
+            case "shell": shell = try reader.readOptional(Bool.self)
+            case "comm": comm = try ProtocolBin(from: &reader)
+            case "args": args = try ProtocolBin(from: &reader)
+            default: return false
+            }
+            return true
+        }
+        self.idle = try MessagePackReader.required(idle, "idle")
+        self.shell = shell
+        self.comm = try MessagePackReader.required(comm, "comm")
+        self.args = try MessagePackReader.required(args, "args")
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        var keyCount = 3
+        if shell != nil { keyCount += 1 }
+        writer.writeMapHeader(keyCount)
+        writer.writeString("idle")
+        idle.encode(to: &writer)
+        if let shell {
+            writer.writeString("shell")
+            shell.encode(to: &writer)
+        }
+        writer.writeString("comm")
+        comm.encode(to: &writer)
+        writer.writeString("args")
+        args.encode(to: &writer)
+    }
+}
+
+extension MactermProtocol {
+    struct Mark: Equatable {
+        var kind: MactermProtocol.MarkKind
+        var command: ProtocolBin?
+        var exitCode: Int32?
+    }
+}
+
+extension MactermProtocol.Mark: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var kind: MactermProtocol.MarkKind?
+        var command: ProtocolBin?
+        var exitCode: Int32?
+        try reader.readMap { key, reader in
+            switch key {
+            case "kind": kind = try MactermProtocol.MarkKind(from: &reader)
+            case "command": command = try reader.readOptional(ProtocolBin.self)
+            case "exit_code": exitCode = try reader.readOptional(Int32.self)
+            default: return false
+            }
+            return true
+        }
+        self.kind = try MessagePackReader.required(kind, "kind")
+        self.command = command
+        self.exitCode = exitCode
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        var keyCount = 1
+        if command != nil { keyCount += 1 }
+        if exitCode != nil { keyCount += 1 }
+        writer.writeMapHeader(keyCount)
+        writer.writeString("kind")
+        kind.encode(to: &writer)
+        if let command {
+            writer.writeString("command")
+            command.encode(to: &writer)
+        }
+        if let exitCode {
+            writer.writeString("exit_code")
+            exitCode.encode(to: &writer)
+        }
+    }
+}
+
+extension MactermProtocol {
+    enum MarkKind: String, Equatable {
+        case prompt
+        case input
+        case output
+        case end
+        case unknown
+    }
+}
+
+extension MactermProtocol.MarkKind: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        let tag = try reader.readString()
+        self = Self(rawValue: tag) ?? .unknown
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeString(rawValue)
+    }
+}
+
+extension MactermProtocol {
+    struct Progress: Equatable {
+        var state: MactermProtocol.ProgressState
+        var percent: UInt8?
+    }
+}
+
+extension MactermProtocol.Progress: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var state: MactermProtocol.ProgressState?
+        var percent: UInt8?
+        try reader.readMap { key, reader in
+            switch key {
+            case "state": state = try MactermProtocol.ProgressState(from: &reader)
+            case "percent": percent = try reader.readOptional(UInt8.self)
+            default: return false
+            }
+            return true
+        }
+        self.state = try MessagePackReader.required(state, "state")
+        self.percent = percent
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        var keyCount = 1
+        if percent != nil { keyCount += 1 }
+        writer.writeMapHeader(keyCount)
+        writer.writeString("state")
+        state.encode(to: &writer)
+        if let percent {
+            writer.writeString("percent")
+            percent.encode(to: &writer)
+        }
+    }
+}
+
+extension MactermProtocol {
+    enum ProgressState: String, Equatable {
+        case remove
+        case set
+        case error
+        case indeterminate
+        case pause
+        case unknown
+    }
+}
+
+extension MactermProtocol.ProgressState: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        let tag = try reader.readString()
+        self = Self(rawValue: tag) ?? .unknown
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeString(rawValue)
+    }
+}
+
+extension MactermProtocol {
+    struct Bell: Equatable {}
+}
+
+extension MactermProtocol.Bell: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        try reader.readMap { _, _ in false }
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(0)
+    }
+}
+
+extension MactermProtocol {
+    struct Activity: Equatable {}
+}
+
+extension MactermProtocol.Activity: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        try reader.readMap { _, _ in false }
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(0)
+    }
+}
+
+extension MactermProtocol {
+    struct Status: Equatable {
+        var state: MactermProtocol.RunState
+        var failed: Bool = false
+    }
+}
+
+extension MactermProtocol.Status: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var state: MactermProtocol.RunState?
+        var failed: Bool?
+        try reader.readMap { key, reader in
+            switch key {
+            case "state": state = try MactermProtocol.RunState(from: &reader)
+            case "failed": failed = try Bool(from: &reader)
+            default: return false
+            }
+            return true
+        }
+        self.state = try MessagePackReader.required(state, "state")
+        self.failed = failed ?? false
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(2)
+        writer.writeString("state")
+        state.encode(to: &writer)
+        writer.writeString("failed")
+        failed.encode(to: &writer)
+    }
+}
+
+extension MactermProtocol {
+    enum RunState: String, Equatable {
+        case idle
+        case running
+        case done
+        case unknown
+    }
+}
+
+extension MactermProtocol.RunState: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        let tag = try reader.readString()
+        self = Self(rawValue: tag) ?? .unknown
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeString(rawValue)
+    }
+}
+
 extension MactermProtocol.Hello: ProtocolMessage {
     static let name = "hello"
     static let since: UInt32 = 1
@@ -801,4 +1105,52 @@ extension MactermProtocol.Take: ProtocolMessage {
     static let name = "take"
     static let since: UInt32 = 1
     static let senders: [MactermProtocol.Trust] = [.local]
+}
+
+extension MactermProtocol.Title: ProtocolMessage {
+    static let name = "title"
+    static let since: UInt32 = 1
+    static let senders: [MactermProtocol.Trust] = [.session]
+}
+
+extension MactermProtocol.Cwd: ProtocolMessage {
+    static let name = "cwd"
+    static let since: UInt32 = 1
+    static let senders: [MactermProtocol.Trust] = [.session]
+}
+
+extension MactermProtocol.Foreground: ProtocolMessage {
+    static let name = "foreground"
+    static let since: UInt32 = 1
+    static let senders: [MactermProtocol.Trust] = [.session]
+}
+
+extension MactermProtocol.Mark: ProtocolMessage {
+    static let name = "mark"
+    static let since: UInt32 = 1
+    static let senders: [MactermProtocol.Trust] = [.session]
+}
+
+extension MactermProtocol.Progress: ProtocolMessage {
+    static let name = "progress"
+    static let since: UInt32 = 1
+    static let senders: [MactermProtocol.Trust] = [.session]
+}
+
+extension MactermProtocol.Bell: ProtocolMessage {
+    static let name = "bell"
+    static let since: UInt32 = 1
+    static let senders: [MactermProtocol.Trust] = [.session]
+}
+
+extension MactermProtocol.Activity: ProtocolMessage {
+    static let name = "activity"
+    static let since: UInt32 = 1
+    static let senders: [MactermProtocol.Trust] = [.session]
+}
+
+extension MactermProtocol.Status: ProtocolMessage {
+    static let name = "status"
+    static let since: UInt32 = 1
+    static let senders: [MactermProtocol.Trust] = [.session]
 }

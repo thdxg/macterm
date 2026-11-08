@@ -22,6 +22,8 @@ const socket = @import("socket.zig");
 const daemonize = @import("daemonize.zig");
 const runtime = @import("runtime.zig");
 const terminal = @import("terminal.zig");
+const events = @import("events.zig");
+const foreground = @import("foreground.zig");
 const protocol = @import("protocol/protocol.zig");
 const ghostty_vt = terminal.ghostty_vt;
 const frame = protocol.frame;
@@ -311,7 +313,8 @@ const Session = struct {
     pty_name_buf: [128]u8,
     epoch: u64,
     size: ipc.Resize,
-    term: ghostty_vt.Terminal,
+    /// The terminal, and the events it gives (events.zig).
+    watch: events.Watch,
     clients: std.ArrayList(*Client) = .empty,
     leader: ?*Client = null,
     pty_in: std.ArrayList(u8) = .empty,
@@ -325,6 +328,14 @@ const Session = struct {
     announced: bool = false,
     /// A client took the exit status.
     taken: bool = false,
+    /// The pty's foreground process group at the last `foreground` message,
+    /// and that message, for a client that connects later.
+    foreground_pgid: ?lib_posix.pid_t = null,
+    foreground_msg: ?m.Foreground = null,
+    foreground_buf: [std.fs.max_path_bytes + foreground.args_max]u8 = undefined,
+    etc_shells: ?[]const u8 = null,
+    etc_shells_loaded: bool = false,
+    etc_shells_buf: [4096]u8 = undefined,
 
     const pty_in_max = 256 * 1024;
 
@@ -342,12 +353,12 @@ const Session = struct {
             .pty_name_buf = pty.name_buf,
             .epoch = epoch,
             .size = opts.size,
-            .term = try ghostty_vt.Terminal.init(io, gpa, .{
+            .watch = .init(gpa, try ghostty_vt.Terminal.init(io, gpa, .{
                 .cols = opts.size.cols,
                 .rows = opts.size.rows,
                 .max_scrollback_lines = opts.max_scrollback_lines,
                 .max_scrollback_bytes = null,
-            }),
+            })),
         };
         s.pty_name = std.mem.sliceTo(&s.pty_name_buf, 0);
         return s;
@@ -364,8 +375,9 @@ const Session = struct {
         try signal.openSignalPipe();
         signal.installWakeHandler(@backingInt(lib_posix.SIG.TERM));
         signal.installWakeHandler(@backingInt(lib_posix.SIG.CHLD));
-        var stream = s.term.vtStream();
+        var stream = s.watch.term.vtStream();
         defer stream.deinit();
+        s.watch.install(&stream.handler);
         var fds: std.ArrayList(lib_posix.pollfd) = .empty;
         defer fds.deinit(s.gpa);
         std.log.info("session {s} started pid={d} shell={d} pty={s}", .{ s.name, std.c.getpid(), s.shell_pid, s.pty_name });
@@ -383,12 +395,18 @@ const Session = struct {
             try fds.append(s.gpa, .{ .fd = signal.sig_pipe[0], .events = lib_posix.POLL.IN, .revents = 0 });
             const polled = s.clients.items.len;
             for (s.clients.items) |c| {
-                var events: i16 = lib_posix.POLL.IN;
-                if (c.out.len() > 0 or c.behind) events |= lib_posix.POLL.OUT;
-                try fds.append(s.gpa, .{ .fd = c.fd, .events = events, .revents = 0 });
+                var poll_events: i16 = lib_posix.POLL.IN;
+                if (c.out.len() > 0 or c.behind) poll_events |= lib_posix.POLL.OUT;
+                try fds.append(s.gpa, .{ .fd = c.fd, .events = poll_events, .revents = 0 });
             }
 
-            _ = try lib_posix.poll(fds.items, -1);
+            _ = try lib_posix.poll(fds.items, s.pollTimeout());
+
+            // Held events whose window ended, and a foreground that changed
+            // while the pty was quiet.
+            s.watch.flush(s.nowMs());
+            s.checkForeground();
+            s.sendEvents();
 
             if (fds.items[2].revents & lib_posix.POLL.IN != 0) {
                 signal.drainSignalPipe() catch {
@@ -507,7 +525,12 @@ const Session = struct {
             return;
         }
         const data = buf[0..n];
-        stream.nextSlice(data);
+        // The events of this output, a foreground change first, go before
+        // its bytes: a report that the shell is back lands before the
+        // shell's prompt (zmx 0010).
+        s.checkForeground();
+        s.watch.feed(stream, data, s.nowMs());
+        s.sendEvents();
         s.has_output = true;
         // With no client that shows the pane, answer the terminal queries
         // that a shell waits for (fish waits 10 s), as v1 does.
@@ -561,7 +584,7 @@ const Session = struct {
     /// comes back, as v1 does.
     fn updateFocus(s: *Session) void {
         const now = s.hasAttached();
-        if (now != s.had_attached and s.term.modes.get(.focus_event))
+        if (now != s.had_attached and s.watch.term.modes.get(.focus_event))
             s.queueInput(if (now) "\x1b[I" else "\x1b[O");
         s.had_attached = now;
     }
@@ -611,6 +634,7 @@ const Session = struct {
                 .speak => {
                     c.greeted = true;
                     s.sendPane(c, m.State, s.state());
+                    s.sendCurrent(c);
                     if (s.exited()) |status| s.sendExit(c, status);
                 },
             }
@@ -680,7 +704,7 @@ const Session = struct {
         if (s.leader == null) s.setLeader(c);
         const leads = s.leader == c;
         // The snapshot is laid out for the size the leader renders at.
-        if (leads) resizeTerm(s.gpa, &s.term, size) catch {};
+        if (leads) resizeTerm(s.gpa, &s.watch.term, size) catch {};
         if (s.has_output) s.sendSnapshot(c, true);
         if (leads) {
             s.resize(size);
@@ -701,7 +725,7 @@ const Session = struct {
             var ws = size.winsize();
             _ = cross.ioctl(s.pty_fd, cross.TIOCSWINSZ, &ws);
         }
-        resizeTerm(s.gpa, &s.term, size) catch |err|
+        resizeTerm(s.gpa, &s.watch.term, size) catch |err|
             std.log.warn("session {s}: resize failed: {s}", .{ s.name, @errorName(err) });
     }
 
@@ -722,7 +746,7 @@ const Session = struct {
     }
 
     fn sendSnapshot(s: *Session, c: *Client, scrollback: bool) void {
-        const raw = (if (scrollback) util.serializeTerminalState(s.gpa, &s.term) else util.serializeScreenState(s.gpa, &s.term)) orelse return;
+        const raw = (if (scrollback) util.serializeTerminalState(s.gpa, &s.watch.term) else util.serializeScreenState(s.gpa, &s.watch.term)) orelse return;
         defer s.gpa.free(raw);
         const data = util.rewritePromptRedraw(s.gpa, raw) orelse raw;
         defer if (data.ptr != raw.ptr) s.gpa.free(data);
@@ -754,6 +778,8 @@ const Session = struct {
             // A drop can take a `lead` that waited: say it again.
             s.sendPane(c, m.Lead, .{ .leader = s.leader == c });
             s.sendSnapshot(c, false);
+            // Events went with the dropped output.
+            s.sendCurrent(c);
         }
     }
 
@@ -794,6 +820,128 @@ const Session = struct {
         m.encodePane(&out.writer, M, value) catch return;
         c.out.append(s.gpa, m.pane_channel, .msg, out.written(), false) catch return s.dropClient(c);
         s.checkHardCap(c);
+    }
+
+    fn nowMs(s: *const Session) i64 {
+        return std.Io.Timestamp.now(s.io, .awake).toMilliseconds();
+    }
+
+    /// Until the next held event is due, and at most the foreground poll
+    /// interval while a client listens: a program that takes the pty and
+    /// prints nothing is still reported (zmx 0010).
+    fn pollTimeout(s: *const Session) i32 {
+        var timeout: i32 = if (foreground.supported and s.hasGreeted()) foreground.poll_interval_ms else -1;
+        if (s.watch.deadline()) |due| {
+            const wait: i32 = @intCast(std.math.clamp(due - s.nowMs(), 0, std.math.maxInt(i32)));
+            timeout = if (timeout < 0) wait else @min(timeout, wait);
+        }
+        return timeout;
+    }
+
+    fn hasGreeted(s: *const Session) bool {
+        for (s.clients.items) |c| if (c.greeted and !c.dead) return true;
+        return false;
+    }
+
+    /// Reads the pty's foreground process group and, when it changed, sends
+    /// `foreground` to every client. One ioctl when nothing changed. With no
+    /// client, nothing is read: a client that greets reads it then.
+    fn checkForeground(s: *Session) void {
+        if (!foreground.supported or s.pty_closed or !s.hasGreeted()) return;
+        var pgrp: lib_posix.pid_t = 0;
+        if (cross.ioctl(s.pty_fd, cross.TIOCGPGRP, &pgrp) != 0 or pgrp <= 0) return;
+        if (s.foreground_pgid == pgrp) return;
+        s.foreground_pgid = pgrp;
+        if (!s.etc_shells_loaded) {
+            s.etc_shells_loaded = true;
+            s.etc_shells = foreground.readEtcShells(&s.etc_shells_buf);
+        }
+        // The group leader can be gone while the group lives on (the first
+        // process of a pipeline exited). Then there is no name to send; the
+        // next change sends again.
+        var comm_buf: [std.fs.max_path_bytes]u8 = undefined;
+        var args_buf: [foreground.args_max]u8 = undefined;
+        var scratch: [8192]u8 = undefined;
+        const process = foreground.readProcess(pgrp, &comm_buf, &args_buf, &scratch) orelse {
+            std.log.info("session {s}: foreground pgid={d} has no readable leader", .{ s.name, pgrp });
+            return;
+        };
+        // Kept for a client that connects later, so it must not point into
+        // the buffers above.
+        const comm = s.foreground_buf[0..process.comm.len];
+        @memcpy(comm, process.comm);
+        const args = s.foreground_buf[comm.len..][0..process.args.len];
+        @memcpy(args, process.args);
+        s.foreground_msg = .{
+            .idle = pgrp == s.shell_pid,
+            .shell = if (s.etc_shells) |shells| foreground.isListedShell(shells, comm) else null,
+            .comm = .{ .bytes = comm },
+            .args = .{ .bytes = args },
+        };
+        s.broadcastPane(m.Foreground, s.foreground_msg.?, true);
+    }
+
+    /// Sends the events that the terminal gave, in order, to every client.
+    fn sendEvents(s: *Session) void {
+        defer s.watch.clearReady();
+        for (s.watch.ready.items) |e| s.broadcastEvent(e);
+    }
+
+    /// Every event but a mark can be dropped with the output of a client
+    /// that falls behind: the client gets the current state again after its
+    /// snapshot. A kept frame stops a drop of the output before it, and the
+    /// heartbeat alone comes every `activity_ms`.
+    fn broadcastEvent(s: *Session, e: events.Event) void {
+        switch (e) {
+            .title => |t| s.broadcastPane(m.Title, .{ .title = .{ .bytes = t } }, true),
+            .cwd => |u| s.broadcastPane(m.Cwd, .{ .url = .{ .bytes = u } }, true),
+            .mark => |mk| s.broadcastPane(m.Mark, .{
+                .kind = mk.kind,
+                .command = if (mk.command) |c| .{ .bytes = c } else null,
+                .exit_code = mk.exit_code,
+            }, false),
+            .progress => |p| s.broadcastPane(m.Progress, p, true),
+            .bell => s.broadcastPane(m.Bell, .{}, true),
+            .activity => s.broadcastPane(m.Activity, .{}, true),
+            .status => |st| s.broadcastPane(m.Status, st, true),
+        }
+    }
+
+    /// The current title, cwd, foreground, progress and status, for a client
+    /// that just greeted.
+    fn sendCurrent(s: *Session, c: *Client) void {
+        // A foreground that changed while no client listened goes to every
+        // client; if it did not change, this one gets it alone.
+        const before = s.foreground_pgid;
+        s.checkForeground();
+        if (s.foreground_pgid == before) if (s.foreground_msg) |f| s.sendPane(c, m.Foreground, f);
+
+        var list: std.ArrayList(events.Event) = .empty;
+        defer list.deinit(s.gpa);
+        s.watch.current(&list) catch return;
+        for (list.items) |e| switch (e) {
+            .title => |t| s.sendPane(c, m.Title, .{ .title = .{ .bytes = t } }),
+            .cwd => |u| s.sendPane(c, m.Cwd, .{ .url = .{ .bytes = u } }),
+            .progress => |p| s.sendPane(c, m.Progress, p),
+            .status => |st| s.sendPane(c, m.Status, st),
+            else => {},
+        };
+    }
+
+    /// Encodes `value` once and queues it for every client that greeted. A
+    /// `droppable` message skips a client that is behind, as output does.
+    fn broadcastPane(s: *Session, comptime M: type, value: M, droppable: bool) void {
+        var out: std.Io.Writer.Allocating = .init(s.gpa);
+        defer out.deinit();
+        m.encodePane(&out.writer, M, value) catch return;
+        for (s.clients.items) |c| {
+            if (!c.greeted or c.dead or (droppable and c.behind)) continue;
+            c.out.append(s.gpa, m.pane_channel, .msg, out.written(), droppable) catch {
+                s.dropClient(c);
+                continue;
+            };
+            s.checkHardCap(c);
+        }
     }
 
     fn checkHardCap(s: *Session, c: *Client) void {
