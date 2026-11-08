@@ -695,6 +695,15 @@ The frames and messages between the app, the server and the session processes (d
 - Field names and enum tags are snake_case ASCII (`checkName`), so the Swift String compare is the Zig byte compare.
 - `scripts/protocol.sh` needs Zig 0.17 on PATH or in `$ZIG`.
 
+### The app's client of the local server (`Macterm/Server/`)
+
+`LocalServer` and `ServerConnection` connect the app to `macterm server` (design/001 A, design/002). Nothing in the app calls them yet: v1's panes still run their own zmx.
+
+- **The app starts the server.** `LocalServer.connect` connects to `<runtime dir>/.server`. When nothing answers, it runs the bundled `zmx server` with `MACTERM_RUNTIME_DIR` set, so that the app and the server use one directory. `runtimeDirectory(environment:)` finds it as `resolveDir` in `server/src/runtime.zig` does.
+- **A newer app replaces an older server** with `server.exit`, then starts its own. The sessions keep running. A lower level is older. A higher level is never replaced. At the same level, another build is replaced only when it runs from this app's own `zmx` path, or from a file that an update removed (`proc_pidpath` of the socket's peer follows a moved bundle and fails after a delete, measured). A build from another app (Debug next to Release) stays: the order of two builds of one level is not known. One `connect` replaces at most once, so two apps never replace each other's server in a loop.
+- `ServerConnection` reads the socket on a thread of its own. A request waits for its response by id. `events` gives one element for each event batch. When the connection ends, each request that waits fails with `ServerClientError.disconnected`.
+- `LocalServerTests` runs the bundled server in a runtime directory under `/tmp` (a socket path has at most 103 bytes).
+
 ### Ghostty config pipeline
 
 In automatic mode, Macterm delegates the user layer to `ghostty_config_load_default_files`. Settings can append custom files. `GhosttyApp.loadConfig` loads `macterm-defaults.conf`, then the user files, then `macterm-overrides.conf` (the last one wins). It regenerates both private files (`MactermConfig.regenerate()`) before every load, because the overrides depend on the content of the user. `GhosttyConfigSource` is the seam for raw text, for keys that the C API cannot expose.
@@ -934,6 +943,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
     - The built-in screens are not extensions, and they have no card. There is no switch for on and off. To remove an extension, uninstall it.
   - `PasswordsSettings`.
   - `IntelligenceSettings` (Settings → Intelligence, macOS 26 and later): project memory, its summary, and the status of Apple's on-device model.
+- `Macterm/Server/`: the app's client of the local server. `LocalServer` (start, reuse, replace) and `ServerConnection` (handshake, requests, events).
 - `Macterm/Protocol/`: the v2 protocol. `MessagePack`, `ProtocolFrame`, `ProtocolControl`, and the generated `MactermProtocol`.
 - `Macterm/Control/`: `ControlProtocol` (shared with the CLI), `ControlSocketServer`, `ControlHandler`, and `AgentSkills/` (the text of `macterm skills`, shared with the CLI).
 - `Macterm/Intents/`: the surface of App Intents. `MactermIntentHost` and `IntentTargets` (`IntentHost.swift`), `IntentPermission`, `MactermIntentError`, `Entities`, `ProjectIntents`, `TabIntents`, `PaneIntents`, `CommandIntents` and `MactermShortcuts` (`AppShortcutsProvider`).

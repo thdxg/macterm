@@ -103,6 +103,11 @@ struct LocalServerTests {
 
             _ = try await connection.call(MactermProtocol.SessionKill.self, .init(id: id))
             #expect(try await connection.call(MactermProtocol.SessionList.self, .init()).sessions.isEmpty)
+            // The shell can be a zombie for a moment after the reply.
+            let deadline = Date().addingTimeInterval(5)
+            while Darwin.kill(pid_t(pid), 0) == 0, Date() < deadline {
+                try await Task.sleep(for: .milliseconds(20))
+            }
             #expect(Darwin.kill(pid_t(pid), 0) != 0)
             try await exit(connection)
         }
