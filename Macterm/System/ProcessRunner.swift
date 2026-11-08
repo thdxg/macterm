@@ -106,6 +106,14 @@ final class CollectedPipe: @unchecked Sendable {
         pipe.fileHandleForReading.readabilityHandler = nil
     }
 
+    /// Read on, and drop what comes: for a process that runs on after its
+    /// output stops counting, so that a full pipe never blocks its writes.
+    func discard() {
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            if handle.availableData.isEmpty { handle.readabilityHandler = nil }
+        }
+    }
+
     var text: String {
         lock.lock()
         defer { lock.unlock() }

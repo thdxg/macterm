@@ -68,8 +68,11 @@ final class SSHLoginPrompts {
             pending.continuation.resume(returning: .cancelled)
         }
         queue.removeAll { $0.request.sshPID == pid }
-        if let current, current.request.sshPID == pid, let sheet = current.sheet {
+        guard let current, current.request.sshPID == pid else { return }
+        if let sheet = current.sheet {
             sheet.window.endSheet(sheet.alert.window, returnCode: .abort)
+        } else if NSApp.modalWindow != nil {
+            NSApp.abortModal()
         }
     }
 
@@ -108,7 +111,10 @@ final class SSHLoginPrompts {
             if savedID != nil { alert.addButton(withTitle: String(localized: "Use Saved Password")) }
         }
 
-        guard let window = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first(where: AppDelegate.isTerminalWindowCandidate)
+        // A terminal window: the key window can be the quick terminal, a
+        // desktop widget or a popover, which a sheet does not suit.
+        let candidates = [NSApp.keyWindow, NSApp.mainWindow].compactMap(\.self) + NSApp.windows.filter(\.isVisible)
+        guard let window = candidates.first(where: { AppDelegate.isTerminalWindowCandidate($0) })
         else {
             NSApp.activate()
             finish(pending, response: alert.runModal(), field: field, savedID: savedID)
@@ -144,10 +150,13 @@ final class SSHLoginPrompts {
             )
             if allowed, let password = PasswordVault.shared.password(for: savedID) {
                 settle(pending, .text(password))
-            } else {
+            } else if kill(request.sshPID, 0) == 0 {
                 current = nil
                 queue.insert(pending, at: 0)
                 presentNext()
+            } else {
+                // The master exited while Touch ID was up.
+                settle(pending, .cancelled)
             }
         }
     }

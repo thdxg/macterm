@@ -1,5 +1,5 @@
 #!/bin/sh
-# The SSH_ASKPASS of a host's ssh master in Macterm (SSHMasters), bundled at
+# The SSH_ASKPASS of a host's ssh master in Macterm (SSHConnections), bundled at
 # Contents/Resources/ssh-bridge/macterm-askpass by the "Bundle macterm CLI"
 # post-build step. ssh runs askpass with one argument, the prompt, and
 # SSH_ASKPASS takes a program and no arguments, so this shim adds the verb.

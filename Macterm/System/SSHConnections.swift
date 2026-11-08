@@ -13,8 +13,8 @@ private let logger = Logger(subsystem: appBundleID, category: "SSHConnections")
 /// - Otherwise Macterm runs `ssh -M -N` with its own ControlPath in
 ///   `<App Support>/cm/`. Its prompts go to `macterm askpass`
 ///   (`SSH_ASKPASS_REQUIRE=force`), which asks the GUI (`SSHLoginPrompts`).
-///   The GUI answers only an askpass whose parent is one of these owned
-///   (`askpassOwner(forPeer:)`, design/006 §4).
+///   The GUI answers only the bundled askpass, started under one of these
+///   masters (`askpassOwner(forPeer:)`, design/006 §4).
 /// - A command over the master (`run`) never logs in by itself: `BatchMode`
 ///   refuses a prompt, and `ProxyCommand=/usr/bin/false` stops the direct
 ///   connection that ssh tries when the master does not answer. It fails
@@ -37,12 +37,16 @@ final class SSHConnections {
         var askpass: String?
         /// More environment for a master (the socket that askpass reports to).
         var environment: [String: String] = [:]
+        /// The executable that a peer of `ssh.askpass` must be. nil: any.
+        var askpassExecutable: String?
 
         static var live: Configuration {
             Configuration(
                 controlDirectory: FileStorage.appSupportDirectory().appendingPathComponent("cm", isDirectory: true),
                 askpass: Bundle.main.resourceURL?.appendingPathComponent("ssh-bridge/macterm-askpass").path,
-                environment: [SSHConnections.askpassSocketVariable: ControlSocketServer.defaultSocketPath()]
+                environment: [SSHConnections.askpassSocketVariable: ControlSocketServer.defaultSocketPath()],
+                // The shim execs the bundled CLI, so the peer runs it.
+                askpassExecutable: Bundle.main.resourceURL?.appendingPathComponent("bin/macterm").resolvingSymlinksInPath().path
             )
         }
     }
@@ -124,6 +128,8 @@ final class SSHConnections {
             "-o", "ControlMaster=no",
             "-o", "BatchMode=yes",
             "-o", "ProxyCommand=/usr/bin/false",
+            // A `RemoteCommand` of the user's config refuses a command line.
+            "-o", "RemoteCommand=none",
             "-T", "--", destination, command,
         ], timeout: timeout)
         guard let outcome else { throw Failure.cannotStart(configuration.ssh.joined(separator: " ")) }
@@ -145,15 +151,34 @@ final class SSHConnections {
         routes.removeAll()
     }
 
-    /// The host of the master that is the parent of `pid`, or nil when no
-    /// master of Macterm started that process. ssh runs its askpass with a
-    /// direct `exec` (`readpass.c`), so the askpass's parent is the master.
+    /// The host and the master pid for an askpass `pid`, or nil when no
+    /// master of Macterm started that process.
+    ///
+    /// - The peer must run `askpassExecutable`. A pid alone can be reused.
+    /// - A master of Macterm must be its parent, or an ancestor up to
+    ///   `askpassAncestry` steps above it. ssh runs its askpass with a direct
+    ///   `exec` (`readpass.c`), so for the login of the host itself the
+    ///   parent is the master. A `ProxyJump` host's login comes from an ssh
+    ///   that the master started through `sh -c`, two steps lower.
     func askpassOwner(forPeer pid: pid_t) -> (host: String, pid: pid_t)? {
-        guard let parent = ProcessInspector.parentPID(of: pid) else { return nil }
-        for (host, process) in owned where process.isRunning && process.processIdentifier == parent {
-            return (host, parent)
+        if let expected = configuration.askpassExecutable, !Self.process(pid, runs: expected) { return nil }
+        var ancestor = pid
+        for _ in 0 ..< Self.askpassAncestry {
+            guard let parent = ProcessInspector.parentPID(of: ancestor), parent > 1 else { return nil }
+            for (host, process) in owned where process.isRunning && process.processIdentifier == parent {
+                return (host, parent)
+            }
+            ancestor = parent
         }
         return nil
+    }
+
+    static let askpassAncestry = 4
+
+    /// Whether `pid` runs the executable at `path`, with links resolved.
+    nonisolated static func process(_ pid: pid_t, runs path: String) -> Bool {
+        guard let actual = ProcessInspector.executablePath(pid: pid) else { return false }
+        return URL(fileURLWithPath: actual).resolvingSymlinksInPath().path == URL(fileURLWithPath: path).resolvingSymlinksInPath().path
     }
 
     // MARK: - Connect
@@ -196,8 +221,13 @@ final class SSHConnections {
         try FileManager.default.createDirectory(
             at: configuration.controlDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]
         )
-        // A socket that a master of an earlier run left. ssh refuses to
-        // listen on a path that exists.
+        // A master of an earlier run that the app did not end (a crash, a
+        // force quit) still listens there. End it, so that it does not stay
+        // with no socket. Then remove what is left: ssh refuses to listen on
+        // a path that exists.
+        if await controlAnswers(destination, at: path) {
+            _ = await runSSH(["-O", "exit", "-S", path, "--", destination], timeout: .seconds(5))
+        }
         unlink(path)
 
         guard let executable = configuration.ssh.first else { throw Failure.cannotStart("no ssh") }
@@ -234,7 +264,7 @@ final class SSHConnections {
 
         // ssh listens on the control socket only after the login.
         while !FileManager.default.fileExists(atPath: path) {
-            guard process.isRunning, !Task.isCancelled else {
+            guard process.isRunning else {
                 if process.isRunning { process.terminate() }
                 await stderr.finish(within: ProcessRunner.drainTimeout)
                 if owned[destination] === process { owned[destination] = nil }
@@ -244,7 +274,7 @@ final class SSHConnections {
             }
             try? await Task.sleep(for: .milliseconds(50))
         }
-        stderr.stop()
+        stderr.discard()
         let count = logins[destination, default: 0] + 1
         logins[destination] = count
         logger.info("ssh login: host=\(destination, privacy: .public) logins=\(count, privacy: .public)")

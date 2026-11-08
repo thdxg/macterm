@@ -220,7 +220,7 @@ targets:
           mkdir -p "$SHIM_DIR"
           cp "$SRCROOT/scripts/ghostty-shim.sh" "$SHIM_DIR/ghostty"
           chmod +x "$SHIM_DIR/ghostty"
-          # The SSH_ASKPASS of a host's ssh master (SSHMasters,
+          # The SSH_ASKPASS of a host's ssh master (SSHConnections,
           # scripts/askpass-shim.sh).
           cp "$SRCROOT/scripts/askpass-shim.sh" "$SHIM_DIR/macterm-askpass"
           chmod +x "$SHIM_DIR/macterm-askpass"

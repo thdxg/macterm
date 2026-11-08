@@ -138,8 +138,54 @@ struct SSHConnectionsTests {
         #expect(prompts.contains("passphrase"))
     }
 
+    @Test
+    func the_peer_must_run_the_bundled_askpass() throws {
+        let own = try #require(ProcessInspector.executablePath(pid: getpid()))
+        #expect(SSHConnections.process(getpid(), runs: own))
+        #expect(!SSHConnections.process(getpid(), runs: "/bin/ls"))
+    }
+
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
-    func a_refused_login_fails_and_a_command_never_logs_in_by_itself() async throws {
+    func the_askpass_of_a_login_belongs_to_its_connection() async throws {
+        let sshd = try LocalSSHD(passphrase: "open sesame")
+        defer { sshd.stop() }
+        let pidFile = sshd.directory.appendingPathComponent("askpass.pid")
+        let go = sshd.directory.appendingPathComponent("go")
+        let askpass = sshd.directory.appendingPathComponent("askpass")
+        // It waits until the test has looked at it, as the real one waits
+        // for the user.
+        try """
+        #!/bin/sh
+        echo $$ > '\(pidFile.path)'
+        i=0
+        while [ ! -e '\(go.path)' ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+        echo 'open sesame'
+
+        """.write(to: askpass, atomically: true, encoding: .utf8)
+        chmod(askpass.path, 0o700)
+        var configuration = sshd.configuration
+        // As in the app: ssh through env, so the pid chain is the same.
+        configuration.ssh = ["/usr/bin/env", "ssh"]
+        configuration.askpass = askpass.path
+
+        let connections = SSHConnections(configuration: configuration)
+        defer { connections.disconnectAll() }
+        let login = Task { try await connections.connect("box") }
+        var pid: pid_t?
+        for _ in 0 ..< 100 where pid == nil {
+            try await Task.sleep(for: .milliseconds(100))
+            pid = (try? String(contentsOf: pidFile, encoding: .utf8)).flatMap { pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        }
+        let askpassPID = try #require(pid)
+        #expect(connections.askpassOwner(forPeer: askpassPID)?.host == "box")
+        #expect(connections.askpassOwner(forPeer: getpid()) == nil)
+        FileManager.default.createFile(atPath: go.path, contents: nil)
+        _ = try await login.value
+        #expect(connections.logins["box"] == 1)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_refused_login_fails_and_counts_no_login() async throws {
         let sshd = try LocalSSHD(passphrase: "right")
         defer { sshd.stop() }
         let askpass = sshd.directory.appendingPathComponent("askpass")
