@@ -17,6 +17,7 @@ const foreground = @import("foreground.zig");
 const schema = @import("protocol/schema.zig");
 const v2session = @import("session.zig");
 const runtime = @import("runtime.zig");
+const v2attach = @import("attach.zig");
 const Daemon = loop.Daemon;
 const version = build_options.version;
 const ghostty_version = build_options.ghostty_version;
@@ -75,6 +76,7 @@ fn mainImpl(init: std.process.Init) !void {
         const shell = init.environ_map.get("SHELL") orelse "/bin/sh";
         if (std.mem.eql(u8, c, "session")) return sessionCommand(gpa, io, init.environ_map, shell, &args);
         if (std.mem.eql(u8, c, v2session.reexec_command)) return sessionEntry(gpa, io, init.environ_map, &args);
+        if (std.mem.eql(u8, c, "connect")) return connectCommand(gpa, io, init.environ_map, &args);
     }
 
     var cfg = try Cfg.init(gpa, io);
@@ -381,6 +383,35 @@ fn sessionCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.En
         },
         else => return printError(io, "cannot start session \"{s}\": {s}", .{ opts.name, @errorName(err) }),
     };
+}
+
+/// `zmx connect <name>`: the pane's client of a v2 session (attach.zig). It
+/// becomes `macterm attach` when v1's `attach` goes (design/007 §6).
+fn connectCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, args: anytype) !void {
+    const name = args.next() orelse return printError(io, "session name required", .{});
+    if (args.next()) |extra| return printError(io, "unexpected argument \"{s}\"", .{extra});
+    const dir = runtime.resolveDir(gpa, env) catch return printError(io, "no runtime directory: set {s}", .{runtime.dir_env});
+    defer gpa.free(dir);
+    const outcome = v2attach.run(gpa, dir, name) catch |err| switch (err) {
+        error.Sighup, error.Sigint, error.Sigterm => return err,
+        error.InvalidName => return printError(io, "invalid session name \"{s}\"", .{name}),
+        error.RuntimeDir => return printError(io, "runtime directory {s} failed the check", .{dir}),
+        error.NoSession => return printError(io, "no session \"{s}\"", .{name}),
+        error.WrongPeer => return printError(io, "session \"{s}\" belongs to another user", .{name}),
+        error.NoAnswer => return printError(io, "session \"{s}\" did not answer", .{name}),
+        error.Protocol => return printError(io, "connection to session \"{s}\" failed", .{name}),
+        error.OutOfMemory => return err,
+    };
+    switch (outcome) {
+        .session_too_old => |o| return printError(io, "session \"{s}\" speaks protocol level {d}, and this build needs level {d} or later", .{ name, o.level, o.min_level }),
+        .refused => |r| {
+            if (std.mem.eql(u8, r.reason, "level_too_low"))
+                return printError(io, "session \"{s}\" needs protocol level {d} or later, and this build speaks level {d}", .{ name, r.needs_level, v2attach.protocol_level });
+            return printError(io, "session \"{s}\" refused this build: {s}", .{ name, r.reason });
+        },
+        .closed => return printError(io, "session \"{s}\" closed", .{name}),
+        else => std.process.exit(v2attach.exitCode(outcome)),
+    }
 }
 
 /// The macOS v2 session after its disclaiming re-exec; not a user command.
