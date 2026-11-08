@@ -1,7 +1,11 @@
 version: 2
 updates:
+  # The workflows and the composite actions in .github/actions, in one
+  # weekly PR, so that a pin in an action cannot stay behind the workflows.
   - package-ecosystem: github-actions
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: weekly
       day: monday
