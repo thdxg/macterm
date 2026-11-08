@@ -140,10 +140,7 @@ pub fn start(gpa: std.mem.Allocator, io: std.Io, dir: []const u8, opts: Options)
 
 /// The `__session` entry on macOS, after the disclaiming re-exec.
 pub fn resumeAfterReexec(dir: []const u8, opts: Options, listen_fd: i32) noreturn {
-    // The re-exec cleared CLOEXEC so that the socket lived on. Set it again,
-    // or the shell and every program in the pane would hold it, and could
-    // accept the next client in place of the session.
-    _ = lib_posix.fcntl(listen_fd, lib_posix.F.SETFD, std.c.FD_CLOEXEC) catch {};
+    // `daemonize.takeReexecState` already set CLOEXEC on `listen_fd` again.
     const cmd = daemonize.createCmdZ(opts.shell, opts.command) catch std.process.exit(1);
     const pty = daemonize.spawnPty(opts.name, cmd, opts.size, runtime.session_env) catch |err| {
         std.log.err("session {s}: pty failed: {s}", .{ opts.name, @errorName(err) });
