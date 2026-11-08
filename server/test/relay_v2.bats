@@ -64,11 +64,25 @@ c.wait_output(a, "still-a4")
 assert len(c.frames.get(b, [])) == seen, c.frames[b][seen:]
 assert c.call("session.info", id="b")["session"]["state"] == "running"
 
+# Input that comes just before the close still reaches the session.
+import os
+from v2client import frame, pack, BYTES, MSG, CONTROL
+path = os.path.join(os.environ["RT"], "closed")
+d = c.call("session.create", id="d", command=[b"/bin/sh"])
+dc = c.open("d")
+c.wait_msg(dc, "state")
+rid = c.next_id
+c.next_id += 1
+c.sock.sendall(frame(dc, BYTES, ("printf x > %s\r" % path).encode())
+               + frame(CONTROL, MSG, pack({"id": rid, "m": "channel.close", "a": {"channel": dc}})))
+c.wait(lambda: c.response(rid) is not None, what="the close")
+c.wait(lambda: os.path.exists(path), what="the input before the close")
+
 # The end of the stream ends the proxy, and the sessions stay.
 c.close()
 assert c.proc.returncode == 0, c.proc.returncode
 again = RelayClient()
-assert sorted(s["id"] for s in again.call("session.list")["sessions"]) == ["a", "b"]
+assert sorted(s["id"] for s in again.call("session.list")["sessions"]) == ["a", "b", "d"]
 again.close()
 PY
 }
@@ -168,6 +182,9 @@ c.count_only.discard(ch)
 c.wait(lambda: any(v.get("t") == "snapshot.start" and v["a"] == {"scrollback": False}
                    for v in c.messages(ch)), timeout=20, what="a snapshot after the skip")
 c.wait_output(ch, "done-9", timeout=60)
+# The output that waited was dropped, not sent late.
+got = sum(n for k, n in c.frames[ch] if k == "bytes")
+assert got < 2000000, got
 c.close()
 PY
 }

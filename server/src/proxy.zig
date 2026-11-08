@@ -26,6 +26,8 @@ pub fn connect(gpa: std.mem.Allocator, dir: []const u8) !i32 {
             else => return err,
         };
         if (ipc.connectSession(path)) |fd| return fd else |err| if (tries >= 3) return err;
+        var ts: std.c.timespec = .{ .sec = 0, .nsec = 50 * std.time.ns_per_ms };
+        _ = std.c.nanosleep(&ts, null);
     }
 }
 
@@ -33,8 +35,9 @@ pub fn connect(gpa: std.mem.Allocator, dir: []const u8) !i32 {
 /// connection. At the end of `in`, the server gets the end of the stream,
 /// and the proxy waits for it to close.
 pub fn pump(sock: i32, in: i32, out: i32) void {
-    // Small, as the server's send buffer: what waits here goes before
-    // channel 0 (relay.zig).
+    // The proxy holds at most this much of the server's output while ssh
+    // does not read. It goes out before any later channel 0 frame, so keep
+    // it small, as the server's send buffer (relay.zig).
     var buf: [16 * 1024]u8 = undefined;
     var in_open = true;
     while (true) {

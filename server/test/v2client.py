@@ -258,7 +258,7 @@ class RelayClient:
     app reaches a host's server through ssh. Each pane is a channel of the
     one stream (src/relay.zig)."""
 
-    def __init__(self, zmx=None, keep=True):
+    def __init__(self, zmx=None):
         import subprocess
 
         ours, theirs = socket.socketpair()

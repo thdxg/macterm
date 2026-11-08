@@ -215,11 +215,11 @@ const Peer = struct {
         return n;
     }
 
-    /// What waits for this client and that no skip can drop. Output has a
+    /// What waits for this client and that no skip can drop. The rest has a
     /// cap for each channel (`relay.skip_bytes`).
     fn kept(p: *const Peer) usize {
         var n = p.out.len() + p.control.bytes;
-        for (p.channels.items) |ch| n += ch.q.bytes - ch.q.output;
+        for (p.channels.items) |ch| n += ch.q.bytes - ch.q.stale().bytes;
         return n;
     }
 };
@@ -239,7 +239,10 @@ const Channel = struct {
     q: relay.Queue = .{},
     flow: relay.Flow = .{},
     greeted: bool = false,
-    /// The client closed it, or the client is gone.
+    /// The `channel.open` request that waits for the session's `hello`.
+    open_re: ?u64 = null,
+    /// The client closed it. Its input that waits still goes to the session,
+    /// then the channel goes.
     closed: bool = false,
 
     fn deinit(ch: *Channel, gpa: std.mem.Allocator) void {
@@ -409,8 +412,10 @@ const Server = struct {
             for (s.entries.items) |e| try fds.append(s.gpa, .{ .fd = e.fd, .events = pollEvents(&e.out), .revents = 0 });
             chans.clearRetainingCapacity();
             for (s.peers.items) |p| for (p.channels.items) |ch| if (ch.fd >= 0) {
+                // A closed channel reads nothing more: it only sends its input.
+                const events: i16 = if (!ch.closed) pollEvents(&ch.to_session) else if (ch.to_session.len() > 0) lib_posix.POLL.OUT else 0;
                 try chans.append(s.gpa, .{ .peer = p, .ch = ch });
-                try fds.append(s.gpa, .{ .fd = ch.fd, .events = pollEvents(&ch.to_session), .revents = 0 });
+                try fds.append(s.gpa, .{ .fd = ch.fd, .events = events, .revents = 0 });
             };
 
             _ = try lib_posix.poll(fds.items, s.pollTimeout());
@@ -441,12 +446,12 @@ const Server = struct {
                     pfd.revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) s.entryGone(e);
             }
             for (chans.items, fds.items[2 + npeers + nentries ..][0..chans.items.len]) |c, pfd| {
-                if (c.peer.dead or c.ch.closed or c.ch.fd < 0) continue;
-                if (pfd.revents & lib_posix.POLL.IN != 0) s.readChannel(c.peer, c.ch);
-                if (c.ch.fd < 0 or c.ch.closed or c.peer.dead) continue;
-                if (pfd.revents & lib_posix.POLL.OUT != 0) s.writeChannel(c.ch);
+                if (c.peer.dead or c.ch.fd < 0) continue;
+                if (!c.ch.closed and pfd.revents & lib_posix.POLL.IN != 0) s.readChannel(c.peer, c.ch);
+                if (c.ch.fd < 0 or c.peer.dead) continue;
+                if (pfd.revents & lib_posix.POLL.OUT != 0) s.writeChannel(c.peer, c.ch);
                 if (c.ch.fd >= 0 and pfd.revents & lib_posix.POLL.IN == 0 and
-                    pfd.revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) s.channelGone(c.ch);
+                    pfd.revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) s.channelGone(c.peer, c.ch);
             }
             s.timers();
             s.sweep();
@@ -499,8 +504,8 @@ const Server = struct {
                 next = @min(next orelse d, d);
             }
         }
-        for (s.peers.items) |p| for (p.channels.items) |ch| if (ch.fd >= 0) {
-            if (ch.flow.deadline(&ch.q)) |d| next = @min(next orelse d, d);
+        for (s.peers.items) |p| for (p.channels.items) |ch| if (ch.fd >= 0 and !ch.closed) {
+            if (ch.flow.deadline(ch.q.stale())) |d| next = @min(next orelse d, d);
         };
         const d = next orelse return -1;
         return @intCast(std.math.clamp(d - t, 0, std.math.maxInt(i32)));
@@ -755,7 +760,7 @@ const Server = struct {
         }
         for (s.peers.items) |p| for (p.channels.items) |ch| {
             if (ch.fd < 0 or ch.closed) continue;
-            if (ch.flow.mustSkip(&ch.q, t)) s.skip(ch, t) else if (ch.flow.mustAskAgain(t)) s.askSnapshot(ch, t);
+            if (ch.flow.mustSkip(ch.q.stale(), t)) s.skip(ch, t) else if (ch.flow.mustAskAgain(t)) s.askSnapshot(ch, t);
         };
         for (s.peers.items) |p| if (!p.greeted and !p.dead and t - p.connected_at >= hello_ms) {
             std.log.info("server: a client sent no hello, closed", .{});
@@ -1050,13 +1055,15 @@ const Server = struct {
                 const ch = p.findChannel(args.channel) orelse
                     return s.replyError(p.id, re, "not_found", "No channel has this number.");
                 ch.closed = true;
+                ch.q.deinit(s.gpa);
                 s.reply(p.id, re, m.ChannelClose, .{});
             },
             m.ChannelPause => {
                 const ch = p.findChannel(args.channel) orelse
                     return s.replyError(p.id, re, "not_found", "No channel has this number.");
                 ch.flow.paused = true;
-                ch.q.dropOutput(s.gpa);
+                const open_kept = ch.q.dropStale(s.gpa);
+                ch.flow.discard_snapshot = ch.flow.in_snapshot and !open_kept;
                 s.reply(p.id, re, m.ChannelPause, .{});
             },
             m.ChannelResume => {
@@ -1190,7 +1197,7 @@ const Server = struct {
     }
 
     fn sendBody(s: *Server, p: *Peer, body: []const u8) void {
-        p.control.push(s.gpa, frame.control_channel, .msg, body, s.now(), false) catch {
+        p.control.push(s.gpa, frame.control_channel, .msg, body, s.now(), .message) catch {
             p.dead = true;
             return;
         };
@@ -1263,8 +1270,11 @@ const Server = struct {
         };
         p.next_channel +%= 1;
         if (p.next_channel == frame.control_channel) p.next_channel = 1;
+        // The reply goes when the session's `hello` comes, so that a session
+        // that refuses the server gives an error, not a channel that is
+        // silent.
+        ch.open_re = re;
         s.sendChannelControl(ch, s.hello());
-        s.reply(p.id, re, m.ChannelOpen, .{ .channel = ch.id });
     }
 
     /// A frame from the client on a pane channel goes to the session, never
@@ -1272,10 +1282,10 @@ const Server = struct {
     fn relayToSession(s: *Server, p: *Peer, f: frame.Frame) void {
         const ch = p.findChannel(f.channel) orelse return;
         if (ch.fd < 0) return;
-        ch.to_session.append(s.gpa, m.pane_channel, f.kind, f.body, false) catch return s.channelGone(ch);
+        ch.to_session.append(s.gpa, m.pane_channel, f.kind, f.body, false) catch return s.channelGone(p, ch);
         if (ch.to_session.len() > session.client_hard_cap) {
             std.log.warn("server: session {s} does not read its channel, closed", .{ch.session});
-            s.channelGone(ch);
+            s.channelGone(p, ch);
         }
     }
 
@@ -1283,10 +1293,10 @@ const Server = struct {
         var buf: [16 * 1024]u8 = undefined;
         const n = lib_posix.read(ch.fd, &buf) catch |err| switch (err) {
             error.WouldBlock => return,
-            else => return s.channelGone(ch),
+            else => return s.channelGone(p, ch),
         };
-        if (n == 0) return s.channelGone(ch);
-        ch.in.appendSlice(s.gpa, buf[0..n]) catch return s.channelGone(ch);
+        if (n == 0) return s.channelGone(p, ch);
+        ch.in.appendSlice(s.gpa, buf[0..n]) catch return s.channelGone(p, ch);
 
         const t = s.now();
         var used: usize = 0;
@@ -1295,86 +1305,96 @@ const Server = struct {
             const rest = ch.in.items[used..];
             if (rest.len >= frame.header_len and std.mem.readInt(u32, rest[0..4], .little) > frame_max) {
                 std.log.warn("server: session {s} sent a frame over 1 MiB on a channel, closed", .{ch.session});
-                return s.channelGone(ch);
+                return s.channelGone(p, ch);
             }
-            const parsed = (frame.parse(rest) catch return s.channelGone(ch)) orelse break;
+            const parsed = (frame.parse(rest) catch return s.channelGone(p, ch)) orelse break;
             used += parsed.len;
             s.handleChannelFrame(p, ch, parsed.frame, t);
         }
-        if (ch.fd >= 0 and ch.flow.mustSkip(&ch.q, t)) s.skip(ch, t);
+        if (ch.fd >= 0 and ch.flow.mustSkip(ch.q.stale(), t)) s.skip(ch, t);
         s.checkPeerCap(p);
     }
 
     fn handleChannelFrame(s: *Server, p: *Peer, ch: *Channel, f: frame.Frame, t: i64) void {
-        _ = p;
         var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
         defer arena_state.deinit();
         const arena = arena_state.allocator();
 
         if (f.channel == frame.control_channel) {
-            const msg = m.decodeControl(arena, f.body) catch return s.channelGone(ch);
+            const msg = m.decodeControl(arena, f.body) catch return s.channelGone(p, ch);
             switch (msg) {
                 .hello => |h| if (!ch.greeted) switch (m.negotiate(s.hello(), h)) {
-                    .speak => ch.greeted = true,
+                    .speak => {
+                        ch.greeted = true;
+                        if (ch.open_re) |re| s.reply(p.id, re, m.ChannelOpen, .{ .channel = ch.id });
+                        ch.open_re = null;
+                    },
                     .refuse => |r| {
                         std.log.info("server: session {s} speaks level {d}, channel closed", .{ ch.session, h.level });
                         s.sendChannelControl(ch, r);
                         _ = lib_posix.write(ch.fd, ch.to_session.buf.items) catch {};
-                        s.channelGone(ch);
+                        s.channelGone(p, ch);
                     },
                 },
-                .refuse => s.channelGone(ch),
+                .refuse => s.channelGone(p, ch),
                 else => {},
             }
             return;
         }
         if (!ch.greeted or f.channel != m.pane_channel) return;
-        const action: relay.Inbound = switch (f.kind) {
+        const class: relay.Class = switch (f.kind) {
             .msg => blk: {
-                const msg = msgpack.decodeSlice(m.PaneMessage, arena, f.body) catch return s.channelGone(ch);
-                break :blk ch.flow.message(
-                    std.mem.eql(u8, msg.t, m.SnapshotStart.name),
-                    std.mem.eql(u8, msg.t, m.SnapshotEnd.name),
-                );
+                const msg = msgpack.decodeSlice(m.PaneMessage, arena, f.body) catch return s.channelGone(p, ch);
+                if (std.mem.eql(u8, msg.t, m.SnapshotStart.name)) break :blk .snapshot_start;
+                if (std.mem.eql(u8, msg.t, m.SnapshotEnd.name)) break :blk .snapshot_end;
+                break :blk .message;
             },
-            .bytes => ch.flow.bytes(),
+            .bytes => if (ch.flow.in_snapshot) .snapshot else .output,
             _ => return,
         };
-        if (action == .drop) return;
-        ch.q.push(s.gpa, ch.id, f.kind, f.body, t, action == .output) catch s.channelGone(ch);
+        if (ch.flow.classify(class) == .drop) return;
+        ch.q.push(s.gpa, ch.id, f.kind, f.body, t, class) catch s.channelGone(p, ch);
     }
 
     /// The channel's output is too old or too large: drop it, and show the
     /// screen as it is now (design/003 §6).
     fn skip(s: *Server, ch: *Channel, t: i64) void {
         std.log.info("server: channel {d} (session {s}) fell behind, output dropped", .{ ch.id, ch.session });
-        ch.q.dropOutput(s.gpa);
-        s.askSnapshot(ch, t);
+        ch.flow.skipped(ch.q.dropStale(s.gpa), t);
+        s.sendRefresh(ch);
     }
 
     /// Output stops until the session's snapshot starts.
     fn askSnapshot(s: *Server, ch: *Channel, t: i64) void {
         ch.flow.want_snapshot = true;
         ch.flow.asked_at = t;
+        s.sendRefresh(ch);
+    }
+
+    fn sendRefresh(s: *Server, ch: *Channel) void {
         var out: std.Io.Writer.Allocating = .init(s.gpa);
         defer out.deinit();
         m.encodePane(&out.writer, m.Refresh, .{}) catch return;
-        ch.to_session.append(s.gpa, m.pane_channel, .msg, out.written(), false) catch s.channelGone(ch);
+        ch.to_session.append(s.gpa, m.pane_channel, .msg, out.written(), false) catch {
+            lib_posix.close(ch.fd);
+            ch.fd = -1;
+        };
     }
 
-    fn writeChannel(s: *Server, ch: *Channel) void {
+    fn writeChannel(s: *Server, p: *Peer, ch: *Channel) void {
         if (ch.to_session.len() == 0) return;
         const n = lib_posix.write(ch.fd, ch.to_session.buf.items) catch |err| switch (err) {
             error.WouldBlock => return,
-            else => return s.channelGone(ch),
+            else => return s.channelGone(p, ch),
         };
         ch.to_session.consume(n);
     }
 
     /// The session closed the channel's connection. The frames that wait
     /// still go to the client (a last `exit`), then the channel goes.
-    fn channelGone(s: *Server, ch: *Channel) void {
-        _ = s;
+    fn channelGone(s: *Server, p: *Peer, ch: *Channel) void {
+        if (ch.open_re) |re| s.replyError(p.id, re, "unavailable", "The session closed the connection.");
+        ch.open_re = null;
         if (ch.fd < 0) return;
         lib_posix.close(ch.fd);
         ch.fd = -1;
@@ -1383,7 +1403,10 @@ const Server = struct {
     fn sendChannelControl(s: *Server, ch: *Channel, value: anytype) void {
         const body = msgpack.encodeAlloc(s.gpa, value) catch return;
         defer s.gpa.free(body);
-        ch.to_session.append(s.gpa, frame.control_channel, .msg, body, false) catch s.channelGone(ch);
+        ch.to_session.append(s.gpa, frame.control_channel, .msg, body, false) catch {
+            lib_posix.close(ch.fd);
+            ch.fd = -1;
+        };
     }
 
     fn sweep(s: *Server) void {
@@ -1400,12 +1423,13 @@ const Server = struct {
                 s.gpa.destroy(p);
                 _ = s.peers.orderedRemove(i);
             } else {
-                // A channel that the client closed goes now. A channel whose
-                // session left goes when its last frames went out.
+                // A channel that the client closed goes when its input went
+                // to the session. A channel whose session left goes when its
+                // last frames went to the client.
                 var j: usize = 0;
                 while (j < p.channels.items.len) {
                     const ch = p.channels.items[j];
-                    if (ch.closed or (ch.fd < 0 and ch.q.empty())) {
+                    if (if (ch.closed) ch.fd < 0 or ch.to_session.len() == 0 else ch.fd < 0 and ch.q.empty()) {
                         ch.deinit(s.gpa);
                         _ = p.channels.orderedRemove(j);
                         if (p.turn > j) p.turn -= 1;
