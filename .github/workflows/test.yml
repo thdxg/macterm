@@ -47,6 +47,8 @@ jobs:
               - "Macterm/Info.plist"
               - "Macterm/Macterm.entitlements"
               - "Macterm/*.xcstrings"
+              # The frames that ProtocolFixtureTests decodes.
+              - "server/schema/**"
             # The extensions anyone can install: the unit tests read each
             # through the validator; nothing else needs to run for them.
             extensions:

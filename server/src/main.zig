@@ -14,8 +14,10 @@ const Cfg = @import("cfg.zig");
 const loop = @import("loop.zig");
 const daemonize = @import("daemonize.zig");
 const foreground = @import("foreground.zig");
+const schema = @import("protocol/schema.zig");
 const v2session = @import("session.zig");
 const runtime = @import("runtime.zig");
+const v2attach = @import("attach.zig");
 const Daemon = loop.Daemon;
 const version = build_options.version;
 const ghostty_version = build_options.ghostty_version;
@@ -61,6 +63,11 @@ fn mainImpl(init: std.process.Init) !void {
     _ = args.next(); // skip program name
     const first_arg = args.next();
 
+    // Needs no config, no log and no session directory: CI runs it.
+    if (first_arg != null and std.mem.eql(u8, first_arg.?, "__schema")) {
+        return schemaCommand(gpa, io, args.next(), args.next());
+    }
+
     // The v2 session runs before `Cfg`: it uses none of v1's directories or
     // its log (see session.zig).
     if (first_arg) |c| {
@@ -69,6 +76,7 @@ fn mainImpl(init: std.process.Init) !void {
         const shell = init.environ_map.get("SHELL") orelse "/bin/sh";
         if (std.mem.eql(u8, c, "session")) return sessionCommand(gpa, io, init.environ_map, shell, &args);
         if (std.mem.eql(u8, c, v2session.reexec_command)) return sessionEntry(gpa, io, init.environ_map, &args);
+        if (std.mem.eql(u8, c, "connect")) return connectCommand(gpa, io, init.environ_map, &args);
     }
 
     var cfg = try Cfg.init(gpa, io);
@@ -377,6 +385,35 @@ fn sessionCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.En
     };
 }
 
+/// `zmx connect <name>`: the pane's client of a v2 session (attach.zig). It
+/// becomes `macterm attach` when v1's `attach` goes (design/007 §6).
+fn connectCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, args: anytype) !void {
+    const name = args.next() orelse return printError(io, "session name required", .{});
+    if (args.next()) |extra| return printError(io, "unexpected argument \"{s}\"", .{extra});
+    const dir = runtime.resolveDir(gpa, env) catch return printError(io, "no runtime directory: set {s}", .{runtime.dir_env});
+    defer gpa.free(dir);
+    const outcome = v2attach.run(gpa, dir, name) catch |err| switch (err) {
+        error.Sighup, error.Sigint, error.Sigterm => return err,
+        error.InvalidName => return printError(io, "invalid session name \"{s}\"", .{name}),
+        error.RuntimeDir => return printError(io, "runtime directory {s} failed the check", .{dir}),
+        error.NoSession => return printError(io, "no session \"{s}\"", .{name}),
+        error.WrongPeer => return printError(io, "session \"{s}\" belongs to another user", .{name}),
+        error.NoAnswer => return printError(io, "session \"{s}\" did not answer", .{name}),
+        error.Protocol => return printError(io, "connection to session \"{s}\" failed", .{name}),
+        error.OutOfMemory => return err,
+    };
+    switch (outcome) {
+        .session_too_old => |o| return printError(io, "session \"{s}\" speaks protocol level {d}, and this build needs level {d} or later", .{ name, o.level, o.min_level }),
+        .refused => |r| {
+            if (std.mem.eql(u8, r.reason, "level_too_low"))
+                return printError(io, "session \"{s}\" needs protocol level {d} or later, and this build speaks level {d}", .{ name, r.needs_level, v2attach.protocol_level });
+            return printError(io, "session \"{s}\" refused this build: {s}", .{ name, r.reason });
+        },
+        .closed => return printError(io, "session \"{s}\" closed", .{name}),
+        else => std.process.exit(v2attach.exitCode(outcome)),
+    }
+}
+
 /// The macOS v2 session after its disclaiming re-exec; not a user command.
 /// argv is `__session <name> [-- command...]`, the rest rides in
 /// `daemonize.reexec_env`, as for `__daemon`.
@@ -490,6 +527,41 @@ fn help(io: std.Io) !void {
     var w = std.Io.File.stdout().writer(io, &buf);
     try w.interface.print(help_text, .{});
     try w.interface.flush();
+}
+
+/// `__schema swift | metadata | fixtures` writes that file of the protocol
+/// schema to stdout. `__schema check [old-metadata.json]` checks this build's
+/// schema against an older one and exits 1 on a problem (design/003 §3).
+/// Hidden: `scripts/protocol.sh` runs it.
+fn schemaCommand(gpa: std.mem.Allocator, io: std.Io, what: ?[]const u8, path: ?[]const u8) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var buf: [4096]u8 = undefined;
+    var out = std.Io.File.stdout().writer(io, &buf);
+    const w = &out.interface;
+    const kind = what orelse printError(io, "__schema needs swift, metadata, fixtures or check", .{});
+    if (std.mem.eql(u8, kind, "swift")) {
+        try schema.writeSwift(w, schema.metadata);
+    } else if (std.mem.eql(u8, kind, "metadata")) {
+        try schema.writeMetadata(w, schema.metadata);
+    } else if (std.mem.eql(u8, kind, "fixtures")) {
+        try schema.writeFixtures(arena, w);
+    } else if (std.mem.eql(u8, kind, "check")) {
+        const old: ?schema.Metadata = if (path) |p| blk: {
+            const text = std.Io.Dir.cwd().readFileAlloc(io, p, arena, .limited(16 * 1024 * 1024)) catch |err|
+                printError(io, "cannot read {s}: {s}", .{ p, @errorName(err) });
+            break :blk std.json.parseFromSliceLeaky(schema.Metadata, arena, text, .{ .ignore_unknown_fields = true }) catch |err|
+                printError(io, "cannot parse {s}: {s}", .{ p, @errorName(err) });
+        } else null;
+        const problems = try schema.check(w, old, schema.metadata);
+        try w.flush();
+        if (problems > 0) printError(io, "{d} problems in the protocol schema", .{problems});
+    } else {
+        printError(io, "unknown __schema output {s}", .{kind});
+    }
+    try w.flush();
 }
 
 fn printVersion(io: std.Io, cfg: *Cfg) !void {
