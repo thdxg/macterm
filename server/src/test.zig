@@ -17,4 +17,6 @@ comptime {
     _ = @import("session.zig");
     _ = @import("server.zig");
     _ = @import("attach.zig");
+    _ = @import("relay.zig");
+    _ = @import("proxy.zig");
 }

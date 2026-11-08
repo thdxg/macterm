@@ -171,6 +171,39 @@ pub const ChannelClose = struct {
     pub const Result = struct {};
 };
 
+/// Stops a channel's pane output, for a pane that no one sees. The session's
+/// messages on the channel (its exit, its state) still come (design/003 §6).
+pub const ChannelPause = struct {
+    pub const name = "channel.pause";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { channel: u32 };
+    pub const Result = struct {};
+};
+
+/// Starts a paused channel's output again. A snapshot of the screen comes
+/// first on the channel.
+pub const ChannelResume = struct {
+    pub const name = "channel.resume";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { channel: u32 };
+    pub const Result = struct {};
+};
+
+/// Tells a client that the link is up. Any frame does the same; this one gets
+/// an answer when nothing else moves (design/005, "Reconnect").
+pub const Ping = struct {
+    pub const name = "ping";
+    pub const since = 1;
+    pub const senders = everyone;
+
+    pub const Args = struct {};
+    pub const Result = struct {};
+};
+
 /// What the server knows of one session (design/001). The session process
 /// holds all of it, so a new server reads it again from each session.
 pub const Session = struct {
@@ -272,7 +305,7 @@ pub const ServerExit = struct {
 };
 
 /// Every request method. A new method goes here.
-pub const methods = .{ ChannelOpen, ChannelClose, SessionCreate, SessionList, SessionInfo, SessionKill, ServerExit };
+pub const methods = .{ ChannelOpen, ChannelClose, ChannelPause, ChannelResume, Ping, SessionCreate, SessionList, SessionInfo, SessionKill, ServerExit };
 
 // ── Events ──────────────────────────────────────────────────────────────────
 
@@ -454,8 +487,18 @@ pub const End = struct {
     pub const senders = from_client;
 };
 
+/// The client asks for a snapshot of the screen, after it dropped output or
+/// did not show it (a server's relay, design/003 §6). The session drops the
+/// output that waits for that client and sends the snapshot, with no
+/// scrollback. A client that does not show the pane gets nothing.
+pub const Refresh = struct {
+    pub const name = "refresh";
+    pub const since = 1;
+    pub const senders = from_client;
+};
+
 /// Every message on a pane channel. A new one goes here.
-pub const pane_messages = .{ State, Attach, Resize, Claim, Lead, SnapshotStart, SnapshotEnd, Exit, Take, End };
+pub const pane_messages = .{ State, Attach, Resize, Claim, Lead, SnapshotStart, SnapshotEnd, Exit, Take, End, Refresh };
 
 pub fn encodePane(w: *std.Io.Writer, comptime M: type, value: M) std.Io.Writer.Error!void {
     try msgpack.encode(w, struct { t: []const u8, a: M }{ .t = M.name, .a = value });

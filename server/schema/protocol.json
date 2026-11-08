@@ -56,6 +56,38 @@
       "result": "ChannelClose.Result"
     },
     {
+      "name": "channel.pause",
+      "type": "ChannelPause",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "ChannelPause.Args",
+      "result": "ChannelPause.Result"
+    },
+    {
+      "name": "channel.resume",
+      "type": "ChannelResume",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "ChannelResume.Args",
+      "result": "ChannelResume.Result"
+    },
+    {
+      "name": "ping",
+      "type": "Ping",
+      "since": 1,
+      "senders": [
+        "local",
+        "session",
+        "remote"
+      ],
+      "args": "Ping.Args",
+      "result": "Ping.Result"
+    },
+    {
       "name": "session.create",
       "type": "SessionCreate",
       "since": 1,
@@ -194,6 +226,14 @@
     {
       "name": "end",
       "type": "End",
+      "since": 1,
+      "senders": [
+        "local"
+      ]
+    },
+    {
+      "name": "refresh",
+      "type": "Refresh",
       "since": 1,
       "senders": [
         "local"
@@ -448,6 +488,56 @@
     },
     {
       "name": "ChannelClose.Result",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "ChannelPause.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "channel",
+          "type": "u32",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ChannelPause.Result",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "ChannelResume.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "channel",
+          "type": "u32",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ChannelResume.Result",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "Ping.Args",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "Ping.Result",
       "kind": "struct",
       "fields": [],
       "cases": []
@@ -857,6 +947,12 @@
     },
     {
       "name": "End",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "Refresh",
       "kind": "struct",
       "fields": [],
       "cases": []
