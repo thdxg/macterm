@@ -140,22 +140,18 @@ pub const Process = struct {
 };
 
 /// Reads the name and command line of `pid`. `comm_buf` and `args_buf`
-/// receive the fields; `scratch` is for the raw kernel data (macOS). null
-/// when the process is gone or cannot be read; a process whose command
-/// line alone cannot be read gets an empty `args`.
-pub fn readProcess(pid: lib_posix.pid_t, comm_buf: []u8, args_buf: []u8, scratch: []u8) ?Process {
+/// receive the fields; `scratch` is for the raw kernel data. On macOS that
+/// data holds the environment too, and a process whose data is longer than
+/// `scratch` is read into a buffer from `gpa`. null when the process is
+/// gone or cannot be read; a process whose command line alone cannot be
+/// read gets an empty `args`.
+pub fn readProcess(gpa: std.mem.Allocator, pid: lib_posix.pid_t, comm_buf: []u8, args_buf: []u8, scratch: []u8) ?Process {
     switch (builtin.os.tag) {
         .macos => {
             const n = macos.proc_pidpath(@intCast(pid), comm_buf.ptr, @intCast(comm_buf.len));
             if (n <= 0) return null;
             const comm = comm_buf[0..@intCast(n)];
-            var mib = [_]c_int{ macos.CTL_KERN, macos.KERN_PROCARGS2, @intCast(pid) };
-            var len: usize = scratch.len;
-            const args = if (std.c.sysctl(&mib, mib.len, @as(*anyopaque, @ptrCast(scratch.ptr)), &len, null, 0) == 0)
-                parseProcArgs2(scratch[0..len], args_buf)
-            else
-                "";
-            return .{ .comm = comm, .args = args };
+            return .{ .comm = comm, .args = macos.procArgs(gpa, pid, args_buf, scratch) };
         },
         .linux => {
             var path_buf: [64]u8 = undefined;
@@ -168,7 +164,7 @@ pub fn readProcess(pid: lib_posix.pid_t, comm_buf: []u8, args_buf: []u8, scratch
             return .{ .comm = comm, .args = args };
         },
         else => {
-            _ = .{ pid, comm_buf, args_buf, scratch };
+            _ = .{ gpa, pid, comm_buf, args_buf, scratch };
             return null;
         },
     }
@@ -178,6 +174,22 @@ const macos = struct {
     const CTL_KERN: c_int = 1;
     const KERN_PROCARGS2: c_int = 49;
     extern "c" fn proc_pidpath(pid: c_int, buffer: [*]u8, buffersize: u32) c_int;
+
+    /// The command line of `pid` from `KERN_PROCARGS2`, or "" when it
+    /// cannot be read. The data holds the environment after the arguments,
+    /// and the kernel fills a buffer that is too short from the end of the
+    /// data, so the size is asked first.
+    fn procArgs(gpa: std.mem.Allocator, pid: lib_posix.pid_t, args_buf: []u8, scratch: []u8) []const u8 {
+        var mib = [_]c_int{ CTL_KERN, KERN_PROCARGS2, @intCast(pid) };
+        var size: usize = 0;
+        if (std.c.sysctl(&mib, mib.len, null, &size, null, 0) != 0) return "";
+        const heap = if (size > scratch.len) gpa.alloc(u8, size) catch return "" else null;
+        defer if (heap) |h| gpa.free(h);
+        const raw = heap orelse scratch;
+        var len: usize = raw.len;
+        if (std.c.sysctl(&mib, mib.len, @as(*anyopaque, @ptrCast(raw.ptr)), &len, null, 0) != 0) return "";
+        return parseProcArgs2(raw[0..len], args_buf);
+    }
 };
 
 /// The command line from a `KERN_PROCARGS2` buffer: the argument count,
