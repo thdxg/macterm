@@ -1,7 +1,8 @@
 name: Build Release
 description: >-
   Build the universal Release app and its DMG with scripts/build.sh: the
-  pinned Xcode, GhosttyKit and zmx from setup, and, for a build that ships,
+  pinned Xcode, GhosttyKit from setup, the server from build/server, and,
+  for a build that ships,
   the stable signing certificate and the Sparkle public key.
 
 # One recipe for every Release build. release.yml (stable and beta),
@@ -12,7 +13,9 @@ description: >-
 # concurrency, its gates and its publish steps stay where they are.
 #
 # The caller checks out the commit first (with tags: the version comes from
-# them). The app lands in build/export/Macterm.app and the DMG in build/.
+# them), and downloads the `server` artifact of server-build.yml into
+# build/server. The app lands in build/export/Macterm.app and the DMG in
+# build/.
 #
 # DerivedData is deliberately NOT cached: a Release build is a clean build, so
 # the shipped binary can't inherit a stale incremental artifact.
@@ -62,7 +65,7 @@ runs:
       shell: bash
       run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
-    # GhosttyKit + bundled resources + zmx: the same key as the test and
+    # GhosttyKit + bundled resources: the same key as the test and
     # benchmark workflows, so a release rides the cache they keep warm.
     - name: Cache GhosttyKit
       uses: actions/cache@v6
@@ -71,8 +74,6 @@ runs:
           GhosttyKit.xcframework
           Macterm/Resources/ghostty
           Macterm/Resources/terminfo
-          Macterm/Resources/zmx
-          .zmx-tag
           .ghosttykit-tag
         # The tag stamp is cached with the artifacts it describes (test.yml).
         #

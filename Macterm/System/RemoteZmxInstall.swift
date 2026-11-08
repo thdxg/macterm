@@ -16,10 +16,6 @@ enum ZmxHostTarget: String, CaseIterable, Equatable {
     case linuxAarch64 = "aarch64-linux"
     case macOS = "universal-macos"
 
-    /// The release asset of `thdxg/zmx` for this target: a tarball that
-    /// holds one `zmx`.
-    var assetName: String { "zmx-\(rawValue).tar.gz" }
-
     var displayName: String {
         switch self {
         case .linuxX86_64: "Linux x86_64"
@@ -159,13 +155,13 @@ enum ZmxInstallVerdict: Equatable {
     }
 }
 
-/// The fork release this Macterm build was made with: its tag and the
-/// SHA-256 of each asset. `scripts/setup.sh` writes it into the bundle as
-/// `zmx-release.json` from the release's `.sha256` files, so an installer
-/// can check a download before it goes over ssh. A release from before the
-/// checksums lists no assets, and the sheet then says the build has no
-/// binary for the host.
+/// The server build this Macterm carries: its key (`scripts/build-server.sh`,
+/// the tree hash of `server/`) and the SHA-256 of each Linux build.
+/// `scripts/setup.sh` writes it into the bundle as `zmx-release.json`, so an
+/// installer can check a download before it goes over ssh. An asset with no
+/// checksum makes the sheet say the build has no binary for the host.
 struct ZmxRelease: Codable, Equatable {
+    /// The build key. `zmx version` of this build ends in `+thdxg.<tag>`.
     var tag: String
     /// Asset name → lowercase SHA-256 hex.
     var assets: [String: String]
@@ -185,26 +181,18 @@ struct ZmxRelease: Codable, Equatable {
 
     /// The checksum of the asset for `target`, nil when the release has none.
     func sha256(for target: ZmxHostTarget) -> String? {
-        assets[target.assetName].map { $0.lowercased() }
+        assets[assetName(for: target)].map { $0.lowercased() }
     }
 
-    /// Where GitHub serves the asset.
+    /// The tarball of this build for `target` (`macterm-<key>-<target>.tar.gz`).
+    func assetName(for target: ZmxHostTarget) -> String {
+        "macterm-\(tag)-\(target.rawValue).tar.gz"
+    }
+
+    /// Where GitHub serves the asset: the `server-prebuilt` release, which CI
+    /// fills for every build key on `main`.
     func downloadURL(for target: ZmxHostTarget) -> URL? {
-        URL(string: "https://github.com/thdxg/zmx/releases/download/\(tag)/\(target.assetName)")
-    }
-
-    /// The release file from the `<hash>  <name>` lines of the `.sha256`
-    /// files (`shasum -a 256` and `sha256sum` both print that shape).
-    static func make(tag: String, checksumLines: [String]) -> ZmxRelease {
-        var assets: [String: String] = [:]
-        for line in checksumLines {
-            let parts = line.split(whereSeparator: \.isWhitespace)
-            guard parts.count == 2, parts[0].count == 64 else { continue }
-            var name = String(parts[1])
-            if name.hasPrefix("*") { name.removeFirst() }
-            assets[name] = String(parts[0]).lowercased()
-        }
-        return ZmxRelease(tag: tag, assets: assets)
+        URL(string: "https://github.com/thdxg/macterm/releases/download/server-prebuilt/\(assetName(for: target))")
     }
 }
 

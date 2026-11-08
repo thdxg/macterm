@@ -189,8 +189,8 @@ targets:
       - sdk: QuartzCore.framework
       - sdk: UserNotifications.framework
     postCompileScripts:
-      # Copy the prebuilt zmx binary (downloaded by setup.sh from the thdxg/zmx
-      # release, like GhosttyKit) into the app bundle at
+      # Copy the session server (built from server/ or downloaded as its
+      # prebuilt by setup.sh) into the app bundle at
       # Contents/Resources/zmx/zmx — ZmxClient resolves it via Bundle.main.
       # Runs after compile so the bundle's Resources dir exists.
       - script: "${SRCROOT}/scripts/embed-zmx.sh"
