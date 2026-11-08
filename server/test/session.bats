@@ -90,19 +90,23 @@ load test_helper
 }
 
 @test "session: no program in the session holds the listen socket" {
-  # ls inherits the fds of the session's program, and lists them with their
-  # types. The listen socket must be CLOEXEC, also after the macOS daemon
-  # re-execs itself, or a program in the pane can accept a client in place of
-  # the session. The count of fds shows that the listing saw stdin to stderr.
-  start_session test-fds sh -c 'l=$(ls -lL /dev/fd/ 2>/dev/null); echo "sockets-$(echo "$l" | grep -c ^s)-fds-$(echo "$l" | grep -c ^[-bcdps])-listed"; exec sleep 30'
+  # The listen socket must be CLOEXEC, also after the macOS daemon re-execs
+  # itself, or a program in the pane can accept a client in place of the
+  # session. lsof names the socket by its path. The daemon that holds it is
+  # the control: it shows that lsof can see the path.
+  # `[ ]` and `|| false`: under bash 3.2 a false `[[ ]]` that is not the last
+  # line does not fail the test.
+  start_session test-fds sh -c 'echo "pids-$$-$PPID-listed"; exec sleep 30'
   wait_for_output test-fds listed
 
   run "$ZMX" history test-fds
-  # `[ ]`, not `[[ ]]` or `(( ))`: under bash 3.2 a false one of those
-  # that is not the last line does not fail the test.
-  [[ "$output" =~ sockets-([0-9]+)-fds-([0-9]+)-listed ]] || false
-  [ "${BASH_REMATCH[1]}" -eq 0 ]
-  [ "${BASH_REMATCH[2]}" -ge 3 ]
+  [[ "$output" =~ pids-([0-9]+)-([0-9]+)-listed ]] || false
+  local program="${BASH_REMATCH[1]}" daemon="${BASH_REMATCH[2]}"
+  run lsof -p "$daemon"
+  [[ "$output" == *"$ZMX_DIR/test-fds"* ]] || false
+  run lsof -p "$program"
+  [ -n "$output" ]
+  [[ "$output" != *"$ZMX_DIR/test-fds"* ]]
 }
 
 @test "list --short: shows only session names" {
