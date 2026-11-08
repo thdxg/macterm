@@ -182,7 +182,8 @@ to_epoch() {
 # pin. A literal tag costs nothing; only an explicit `latest` hits the network.
 # The session server, built from server/ at this commit (scripts/build-server.sh)
 # and embedded at Contents/Resources/zmx/zmx by embed-zmx.sh. The binary keeps
-# the name zmx until the app calls it by another.
+# the name zmx until the app calls it by another. The gzip builds for every
+# host target go to Contents/Resources/server/macterm-<key>-<target>.gz.
 #
 # Its key is the tree hash of server/ and protocol/ (build-server.sh). In order:
 #   1. A build for the key in build/server/: CI downloads its own server build
@@ -223,6 +224,13 @@ install_server() {
   mkdir -p "$SERVER_DIR"
   tar xzf "$dir/macterm-$key-universal-macos.tar.gz" -C "$SERVER_DIR" zmx
   chmod +x "$SERVER_DIR/zmx"
+  # The Linux builds go into the bundle as gzip files of the bare binary, for
+  # an install on a host (design/007 §3A). embed-zmx.sh adds the macOS one from
+  # the signed copy.
+  local target
+  for target in x86_64-linux aarch64-linux; do
+    tar xzf "$dir/macterm-$key-$target.tar.gz" -O zmx | gzip -n -9 > "$SERVER_DIR/macterm-$key-$target.gz"
+  done
   python3 - "$key" "$dir" > "$SERVER_RELEASE_FILE" <<'PY'
 import json, sys
 key, directory = sys.argv[1], sys.argv[2]
@@ -255,7 +263,9 @@ ensure_server() {
   local key stamped="" fetched
   key="$(scripts/build-server.sh key)"
   [[ -f "$SERVER_STAMP" ]] && stamped="$(cat "$SERVER_STAMP")"
-  if [[ -x "$SERVER_DIR/zmx" && -f "$SERVER_RELEASE_FILE" && "$stamped" == "$key" ]]; then
+  if [[ -x "$SERVER_DIR/zmx" && -f "$SERVER_DIR/macterm-$key-x86_64-linux.gz" &&
+    -f "$SERVER_DIR/macterm-$key-aarch64-linux.gz" && -f "$SERVER_RELEASE_FILE" &&
+    "$stamped" == "$key" ]]; then
     return 0
   fi
   if server_dist_complete "$SERVER_DIST" "$key" 2>/dev/null; then

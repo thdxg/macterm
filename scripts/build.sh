@@ -142,6 +142,20 @@ if ! grep -qF "+thdxg.$ZMX_KEY" <<<"$ZMX_VERSION_OUTPUT"; then
   echo "ERROR: $ZMX_BINARY does not report build $ZMX_KEY" >&2
   exit 1
 fi
+# The server builds for an install on a host (design/007 §3A): one gzip file
+# for each target, named for this build. The macOS one must be the bundled zmx
+# itself, so it carries the same signature that the checks above require.
+SERVER_BUILDS="$APP_BUNDLE/Contents/Resources/server"
+for target in universal-macos x86_64-linux aarch64-linux; do
+  if ! gzip -t "$SERVER_BUILDS/macterm-$ZMX_KEY-$target.gz" 2>/dev/null; then
+    echo "ERROR: $SERVER_BUILDS/macterm-$ZMX_KEY-$target.gz is missing or is not gzip. Run scripts/setup.sh" >&2
+    exit 1
+  fi
+done
+if ! gzip -dc "$SERVER_BUILDS/macterm-$ZMX_KEY-universal-macos.gz" | cmp -s - "$ZMX_BINARY"; then
+  echo "ERROR: $SERVER_BUILDS/macterm-$ZMX_KEY-universal-macos.gz is not the bundled zmx" >&2
+  exit 1
+fi
 # The adaptive icon's renderer is copied into Contents/Helpers with the
 # signature that its own target gave it. When a stable identity was requested,
 # an ad-hoc helper means that target was signed apart from the app, so refuse
