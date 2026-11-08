@@ -63,7 +63,7 @@
         "local"
       ],
       "args": "SessionCreate.Args",
-      "result": "Session"
+      "result": "SessionCreate.Result"
     },
     {
       "name": "session.list",
@@ -83,7 +83,7 @@
         "local"
       ],
       "args": "SessionInfo.Args",
-      "result": "Session"
+      "result": "SessionInfo.Result"
     },
     {
       "name": "session.kill",
@@ -492,6 +492,19 @@
       "cases": []
     },
     {
+      "name": "SessionCreate.Result",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "session",
+          "type": "Session",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
       "name": "Session",
       "kind": "struct",
       "fields": [
@@ -601,6 +614,19 @@
         {
           "name": "id",
           "type": "str",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "SessionInfo.Result",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "session",
+          "type": "Session",
           "optional": false,
           "since": 1
         }

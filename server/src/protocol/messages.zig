@@ -227,7 +227,7 @@ pub const SessionCreate = struct {
         cols: u16 = 80,
         rows: u16 = 24,
     };
-    pub const Result = Session;
+    pub const Result = struct { session: Session };
 };
 
 pub const SessionList = struct {
@@ -245,7 +245,7 @@ pub const SessionInfo = struct {
     pub const senders: []const Trust = &.{.local};
 
     pub const Args = struct { id: []const u8 };
-    pub const Result = Session;
+    pub const Result = struct { session: Session };
 };
 
 /// Ends a session. A running session ends its shell (SIGHUP to the shell's

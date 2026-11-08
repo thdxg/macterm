@@ -96,7 +96,7 @@ PY
 import os
 from v2client import Client, ServerClient, alive, wait_dead
 c = ServerClient()
-s = c.call("session.create", id="s1", command=[b"/bin/sh"], cols=90, rows=30, cwd=os.environ["RT"].encode())
+s = c.call("session.create", id="s1", command=[b"/bin/sh"], cols=90, rows=30, cwd=os.environ["RT"].encode())["session"]
 assert s["id"] == "s1" and s["state"] == "running", s
 assert s["pid"] > 0 and s["shell_pid"] > 0 and (s["cols"], s["rows"]) == (90, 30), s
 assert s["pty"].startswith(b"/dev/"), s
@@ -110,7 +110,7 @@ a.wait_output("mark-42")
 assert os.path.realpath(os.environ["RT"]).encode() in a.output, a.output
 
 # The same id again: the same session, not a second one.
-again = c.call("session.create", id="s1", command=[b"/bin/sh"])
+again = c.call("session.create", id="s1", command=[b"/bin/sh"])["session"]
 assert again["pid"] == s["pid"], again
 
 # Two creates of one new id at the same time start one session.
@@ -119,11 +119,11 @@ c.send_msg(CONTROL, {"id": 900, "m": "session.create", "a": {"id": "s2", "comman
 c.send_msg(CONTROL, {"id": 901, "m": "session.create", "a": {"id": "s2", "command": [b"/bin/sh"]}})
 both = lambda: [v for v in c.control() if isinstance(v, dict) and v.get("re") in (900, 901)]
 c.wait(lambda: len(both()) == 2, what="two responses")
-assert both()[0]["ok"]["pid"] == both()[1]["ok"]["pid"], both()
+assert both()[0]["ok"]["session"]["pid"] == both()[1]["ok"]["session"]["pid"], both()
 c.call("session.kill", id="s2")
 
 assert list(c.sessions()) == ["s1"], c.sessions()
-assert c.call("session.info", id="s1")["pid"] == s["pid"]
+assert c.call("session.info", id="s1")["session"]["pid"] == s["pid"]
 assert c.request("session.info", id="nope")["err"]["code"] == "not_found"
 
 assert c.call("session.kill", id="s1") == {}
@@ -158,10 +158,10 @@ PY
   python3 - <<'PY'
 from v2client import ServerClient, alive, wait_dead
 c = ServerClient()
-s = c.call("session.create", id="e1", command=[b"/bin/sh", b"-c", b"sleep 0.3; exit 7"])
+s = c.call("session.create", id="e1", command=[b"/bin/sh", b"-c", b"sleep 0.3; exit 7"])["session"]
 ev = c.wait_event("session.exit")
 assert ev == {"id": "e1", "code": 7}, ev
-info = c.call("session.info", id="e1")
+info = c.call("session.info", id="e1")["session"]
 assert info["state"] == "exited" and info["code"] == 7, info
 assert alive(info["pid"]), info
 
@@ -183,9 +183,9 @@ PY
 import os, signal, time
 from v2client import Client, ServerClient, alive, wait_dead
 c = ServerClient()
-run = c.call("session.create", id="run", command=[b"/bin/sh"])
-done = c.call("session.create", id="done", command=[b"/bin/sh", b"-c", b"exit 3"])
-later = c.call("session.create", id="later", command=[b"/bin/sh"])
+run = c.call("session.create", id="run", command=[b"/bin/sh"])["session"]
+done = c.call("session.create", id="done", command=[b"/bin/sh", b"-c", b"exit 3"])["session"]
+later = c.call("session.create", id="later", command=[b"/bin/sh"])["session"]
 c.wait_event("session.exit", lambda a: a["id"] == "done")
 
 server = c.peer_pid()
@@ -225,7 +225,7 @@ PY
 import os
 from v2client import Client, ServerClient, alive, wait_dead
 c = ServerClient()
-s = c.call("session.create", id="keep", command=[b"/bin/sh"])
+s = c.call("session.create", id="keep", command=[b"/bin/sh"])["session"]
 old = c.peer_pid()
 assert c.call("server.exit") == {}
 # The socket is gone when the reply comes, so a start right after it
@@ -301,7 +301,7 @@ import os, time
 from v2client import ServerClient, alive, wait_dead
 c = ServerClient()
 pid = c.peer_pid()
-c.call("session.create", id="s1", command=[b"/bin/sh"])
+c.call("session.create", id="s1", command=[b"/bin/sh"])["session"]
 c.close()
 # A session keeps it running.
 time.sleep(6)
@@ -322,7 +322,7 @@ PY
   python3 - <<'PY'
 from v2client import ServerClient, wait_dead
 c = ServerClient()
-s = c.call("session.create", id="stubborn", command=[b"/bin/sh", b"-c", b"trap '' HUP; while :; do sleep 1; done"])
+s = c.call("session.create", id="stubborn", command=[b"/bin/sh", b"-c", b"trap '' HUP; while :; do sleep 1; done"])["session"]
 c.call("session.kill", id="stubborn")
 wait_dead(s["pid"])
 wait_dead(s["shell_pid"])

@@ -586,8 +586,8 @@ const Server = struct {
         const waiters = e.waiters.toOwnedSlice(s.gpa) catch return;
         defer s.gpa.free(waiters);
         for (waiters) |w| switch (w.kind) {
-            .create => s.reply(w.peer, w.re, m.SessionCreate, e.info()),
-            .info => s.reply(w.peer, w.re, m.SessionInfo, e.info()),
+            .create => s.reply(w.peer, w.re, m.SessionCreate, .{ .session = e.info() }),
+            .info => s.reply(w.peer, w.re, m.SessionInfo, .{ .session = e.info() }),
             .kill, .list => s.wait(&e.waiters, w),
         };
         s.answerLists();
@@ -929,7 +929,7 @@ const Server = struct {
             m.SessionInfo => {
                 const e = s.findEntry(args.id) orelse
                     return s.replyError(p.id, re, "not_found", "No session has this id.");
-                if (e.listed()) return s.reply(p.id, re, m.SessionInfo, e.info());
+                if (e.listed()) return s.reply(p.id, re, m.SessionInfo, .{ .session = e.info() });
                 s.wait(&e.waiters, .{ .peer = p.id, .re = re, .kind = .info });
             },
             m.SessionKill => s.kill(p, re, args.id),
@@ -959,7 +959,7 @@ const Server = struct {
         const waiter: Waiter = .{ .peer = p.id, .re = re, .kind = .create };
         // The same id again: the session that the first request started.
         if (s.findEntry(args.id)) |e| {
-            if (e.listed()) return s.reply(p.id, re, m.SessionCreate, e.info());
+            if (e.listed()) return s.reply(p.id, re, m.SessionCreate, .{ .session = e.info() });
             return s.wait(&e.waiters, waiter);
         }
         for (s.spawns.items) |sp| if (std.mem.eql(u8, sp.id, args.id)) return s.wait(&sp.waiters, waiter);

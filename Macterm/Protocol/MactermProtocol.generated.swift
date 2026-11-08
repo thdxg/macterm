@@ -563,6 +563,32 @@ extension MactermProtocol.SessionCreate.Args: ProtocolValue {
     }
 }
 
+extension MactermProtocol.SessionCreate {
+    struct Result: Equatable {
+        var session: MactermProtocol.Session
+    }
+}
+
+extension MactermProtocol.SessionCreate.Result: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var session: MactermProtocol.Session?
+        try reader.readMap { key, reader in
+            switch key {
+            case "session": session = try MactermProtocol.Session(from: &reader)
+            default: return false
+            }
+            return true
+        }
+        self.session = try MessagePackReader.required(session, "session")
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(1)
+        writer.writeString("session")
+        session.encode(to: &writer)
+    }
+}
+
 extension MactermProtocol {
     struct Session: Equatable {
         var id: String
@@ -754,6 +780,32 @@ extension MactermProtocol.SessionInfo.Args: ProtocolValue {
         writer.writeMapHeader(1)
         writer.writeString("id")
         id.encode(to: &writer)
+    }
+}
+
+extension MactermProtocol.SessionInfo {
+    struct Result: Equatable {
+        var session: MactermProtocol.Session
+    }
+}
+
+extension MactermProtocol.SessionInfo.Result: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var session: MactermProtocol.Session?
+        try reader.readMap { key, reader in
+            switch key {
+            case "session": session = try MactermProtocol.Session(from: &reader)
+            default: return false
+            }
+            return true
+        }
+        self.session = try MessagePackReader.required(session, "session")
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(1)
+        writer.writeString("session")
+        session.encode(to: &writer)
     }
 }
 
