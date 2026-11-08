@@ -1005,7 +1005,7 @@ pub const Daemon = struct {
         var comm_buf: [std.fs.max_path_bytes]u8 = undefined;
         var args_buf: [foreground.args_max]u8 = undefined;
         var scratch: [8192]u8 = undefined;
-        const process = foreground.readProcess(pgrp, &comm_buf, &args_buf, &scratch) orelse {
+        const process = foreground.readProcess(gpa, pgrp, &comm_buf, &args_buf, &scratch) orelse {
             std.log.info("foreground pgid={d} has no readable leader", .{pgrp});
             return;
         };
