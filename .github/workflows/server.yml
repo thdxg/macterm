@@ -111,20 +111,6 @@ jobs:
           git fetch --no-tags --depth=1 origin main
           PROTOCOL_BASE=FETCH_HEAD scripts/protocol.sh --check
 
-      # TEMPORARY (issue 0072): repeat the level tests 50 times. Removed before merge.
-      - name: Repeat the Level Tests
-        if: steps.changes.outputs.server == 'true'
-        shell: bash
-        env:
-          TMPDIR: ${{ runner.temp }}
-        run: |
-          fails=0
-          for i in $(seq 50); do
-            bats -f "level" test/attach_v2.bats > out.txt 2>&1 || { fails=$((fails+1)); cat out.txt; }
-          done
-          echo "fails=$fails of 50"
-          [ "$fails" -eq 0 ]
-
       # A skipped test fails the step, so a missing tool cannot hide a test.
       # daemon_responsibility.bats tests a macOS concept, so Linux leaves it
       # out. The short TMPDIR keeps the socket paths under the macOS limit of
