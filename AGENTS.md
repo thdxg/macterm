@@ -374,6 +374,18 @@ These rules for the spawn script come from tests against a real host:
 - **Two connections do the install**: `scp` lands the binary in the home as `.zmx.macterm`, then one ssh moves it into `~/.local/bin/zmx` in one `mv`, so a running `zmx attach` never sees a half-written file. `~/.local/bin` is in the fallback PATH of the pane script. Running sessions keep their old daemon until the user creates them again. When the zmx the check found is not the installed one (another zmx first in PATH, or `zmxPath` named an old one), Done sets the project's `zmxPath` to the installed path (`AppState.useInstalledZmx`); from the New Remote Project sheet it fills the path field.
 - Not yet: an action on the `zmx not found` diagnostic in a pane, and a CLI verb (ssh prompts have no way to reach a CLI).
 
+### One ssh connection for each host (v2, design/005 step 1)
+
+`SSHConnections` (`Macterm/System/SSHConnections.swift`) gives each host one ssh connection. Nothing in a remote project uses it yet: remote panes stay on the path above until v2 moves them (issue 0057). The debug-only `macterm host connect <host>` opens one.
+
+- **The user's own ControlMaster first.** If `ssh -G` names a ControlPath and `ssh -O check` finds a master there, Macterm uses it and opens nothing. Otherwise it runs `ssh -M -N` with its own ControlPath, `<App Support>/cm/<hash>` (mode 0700, `SSHControlPath`). The path is a hash, because a socket path holds 104 bytes.
+- **A command over the connection never logs in by itself** (`run`): `BatchMode=yes` refuses a prompt, and `ProxyCommand=/usr/bin/false` stops the direct connection that ssh tries when the control socket does not answer.
+- **The login asks the GUI** (`SSHLoginPrompts`): the master has `SSH_ASKPASS` set to `Contents/Resources/ssh-bridge/macterm-askpass` (`scripts/askpass-shim.sh`, which execs `macterm askpass`) and `SSH_ASKPASS_REQUIRE=force`. The askpass sends ssh's prompt to the app named in `MACTERM_ASKPASS_SOCKET` (`ssh.askpass`). The app shows an `NSAlert` sheet: a secure field, or Connect and Cancel for a host key or a confirmation.
+- **The answer goes only to an askpass of Macterm's own ssh** (design/006 §4). `ControlSocketServer` reads the peer's pid (`LOCAL_PEERPID`), and `askpassOwner(forPeer:)` requires that its parent is a running master of Macterm. ssh execs its askpass directly, and the shim execs too, so the parent is the master. Any other process gets `denied`.
+- **A saved password fills the login only after a click** on Use Saved Password, and then `PasswordAuthenticator`. The entry is v1's: `ssh <destination>` and the prompt line.
+- **Each new login writes a log line**, `ssh login: host=<host> logins=<n>`, so the logins of a day can be counted from the log (design/005, the question of a link that roams).
+- A master ends at quit (`disconnectAll`) and on `disconnect`. A user's master is never ended.
+
 ### Session daemons and macOS attribution (#419)
 
 macOS attributes work that needs privacy permission (Local Network, TCC) to the *responsible process* of a process. The value is fixed when the process starts, and the process inherits it from its parent.
@@ -931,6 +943,8 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
   - `NativeDesktopWidgets`: the frames of the system desktop widgets, from the window list.
   - `PasswordAuthenticator`.
   - `OnDeviceModel`: Apple's on-device model (FoundationModels), for Explain Output.
+  - `SSHConnections`: one ssh connection for each host, and its login (see "One ssh connection for each host").
+  - `ProcessRunner`: runs a short process to its exit and collects its output (Git reads, ssh commands).
   - `ObjCExceptionCatcher`: a trampoline with `@try` and `@catch`. AppKit raises ObjC exceptions that Swift cannot catch.
   - `GitWorktrees`: the Worktrees menu of the sidebar. It reads the worktrees of a project from the metadata files of git. It never runs git. A Mac without the Command Line Tools shows an install dialog for `/usr/bin/git`.
 - `Macterm/Config/`: `MactermConfig` (with `Animations`), `MactermConfigFile` (`~/.config/macterm/config.ghostty`), `GhosttyConfigSource`, `GhosttyConfigText`, `TerminalFontFamily`, `ShellIntegrationFeatures`, `GhosttyColorSpace`, `MouseScrollMultiplier` and `MacosHidden`.
@@ -1003,7 +1017,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
     - Matching is the matching of `Macterm/Search/`.
 - `Macterm/Search/`: `SearchText` (prepared, folded text), `SearchScoring` (the scoring of fzf and the positions of highlights), and `SearchIndex` with `SearchSession` and `Search` (the engine, see Search).
 - `IconRenderer/`: `macterm-icon-renderer`, the adaptive icon's helper (`main.swift`), and `PrivateInterfaces/` (the hand-written IconRendering interface, the CoreUI header, and the two link stubs).
-- `CLI/`: the `macterm` binary. `MactermCommand` (the ArgumentParser tree), `ControlClient`, `Output`, `SSHCommand`, `TutorCommand`, `SkillsCommand`, `WidgetCommand`, and `PaletteCommand` (`palette list`, and the hidden runner `palette exec`).
+- `CLI/`: the `macterm` binary. `MactermCommand` (the ArgumentParser tree), `ControlClient`, `Output`, `SSHCommand`, `TutorCommand`, `SkillsCommand`, `WidgetCommand`, `PaletteCommand` (`palette list`, and the hidden runner `palette exec`), and `AskpassCommand` (the hidden `askpass`, and the debug-only `host`).
 - `scripts/`: `setup.sh`, `build-server.sh` (the server builds and their key), `build.sh`, `_lib.sh` (version mapping, update channel), `publish-appcast.sh` and `benchmark.py` with `_harness.py` (`MactermHarness`, shared with e2e). It also has `e2e.sh` with `e2e/` (the pytest suite), `ghosttykit-api-diff.sh`, `ghostty-shim.sh` and `record-demos/` (the demo clips of the website).
 - `website/` has the docs site (`docs/pages/*.md`) and the Caddyfile that serves the update feed.
 

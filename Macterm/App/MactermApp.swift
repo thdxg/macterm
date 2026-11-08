@@ -828,7 +828,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let handler = ControlHandler(appState: appState, projectStore: projectStore)
         controlHandler = handler
-        controlServer.attach { raw in await handler.handle(raw) }
+        controlServer.attach { raw, peer in await handler.handle(raw, peerPID: peer) }
+        // A master that exits takes its login questions with it.
+        SSHConnections.shared.onConnectionExit = { SSHLoginPrompts.shared.cancel(sshPID: $0) }
         finderServices.attach(appState: appState, projectStore: projectStore)
         // A global chord fired before this point can only toggle the quick
         // terminal; every other action needs the workspace this hands over.
@@ -878,6 +880,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_: Notification) {
         controlServer.stop()
+        SSHConnections.shared.disconnectAll()
         onTerminate?()
         // A command recorded in the last half second is still waiting for
         // its debounced write.

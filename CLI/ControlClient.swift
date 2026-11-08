@@ -6,6 +6,8 @@ import Foundation
 struct ControlClient {
     /// Explicit `--socket` value: a hard pin, tried alone.
     var socketOverride: String?
+    /// Seconds to wait for the response.
+    var readTimeout = 10
 
     struct ClientError: Error, CustomStringConvertible {
         var description: String
@@ -208,7 +210,7 @@ struct ControlClient {
 
         // Back to blocking for the write/read; bound the read instead.
         _ = fcntl(fd, F_SETFL, flags)
-        var timeout = timeval(tv_sec: 10, tv_usec: 0)
+        var timeout = timeval(tv_sec: readTimeout, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
 
         guard writeAll(fd: fd, data: payload) else {

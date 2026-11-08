@@ -170,6 +170,13 @@ struct ControlArgs: Codable, Equatable {
     var widget: String?
     /// Desktop widget size (`widget.new`, `widget.set`): a `CxR` grid span.
     var size: String?
+    /// The text that ssh gave its askpass (`ssh.askpass`).
+    var prompt: String?
+    /// ssh asks for a yes or no and reads the exit status, not a line
+    /// (`SSH_ASKPASS_PROMPT=confirm`).
+    var confirm: Bool?
+    /// An ssh destination (`[user@]host`), for the debug-only `host.*` verbs.
+    var host: String?
 
     init(
         project: String? = nil,
@@ -280,6 +287,11 @@ enum ControlErrorCode: String, Codable {
     /// The client needs a newer protocol than this app speaks (its request's
     /// `v` exceeds `ControlProtocol.version`). Refused before any side effect.
     case unsupportedVersion = "unsupported_version"
+    /// The peer may not make this request (`ssh.askpass` from a process that
+    /// no ssh of Macterm started).
+    case denied
+    /// The user closed the question with Cancel.
+    case cancelled
     case internalError = "internal"
 }
 
@@ -314,6 +326,11 @@ struct ControlData: Codable {
     var palettes: [ControlPaletteInfo]?
     /// Typing latency (`pane.latency`, debug and benchmark builds only).
     var latency: ControlLatencyResult?
+    /// The user's answer to an ssh prompt (`ssh.askpass`). It goes only to an
+    /// askpass that an ssh of Macterm started.
+    var askpass: ControlAskpassReply?
+    /// A host's ssh connection (debug-only `host.connect`).
+    var host: ControlHostState?
 
     init(
         status: ControlStatusInfo? = nil,
@@ -331,7 +348,9 @@ struct ControlData: Codable {
         memory: ControlMemoryState? = nil,
         widgets: [ControlWidgetInfo]? = nil,
         palettes: [ControlPaletteInfo]? = nil,
-        latency: ControlLatencyResult? = nil
+        latency: ControlLatencyResult? = nil,
+        askpass: ControlAskpassReply? = nil,
+        host: ControlHostState? = nil
     ) {
         self.status = status
         self.projects = projects
@@ -349,7 +368,24 @@ struct ControlData: Codable {
         self.palettes = palettes
         self.widgets = widgets
         self.latency = latency
+        self.askpass = askpass
+        self.host = host
     }
+}
+
+struct ControlAskpassReply: Codable, Equatable {
+    /// The line that askpass prints. Empty for a `confirm` prompt, which ssh
+    /// reads from the exit status.
+    var answer: String
+}
+
+struct ControlHostState: Codable, Equatable {
+    var host: String
+    var controlPath: String
+    /// The connection is the user's own ControlMaster, not one of Macterm.
+    var usersOwn: Bool
+    /// The logins to this host in this run of the app.
+    var logins: Int
 }
 
 /// The result of `pane.latency`: milliseconds from each key to the frame that

@@ -130,6 +130,14 @@ enum ProcessInspector {
         return (path, isProtectedExecutable(atPath: path))
     }
 
+    /// The parent of `pid` (`proc_pidinfo`), or nil when the process is gone.
+    nonisolated static func parentPID(of pid: pid_t) -> pid_t? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return pid_t(info.pbi_ppid)
+    }
+
     /// The executable's resolved absolute path from the kernel
     /// (`proc_pidpath`), or nil when the process is gone or unreadable.
     static func executablePath(pid: pid_t) -> String? {
