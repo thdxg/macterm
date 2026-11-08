@@ -6,6 +6,7 @@ const std = @import("std");
 pub const frame = @import("frame.zig");
 pub const msgpack = @import("msgpack.zig");
 pub const messages = @import("messages.zig");
+pub const schema = @import("schema.zig");
 
 const Bin = msgpack.Bin;
 const Secret = msgpack.Secret;
@@ -260,4 +261,5 @@ test {
     _ = frame;
     _ = msgpack;
     _ = messages;
+    _ = schema;
 }

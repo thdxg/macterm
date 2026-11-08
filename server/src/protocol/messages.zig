@@ -8,6 +8,9 @@
 //! - `since`: the protocol level that added it;
 //! - `senders`: the trust levels of the connections that may send it.
 //!
+//! A field added to a type of an older level names its level in the type's
+//! `field_since` declaration: `pub const field_since = .{ .hint = 2 };`.
+//!
 //! The add-only rule: never remove or rename a message or a field, and never
 //! change a field's type. A new field is optional or has a default, so that
 //! an older peer's message still decodes. A peer skips keys it does not know.
@@ -170,6 +173,12 @@ pub const ChannelClose = struct {
 
 /// Every request method. A new method goes here.
 pub const methods = .{ ChannelOpen, ChannelClose };
+
+/// Every event type. A new event goes here. Each one declares `name`,
+/// `since` and `senders`, as a method does, and its fields are the event's
+/// `a`. No event may hold a `Secret` (design/006 §1); `schema.check` refuses
+/// one.
+pub const events = .{};
 
 /// True if a connection with this trust may send message `M`. A message from
 /// a sender outside the list gets an error reply and a log line; the link
