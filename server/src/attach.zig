@@ -6,7 +6,10 @@
 //! A libghostty surface runs it as its command, as it runs `zmx attach` for
 //! v1. Until the GUI feeds a surface from a channel itself (m3), v1's claim
 //! APC on stdin becomes the `claim` message (design/004 §5). Ctrl-\
-//! detaches, as in v1. It never makes a session: the server does that.
+//! detaches, as in v1. When no session has the name and a command is
+//! given, it asks the server to make one (starting the server when nothing
+//! answers), with this process's folder, environment and terminal size,
+//! as `zmx attach` makes a missing session in v1.
 
 const std = @import("std");
 const cross = @import("cross");
@@ -18,6 +21,7 @@ const signal = @import("signal.zig");
 const socket = @import("socket.zig");
 const runtime = @import("runtime.zig");
 const session = @import("session.zig");
+const server = @import("server.zig");
 const protocol = @import("protocol/protocol.zig");
 const frame = protocol.frame;
 const msgpack = protocol.msgpack;
@@ -27,6 +31,16 @@ pub const protocol_level = m.level;
 
 /// How long the session may take to answer the handshake.
 const handshake_timeout_ms = 5000;
+
+/// How long the server may take to answer `session.create`: its own limit
+/// for a session to start, and the handshake.
+const create_timeout_ms = server.spawn_ms + handshake_timeout_ms;
+
+/// What `run` makes when no session has the name.
+pub const Create = struct {
+    /// The session's command (argv). Null: the session's login shell.
+    command: ?[]const []const u8 = null,
+};
 
 pub const Outcome = union(enum) {
     /// The user pressed Ctrl-\.
@@ -40,6 +54,8 @@ pub const Outcome = union(enum) {
     session_too_old: struct { level: u32, min_level: u32 },
     /// The session refused our level.
     refused: m.Refuse,
+    /// The server did not make the session: its message.
+    not_created: []const u8,
 };
 
 pub const Error = error{
@@ -62,24 +78,32 @@ pub fn exitCode(outcome: Outcome) u8 {
         .detached => 0,
         .closed => 1,
         .exited => |s| if (s.code) |c| c else 128 +| (s.signal orelse 0),
-        .session_too_old, .refused => 1,
+        .session_too_old, .refused, .not_created => 1,
     };
 }
 
-pub fn run(gpa: std.mem.Allocator, dir: []const u8, name: []const u8) (Error || error{ OutOfMemory, Sighup, Sigint, Sigterm })!Outcome {
+/// Attaches to session `name`. With `create`, a missing session is made
+/// first through the server.
+pub fn run(gpa: std.mem.Allocator, dir: []const u8, name: []const u8, create: ?Create) (Error || error{ OutOfMemory, Sighup, Sigint, Sigterm })!Outcome {
     if (!session.validName(name)) return error.InvalidName;
     var dir_buf: [std.fs.max_path_bytes]u8 = undefined;
     const dir_z = std.fmt.bufPrintSentinel(&dir_buf, "{s}", .{dir}, 0) catch return error.RuntimeDir;
+    var have_dir = true;
     runtime.checkDir(dir_z, std.c.getuid()) catch |err| switch (err) {
-        // No session has made it yet.
-        error.Unreadable => return error.NoSession,
+        // No session has made it yet. The server makes it.
+        error.Unreadable => have_dir = false,
         else => return error.RuntimeDir,
     };
     const path = socket.getSocketPath(gpa, dir, name) catch return error.InvalidName;
     defer gpa.free(path);
 
     signal.ignoreSigpipe();
-    const fd = ipc.connectSession(path) catch return error.NoSession;
+    const existing: ?i32 = if (have_dir) ipc.connectSession(path) catch null else null;
+    const fd = existing orelse fd: {
+        const spec = create orelse return error.NoSession;
+        if (try createSession(gpa, dir, name, spec)) |outcome| return outcome;
+        break :fd ipc.connectSession(path) catch return error.NoSession;
+    };
     defer lib_posix.close(fd);
     if (!runtime.allowPeer(runtime.peerUid(fd), std.c.getuid())) return error.WrongPeer;
 
@@ -87,6 +111,99 @@ pub fn run(gpa: std.mem.Allocator, dir: []const u8, name: []const u8) (Error || 
     defer c.in.deinit(gpa);
     if (try c.handshake()) |outcome| return outcome;
     return c.loop();
+}
+
+/// Asks the server to make session `name`, and starts the server when its
+/// socket does not answer. Null when the session listens; an outcome when
+/// the server or its level refused.
+fn createSession(gpa: std.mem.Allocator, dir: []const u8, name: []const u8, spec: Create) (Error || error{OutOfMemory})!?Outcome {
+    const server_path = socket.getSocketPath(gpa, dir, server.socket_name) catch return error.RuntimeDir;
+    defer gpa.free(server_path);
+    const fd = ipc.connectSession(server_path) catch fd: {
+        server.start(gpa, dir) catch |err| switch (err) {
+            error.AlreadyRunning => {},
+            error.RuntimeDir => return error.RuntimeDir,
+            else => return .{ .not_created = "the server did not start" },
+        };
+        break :fd ipc.connectSession(server_path) catch return error.NoAnswer;
+    };
+    defer lib_posix.close(fd);
+    if (!runtime.allowPeer(runtime.peerUid(fd), std.c.getuid())) return error.WrongPeer;
+
+    var c: Client = .{ .gpa = gpa, .fd = fd };
+    defer c.in.deinit(gpa);
+    const mine = helloMessage();
+    try c.sendControl(mine);
+
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var env: std.ArrayList(msgpack.Bin) = .empty;
+    var i: usize = 0;
+    while (std.c.environ[i]) |entry| : (i += 1) try env.append(arena, .{ .bytes = std.mem.span(entry) });
+    var command: ?[]const msgpack.Bin = null;
+    if (spec.command) |argv| {
+        const list = try arena.alloc(msgpack.Bin, argv.len);
+        for (argv, list) |arg, *bin| bin.* = .{ .bytes = arg };
+        command = list;
+    }
+    var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const cwd: ?msgpack.Bin = if (std.c.getcwd(&cwd_buf, cwd_buf.len)) |p| .{ .bytes = std.mem.sliceTo(@as([*:0]u8, @ptrCast(p)), 0) } else null;
+    const size = ipc.getTerminalSize(lib_posix.STDOUT_FILENO);
+    const request_id = 1;
+
+    var greeted = false;
+    while (true) {
+        const f = try c.nextFrame(create_timeout_ms) orelse return error.NoAnswer;
+        if (f.channel != frame.control_channel) continue;
+        switch (m.decodeControl(arena, f.body) catch return error.Protocol) {
+            .hello => |theirs| {
+                if (greeted) return error.Protocol;
+                greeted = true;
+                switch (m.negotiate(mine, theirs)) {
+                    .refuse => |r| {
+                        c.sendControl(r) catch {};
+                        return .{ .session_too_old = .{ .level = theirs.level, .min_level = r.needs_level } };
+                    },
+                    .speak => {},
+                }
+                var out: std.Io.Writer.Allocating = .init(arena);
+                m.encodeRequest(&out.writer, request_id, m.SessionCreate, .{
+                    .id = name,
+                    .cwd = cwd,
+                    .command = command,
+                    .cols = size.cols,
+                    .rows = size.rows,
+                    .env = env.items,
+                }) catch return error.OutOfMemory;
+                try c.sendFrame(frame.control_channel, .msg, out.written());
+            },
+            .refuse => |r| return .{ .refused = .{
+                .reason = try gpa.dupe(u8, r.reason),
+                .needs_level = r.needs_level,
+            } },
+            .response => |res| {
+                if (res.re != request_id) continue;
+                const err = res.err orelse return null;
+                return .{ .not_created = try gpa.dupe(u8, err.message) };
+            },
+            else => {},
+        }
+    }
+}
+
+fn helloMessage() m.Hello {
+    return .{
+        .level = m.level,
+        .min_level = m.min_level,
+        .build = build_options.version,
+        // The pane's client acts for the GUI. Not `cli`: a session of an
+        // older build must still attach.
+        .role = .gui,
+        .epoch = 0,
+        .caps = &.{},
+    };
 }
 
 const Client = struct {
@@ -99,16 +216,7 @@ const Client = struct {
     /// Hello in each direction, then the session's `state`. Null when the
     /// pane may start; an outcome when the two levels refuse each other.
     fn handshake(c: *Client) (Error || error{OutOfMemory})!?Outcome {
-        const mine: m.Hello = .{
-            .level = m.level,
-            .min_level = m.min_level,
-            .build = build_options.version,
-            // The pane's client acts for the GUI. Not `cli`: a session of an
-            // older build must still attach.
-            .role = .gui,
-            .epoch = 0,
-            .caps = &.{},
-        };
+        const mine = helloMessage();
         try c.sendControl(mine);
 
         var arena_state: std.heap.ArenaAllocator = .init(c.gpa);

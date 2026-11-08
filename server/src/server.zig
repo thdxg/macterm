@@ -724,6 +724,7 @@ const Server = struct {
             for (command) |arg| try argv.append(arena, (try arena.dupeSentinel(u8, arg.bytes, 0)).ptr);
         }
         try argv.append(arena, null);
+        const envp = try s.sessionEnv(arena, args.env);
 
         const pipe = try lib_posix.pipe2(.{ .CLOEXEC = true, .NONBLOCK = true });
         errdefer lib_posix.close(pipe[0]);
@@ -741,13 +742,29 @@ const Server = struct {
         if (pid == 0) {
             // The child: stderr to the pipe, then this binary again.
             lib_posix.dup2(pipe[1], lib_posix.STDERR_FILENO) catch std.c._exit(127);
-            _ = std.c.execve(s.exe.ptr, @ptrCast(argv.items.ptr), @ptrCast(std.c.environ));
+            _ = std.c.execve(s.exe.ptr, @ptrCast(argv.items.ptr), envp);
             std.c._exit(127);
         }
         lib_posix.close(pipe[1]);
         sp.pid = pid;
         std.log.info("server: starting session {s} pid={d}", .{ id, pid });
         return sp;
+    }
+
+    /// The environment of a new session: the client's entries, or the
+    /// server's own environment when it sent none. The runtime directory is
+    /// always the server's, so that the session listens where the server
+    /// looks.
+    fn sessionEnv(s: *const Server, arena: std.mem.Allocator, env: ?[]const msgpack.Bin) ![*:null]const ?[*:0]const u8 {
+        const entries = env orelse return @ptrCast(std.c.environ);
+        var list: std.ArrayList(?[*:0]const u8) = .empty;
+        for (entries) |entry| {
+            if (std.mem.startsWith(u8, entry.bytes, runtime.dir_env ++ "=")) continue;
+            try list.append(arena, (try arena.dupeSentinel(u8, entry.bytes, 0)).ptr);
+        }
+        try list.append(arena, (try std.fmt.allocPrintSentinel(arena, "{s}={s}", .{ runtime.dir_env, s.dir }, 0)).ptr);
+        try list.append(arena, null);
+        return @ptrCast(list.items.ptr);
     }
 
     /// Reaps the `session` children that exited. The server has no other
@@ -954,6 +971,8 @@ const Server = struct {
             return s.replyError(p.id, re, "invalid_args", "The folder must be an absolute path.");
         if (args.command) |command| for (command) |arg| if (std.mem.findScalar(u8, arg.bytes, 0) != null)
             return s.replyError(p.id, re, "invalid_args", "A command argument cannot hold a NUL byte.");
+        if (args.env) |env| for (env) |entry| if (std.mem.findScalar(u8, entry.bytes, 0) != null or std.mem.findScalar(u8, entry.bytes, '=') == null)
+            return s.replyError(p.id, re, "invalid_args", "An environment entry must be NAME=value with no NUL byte.");
         if (args.cols == 0 or args.rows == 0)
             return s.replyError(p.id, re, "invalid_args", "The size must be at least 1 by 1.");
         const waiter: Waiter = .{ .peer = p.id, .re = re, .kind = .create };

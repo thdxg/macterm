@@ -226,6 +226,11 @@ pub const SessionCreate = struct {
         command: ?[]const msgpack.Bin = null,
         cols: u16 = 80,
         rows: u16 = 24,
+        /// The session's environment, as `NAME=value` entries, in place of
+        /// the server's. The server sets its own runtime directory in it.
+        /// A pane's client sends its own, so that the shell gets the
+        /// environment that the terminal made for it.
+        env: ?[]const msgpack.Bin = null,
     };
     pub const Result = struct { session: Session };
 };

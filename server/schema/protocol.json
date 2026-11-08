@@ -487,6 +487,12 @@
           "optional": false,
           "default": "24",
           "since": 1
+        },
+        {
+          "name": "env",
+          "type": "[bin]",
+          "optional": true,
+          "since": 1
         }
       ],
       "cases": []
