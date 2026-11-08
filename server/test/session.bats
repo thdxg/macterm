@@ -89,6 +89,17 @@ load test_helper
   [[ "$output" == *"pid="* ]]
 }
 
+@test "session: no program in the session holds the listen socket" {
+  # The command lists each socket among its own open fds. The listen socket
+  # must be CLOEXEC, also after the macOS daemon re-execs itself, or a program
+  # in the pane can accept a client in place of the session.
+  start_session test-fds sh -c 'for f in /dev/fd/*; do [ -S "$f" ] && echo "socket-fd $f"; done; echo fds-listed; exec sleep 30'
+  wait_for_output test-fds fds-listed
+
+  run "$ZMX" history test-fds
+  [[ "$output" != *"socket-fd"* ]]
+}
+
 @test "list --short: shows only session names" {
   start_session test-short-a
   start_session test-short-b
