@@ -72,6 +72,21 @@ c.wait_output("mark-42")
 PY
 }
 
+@test "session: no program in the session holds the listen socket" {
+  # As in session.bats: ls lists the fds that the session's program holds.
+  "$ZMX" session s1 -- /bin/sh -c 'l=$(ls -lL /dev/fd/ 2>/dev/null); echo "sockets-$(echo "$l" | grep -c ^s)-fds-$(echo "$l" | grep -c ^[-bcdps])-listed"; exec sleep 30'
+  python3 - <<'PY'
+import re
+from v2client import Client
+c = Client("s1")
+c.attach(80, 24)
+count = re.compile(rb"sockets-(\d+)-fds-(\d+)-listed")
+c.wait(lambda: count.search(c.output), 10, "the fd count")
+sockets, fds = map(int, count.search(c.output).groups())
+assert sockets == 0 and fds >= 3, c.output
+PY
+}
+
 @test "session: the leader's resize reaches the pty" {
   "$ZMX" session s1 -- /bin/sh
   python3 - <<'PY'

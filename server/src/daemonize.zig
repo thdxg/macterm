@@ -233,7 +233,8 @@ fn reexecDisclaimed(spec: Reexec, size: ipc.Resize) !void {
 
     _ = try lib_posix.fcntl(spec.server_sock_fd, lib_posix.F.SETFD, 0);
     // A failed re-exec continues in this image and spawns the shell here.
-    errdefer _ = lib_posix.fcntl(spec.server_sock_fd, lib_posix.F.SETFD, std.c.FD_CLOEXEC) catch {};
+    // If the flag cannot be set again, stop: the shell must not get the socket.
+    errdefer _ = lib_posix.fcntl(spec.server_sock_fd, lib_posix.F.SETFD, std.c.FD_CLOEXEC) catch std.process.exit(1);
 
     var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
     var exe_len: u32 = exe_buf.len;
