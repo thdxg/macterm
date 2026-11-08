@@ -150,7 +150,7 @@ PY
 # and a body, and a close between the two fails the client's write (EPIPE).
 fake_session() {
   mkdir -p -m 700 "$MACTERM_RUNTIME_DIR"
-  python3 - "$@" <<'PY' &
+  python3 - "$@" 3>&- <<'PY' &
 import os, socket, sys
 from v2client import pack, frame, MSG, runtime_dir
 name, level, min_level = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
