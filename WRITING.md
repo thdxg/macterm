@@ -93,3 +93,4 @@ Run the linter on this file with `--disable synonym-rotation`. The word tables n
 ## When the app text and the docs disagree
 
 Phase 3 of the rewrite keeps every app label as it is. Phase 4 changes an app label only when this list says to. When a label changes, update every page that names it in the same pull request.
+
