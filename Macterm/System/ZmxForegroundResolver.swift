@@ -4,55 +4,59 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "ZmxForeground")
 
-/// Translates a zmx-wrapped surface's session name into the pid of the *real*
+/// Translates a wrapped surface's session name into the pid of the *real*
 /// foreground process — the shell or program the user is actually looking at.
 ///
-/// Why this is needed: a wrapped surface's shell runs under the zmx **daemon**,
-/// a process tree completely detached from the `zmx attach` **client** that
+/// Why this is needed: a wrapped surface's shell runs in its v2 **session**
+/// process, a process tree detached from the `zmx connect` **client** that
 /// libghostty reports as the surface's foreground pid. So `ProcessInspector`,
-/// reading libghostty's pid, sees `zmx` for every pane — breaking tab names and
-/// layout `run:` capture. The daemon side is reachable only by session name.
+/// reading libghostty's pid, sees `zmx` for every pane — breaking tab names
+/// and layout `run:` capture. The session side is reachable only by name.
 ///
-/// Resolution: `zmx ls` maps `sessionName → daemon session-leader pid` (the
-/// `login`/shell process the daemon spawned). The leader's controlling tty's
-/// foreground process group (`tcgetpgrp`) is the true foreground — NOT the
-/// deepest child (a language server spawned by an editor is a deeper leaf than
-/// the editor the user sees). This mirrors how libghostty / tmux resolve the
-/// foreground on the client side; we just do it against the daemon's pty.
+/// Resolution: the server's `session.list` maps `sessionName → shell pid
+/// and pty` (the `login`/shell process that the session started). The
+/// shell's controlling tty's foreground process group is the true
+/// foreground — NOT the deepest child (a language server spawned by an
+/// editor is a deeper leaf than the editor the user sees). This mirrors how
+/// libghostty / tmux resolve the foreground on the client side; we just do
+/// it against the session's pty.
 ///
-/// `zmx ls` is a fork/exec, far too costly for the foreground poll, and daemon
-/// leader pids are **stable for a session's lifetime** — so the name→leader map
-/// only needs refreshing on session lifecycle events (spawn/kill/reattach) plus
-/// a slow reconcile. `ZmxRefreshGate` owns that policy; per-tick work here is
-/// two cheap syscalls (`kill(pid, 0)` liveness + `tcgetpgrp`).
+/// A session's shell pid and pty are **stable for its lifetime** — so the
+/// map only needs refreshing on session lifecycle events (spawn, kill,
+/// reattach) plus a slow reconcile. `ZmxRefreshGate` owns that policy;
+/// per-tick work here is one cheap syscall (the `kinfo_proc` sysctl).
 enum ZmxForegroundResolver {
-    struct Entry {
+    struct Entry: Equatable {
         let leaderPID: pid_t
-        /// The daemon-side pty path, resolved ONCE per refresh: `devname` falls
-        /// back to a full /dev scan (readdir + lstat per node) whenever the
-        /// dev_t misses its static cache, which pty slaves reliably do. Doing
-        /// that per foreground refresh on the main thread saturated the render
-        /// loop (observed: app wedged at ~90% CPU inside devname_r). A
-        /// session's leader keeps its tty for life, so resolve off-main here
-        /// and never again.
+        /// The session's pty path, as the server reports it.
         let ttyPath: String?
     }
 
-    /// Cached `macterm-…` name → daemon leader (pid + tty). Guarded by an
+    /// Cached `macterm-…` name → session shell (pid + tty). Guarded by an
     /// unfair lock; written by the off-main refresh, read on the main actor.
     private static let cache = OSAllocatedUnfairLock<[String: Entry]>(initialState: [:])
 
-    /// Replace the cache from a fresh `zmx ls`. Called OFF-MAIN: the per-pid
-    /// tty resolution below is the expensive devname path.
-    static func updateCache(_ map: [String: pid_t]) {
-        let entries = map.mapValues { Entry(leaderPID: $0, ttyPath: ttyPath(pid: $0)) }
+    /// Replace the cache from a fresh `session.list`. Only running sessions
+    /// with a shell pid are kept.
+    static func updateCache(_ sessions: [LocalSession]) {
+        let entries = entries(from: sessions)
         cache.withLock { $0 = entries }
         logger.debug("updateCache: \(entries.count, privacy: .public) session(s)")
     }
 
+    /// The cache entries of a listing. Pure.
+    static func entries(from sessions: [LocalSession]) -> [String: Entry] {
+        var entries: [String: Entry] = [:]
+        for session in sessions where session.isRunning {
+            guard let pid = session.shellPID else { continue }
+            entries[session.name] = Entry(leaderPID: pid, ttyPath: session.ttyPath)
+        }
+        return entries
+    }
+
     /// The pid of the real foreground process for `sessionName`, or nil when
     /// the session isn't cached (not zmx-wrapped, or not refreshed yet).
-    /// A dead leader (stale cache after an external `zmx kill`) is evicted so
+    /// A dead leader (stale cache after a kill from outside) is evicted so
     /// callers fall back to the client-side pid until the next refresh.
     ///
     /// The foreground group comes from `kinfo_proc.kp_eproc.e_tpgid` — the
@@ -77,10 +81,10 @@ enum ZmxForegroundResolver {
         return tpgid
     }
 
-    /// The daemon-side pty path for `sessionName`, or nil when uncached. Used
+    /// The session's pty path for `sessionName`, or nil when uncached. Used
     /// by `ProcessInspector.terminalInputIsRaw` — raw-mode detection must probe
-    /// the daemon's pty, because the `zmx attach` client keeps the client-side
-    /// pty raw permanently.
+    /// the session's pty, because the `zmx connect` client keeps the
+    /// client-side pty raw permanently.
     static func daemonTTYPath(sessionName: String) -> String? {
         cache.withLock { $0[sessionName]?.ttyPath }
     }
@@ -98,32 +102,6 @@ enum ZmxForegroundResolver {
         // A reaped pid yields a zeroed struct rather than an error.
         guard info.kp_proc.p_pid == pid else { return nil }
         return info
-    }
-
-    /// The controlling-tty device path of `pid` (e.g. `/dev/ttys083`), or nil.
-    private static func ttyPath(pid: pid_t) -> String? {
-        guard let info = kinfoProc(pid: pid) else { return nil }
-        let dev = info.kp_eproc.e_tdev
-        guard dev != 0, dev != -1 else { return nil }
-        guard let name = devname(dev, S_IFCHR) else { return nil }
-        return "/dev/" + String(cString: name)
-    }
-}
-
-extension ZmxForegroundResolver {
-    /// Parse a `zmx ls` listing into a `sessionName → leaderPID` map. Only
-    /// `macterm-` sessions with a readable pid are included. Shares
-    /// `ZmxListLexer` with `ZmxSessionListParser` so the two projections of the
-    /// same grammar can't drift.
-    static func parseLeaderPIDs(_ stdout: String) -> [String: pid_t] {
-        var map: [String: pid_t] = [:]
-        ZmxListLexer.forEachLine(stdout) { values in
-            guard let name = values["name"], name.hasPrefix(ZmxSessionName.prefix),
-                  let pid = values["pid"].flatMap({ Int32($0) })
-            else { return }
-            map[String(name)] = pid
-        }
-        return map
     }
 }
 

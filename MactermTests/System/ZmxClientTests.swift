@@ -72,7 +72,7 @@ struct ZmxBypassTests {
     @Test
     func a_long_socket_dir_bypasses_with_its_reason() {
         let dir = "/" + String(repeating: "d", count: 80)
-        guard case let .socketPathTooLong(reason) = ZmxClient.bypass(environment: ["ZMX_DIR": dir]) else {
+        guard case let .socketPathTooLong(reason) = ZmxClient.bypass(environment: ["MACTERM_RUNTIME_DIR": dir]) else {
             Issue.record("expected socketPathTooLong")
             return
         }
@@ -81,91 +81,44 @@ struct ZmxBypassTests {
 
     @Test
     func a_short_socket_dir_outside_tests_wraps() {
-        #expect(ZmxClient.bypass(environment: ["ZMX_DIR": "/tmp/zmx-501"]) == nil)
+        #expect(ZmxClient.bypass(environment: ["MACTERM_RUNTIME_DIR": "/tmp/macterm"]) == nil)
+    }
+
+    @Test
+    func no_runtime_directory_bypasses() {
+        #expect(ZmxClient.bypass(environment: [:]) != nil)
     }
 }
 
 struct ZmxSocketBudgetTests {
     @Test
     func defaultTmpDirIsUnderBudget() {
-        // `/tmp/zmx-<uid>` (~13 chars) + `/macterm-<UUID>` (45) is well under
-        // the 102B budget; probe must pass (nil).
-        #expect(ZmxSocketBudget.probe(env: [:]) == nil)
+        // `/tmp/macterm` + `/macterm-<slug>-<hex>` (33) is well under the
+        // 102B budget; probe must pass (nil).
+        #expect(ZmxSocketBudget.probe(env: ["TMPDIR": "/tmp/"]) == nil)
     }
 
     @Test
-    func explicitZmxDirWins() {
-        #expect(ZmxSocketBudget.socketDir(env: ["ZMX_DIR": "/custom/dir"]) == "/custom/dir")
+    func theSocketDirIsTheServersRuntimeDirectory() {
+        #expect(ZmxSocketBudget.socketDir(env: ["MACTERM_RUNTIME_DIR": "/custom/dir"]) == "/custom/dir")
+        #expect(ZmxSocketBudget.socketDir(env: ["TMPDIR": "/var/tmp/"]) == "/var/tmp/macterm")
+        #expect(ZmxSocketBudget.socketDir(env: [:]) == nil)
     }
 
     @Test
-    func trailingSlashIsTrimmedForDerivedDirs() {
-        // The derived (non-ZMX_DIR) paths must match zmx's own resolver, which
-        // trims a trailing slash before appending — otherwise kill and the
-        // wrapped shell land on different socket dirs.
-        #expect(ZmxSocketBudget.socketDir(env: ["XDG_RUNTIME_DIR": "/run/user/501/"]) == "/run/user/501/zmx")
-        #expect(ZmxSocketBudget.socketDir(env: ["TMPDIR": "/var/tmp/"]) == "/var/tmp/zmx-\(getuid())")
+    func theV1DirIsFoundAsV1ZmxFindsIt() {
+        // v1's sessions are ended where v1's zmx put them: its resolver
+        // trims a trailing slash before it appends.
+        #expect(ZmxSocketBudget.v1SocketDir(env: ["ZMX_DIR": "/custom/dir"]) == "/custom/dir")
+        #expect(ZmxSocketBudget.v1SocketDir(env: ["XDG_RUNTIME_DIR": "/run/user/501/"]) == "/run/user/501/zmx")
+        #expect(ZmxSocketBudget.v1SocketDir(env: ["TMPDIR": "/var/tmp/"]) == "/var/tmp/zmx-\(getuid())")
     }
 
     @Test
     func overlongDirExceedsBudget() {
         let longDir = "/" + String(repeating: "x", count: 100)
-        let reason = ZmxSocketBudget.probe(env: ["ZMX_DIR": longDir])
+        let reason = ZmxSocketBudget.probe(env: ["MACTERM_RUNTIME_DIR": longDir])
         #expect(reason != nil)
-    }
-}
-
-/// Two `zmx ls` at the same time count each other as a client, so Macterm's
-/// own listings must never overlap.
-struct ZmxListingGateTests {
-    private actor Overlap {
-        private var inFlight = 0
-        private(set) var peak = 0
-        private(set) var order: [Int] = []
-
-        func enter(_ index: Int) {
-            inFlight += 1
-            peak = max(peak, inFlight)
-            order.append(index)
-        }
-
-        func leave() {
-            inFlight -= 1
-        }
-    }
-
-    @Test
-    func listingsNeverOverlap() async {
-        let gate = ZmxListingGate()
-        let overlap = Overlap()
-        await withTaskGroup(of: Int.self) { group in
-            for index in 0 ..< 20 {
-                group.addTask {
-                    await gate.run {
-                        await overlap.enter(index)
-                        try? await Task.sleep(for: .milliseconds(2))
-                        await overlap.leave()
-                        return index
-                    }
-                }
-            }
-            var results: [Int] = []
-            for await result in group {
-                results.append(result)
-            }
-            #expect(results.sorted() == Array(0 ..< 20))
-        }
-        #expect(await overlap.peak == 1)
-        #expect(await overlap.order.count == 20)
-    }
-
-    @Test
-    func theGateOpensAgainAfterEachListing() async {
-        let gate = ZmxListingGate()
-        let first: Int = await gate.run { 1 }
-        let second: Int = await gate.run { 2 }
-        #expect(first == 1)
-        #expect(second == 2)
     }
 }
 
@@ -233,53 +186,6 @@ struct ZmxSessionNameTests {
 }
 
 struct ZmxReaperTests {
-    private func entry(_ name: String, clients: Int?) -> ZmxSessionListParser.Entry {
-        .init(name: name, clients: clients)
-    }
-
-    @Test
-    func reaps_unclaimed_detached_macterm_sessions() {
-        let entries = [
-            entry("macterm-a", clients: 0), // orphan → reap
-            entry("macterm-b", clients: 0), // claimed → spare
-        ]
-        let orphans = ZmxReaper.orphans(in: entries, known: ["macterm-b"])
-        #expect(orphans == ["macterm-a"])
-    }
-
-    @Test
-    func spares_attached_sessions_even_if_unclaimed() {
-        // clients > 0 means a live client (another instance / manual attach) —
-        // never reap regardless of the known set.
-        let orphans = ZmxReaper.orphans(in: [entry("macterm-x", clients: 1)], known: [])
-        #expect(orphans.isEmpty)
-    }
-
-    @Test
-    func spares_unknown_client_count() {
-        // nil clients (err/status line) = unknown → spare.
-        let orphans = ZmxReaper.orphans(in: [entry("macterm-x", clients: nil)], known: [])
-        #expect(orphans.isEmpty)
-    }
-
-    @Test
-    func never_touches_foreign_prefix_sessions() {
-        // A co-resident Supacode session must never be reaped by Macterm.
-        let entries = [
-            entry("supa-abc", clients: 0),
-            entry("macterm-y", clients: 0),
-        ]
-        let orphans = ZmxReaper.orphans(in: entries, known: [])
-        #expect(orphans == ["macterm-y"])
-    }
-
-    @Test
-    func empty_listing_reaps_nothing() {
-        #expect(ZmxReaper.orphans(in: [], known: ["macterm-a"]).isEmpty)
-    }
-
-    // MARK: - Remote (owner-labelled) variant (#281)
-
     private func entry(_ name: String, clients: Int?, owner: String?) -> ZmxSessionListParser.Entry {
         .init(name: name, clients: clients, owner: owner)
     }
@@ -334,7 +240,7 @@ struct ZmxAttachTests {
     @Test
     func wrapperArgvWrapsTheShellWhenExecutablePresent() {
         let argv = ZmxAttach.wrapperArgv(executablePath: "/path/to/zmx", sessionID: "macterm-1")
-        #expect(argv == ["/path/to/zmx", "attach", "macterm-1"])
+        #expect(argv == ["/path/to/zmx", "connect", "macterm-1", "--"])
     }
 
     @Test
@@ -363,55 +269,6 @@ struct ZmxEnvironmentTests {
         setenv("ZMX_SESSION", "macterm-test-deadbeefcafe", 1)
         ZmxEnvironment.scrubInheritedSession()
         #expect(getenv("ZMX_SESSION") == nil)
-    }
-}
-
-/// Drives the async `reapOrphans` over an injected `ZmxClient` (no real
-/// subprocess), so the known-set mapping, the nil-probe short-circuit, and the
-/// kill fan-out are covered end to end — not just the pure `ZmxReaper.orphans`.
-struct ZmxReapOrphansDriverTests {
-    /// A client whose `ls` returns `entries` and that records every killed id.
-    private func recordingClient(
-        entries: [ZmxSessionListParser.Entry]?,
-        killed: LockedBox<[String]>
-    ) -> ZmxClient {
-        ZmxClient(
-            executableURL: { URL(fileURLWithPath: "/fake/zmx") },
-            isBundled: { true },
-            killSession: { id in killed.mutate { $0.append(id) } },
-            killRemoteSession: { _, _, _ in },
-            remoteForegrounds: { _, _ in .unreachable },
-            sweepRemoteOrphans: { _, _, _, _ in nil },
-            listSessionsWithClients: { entries },
-            sessionLeaderPIDs: { [:] },
-            sessionListSnapshot: { entries.map { (entries: $0, leaders: [:]) } }
-        )
-    }
-
-    @Test
-    func reapsOnlyUnclaimedDetachedSessions() async {
-        let killed = LockedBox<[String]>([])
-        let knownName = ZmxSessionName.make(projectName: "proj", paneSessionID: UUID())
-        let client = recordingClient(
-            entries: [
-                .init(name: knownName, clients: 0), // claimed → spare
-                .init(name: "macterm-orphan", clients: 0), // unclaimed → reap
-                .init(name: "macterm-attached", clients: 1), // attached → spare
-                .init(name: "supa-foreign", clients: 0), // foreign prefix → spare
-            ],
-            killed: killed
-        )
-        await client.reapOrphans(knownSessionNames: [knownName])
-        #expect(killed.value == ["macterm-orphan"])
-    }
-
-    @Test
-    func failedProbeReapsNothing() async {
-        let killed = LockedBox<[String]>([])
-        // nil listing = probe failed/unavailable → never reap.
-        let client = recordingClient(entries: nil, killed: killed)
-        await client.reapOrphans(knownSessionNames: [])
-        #expect(killed.value.isEmpty)
     }
 }
 

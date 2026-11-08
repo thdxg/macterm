@@ -161,7 +161,7 @@ libghostty resolves a unicode binding such as `super+c` from the text before it 
 A pane that asks for a password gets a native `NSPopover` at the cursor (`PasswordBubble`). The bubble shows **Autofill** when Macterm saved a password for that prompt. It shows **Save Password?** after a password that the user typed worked. `PasswordPromptMonitor` (`Macterm/App/`) does all of this. The pure rules are in `Macterm/Model/PasswordPrompt.swift`.
 
 - **Detection uses the tty, not the screen**. The rule is canonical mode with echo off (`ProcessInspector.terminalIsReadingPassword`). Ghostty and iTerm2 use the same rule.
-  - Macterm reads the tty of the **zmx session** (`ZmxForegroundResolver.daemonTTYPath`). The check of libghostty sees the pty of the `zmx attach` client, and `cfmakeraw` keeps that pty raw for ever. Under zmx, `GHOSTTY_ACTION_SECURE_INPUT` never fires.
+  - Macterm reads the tty of the **session** (`ZmxForegroundResolver.daemonTTYPath`, the `pty` of `session.list`). The check of libghostty sees the pty of the `zmx connect` client, and `cfmakeraw` keeps that pty raw for ever. Under zmx, `GHOSTTY_ACTION_SECURE_INPUT` never fires.
   - The same reading also drives `macos-auto-secure-input` (`GhosttyTerminalNSView.detectedPasswordInput`, combined with OR with `passwordInput` of libghostty). The lock badge for each pane is off by default (`macos-secure-input-indication = false` in the defaults layer), because the bubble marks the prompt.
   - Macterm reads the tty in three cases:
     1. On the output heartbeat of the pane (`viewDidOutput`), because a prompt is output.
@@ -362,7 +362,7 @@ These rules for the spawn script come from tests against a real host:
 - Only triggers cause a new connection (wake, activation, project selection), with the backoff of `RemoteReconnectPolicy`. There is no timer and no verb for the user to connect again.
 - `Pane.ensureNSView` passes `command` only on the first surface build. A new start therefore never types a `run:` of a layout again.
 
-**Macterm reaps remote orphans by an ownership stamp**. `AppState.sweepOrphanSessions` (throttled for each host) stamps `macterm.owner=<installationID>` on the sessions that our panes claim. It lists the sessions. It kills only the `macterm-*` sessions that have zero clients and carry **our** stamp (`ZmxReaper.orphans`). The labels of zmx are in memory, and you can set them only on live sessions. A session that became an orphan before the stamp is therefore spared for ever. The stamp needs zmx 0.7.0 or later (labels). On an older host or session daemon the `set` fails behind `|| true`, so the sweep checks the listing: a claimed session with no stamp logs one warning per host for the run (`ZmxReaper.unstamped`), and the docs require zmx 0.7.1. `zmx ls --where` is not implemented, and it gives no error. Never filter on the host. Both reapers skip everything when `WorkspaceStore.loadFailed`.
+**Macterm reaps remote orphans by an ownership stamp**. `AppState.sweepOrphanSessions` (throttled for each host) stamps `macterm.owner=<installationID>` on the sessions that our panes claim. It lists the sessions. It kills only the `macterm-*` sessions that have zero clients and carry **our** stamp (`ZmxReaper.orphans`). The labels of zmx are in memory, and you can set them only on live sessions. A session that became an orphan before the stamp is therefore spared for ever. The stamp needs zmx 0.7.0 or later (labels). On an older host or session daemon the `set` fails behind `|| true`, so the sweep checks the listing: a claimed session with no stamp logs one warning per host for the run (`ZmxReaper.unstamped`), and the docs require zmx 0.7.1. `zmx ls --where` is not implemented, and it gives no error. Never filter on the host. The reaper skips everything when `WorkspaceStore.loadFailed`. Local sessions have no reaper: the server knows them.
 
 ### Installing zmx on a host (#699)
 
@@ -407,7 +407,7 @@ Pinned tabs belong to no project. The sidebar shows them above the projects. The
   - `AppState` tracks its own last write. It absorbs external edits before each write. A file that does not parse suspends the auto-writes with an alert.
   - A file that is absent or empty means "no input". It never means "remove everything".
 - **`pinned.yaml` lived in `projects/` before 1.31. That location is retired (#446)**. Macterm reads and writes only the new place. The 1.31 releases moved an existing file up at launch. A file that is still in `projects/` is ignored. The listing of projects still skips the reserved name there. A leftover file is therefore never offered as a project, and no project can take the name.
-- At launch, every record materializes. `materializeRestoredPinnedTabs` asks `zmx ls` which sessions survived. A session that is dead starts again from the declaration. The declaration refreshes at pin time, when the pinned foreground changes (debounced), and at quit. It never refreshes at unload.
+- At launch, every record materializes. `materializeRestoredPinnedTabs` asks the server which sessions survived. A session that is dead starts again from the declaration. The declaration refreshes at pin time, when the pinned foreground changes (debounced), and at quit. It never refreshes at unload.
 - Sidebar drag: the pinned rows and the tab lists share one `.dropDestination` at the level of the ForEach. It drives the native insertion line. Rows have no destinations of their own. A target on a row kills the line and swallows clicks. `PinTabDropZone` above the List makes the first pin possible by drag. `--project pinned` addresses the workspace over the CLI.
 - **No project may have the name `Pinned`** (any case, padding ignored). `ControlHandler.resolveProject` reads it as this workspace before any project, so such a project cannot be reached by name.
   - `PinnedTabs.reservesName` is the one test that every naming path applies. A typed name is refused where the user typed it. These paths are CLI `project create --name` and `project rename`, the notice of the sidebar rename, the New Project intent, and the remote sheet.
@@ -474,7 +474,7 @@ Desktop widgets are terminals on the desktop (`DesktopWidget`, `AppState+Desktop
   - `widgets.yaml` declares the latest *placement*, not `topLeft`. If it declared `topLeft`, a quit on the laptop would write the cell of the laptop. The next launch on the external display would adopt it.
   - Not verified live: what Notification Center does with widgets that do not fit, and if it anchors any of them to the right edge. Ours clamp.
 - **Widget panes live outside every workspace**, like the panes of the quick terminal.
-  - Their sessions are claims of the reaper (`desktopWidgetSessionNames`). They are bound in `session list`. They are rows in the quit prompt for the case with no persistence. The pane verbs address them through a bare `--session` (`ControlHandler.widgetTarget`).
+  - Their sessions are claims (`desktopWidgetSessionNames`). They are bound in `session list`. They are rows in the quit prompt for the case with no persistence. The pane verbs address them through a bare `--session` (`ControlHandler.widgetTarget`).
   - When the shell of a widget exits, the widget starts again in a new session (`desktopWidgetShellExited`). It does not close.
 
 ### First-run seed
@@ -657,7 +657,6 @@ Rules:
   - Apps of v1 that shipped earlier ignore `v`. The CLI must therefore check newer requests against the version in the response of the server before it sends any mutation. A new version number alone cannot stop an older app from ignoring `--no-focus` in silence.
 - **Server** (`ControlSocketServer`). A dedicated thread polls a non-blocking listen fd. The dispatch of each connection hops to `@MainActor`. The server starts in `applicationDidFinishLaunching`. The handler attaches in `installResponders` (early requests get `starting`). The socket has mode 0600 in a directory with mode 0700, for the same user only.
 - **Handler** (`ControlHandler`). It translates and delegates only. It resolves selectors (name, UUID, index from 1). It calls the same `AppState`, `ProjectStore` and `ZmxClient` methods that the UI uses. Close verbs return a typed `busy` error, and they do not stage dialogs. A session selector with no `--project` resolves in the project that holds the session (`MACTERM_SESSION` arrives in the same way). A pane in the background can therefore still reach itself while the user looks at another project.
-- **Macterm runs one local `zmx ls` at a time** (`ZmxListingGate`, through `listLocal` in `ZmxClient.live`). zmx counts every connection to the socket of a session as a client, and `zmx ls` connects to each session. Two listings at the same time can therefore count each other, and `session info` then reports a client that does not exist. Send every new local listing through the gate.
 - **Client.**
   - Discovery order: `--socket`, then `MACTERM_SOCKET` (a hint, and the client falls through when it is stale), then the paths in App Support for each flavor.
   - stdout has output only on success. The exit code is 0 for ok, 1 for an error of the app, 2 for not reachable.
@@ -697,7 +696,7 @@ The frames and messages between the app, the server and the session processes (d
 
 ### The app's client of the local server (`Macterm/Server/`)
 
-`LocalServer` and `ServerConnection` connect the app to `macterm server` (design/001 A, design/002). Nothing in the app calls them yet: v1's panes still run their own zmx.
+`LocalServer` and `ServerConnection` connect the app to `macterm server` (design/001 A, design/002). `LocalSessions` holds the app's one connection, and every local session path goes through it (see "Local panes are v2 sessions" below).
 
 - **The app starts the server.** `LocalServer.connect` connects to `<runtime dir>/.server`. When nothing answers, it runs the bundled `zmx server` with `MACTERM_RUNTIME_DIR` set, so that the app and the server use one directory. `runtimeDirectory(environment:)` finds it as `resolveDir` in `server/src/runtime.zig` does.
 - **A newer app replaces an older server** with `server.exit`, then starts its own. The sessions keep running.
@@ -707,6 +706,21 @@ The frames and messages between the app, the server and the session processes (d
   - One `connect` replaces at most once, so two apps never replace each other's server in a loop.
 - `ServerConnection` reads the socket on a thread of its own. A request waits for its response by id. `events` gives one element for each event batch. When the connection ends, each request that waits fails with `ServerClientError.disconnected`. Only the reader thread closes the fd, under the lock that each write holds.
 - `LocalServerTests` runs the bundled server in a runtime directory under `/tmp` (a socket path has at most 103 bytes).
+
+### Local panes are v2 sessions
+
+Every local pane (workspace, pinned, quick terminal, widget) is a v2 session of the local server. Remote panes stay on v1's path (`RemoteSpawn`, `zmx attach` on the host) until the remote cut-over.
+
+- **The surface still runs a client on a pty** (interim until the GUI feeds a surface from a channel, m3). `ZmxAttach.wrapperArgv` is ghostty's `command-wrapper`: `zmx connect <name> --`, before ghostty's fully resolved command. When no session has the name, `zmx connect` asks the server to make one (`session.create`, and it starts the server when nothing answers) with its own folder, environment and terminal size, and the command after `--`. So the session's shell is the one that libghostty resolved, with login(1), shell integration and the pane's `env` (`MACTERM_SESSION`, palette exports), as v1's `zmx attach` upsert gave. A session that exists is attached, and the command is not run.
+  - `session.create` takes `env` (`NAME=value` entries). The server sets its own `MACTERM_RUNTIME_DIR` in it, so the session listens where the server looks. The surface's env pins `MACTERM_RUNTIME_DIR` to the app's runtime directory.
+  - The claim APC goes through `zmx connect` as the `claim` message, so leadership works as in v1.
+- **`LocalSessions` is the app's one server connection** (`LocalSessions.shared`). It connects at the first use and again after the connection ends (the server exits when it has no session and no client). `MactermApp` connects at launch, so a server of an older build is replaced early. `ZmxClient.live` sends `killSession`, `listSessions`, `session list/info/kill` and the foreground cache through it.
+- **The app ends a session whose shell exited** (`session.kill` takes the status): at its `session.exit` event, and at each connect for one that exited while no app was connected. Its pane already closed from the client's exit. Without this, a session keeps its exit status for ever, and a pane of the same name attaches to an exited session.
+- **The foreground and the tty come from `session.list`**: `shell_pid` (the pty's leader) and `pty`. `ZmxForegroundResolver` reads the foreground group of the shell, and `daemonTTYPath` is the session's pty, for the password monitor and secure input. `ProcessInspector` is unchanged.
+- **No local reaper and no listing gate.** The server knows every session, and a pane's close ends its session. `session list` reports `clients` as unknown (the server does not count clients), and lists only running sessions.
+- **The first v2 launch ends v1's local sessions** that the restored panes name (`AppState.endV1SessionsOnce`, design/008 §4 Q3 A), once (`Preferences.endedV1Sessions`). It runs v1's `zmx kill` in v1's socket folder (`ZmxSocketBudget.v1SocketDir`). Each pane already opened a new v2 session of the same name, with a new shell in its saved folder. v1 sessions that no pane names, and remote sessions, are left alone.
+- The unit-test host starts no server and runs no session (`ZmxBypass.unitTestHost`): every live session call returns nil or does nothing there.
+- The server tests are `server/test/connect_create.bats` (the create path of `zmx connect`) and `server_v2.bats`.
 
 ### Ghostty config pipeline
 
@@ -1020,7 +1034,7 @@ There is one `XxxTests.swift` for each production type. It mirrors the source pa
 
 ### End-to-end (`scripts/e2e/`)
 
-The suite starts the real Debug app in a hermetic way through `MactermHarness`. It uses a throwaway `$HOME`, `MACTERM_BENCHMARK_DATA_DIR` and `ZMX_DIR`. The socket directory of zmx is per user. Without the override, a hermetic instance would share sessions with the real Macterm of the developer. The suite asserts through the CLI (`pane dump` and others read the live state of libghostty).
+The suite starts the real Debug app in a hermetic way through `MactermHarness`. It uses a throwaway `$HOME`, `MACTERM_BENCHMARK_DATA_DIR`, `MACTERM_RUNTIME_DIR` and `ZMX_DIR`. The runtime directory of the session server is per user. Without the override, a hermetic instance would use the developer's real server and share its sessions. The suite asserts through the CLI (`pane dump` and others read the live state of libghostty).
 
 Conventions:
 
@@ -1228,7 +1242,7 @@ The GUI text is in three String Catalogs: `Macterm/Localizable.xcstrings` (the a
 - `save` records `run:` as the live foreground command (`ProcessInspector.runningCommand`, for a remote project through the probe cache). It records `shell:` only for a shell that is not the default. `apply` (`LayoutReconciler`) matches by the same `(run, cwd)`. Files that do not parse surface `LayoutFileError`. An empty `tabs:` is a bare declaration.
 - v1.22.0 removed the `.macterm/layout.yaml` in the repo. `LayoutFile` has no form on disk. Do not add helpers to load or serialize it.
 - **The tab of the quick terminal persists too** (`WorkspacesFile.quickTerminal`, an optional section with deliberately no change of the schema version, see its doc comment).
-  - `AppState` adopts `QuickTerminalService.shared.splitState` one time (`adoptQuickTerminal`, which you can inject at init for tests). It takes a snapshot of it in every `saveWorkspaces`. It hands the tab back in `restoreSelection` before the sweep for orphans. It counts the sessions of the tab as claims for the reaper. The panes connect only when the panel is shown for the first time, so until then they have zero clients.
+  - `AppState` adopts `QuickTerminalService.shared.splitState` one time (`adoptQuickTerminal`, which you can inject at init for tests). It takes a snapshot of it in every `saveWorkspaces`. It hands the tab back in `restoreSelection`. It counts the sessions of the tab as claims. The panes connect only when the panel is shown for the first time, so until then they have zero clients.
   - `QuickTerminalSplitState` reports its own splits and closes through `onStructureChange`, because it owns no `AppState`. Macterm refuses a restore after the panel was shown in this run.
   - Results: a quit kills nothing and confirms nothing while zmx is bundled. The confirmation returns, with the quick terminal included, only when zmx is not available. A close of a pane in the panel is still the one permanent kill.
 - Settings → Projects duplicates the alerts for layout and remove. Keep them gated on `AppState.DialogHost`, so that a confirmation that the palette raises does not also open Settings.

@@ -340,7 +340,7 @@ extension AppState {
     /// one that was already unloaded at quit, or hand-added to `pinned.yaml`
     /// — rebuilds from its declaration, re-running its `run:` commands. A tab
     /// with any REMOTE pane always reattaches — its sessions live on the
-    /// remote host, which a local `zmx ls` can't see (and which survive this
+    /// remote host, which the local server can't see (and which survive this
     /// machine's reboots by design). A failed listing (nil) also reattaches
     /// everything: fail toward reattach, never toward respawning over
     /// sessions that may be alive.
@@ -355,8 +355,8 @@ extension AppState {
         if pendingPinnedLiveRestores.isEmpty {
             aliveNames = []
         } else if zmx.isBundled() {
-            if let entries = await zmx.listSessionsWithClients() {
-                aliveNames = Set(entries.map(\.name))
+            if let sessions = await zmx.listSessions() {
+                aliveNames = Set(sessions.filter(\.isRunning).map(\.name))
             }
         } else {
             // No persistence layer: nothing survived the quit.

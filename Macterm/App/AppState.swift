@@ -1255,8 +1255,8 @@ final class AppState {
     /// pure bookkeeping, no UI reads it.
     @ObservationIgnored
     private var reconnectPolicy = RemoteReconnectPolicy()
-    /// Orphan-sweep throttle (#281): destination (`user@host`, or
-    /// `localSweepKey` for the local daemon) → when it was last swept.
+    /// Orphan-sweep throttle (#281): destination (`user@host`) → when it
+    /// was last swept.
     @ObservationIgnored
     private var sweptDestinations: [String: Date] = [:]
     /// Remote destinations whose owner stamp failed (`ZmxReaper.unstamped`),
@@ -1449,9 +1449,9 @@ final class AppState {
     @ObservationIgnored
     var pendingDesktopWidgetMaterialize: Set<UUID> = []
 
-    /// Refresh policy for `ZmxForegroundResolver`'s name→leader-pid cache:
+    /// Refresh policy for `ZmxForegroundResolver`'s name→leader cache:
     /// refresh on session lifecycle events plus a 30s reconcile TTL — never
-    /// per tick (`zmx ls` is a fork/exec).
+    /// per tick.
     @ObservationIgnored
     private var zmxRefreshGate = ZmxRefreshGate()
 
@@ -1462,16 +1462,16 @@ final class AppState {
     @ObservationIgnored
     private let remoteForegroundResolver = RemoteForegroundResolver()
 
-    /// Drops overlapping `zmx ls` refreshes so a slow probe can't pile up
+    /// Drops overlapping session listings so a slow one can't pile up
     /// behind the poll.
     @ObservationIgnored
     private var zmxRefreshInFlight = false
 
-    /// Bounded retries while a *wrapped* pane is missing from `zmx ls`: a
-    /// freshly-spawned session registers asynchronously, so the refresh fired
-    /// by its creation event usually runs too early. Reset on every lifecycle
-    /// event; without the cap, a genuinely dead daemon would turn every poll
-    /// tick back into a fork/exec.
+    /// Bounded retries while a *wrapped* pane is missing from the server's
+    /// list: a freshly-spawned session registers asynchronously, so the
+    /// refresh fired by its creation event usually runs too early. Reset on
+    /// every lifecycle event; without the cap, a dead session would turn
+    /// every poll tick back into a listing.
     @ObservationIgnored
     private var zmxRetryBudget = 8
 
@@ -1616,23 +1616,23 @@ final class AppState {
         reschedulePoll()
     }
 
-    /// Refresh `ZmxForegroundResolver`'s name→leader-pid cache when the gate
-    /// says so (session lifecycle event, or the 30s reconcile TTL). Runs the
-    /// `zmx ls` subprocess off-main; per-tick foreground resolution reads the
-    /// cache with cheap syscalls only. Steady state: at most one fork/exec
-    /// every 30s, zero while polling is paused.
+    /// Refresh `ZmxForegroundResolver`'s name→leader cache when the gate
+    /// says so (session lifecycle event, or the 30s reconcile TTL), from the
+    /// server's `session.list`. Per-tick foreground resolution reads the
+    /// cache with cheap syscalls only. A failed listing keeps the cache.
     private func refreshZmxCacheIfDue() {
         guard !zmxRefreshInFlight, zmx.isBundled() else { return }
         guard zmxRefreshGate.shouldRefresh(now: Date()) else { return }
         zmxRefreshInFlight = true
         Task { [weak self, zmx] in
-            let map = await zmx.sessionLeaderPIDs()
-            ZmxForegroundResolver.updateCache(map)
-            await MainActor.run { self?.finishZmxRefresh(map: map) }
+            let sessions = await zmx.listSessions()
+            if let sessions { ZmxForegroundResolver.updateCache(sessions) }
+            let names = Set((sessions ?? []).filter(\.isRunning).map(\.name))
+            await MainActor.run { self?.finishZmxRefresh(running: names) }
         }
     }
 
-    private func finishZmxRefresh(map: [String: pid_t]) {
+    private func finishZmxRefresh(running map: Set<String>) {
         zmxRefreshInFlight = false
         // A wrapped pane absent from the listing means the refresh raced the
         // session's async registration — retry on the next tick (bounded).
@@ -1641,7 +1641,7 @@ final class AppState {
         let missingWrapped = workspaces.values
             .flatMap(\.tabs)
             .flatMap { $0.splitRoot.allPanes() }
-            .contains { $0.nsView?.isZmxWrapped == true && map[$0.sessionName] == nil }
+            .contains { $0.nsView?.isZmxWrapped == true && !map.contains($0.sessionName) }
         if missingWrapped, zmxRetryBudget > 0 {
             zmxRetryBudget -= 1
             zmxRefreshGate.noteSessionLifecycle()
@@ -1842,21 +1842,13 @@ final class AppState {
                 warmFocusedProject()
             }
         }
-        // Sweep crash/force-quit orphans: kill zero-client macterm-* sessions
-        // no restored pane claims. Attach-aware and fail-closed (a failed
-        // probe reaps nothing, and a failed snapshot LOAD sweeps nothing —
-        // an empty claim set would mark every live session an orphan);
-        // foreign prefixes (supa-*, user sessions) are spared. The quick
-        // terminal's restored sessions are claims like any other, so they
-        // wait for the panel to be shown rather than dying here.
-        // Pinned live tabs materialize async, after zmx says which sessions
-        // survived (#285) — ahead of the loadFailed gate, since pinned
-        // records come from pinned.yaml, not the snapshot.
+        // Pinned live tabs materialize async, after the server says which
+        // sessions survived (#285) — ahead of the loadFailed gate, since
+        // pinned records come from pinned.yaml, not the snapshot.
         Task { await materializeRestoredPinnedTabs(projects: projects) }
+        // A failed snapshot LOAD gives no names: nothing is ended.
         guard !workspaceStore.loadFailed else { return }
-        sweptDestinations[Self.localSweepKey] = Date()
-        let known = claimedSessionNames()
-        Task { [zmx] in await zmx.reapOrphans(knownSessionNames: known) }
+        endV1SessionsOnce(names: claimedSessionNames())
         // The active project's remote host gets the labelled sweep (#281);
         // other hosts are swept when their projects are selected.
         if let id = activeProjectID, let project = projects.first(where: { $0.id == id }) {
@@ -2104,25 +2096,35 @@ final class AppState {
         pane.requestSurfaceReattach()
     }
 
+    // MARK: - The v1 sessions
+
+    /// Ends the v1 local zmx sessions that the restored panes name, at the
+    /// first v2 launch (design/008 §4, Q3 A). v2 cannot attach to them: each
+    /// pane opened a new v2 session of the same name, with a new shell in
+    /// its saved folder, so a v1 session left running would be a hidden
+    /// shell until a reboot. Only these names: a v1 session that no pane
+    /// names is not ours to judge. Remote sessions stay (their names are not
+    /// in the local folder). The flag is set only when the kill ran.
+    private func endV1SessionsOnce(names: Set<String>) {
+        guard !Preferences.shared.endedV1Sessions else { return }
+        Task { [zmx] in
+            guard await zmx.endV1Sessions(names.sorted()) else { return }
+            await MainActor.run { Preferences.shared.endedV1Sessions = true }
+        }
+    }
+
     // MARK: - Orphan session sweep (#281)
 
-    /// Throttle key for the local daemon's slot in `sweptDestinations` —
-    /// contains a character `RemoteSpawn.destination` can never produce.
-    private static let localSweepKey = "<local>"
     /// Floor between sweeps of one destination. Project switches are cheap
     /// and frequent; orphan creation is rare, so once per app run is the
     /// intent and this just lets a long-lived run catch up eventually.
     private static let orphanSweepInterval: TimeInterval = 600
 
     /// Every session name a live or restored pane claims, across ALL
-    /// workspaces — the reapers' spare list. Over-sparing is safe;
-    /// under-sparing kills a live session, hence the `loadFailed` gates.
-    /// Pinned live snapshots that haven't materialized yet count as claims
-    /// too (#285), or a sweep would kill the very sessions the materialize
-    /// step is about to reattach. So do the quick terminal's panes: restored
-    /// at launch but attached only when the panel is first shown, they sit
-    /// at zero clients for exactly the window this sweep runs in. Desktop
-    /// widgets' sessions are claims for the same reason.
+    /// workspaces: pinned live snapshots that haven't materialized yet
+    /// (#285), the quick terminal's panes (attached only when the panel is
+    /// first shown) and desktop widgets' sessions included. The names that
+    /// `endV1SessionsOnce` ends in v1's folder.
     private func claimedSessionNames() -> Set<String> {
         Set(allLivePanes().map(\.sessionName))
             .union(pendingPinnedSessionNames())
@@ -2469,9 +2471,9 @@ final class AppState {
         return true
     }
 
-    /// Reap orphaned zmx sessions on project selection (#281): the local
-    /// daemon sweep that used to run only at launch, plus — for a remote
-    /// project — the labelled sweep of its host. A remote session is orphaned
+    /// Reap orphaned zmx sessions of a remote project's host on project
+    /// selection (#281). Local sessions have no reaper: the server knows
+    /// every one, and a pane's close ends its session. A remote session is orphaned
     /// when its kill silently no-op'd (`killRemoteSession` is best-effort:
     /// closing a pane while the host is unreachable leaves the session
     /// running with nobody tracking it); the sweep stamps
@@ -2489,10 +2491,6 @@ final class AppState {
         guard !Preferences.isTestRun else { return }
         guard !workspaceStore.loadFailed else { return }
         let now = Date()
-        let known = claimedSessionNames()
-        if shouldSweep(Self.localSweepKey, now: now) {
-            Task { [zmx] in await zmx.reapOrphans(knownSessionNames: known) }
-        }
         guard Preferences.shared.backgroundSSHConnections,
               let remote = ProjectPath.remote(from: project.path),
               case let .remote(user, host, _) = remote
@@ -2511,6 +2509,7 @@ final class AppState {
             .map(\.sessionName)
         let ownerID = Preferences.shared.installationID
         let zmxPath = project.zmxPath
+        let known = claimedSessionNames()
         Task { [zmx, weak self] in
             guard let entries = await zmx.sweepRemoteOrphans(remote, zmxPath, claimed, ownerID)
             else { return }

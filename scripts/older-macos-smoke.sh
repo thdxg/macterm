@@ -17,7 +17,8 @@
 #
 #   scripts/older-macos-smoke.sh "<path to Macterm.app>"
 #
-# The instance is isolated: a throwaway HOME, data folder and zmx folder. It
+# The instance is isolated: a throwaway HOME, data folder, session runtime
+# folder and zmx folder. It
 # runs without MACTERM_BENCHMARK, which would turn the adaptive icon off.
 # UserDefaults is NOT isolated (cfprefsd ignores HOME): on a developer Mac the
 # run reads and writes the real defaults domain of that build.
@@ -124,6 +125,7 @@ before=" $(pids_of_app | tr '\n' ' ')"
 open -n \
   --env HOME="$ROOT/home" \
   --env XDG_CONFIG_HOME="$ROOT/home/.config" \
+  --env MACTERM_RUNTIME_DIR="$ROOT/run" \
   --env ZMX_DIR="$ROOT/zmx" \
   --env MACTERM_BENCHMARK_DATA_DIR="$ROOT/data" \
   "$APP"

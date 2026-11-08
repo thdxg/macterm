@@ -15,13 +15,13 @@ piece of it earned against real CI runners:
   a TCC grant, so a stock headless CI runner can script the GUI app.
 - Isolate the instance: a throwaway $HOME (shell rc files, ~/.config/macterm),
   MACTERM_BENCHMARK_DATA_DIR (App Support resolves via the user record, NOT
-  $HOME — projects/workspaces/control.sock need the explicit override), and
-  ZMX_DIR (the zmx socket dir defaults to a per-*user* path — TMPDIR/zmx-<uid>
-  — that a throwaway $HOME does NOT move, so without this override a hermetic
-  instance would share the session namespace with the developer's real
-  Macterm: its `session list` would see their sessions, and its orphan reaper
-  could kill their detached-but-persistent shells).
-- Root the home in /tmp, NOT the default $TMPDIR: control.sock and the zmx
+  $HOME — projects/workspaces/control.sock need the explicit override),
+  MACTERM_RUNTIME_DIR (the folder of the session server and its sessions
+  defaults to TMPDIR/macterm, a per-*user* path that a throwaway $HOME does
+  NOT move, so without this override a hermetic instance would use the
+  developer's real server: its `session list` would see their sessions), and
+  ZMX_DIR (v1's zmx socket dir, where the first v2 launch ends v1 sessions).
+- Root the home in /tmp, NOT the default $TMPDIR: control.sock and the
   session sockets must fit sun_path (~104 bytes), and CI runners' $TMPDIR
   (/var/folders/…/T/) pushes the paths right past that.
 """
@@ -124,6 +124,7 @@ class MactermHarness:
             "MACTERM_BENCHMARK": "1",
             "MACTERM_BENCHMARK_DATA_DIR": self.data_dir,
             "HOME": self.home,
+            "MACTERM_RUNTIME_DIR": os.path.join(self.home, "run"),
             "ZMX_DIR": os.path.join(self.home, "zmx"),
         }
         self.pid = None
@@ -285,16 +286,15 @@ class MactermHarness:
         self.pid = None
 
     def kill_sessions(self):
-        """Kill every zmx session attached to one of this instance's live
-        panes, so their shells don't keep running after teardown. Scoped by
-        pane attachment, never by name: with a shared ZMX_DIR the daemon
-        could list sessions belonging to another Macterm, and those must
-        survive. Best-effort — teardown proceeds to SIGKILL regardless."""
+        """Kill every session of this instance, so their shells don't keep
+        running after teardown. The runtime directory is the instance's own,
+        so every session that its server lists is one of ours. With no
+        session and no client, the server then exits by itself. Best-effort
+        — teardown proceeds to SIGKILL regardless."""
         try:
             sessions = self.cli_json("session", "list").get("sessions") or []
             for session in sessions:
-                if session.get("paneID"):
-                    self.cli("session", "kill", session["name"], check=False)
+                self.cli("session", "kill", session["name"], check=False)
         except Exception:
             pass
 

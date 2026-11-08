@@ -2163,9 +2163,8 @@ struct AppStateTests {
             killRemoteSession: { _, name, _ in await (remoteKilled ?? killed).append(name) },
             remoteForegrounds: { _, _ in .unreachable },
             sweepRemoteOrphans: { _, _, _, _ in nil },
-            listSessionsWithClients: { [] },
-            sessionLeaderPIDs: { [:] },
-            sessionListSnapshot: { (entries: [], leaders: [:]) }
+            listSessions: { [] },
+            endV1Sessions: { _ in true }
         )
     }
 
@@ -2300,9 +2299,8 @@ struct AppStateTests {
             killRemoteSession: { _, name, _ in await remoteKilled.append(name) },
             remoteForegrounds: { _, _ in .unreachable },
             sweepRemoteOrphans: { _, _, _, _ in entries },
-            listSessionsWithClients: { [] },
-            sessionLeaderPIDs: { [:] },
-            sessionListSnapshot: { (entries: [], leaders: [:]) }
+            listSessions: { [] },
+            endV1Sessions: { _ in true }
         )
     }
 
@@ -2440,9 +2438,8 @@ struct AppStateTests {
                 return .unreachable
             },
             sweepRemoteOrphans: { _, _, _, _ in nil },
-            listSessionsWithClients: { [] },
-            sessionLeaderPIDs: { [:] },
-            sessionListSnapshot: { (entries: [], leaders: [:]) }
+            listSessions: { [] },
+            endV1Sessions: { _ in true }
         )
     }
 
@@ -2898,28 +2895,26 @@ struct AppStateTests {
         #expect(quick.tab.id == bornWith)
     }
 
-    /// The launch sweep kills zero-client `macterm-*` sessions nobody claims.
-    /// The quick terminal's restored panes attach only when the panel is
-    /// first shown, so they ARE zero-client at exactly that moment — and must
-    /// count as claims, or the sweep would destroy the sessions the panel is
-    /// about to reattach. A genuinely unclaimed session still dies.
+    /// The first v2 launch ends the v1 sessions that the restored panes
+    /// name, the quick terminal's included, and only once.
     @Test
-    func the_launch_sweep_spares_the_restored_quick_terminals_sessions() async throws {
+    func the_first_v2_launch_ends_the_v1_sessions_that_the_restored_panes_name() async throws {
         let (writer, writerQuick, storeURL, dir) = try makeQuickTerminalFixture()
         defer { try? FileManager.default.removeItem(at: dir) }
         try writerQuick.split(paneID: #require(writerQuick.focusedPaneID), direction: .horizontal)
         let quickNames = Set(writerQuick.tab.splitRoot.allPanes().map(\.sessionName))
         writer.saveWorkspaces()
 
-        let orphan = "macterm-quick-0123456789ab"
-        #expect(!quickNames.contains(orphan))
-        let killed = KilledSessions()
-        var zmx = recordingZmx(into: killed)
-        zmx.listSessionsWithClients = {
-            (quickNames.sorted() + [orphan]).map {
-                ZmxSessionListParser.Entry(name: $0, clients: 0, owner: nil)
+        let ended = KilledSessions()
+        var zmx = ZmxClient.noop
+        zmx.endV1Sessions = { names in
+            for name in names {
+                await ended.append(name)
             }
+            return true
         }
+        Preferences.shared.endedV1Sessions = false
+        defer { Preferences.shared.endedV1Sessions = false }
         let state = AppState(
             workspaceStore: WorkspaceStore(fileURL: storeURL),
             projectFiles: makeProjectFileStore(),
@@ -2928,8 +2923,13 @@ struct AppStateTests {
         state.zmx = zmx
         state.restoreSelection(projects: [])
 
-        await killed.settle(expecting: 1)
-        #expect(await killed.names == [orphan])
+        await ended.settle(expecting: quickNames.count)
+        #expect(await Set(ended.names) == quickNames)
+        let deadline = Date().addingTimeInterval(5)
+        while !Preferences.shared.endedV1Sessions, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(Preferences.shared.endedV1Sessions)
     }
 }
 

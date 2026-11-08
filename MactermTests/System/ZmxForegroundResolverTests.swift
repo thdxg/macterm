@@ -2,26 +2,39 @@ import Foundation
 @testable import Macterm
 import Testing
 
-struct ZmxForegroundResolverParseTests {
+struct ZmxForegroundResolverEntriesTests {
     @Test
-    func parses_session_name_to_leader_pid() {
-        let stdout = """
-          name=macterm-proj-abc123\tpid=46878\tclients=1\tcreated=123
-          name=macterm-proj-def456\tpid=47353\tclients=0\tcreated=456
-        """
-        let map = ZmxForegroundResolver.parseLeaderPIDs(stdout)
-        #expect(map == ["macterm-proj-abc123": 46878, "macterm-proj-def456": 47353])
+    func a_running_session_maps_to_its_shell_and_pty() {
+        let entries = ZmxForegroundResolver.entries(from: [
+            LocalSession(name: "macterm-proj-abc123", shellPID: 46878, ttyPath: "/dev/ttys012"),
+            LocalSession(name: "macterm-proj-def456", shellPID: 47353, ttyPath: nil),
+        ])
+        #expect(entries == [
+            "macterm-proj-abc123": .init(leaderPID: 46878, ttyPath: "/dev/ttys012"),
+            "macterm-proj-def456": .init(leaderPID: 47353, ttyPath: nil),
+        ])
     }
 
     @Test
-    func skips_foreign_prefix_and_pidless_lines() {
-        let stdout = """
-          name=supa-xyz\tpid=999\tclients=0
-          name=macterm-nopid\tclients=0
-          name=macterm-ok\tpid=42\tclients=1
-        """
-        let map = ZmxForegroundResolver.parseLeaderPIDs(stdout)
-        #expect(map == ["macterm-ok": 42])
+    func an_exited_session_or_one_with_no_shell_is_left_out() {
+        let entries = ZmxForegroundResolver.entries(from: [
+            LocalSession(name: "macterm-exited", shellPID: 999, ttyPath: "/dev/ttys001", isRunning: false),
+            LocalSession(name: "macterm-starting", shellPID: nil),
+            LocalSession(name: "macterm-ok", shellPID: 42),
+        ])
+        #expect(entries == ["macterm-ok": .init(leaderPID: 42, ttyPath: nil)])
+    }
+
+    @Test
+    func a_server_session_becomes_a_local_session() {
+        let session = MactermProtocol.Session(
+            id: "macterm-x", state: .running, build: "b", level: 1,
+            pid: 10, shellPid: 11, pty: ProtocolBin(Data("/dev/ttys004".utf8)), cols: 80, rows: 24
+        )
+        #expect(LocalSession(session) == LocalSession(name: "macterm-x", shellPID: 11, ttyPath: "/dev/ttys004"))
+        var exited = session
+        exited.state = .exited
+        #expect(!LocalSession(exited).isRunning)
     }
 }
 
