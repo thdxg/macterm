@@ -194,6 +194,9 @@ pub const Session = struct {
     /// The signal number, when `state` is `exited` and a signal ended the
     /// shell.
     signal: ?u8 = null,
+    /// The clients that show the session (they sent `attach`). Null when
+    /// the session did not say (a session of an older build).
+    clients: ?u16 = null,
 };
 
 pub const SessionState = enum {
@@ -365,6 +368,9 @@ pub const State = struct {
     pty: msgpack.Bin,
     cols: u16,
     rows: u16,
+    /// The clients that sent `attach`. The session sends `state` again to
+    /// its other connections (the server's) each time this count changes.
+    clients: ?u16 = null,
 };
 
 /// The first message of a client that shows the pane: its size. When the

@@ -101,7 +101,7 @@ struct ZmxSocketBudgetTests {
     @Test
     func theSocketDirIsTheServersRuntimeDirectory() {
         #expect(ZmxSocketBudget.socketDir(env: ["MACTERM_RUNTIME_DIR": "/custom/dir"]) == "/custom/dir")
-        #expect(ZmxSocketBudget.socketDir(env: ["TMPDIR": "/var/tmp/"]) == "/var/tmp/macterm")
+        #expect(ZmxSocketBudget.socketDir(env: ["TMPDIR": "/var/tmp/"])?.hasPrefix("/var/tmp/macterm") == true)
         #expect(ZmxSocketBudget.socketDir(env: [:]) == nil)
     }
 
@@ -186,6 +186,26 @@ struct ZmxSessionNameTests {
 }
 
 struct ZmxReaperTests {
+    @Test
+    func local_orphans_are_running_unclaimed_sessions_that_no_client_shows() {
+        let sessions = [
+            LocalSession(name: "macterm-a", clients: 0), // orphan → end
+            LocalSession(name: "macterm-b", clients: 0), // claimed → spare
+            LocalSession(name: "macterm-c", clients: 1), // shown → spare
+            LocalSession(name: "macterm-d", clients: nil), // unknown count → spare
+            LocalSession(name: "macterm-e", isRunning: false, clients: 0), // exited → the app ends it anyway
+            LocalSession(name: "user-f", clients: 0), // foreign prefix → spare
+        ]
+        #expect(ZmxReaper.localOrphans(in: sessions, known: ["macterm-b"]) == ["macterm-a"])
+        #expect(ZmxReaper.localOrphans(in: [], known: []).isEmpty)
+    }
+
+    @Test @MainActor
+    func a_hermetic_run_never_ends_v1_sessions_or_writes_the_flag() {
+        // The unit-test host is hermetic, as the benchmark and e2e are.
+        #expect(AppState.OnceFlag.preferences.read())
+    }
+
     private func entry(_ name: String, clients: Int?, owner: String?) -> ZmxSessionListParser.Entry {
         .init(name: name, clients: clients, owner: owner)
     }

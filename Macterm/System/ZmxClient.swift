@@ -56,14 +56,14 @@ struct ZmxClient {
     var listSessions: @Sendable () async -> [LocalSession]?
     /// Ends v1's local zmx sessions of these names (`zmx kill`, in v1's
     /// socket folder), once, at the first v2 launch (design/008 §4). False
-    /// when the kill did not run.
+    /// when nothing was tried (no zmx, or the unit-test host).
     var endV1Sessions: @Sendable (_ names: [String]) async -> Bool
 }
 
 extension ZmxClient {
     /// 5-second cap on any `zmx` subprocess so a stuck daemon never blocks the
-    /// app's close / quit paths. Every call we issue (ls / kill) completes in
-    /// <100ms in practice; if it doesn't, log + continue beats hanging.
+    /// app's close / quit paths. Every call we issue completes in <100ms in
+    /// practice; if it doesn't, log + continue beats hanging.
     static let subprocessTimeout: Duration = .seconds(5)
 
     static let live: ZmxClient = {
@@ -157,7 +157,9 @@ extension ZmxClient {
                 guard !names.isEmpty else { return true }
                 var env = ProcessInfo.processInfo.environment
                 env["ZMX_DIR"] = ZmxSocketBudget.v1SocketDir(env: env)
-                return await runZmxProcess(["kill"] + names, executable: bundledExecutable(), environment: env) != nil
+                // `zmx kill` exits 1 when no session of the names runs.
+                _ = await runZmxProcess(["kill"] + names, executable: bundledExecutable(), environment: env)
+                return true
             }
         )
     }()
@@ -500,9 +502,26 @@ enum ZmxSessionListParser {
     }
 }
 
-/// Pure orphan-selection logic for a remote host (#281), split out so the
-/// reap policy is unit-testable without spawning subprocesses.
+/// Pure orphan-selection logic, split out so the reap policy is
+/// unit-testable without a server or subprocesses.
 enum ZmxReaper {
+    /// Local sessions safe to end: a running `macterm-` session that no
+    /// client shows (`clients == 0`) and that the `known` set doesn't claim.
+    /// An unknown count (`clients == nil`) is spared. The runtime folder is
+    /// this build flavor's own (`LocalServer.folderName`), so every session
+    /// in it was made by an app of this flavor. These are the leftovers of a
+    /// crash, or of a close whose kill did not reach the server.
+    static func localOrphans(in sessions: [LocalSession], known: Set<String>) -> [String] {
+        sessions.compactMap { session in
+            guard session.isRunning,
+                  session.name.hasPrefix(ZmxSessionName.prefix),
+                  session.clients == 0,
+                  !known.contains(session.name)
+            else { return nil }
+            return session.name
+        }
+    }
+
     /// Names safe to reap: a `macterm-` session with `clients == 0` that the
     /// `known` set doesn't claim, and that carries OUR `macterm.owner` label.
     /// Spares unknown counts (`clients == nil`), attached sessions, foreign

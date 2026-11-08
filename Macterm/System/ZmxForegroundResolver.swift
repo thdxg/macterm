@@ -107,8 +107,8 @@ enum ZmxForegroundResolver {
 
 /// Pure refresh policy for the resolver cache: refresh on session lifecycle
 /// events (spawn/kill/reattach — the only times a leader pid can change) and
-/// on a slow reconcile TTL as a safety net against drift from external
-/// `zmx kill`s. Owned by `AppState`, consulted inside the poll tick; value
+/// on a slow reconcile TTL as a safety net against drift from kills
+/// outside the app. Owned by `AppState`, consulted inside the poll tick; value
 /// type with an injected clock in the `PollCadence` style.
 struct ZmxRefreshGate {
     static let reconcileInterval: TimeInterval = 30
@@ -121,7 +121,7 @@ struct ZmxRefreshGate {
         invalidated = true
     }
 
-    /// Whether the caller should run `zmx ls` now. Returns true at most once
+    /// Whether the caller should list the sessions now. Returns true at most once
     /// per invalidation-or-TTL window: asking stamps the refresh, so callers
     /// must actually perform it (a failed run self-heals via the TTL).
     mutating func shouldRefresh(now: Date) -> Bool {

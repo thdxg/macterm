@@ -161,13 +161,27 @@ struct LocalServerTests {
 
     @Test
     func the_runtime_directory_is_found_as_the_server_finds_it() {
+        let release = "com.thdxg.macterm"
         #expect(LocalServer.runtimeDirectory(environment: [
             "MACTERM_RUNTIME_DIR": "/a", "XDG_RUNTIME_DIR": "/b", "TMPDIR": "/c/",
-        ])?.path == "/a")
-        #expect(LocalServer.runtimeDirectory(environment: ["XDG_RUNTIME_DIR": "/b", "TMPDIR": "/c/"])?.path == "/b/macterm")
-        #expect(LocalServer.runtimeDirectory(environment: ["MACTERM_RUNTIME_DIR": "", "TMPDIR": "/c/"])?.path == "/c/macterm")
-        #expect(LocalServer.runtimeDirectory(environment: ["HOME": "/h"])?.path == "/h/.local/state/macterm/run")
-        #expect(LocalServer.runtimeDirectory(environment: [:]) == nil)
+        ], bundleID: release)?.path == "/a")
+        #expect(LocalServer.runtimeDirectory(environment: ["XDG_RUNTIME_DIR": "/b", "TMPDIR": "/c/"], bundleID: release)?
+            .path == "/b/macterm")
+        #expect(LocalServer.runtimeDirectory(environment: ["MACTERM_RUNTIME_DIR": "", "TMPDIR": "/c/"], bundleID: release)?
+            .path == "/c/macterm")
+        #expect(LocalServer.runtimeDirectory(environment: ["HOME": "/h"], bundleID: release)?.path == "/h/.local/state/macterm/run")
+        #expect(LocalServer.runtimeDirectory(environment: [:], bundleID: release) == nil)
+    }
+
+    @Test
+    func each_build_flavor_has_its_own_runtime_directory() {
+        #expect(LocalServer.folderName(bundleID: "com.thdxg.macterm") == "macterm")
+        #expect(LocalServer.folderName(bundleID: "com.thdxg.macterm.debug") == "macterm-debug")
+        #expect(LocalServer.folderName(bundleID: nil) == "macterm")
+        #expect(LocalServer.runtimeDirectory(environment: ["TMPDIR": "/c/"], bundleID: "com.thdxg.macterm.debug")?
+            .path == "/c/macterm-debug")
+        // An explicit directory wins for every flavor.
+        #expect(LocalServer.runtimeDirectory(environment: ["MACTERM_RUNTIME_DIR": "/a"], bundleID: "com.thdxg.macterm.debug")?.path == "/a")
     }
 
     // MARK: - Helpers

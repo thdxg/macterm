@@ -313,7 +313,8 @@ extension AppState {
 
     /// Rebuild the records from the workspace snapshot. Live tab snapshots
     /// are NOT materialized here — they wait for `materializeRestoredPinnedTabs`
-    /// to ask zmx which sessions survived, because `zmx attach` is an upsert:
+    /// to ask the server which sessions survived, because `zmx connect --`
+    /// makes a missing session:
     /// eagerly restoring a dead session would silently hand the user a bare
     /// shell where the declaration should have re-run its command.
     func restorePinnedState(_ snapshots: [PinnedTabSnapshot], activeTabID: UUID? = nil) {

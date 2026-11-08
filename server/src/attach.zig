@@ -98,12 +98,12 @@ pub fn run(gpa: std.mem.Allocator, dir: []const u8, name: []const u8, create: ?C
     defer gpa.free(path);
 
     signal.ignoreSigpipe();
-    const existing: ?i32 = if (have_dir) ipc.connectSession(path) catch null else null;
-    const fd = existing orelse fd: {
-        const spec = create orelse return error.NoSession;
+    // With `create`, the server is asked first, also when a socket answers:
+    // it knows when that session's shell already exited.
+    if (create) |spec| {
         if (try createSession(gpa, dir, name, spec)) |outcome| return outcome;
-        break :fd ipc.connectSession(path) catch return error.NoSession;
-    };
+    } else if (!have_dir) return error.NoSession;
+    const fd = ipc.connectSession(path) catch return error.NoSession;
     defer lib_posix.close(fd);
     if (!runtime.allowPeer(runtime.peerUid(fd), std.c.getuid())) return error.WrongPeer;
 
@@ -113,10 +113,22 @@ pub fn run(gpa: std.mem.Allocator, dir: []const u8, name: []const u8, create: ?C
     return c.loop();
 }
 
-/// Asks the server to make session `name`, and starts the server when its
-/// socket does not answer. Null when the session listens; an outcome when
-/// the server or its level refused.
+/// Asks the server to make session `name`, or to give the one that runs,
+/// and starts the server when its socket does not answer. Null when the
+/// session listens; an outcome when the server or its level refused.
+///
+/// A connection that ends before the reply is a server that exits (a newer
+/// app replaced it, or it was idle): one more try starts or finds the next.
 fn createSession(gpa: std.mem.Allocator, dir: []const u8, name: []const u8, spec: Create) (Error || error{OutOfMemory})!?Outcome {
+    if (createOnce(gpa, dir, name, spec)) |outcome| {
+        return outcome;
+    } else |err| {
+        if (err != error.NoAnswer) return err;
+    }
+    return createOnce(gpa, dir, name, spec);
+}
+
+fn createOnce(gpa: std.mem.Allocator, dir: []const u8, name: []const u8, spec: Create) (Error || error{OutOfMemory})!?Outcome {
     const server_path = socket.getSocketPath(gpa, dir, server.socket_name) catch return error.RuntimeDir;
     defer gpa.free(server_path);
     const fd = ipc.connectSession(server_path) catch fd: {
@@ -151,7 +163,16 @@ fn createSession(gpa: std.mem.Allocator, dir: []const u8, name: []const u8, spec
     var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
     const cwd: ?msgpack.Bin = if (std.c.getcwd(&cwd_buf, cwd_buf.len)) |p| .{ .bytes = std.mem.sliceTo(@as([*:0]u8, @ptrCast(p)), 0) } else null;
     const size = ipc.getTerminalSize(lib_posix.STDOUT_FILENO);
-    const request_id = 1;
+    const args: m.SessionCreate.Args = .{
+        .id = name,
+        .cwd = cwd,
+        .command = command,
+        .cols = size.cols,
+        .rows = size.rows,
+        .env = env.items,
+    };
+    // 1: the create. 2: the kill of an exited session. 3: the create again.
+    var request_id: u64 = 1;
 
     var greeted = false;
     while (true) {
@@ -168,16 +189,7 @@ fn createSession(gpa: std.mem.Allocator, dir: []const u8, name: []const u8, spec
                     },
                     .speak => {},
                 }
-                var out: std.Io.Writer.Allocating = .init(arena);
-                m.encodeRequest(&out.writer, request_id, m.SessionCreate, .{
-                    .id = name,
-                    .cwd = cwd,
-                    .command = command,
-                    .cols = size.cols,
-                    .rows = size.rows,
-                    .env = env.items,
-                }) catch return error.OutOfMemory;
-                try c.sendFrame(frame.control_channel, .msg, out.written());
+                try sendRequest(&c, arena, request_id, m.SessionCreate, args);
             },
             .refuse => |r| return .{ .refused = .{
                 .reason = try gpa.dupe(u8, r.reason),
@@ -185,12 +197,36 @@ fn createSession(gpa: std.mem.Allocator, dir: []const u8, name: []const u8, spec
             } },
             .response => |res| {
                 if (res.re != request_id) continue;
-                const err = res.err orelse return null;
-                return .{ .not_created = try gpa.dupe(u8, err.message) };
+                switch (request_id) {
+                    1 => {
+                        const err = res.err orelse return null;
+                        if (!std.mem.eql(u8, err.code, "exited"))
+                            return .{ .not_created = try gpa.dupe(u8, err.message) };
+                        // The shell of a session of this name exited (while
+                        // no app was there to end it): end it, and make a
+                        // new one, as v1's `zmx attach` made a new session.
+                        request_id = 2;
+                        try sendRequest(&c, arena, request_id, m.SessionKill, .{ .id = name });
+                    },
+                    2 => {
+                        request_id = 3;
+                        try sendRequest(&c, arena, request_id, m.SessionCreate, args);
+                    },
+                    else => {
+                        const err = res.err orelse return null;
+                        return .{ .not_created = try gpa.dupe(u8, err.message) };
+                    },
+                }
             },
             else => {},
         }
     }
+}
+
+fn sendRequest(c: *Client, arena: std.mem.Allocator, id: u64, comptime M: type, args: M.Args) (Error || error{OutOfMemory})!void {
+    var out: std.Io.Writer.Allocating = .init(arena);
+    m.encodeRequest(&out.writer, id, M, args) catch return error.OutOfMemory;
+    try c.sendFrame(frame.control_channel, .msg, out.written());
 }
 
 fn helloMessage() m.Hello {

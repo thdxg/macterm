@@ -680,7 +680,9 @@ const Session = struct {
     fn attach(s: *Session, c: *Client, size: ipc.Resize) void {
         // Output that queued before the attach is not this client's: a client
         // gets output only after its snapshot.
+        const was_attached = c.attached;
         c.attached = true;
+        if (!was_attached) s.announceClients();
         if (s.leader == null) s.setLeader(c);
         const leads = s.leader == c;
         // The snapshot is laid out for the size the leader renders at.
@@ -722,7 +724,25 @@ const Session = struct {
             .pty = .{ .bytes = s.pty_name },
             .cols = s.size.cols,
             .rows = s.size.rows,
+            .clients = s.attachedCount(),
         };
+    }
+
+    fn attachedCount(s: *const Session) u16 {
+        var n: u16 = 0;
+        for (s.clients.items) |c| {
+            if (c.attached and !c.dead) n +|= 1;
+        }
+        return n;
+    }
+
+    /// The count of attached clients changed: the connections that do not
+    /// show the pane (the server's) get the new `state`.
+    fn announceClients(s: *Session) void {
+        const st = s.state();
+        for (s.clients.items) |c| {
+            if (c.greeted and !c.attached and !c.dead and !c.closing) s.sendPane(c, m.State, st);
+        }
     }
 
     fn sendSnapshot(s: *Session, c: *Client, scrollback: bool) void {
@@ -764,6 +784,7 @@ const Session = struct {
     fn dropClient(s: *Session, c: *Client) void {
         if (c.dead) return;
         c.dead = true;
+        if (c.attached) s.announceClients();
         if (s.leader != c) return;
         s.leader = null;
         // The client that attached first of those left leads next. It sends

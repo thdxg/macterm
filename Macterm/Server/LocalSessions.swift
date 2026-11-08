@@ -15,12 +15,15 @@ struct LocalSession: Equatable {
     /// False after the shell exited: the session keeps the status until a
     /// client sends `session.kill`.
     var isRunning: Bool
+    /// The clients that show the session. nil when the session did not say.
+    var clients: Int?
 
-    init(name: String, shellPID: pid_t? = nil, ttyPath: String? = nil, isRunning: Bool = true) {
+    init(name: String, shellPID: pid_t? = nil, ttyPath: String? = nil, isRunning: Bool = true, clients: Int? = 0) {
         self.name = name
         self.shellPID = shellPID
         self.ttyPath = ttyPath
         self.isRunning = isRunning
+        self.clients = clients
     }
 
     init(_ session: MactermProtocol.Session) {
@@ -28,7 +31,8 @@ struct LocalSession: Equatable {
             name: session.id,
             shellPID: session.shellPid.flatMap { pid_t(exactly: $0) },
             ttyPath: session.pty.map { String(decoding: $0.bytes, as: UTF8.self) },
-            isRunning: session.state == .running
+            isRunning: session.state == .running,
+            clients: session.clients.map(Int.init)
         )
     }
 }
@@ -50,6 +54,10 @@ actor LocalSessions {
     private let server: LocalServer?
     private var connection: ServerConnection?
     private var connecting: Task<ServerConnection, Error>?
+
+    /// The longest wait for one reply. A kill waits for the session to end:
+    /// the server gives it 3 s before SIGKILL.
+    static let requestTimeout: Duration = .seconds(10)
 
     init(server: LocalServer?) {
         self.server = server
@@ -86,11 +94,40 @@ actor LocalSessions {
     private func call<M: ProtocolMethod>(_ method: M.Type, _ args: M.Args) async throws -> M.Result {
         let connection = try await connected()
         do {
-            return try await connection.call(method, args)
+            return try await Self.bounded { try await connection.call(method, args) }
         } catch ServerClientError.disconnected {
             // The server exited while idle: one new connection.
             drop(connection)
-            return try await connected().call(method, args)
+            let next = try await connected()
+            return try await Self.bounded { try await next.call(method, args) }
+        }
+    }
+
+    /// The reply, or `ServerClientError.noAnswer` after `requestTimeout`. A
+    /// request that waits for its reply cannot be cancelled, so the two race
+    /// in tasks of their own and the first to finish answers.
+    private static func bounded<T: Sendable>(_ body: @escaping @Sendable () async throws -> T) async throws -> T {
+        let answered = OSAllocatedUnfairLock(initialState: false)
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<T, Error>) in
+            func finish(_ result: Result<T, Error>) {
+                guard answered.withLock({ done in
+                    defer { done = true }
+                    return !done
+                })
+                else { return }
+                continuation.resume(with: result)
+            }
+            Task {
+                do {
+                    try await finish(.success(body()))
+                } catch {
+                    finish(.failure(error))
+                }
+            }
+            Task {
+                try? await Task.sleep(for: requestTimeout)
+                finish(.failure(ServerClientError.noAnswer))
+            }
         }
     }
 

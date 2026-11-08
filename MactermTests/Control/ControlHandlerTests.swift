@@ -289,7 +289,7 @@ struct ControlHandlerTests {
         stubZmx(
             appState,
             sessions: [
-                LocalSession(name: pane.sessionName, shellPID: 4242),
+                LocalSession(name: pane.sessionName, shellPID: 4242, clients: 1),
                 LocalSession(name: "macterm-orphan-aaaabbbbcccc"),
                 LocalSession(name: "macterm-exited-aaaabbbbcccc", isRunning: false),
             ]
@@ -300,8 +300,7 @@ struct ControlHandlerTests {
         let live = sessions?.first { $0.name == pane.sessionName }
         #expect(live?.paneID == pane.id.uuidString)
         #expect(live?.leaderPID == 4242)
-        // The server does not count a session's clients.
-        #expect(live?.clients == nil)
+        #expect(live?.clients == 1)
         let orphan = sessions?.first { $0.name == "macterm-orphan-aaaabbbbcccc" }
         #expect(orphan?.paneID == nil)
     }

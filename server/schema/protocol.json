@@ -579,6 +579,12 @@
           "type": "u8",
           "optional": true,
           "since": 1
+        },
+        {
+          "name": "clients",
+          "type": "u16",
+          "optional": true,
+          "since": 1
         }
       ],
       "cases": []
@@ -727,6 +733,12 @@
           "name": "rows",
           "type": "u16",
           "optional": false,
+          "since": 1
+        },
+        {
+          "name": "clients",
+          "type": "u16",
+          "optional": true,
           "since": 1
         }
       ],

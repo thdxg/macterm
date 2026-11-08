@@ -1849,9 +1849,11 @@ final class AppState {
         // sessions survived (#285) — ahead of the loadFailed gate, since
         // pinned records come from pinned.yaml, not the snapshot.
         Task { await materializeRestoredPinnedTabs(projects: projects) }
-        // A failed snapshot LOAD gives no names: nothing is ended.
+        // A failed snapshot LOAD gives no names: nothing is ended (an empty
+        // claim set would mark every live session an orphan).
         guard !workspaceStore.loadFailed else { return }
         endV1SessionsOnce(names: claimedSessionNames())
+        sweepLocalOrphans()
         // The active project's remote host gets the labelled sweep (#281);
         // other hosts are swept when their projects are selected.
         if let id = activeProjectID, let project = projects.first(where: { $0.id == id }) {
@@ -2107,7 +2109,10 @@ final class AppState {
     /// its saved folder, so a v1 session left running would be a hidden
     /// shell until a reboot. Only these names: a v1 session that no pane
     /// names is not ours to judge. Remote sessions stay (their names are not
-    /// in the local folder). The flag is set only when the kill ran.
+    /// in the local folder). The flag is set after one try, also when the
+    /// kill failed or timed out (a v1 daemon from before zmx 1.0 does not
+    /// answer `zmx kill`): a second try would fail the same way at each
+    /// launch.
     private func endV1SessionsOnce(names: Set<String>) {
         guard !v1SessionsEnded.read() else { return }
         let flag = v1SessionsEnded
@@ -2117,15 +2122,37 @@ final class AppState {
         }
     }
 
+    /// Ends the local sessions that no pane claims and no client shows, once
+    /// at launch: the leftovers of a crash, or of a close whose kill did not
+    /// reach the server (`ZmxReaper.localOrphans`). The claims are read after
+    /// the listing, so a pane made in between is never judged against an
+    /// older set. A failed listing ends nothing.
+    private func sweepLocalOrphans() {
+        Task { [zmx, weak self] in
+            guard let sessions = await zmx.listSessions() else { return }
+            guard let known = await MainActor.run(body: { self?.claimedSessionNames() }) else { return }
+            let orphans = ZmxReaper.localOrphans(in: sessions, known: known)
+            guard !orphans.isEmpty else { return }
+            logger.info("Ending \(orphans.count, privacy: .public) orphan local session(s)")
+            for name in orphans {
+                await zmx.killSession(name)
+            }
+        }
+    }
+
     /// The once-flag of `endV1SessionsOnce`: `Preferences.endedV1Sessions`.
     /// Tests hand in their own, so that two tests never share it.
     struct OnceFlag {
         var read: @MainActor () -> Bool
         var write: @MainActor () -> Void
 
+        /// A hermetic run (tests, the benchmark, e2e, the smoke check)
+        /// shares the real defaults domain, because cfprefsd ignores `HOME`.
+        /// It reads the flag as set and never writes it, so it ends no v1
+        /// session and cannot stop the real first launch from ending them.
         static let preferences = OnceFlag(
-            read: { Preferences.shared.endedV1Sessions },
-            write: { Preferences.shared.endedV1Sessions = true }
+            read: { PasswordVault.isHermetic || Preferences.shared.endedV1Sessions },
+            write: { if !PasswordVault.isHermetic { Preferences.shared.endedV1Sessions = true } }
         )
     }
 

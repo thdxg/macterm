@@ -109,3 +109,48 @@ r = c.request("session.create", id="s1", env=[b"NOEQUALS"])
 assert r.get("err", {}).get("code") == "invalid_args", r
 PY
 }
+
+@test "connect --: a session whose shell exited is ended, and a new one starts" {
+  python3 - <<'PY'
+import os
+from ptyrun import Pty
+from v2client import ServerClient
+first = Pty([os.environ["ZMX"], "connect", "s1", "--", "/bin/sh", "-c", "exit 5"])
+assert first.wait_exit() == 5, first.output
+# No app ended it: the session keeps its exit status.
+c = ServerClient()
+assert c.sessions()["s1"]["state"] == "exited", c.sessions()
+again = Pty([os.environ["ZMX"], "connect", "s1", "--", "/bin/sh"])
+again.type("printf 'new-%s\\n' shell\r")
+again.wait_output("new-shell")
+assert c.sessions()["s1"]["state"] == "running", c.sessions()
+again.type(b"\x1c")
+assert again.wait_exit() == 0
+PY
+}
+
+@test "session.list: clients counts the clients that show the session" {
+  python3 - <<'PY'
+import os, time
+from ptyrun import Pty
+from v2client import ServerClient
+p = Pty([os.environ["ZMX"], "connect", "s1", "--", "/bin/sh"])
+p.type("printf 'up-%s\\n' 1\r")
+p.wait_output("up-1")
+c = ServerClient()
+def wait_clients(n):
+    deadline = time.time() + 5
+    while c.sessions()["s1"].get("clients") != n and time.time() < deadline:
+        time.sleep(0.05)
+    assert c.sessions()["s1"].get("clients") == n, c.sessions()
+wait_clients(1)
+q = Pty([os.environ["ZMX"], "connect", "s1", "--", "/bin/sh"])
+q.wait_output("up-1")
+wait_clients(2)
+q.type(b"\x1c")
+assert q.wait_exit() == 0
+wait_clients(1)
+p.type(b"\x1c")
+assert p.wait_exit() == 0
+PY
+}

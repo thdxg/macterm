@@ -228,6 +228,7 @@ const Entry = struct {
         pty_len: usize = 0,
         cols: u16,
         rows: u16,
+        clients: ?u16 = null,
     };
 
     /// Its state or its refusal is in, or it was silent too long.
@@ -253,6 +254,7 @@ const Entry = struct {
             out.pty = .{ .bytes = st.pty_buf[0..st.pty_len] };
             out.cols = st.cols;
             out.rows = st.rows;
+            out.clients = st.clients;
         }
         if (e.exit) |x| {
             out.code = x.code;
@@ -565,7 +567,7 @@ const Server = struct {
             if (e.state) |old| if (old.pid != st.pid or old.shell_pid != st.shell_pid)
                 return s.brokenEntry(e, "a pid other than its first");
             const first = e.state == null;
-            var state: Entry.State = .{ .pid = st.pid, .shell_pid = st.shell_pid, .cols = st.cols, .rows = st.rows };
+            var state: Entry.State = .{ .pid = st.pid, .shell_pid = st.shell_pid, .cols = st.cols, .rows = st.rows, .clients = st.clients };
             state.pty_len = @min(st.pty.bytes.len, state.pty_buf.len);
             @memcpy(state.pty_buf[0..state.pty_len], st.pty.bytes[0..state.pty_len]);
             e.state = state;
@@ -978,6 +980,9 @@ const Server = struct {
         const waiter: Waiter = .{ .peer = p.id, .re = re, .kind = .create };
         // The same id again: the session that the first request started.
         if (s.findEntry(args.id)) |e| {
+            // A session whose shell exited is not given out as a new one:
+            // the client ends it (`session.kill`) and asks again.
+            if (e.exit != null) return s.replyError(p.id, re, "exited", "The session's shell exited. End the session first.");
             if (e.listed()) return s.reply(p.id, re, m.SessionCreate, .{ .session = e.info() });
             return s.wait(&e.waiters, waiter);
         }

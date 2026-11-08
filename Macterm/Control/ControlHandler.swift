@@ -497,8 +497,7 @@ final class ControlHandler {
             let bound = panesBySession[session.name] ?? []
             return ControlSessionInfo(
                 name: session.name,
-                // The server does not count a session's clients.
-                clients: nil,
+                clients: session.clients,
                 leaderPID: session.shellPID,
                 paneID: bound.first,
                 paneIDs: bound.isEmpty ? nil : bound
