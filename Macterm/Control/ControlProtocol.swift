@@ -149,6 +149,8 @@ struct ControlArgs: Codable, Equatable {
     var slot: Int?
     /// Custom title for `tab.rename`.
     var title: String?
+    /// How many keys `pane.latency` types.
+    var count: Int?
     /// Reset custom title back to automatic default (`tab.rename`).
     var reset: Bool?
     /// Whether `pane.run` submits the text it pastes. ABSENT means submit —
@@ -310,6 +312,8 @@ struct ControlData: Codable {
     var widgets: [ControlWidgetInfo]?
     /// The palettes of the installed extensions (`palette.list`).
     var palettes: [ControlPaletteInfo]?
+    /// Typing latency (`pane.latency`, debug and benchmark builds only).
+    var latency: ControlLatencyResult?
 
     init(
         status: ControlStatusInfo? = nil,
@@ -326,7 +330,8 @@ struct ControlData: Codable {
         explain: ControlExplainState? = nil,
         memory: ControlMemoryState? = nil,
         widgets: [ControlWidgetInfo]? = nil,
-        palettes: [ControlPaletteInfo]? = nil
+        palettes: [ControlPaletteInfo]? = nil,
+        latency: ControlLatencyResult? = nil
     ) {
         self.status = status
         self.projects = projects
@@ -343,7 +348,15 @@ struct ControlData: Codable {
         self.memory = memory
         self.palettes = palettes
         self.widgets = widgets
+        self.latency = latency
     }
+}
+
+/// The result of `pane.latency`: milliseconds from each key to the frame that
+/// shows its glyph, and the keys that showed no glyph.
+struct ControlLatencyResult: Codable, Equatable {
+    var samples: [Double]
+    var misses: Int
 }
 
 /// What the password monitor knows about a pane (debug-only `pane.password`):

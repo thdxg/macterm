@@ -31,9 +31,13 @@ xcodebuild \
 # that many windows whose per-metric median is reported — the median tames a
 # single co-scheduled CPU spike on a shared runner. Defaults (3x10s = 30s/state)
 # keep the same wall-clock the single 30s window used, so CI timeouts are safe.
+#
+# BENCH_LATENCY_KEYS keys are typed into the idle focused pane, each timed to
+# the frame that shows its glyph (about 0.5 s a key); 0 skips the measurement.
 python3 "$PROJECT_ROOT/scripts/benchmark.py" run \
   --app "$DERIVED_DATA/Build/Products/Release/Macterm.app" \
   --out "$OUT_DIR/results.json" \
   --seconds "${BENCH_SECONDS:-10}" \
   --samples "${BENCH_SAMPLES:-3}" \
-  --workload "${BENCH_WORKLOAD:-2}"
+  --workload "${BENCH_WORKLOAD:-2}" \
+  --latency-keys "${BENCH_LATENCY_KEYS:-200}"

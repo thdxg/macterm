@@ -673,6 +673,7 @@ Rules:
   - Remote tabs get `project.zmxPath` before the warm. A split stamps the whole target tab, so the new sibling inherits the path of the source.
   - The start is asynchronous. It is not a promise that the shell prompt is ready when the CLI returns.
 - `pane run` types through the paste path (`sendText`). `--no-submit` withholds the newline and keeps the evidence of a submission armed. `pane key <chord>` uses the key-encoding path (`sendKey`) and **bypasses `keyDown`**, so the interceptions of `keyDown` do not apply. A bare printable key must carry `.text`, or it encodes to nothing. `pane resize` exists only under `#if DEBUG`.
+- `pane.latency` is a socket command with no CLI subcommand (`TypingLatencyProbe`). It types `x` into a pane, times each glyph to the first frame that shows it, and clears the line with ctrl+u. Only a Debug build or an app with `MACTERM_BENCHMARK=1` answers it; any other build answers `unknown_command`. `benchmark.py --latency-keys` sends it straight to the socket.
 
 ### Ghostty config pipeline
 
