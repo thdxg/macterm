@@ -392,12 +392,18 @@ fn connectCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.En
         error.RuntimeDir => return printError(io, "runtime directory {s} failed the check", .{dir}),
         error.NoSession => return printError(io, "no session \"{s}\"", .{name}),
         error.WrongPeer => return printError(io, "session \"{s}\" belongs to another user", .{name}),
-        error.Protocol => return printError(io, "session \"{s}\" did not answer", .{name}),
+        error.NoAnswer => return printError(io, "session \"{s}\" did not answer", .{name}),
+        error.Protocol => return printError(io, "connection to session \"{s}\" failed", .{name}),
         error.OutOfMemory => return err,
     };
     switch (outcome) {
         .session_too_old => |o| return printError(io, "session \"{s}\" speaks protocol level {d}, and this build needs level {d} or later", .{ name, o.level, o.min_level }),
-        .refused => |r| return printError(io, "session \"{s}\" needs protocol level {d} or later, and this build speaks level {d} ({s})", .{ name, r.needs_level, v2attach.protocol_level, r.reason }),
+        .refused => |r| {
+            if (std.mem.eql(u8, r.reason, "level_too_low"))
+                return printError(io, "session \"{s}\" needs protocol level {d} or later, and this build speaks level {d}", .{ name, r.needs_level, v2attach.protocol_level });
+            return printError(io, "session \"{s}\" refused this build: {s}", .{ name, r.reason });
+        },
+        .closed => return printError(io, "session \"{s}\" closed", .{name}),
         else => std.process.exit(v2attach.exitCode(outcome)),
     }
 }

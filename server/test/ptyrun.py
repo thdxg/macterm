@@ -18,10 +18,13 @@ class Pty:
                 os.execv(argv[0], argv)
             finally:
                 os._exit(127)
-        fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        self.resize(cols, rows)
         os.set_blocking(self.fd, False)
         self.output = b""
         self.status = None
+
+    def resize(self, cols, rows):
+        fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
     def _read(self):
         try:
@@ -59,6 +62,15 @@ class Pty:
             if time.time() > deadline:
                 raise AssertionError("still running; tail=%r" % self.output[-300:])
             self._read()
+        # What the command wrote last, an error message among it.
+        while True:
+            try:
+                data = os.read(self.fd, 65536)
+            except OSError:
+                break
+            if not data:
+                break
+            self.output += data
         return self.status
 
 

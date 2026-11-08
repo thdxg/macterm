@@ -46,6 +46,54 @@ c.wait_msg("state")
 PY
 }
 
+@test "connect: a new size of the terminal reaches the pty" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+from ptyrun import connect
+p = connect("s1", cols=80, rows=24)
+p.type("stty size; printf 'ok-%s\\n' 1\r")
+p.wait_output("ok-1")
+assert b"24 80" in p.output, p.output
+# The pty sends SIGWINCH to the client, which is in its foreground.
+p.resize(120, 40)
+for i in range(2, 50):
+    p.type("stty size; printf 'ok-%%s\\n' %d\r" % i)
+    p.wait_output("ok-%d" % i)
+    if b"40 120" in p.output:
+        break
+assert b"40 120" in p.output, p.output[-300:]
+p.type(b"\x1c")
+assert p.wait_exit() == 0
+PY
+}
+
+@test "connect: Ctrl-\\ detaches while the session floods output" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+from ptyrun import connect
+p = connect("s1")
+p.type("yes flood\r")
+p.wait_output("flood\r\nflood")
+p.type(b"\x1c")
+assert p.wait_exit(timeout=5) == 0
+PY
+}
+
+@test "connect: a session that ends with no exit status is an error" {
+  "$ZMX" session s1 -- /bin/sh
+  pid=$(python3 "$BATS_TEST_DIRNAME/v2client.py" pid s1)
+  python3 - "$pid" <<'PY'
+import os, signal, sys
+from ptyrun import connect
+p = connect("s1")
+p.wait_output("\x1b[2J")
+os.kill(int(sys.argv[1]), signal.SIGKILL)
+st = p.wait_exit()
+assert st == 1, (st, p.output[-300:])
+assert b'session "s1" closed' in p.output, p.output[-300:]
+PY
+}
+
 @test "connect: a reattach shows the snapshot" {
   "$ZMX" session s1 -- /bin/sh
   python3 - <<'PY'

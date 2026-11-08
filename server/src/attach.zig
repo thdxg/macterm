@@ -33,7 +33,8 @@ pub const Outcome = union(enum) {
     detached,
     /// The shell exited.
     exited: session.ExitStatus,
-    /// The session closed the connection with no exit status.
+    /// The session closed the connection with no exit status: it crashed or
+    /// was killed.
     closed,
     /// The session speaks a level under ours: `min_level` is what we need.
     session_too_old: struct { level: u32, min_level: u32 },
@@ -48,7 +49,9 @@ pub const Error = error{
     NoSession,
     /// The socket's peer is another user.
     WrongPeer,
-    /// The session broke the protocol or did not answer.
+    /// The session did not finish the handshake in time.
+    NoAnswer,
+    /// The session broke the protocol, or the connection failed.
     Protocol,
 };
 
@@ -56,7 +59,8 @@ pub const Error = error{
 /// plus the signal, as a shell reports it.
 pub fn exitCode(outcome: Outcome) u8 {
     return switch (outcome) {
-        .detached, .closed => 0,
+        .detached => 0,
+        .closed => 1,
         .exited => |s| if (s.code) |c| c else 128 +| (s.signal orelse 0),
         .session_too_old, .refused => 1,
     };
@@ -66,7 +70,11 @@ pub fn run(gpa: std.mem.Allocator, dir: []const u8, name: []const u8) (Error || 
     if (!session.validName(name)) return error.InvalidName;
     var dir_buf: [std.fs.max_path_bytes]u8 = undefined;
     const dir_z = std.fmt.bufPrintSentinel(&dir_buf, "{s}", .{dir}, 0) catch return error.RuntimeDir;
-    runtime.checkDir(dir_z, std.c.getuid()) catch return error.RuntimeDir;
+    runtime.checkDir(dir_z, std.c.getuid()) catch |err| switch (err) {
+        // No session has made it yet.
+        error.Unreadable => return error.NoSession,
+        else => return error.RuntimeDir,
+    };
     const path = socket.getSocketPath(gpa, dir, name) catch return error.InvalidName;
     defer gpa.free(path);
 
@@ -109,7 +117,7 @@ const Client = struct {
 
         var greeted = false;
         while (true) {
-            const f = try c.nextFrame(handshake_timeout_ms) orelse return error.Protocol;
+            const f = try c.nextFrame(handshake_timeout_ms) orelse return error.NoAnswer;
             if (f.channel == frame.control_channel) {
                 const msg = m.decodeControl(arena, f.body) catch return error.Protocol;
                 switch (msg) {
@@ -189,7 +197,7 @@ const Client = struct {
             if (fds[0].revents & (lib_posix.POLL.IN | lib_posix.POLL.HUP | lib_posix.POLL.ERR) != 0) {
                 var buf: [4096]u8 = undefined;
                 const n = lib_posix.read(stdin, &buf) catch |err| switch (err) {
-                    error.WouldBlock => 0,
+                    error.WouldBlock => continue,
                     else => return .detached,
                 };
                 if (n == 0) return .detached;
@@ -209,9 +217,12 @@ const Client = struct {
 
     /// Handles every whole frame in `in`. An outcome ends the pane.
     fn drain(c: *Client, stdout: i32) (Error || error{OutOfMemory})!?Outcome {
-        while (try c.nextFrame(0)) |f| {
+        // Only what `fill` read: a socket that is always full must not keep
+        // the loop from stdin.
+        while (try c.bufferedFrame()) |f| {
             if (f.channel != m.pane_channel) continue;
             switch (f.kind) {
+                // The terminal is gone: nothing can show the pane.
                 .bytes => writeAll(stdout, f.body) catch return .detached,
                 .msg => {
                     var arena_state: std.heap.ArenaAllocator = .init(c.gpa);
@@ -246,16 +257,21 @@ const Client = struct {
         return true;
     }
 
+    /// The next whole frame in `in`, or null. The body stays valid until
+    /// the next call.
+    fn bufferedFrame(c: *Client) Error!?frame.Frame {
+        c.consume();
+        const p = (frame.parse(c.in.items) catch return error.Protocol) orelse return null;
+        c.consumed = p.len;
+        return p.frame;
+    }
+
     /// The next whole frame, waiting at most `timeout_ms` for it. Null on a
     /// timeout or at the end of the stream. The body stays valid until the
     /// next call.
     fn nextFrame(c: *Client, timeout_ms: i32) (Error || error{OutOfMemory})!?frame.Frame {
-        c.consume();
         while (true) {
-            if (frame.parse(c.in.items) catch return error.Protocol) |p| {
-                c.consumed = p.len;
-                return p.frame;
-            }
+            if (try c.bufferedFrame()) |f| return f;
             var fds = [_]lib_posix.pollfd{.{ .fd = c.fd, .events = lib_posix.POLL.IN, .revents = 0 }};
             const ready = lib_posix.poll(&fds, timeout_ms) catch return error.Protocol;
             if (ready == 0) return null;
@@ -319,7 +335,7 @@ const testing = std.testing;
 
 test "the exit code is the shell's, or 128 plus its signal" {
     try testing.expectEqual(0, exitCode(.detached));
-    try testing.expectEqual(0, exitCode(.closed));
+    try testing.expectEqual(1, exitCode(.closed));
     try testing.expectEqual(3, exitCode(.{ .exited = .{ .code = 3 } }));
     try testing.expectEqual(137, exitCode(.{ .exited = .{ .signal = 9 } }));
     try testing.expectEqual(1, exitCode(.{ .refused = .{ .reason = "level_too_low", .needs_level = 9 } }));
