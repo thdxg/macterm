@@ -4,8 +4,6 @@ import SwiftUI
 /// and Apple Intelligence. Listed only on macOS 26 and later
 /// (`SettingsPane.visible`).
 struct IntelligenceSettings: View {
-    /// Observed directly: the panel's Turn On button writes the same
-    /// preference while this pane is open.
     @State
     private var preferences = Preferences.shared
     @State
@@ -14,7 +12,7 @@ struct IntelligenceSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Record commands for Project Insights", isOn: $preferences.projectMemory)
+                Toggle("Enable Project Insights", isOn: $preferences.projectMemory)
                 Group {
                     Toggle(isOn: $preferences.projectMemorySummary) {
                         Text("Summarize with Apple Intelligence").dimsWhenDisabled()

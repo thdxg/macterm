@@ -37,6 +37,25 @@ struct AppCommandMenuItem: View {
     }
 }
 
+/// View → Toggle Project Insights, there only while Project Insights is on
+/// (Settings → Intelligence). A view of its own, because a `.commands` tree
+/// is not built again from observable state, but a view's body is.
+struct ProjectInsightsMenuItem: View {
+    let appState: AppState
+    let projectStore: ProjectStore
+
+    var body: some View {
+        if ProjectMemory.isEnabled {
+            AppCommandMenuItem(
+                command: .toggleProjectMemory,
+                appState: appState,
+                projectStore: projectStore,
+                titleOverride: "Toggle Project Insights"
+            )
+        }
+    }
+}
+
 /// Applies the command's keyboard shortcut as it stands *at launch*.
 ///
 /// This only ever runs when SwiftUI builds the menu, which happens once —

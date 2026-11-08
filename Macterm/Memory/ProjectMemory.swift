@@ -68,9 +68,18 @@ final class ProjectMemory {
         if #available(macOS 26.0, *) { true } else { false }
     }
 
-    /// Whether commands are recorded now.
-    static var isRecording: Bool {
+    /// Whether Project Insights is on: the one switch, Settings →
+    /// Intelligence (`Preferences.projectMemory`). While it is off, nothing
+    /// is recorded, Toggle Project Insights has no action, and the toolbar
+    /// button and the panel are not there.
+    static var isEnabled: Bool {
         isSupported && Preferences.shared.projectMemory
+    }
+
+    /// Whether a window shows the panel: the feature is on and the panel's
+    /// toggle is on.
+    static var showsPanel: Bool {
+        isEnabled && Preferences.shared.projectMemoryPanelVisible
     }
 
     /// Whether a workspace is a project that memory covers.
@@ -110,7 +119,7 @@ final class ProjectMemory {
     /// inside a program (an editor, a REPL) is not at the prompt and is
     /// ignored.
     func commandSubmitted(pane: Pane, view: GhosttyTerminalNSView?) {
-        guard Self.isRecording, Self.covers(pane.projectID), pane.isShellAtPrompt, let view else { return }
+        guard Self.isEnabled, Self.covers(pane.projectID), pane.isShellAtPrompt, let view else { return }
         let line: ExtractedCommand? = if let sent = view.submittedText {
             ScreenCommandExtractor.sentCommand(sent)
         } else {
@@ -146,7 +155,7 @@ final class ProjectMemory {
         // or not: memory off, a private command and a command whose text
         // could not be read change the Git state just as well.
         if panelShows(pane.projectID) { refreshGit(pane.projectID, after: Self.gitReadAfterCommand) }
-        guard Self.isRecording, Self.covers(pane.projectID) else { return }
+        guard Self.isEnabled, Self.covers(pane.projectID) else { return }
         let projectID = pane.projectID
         let finishedAt = Date()
         let directory = view?.currentPwd
