@@ -45,6 +45,21 @@
     "reencodes": false
   },
   {
+    "name": "attach",
+    "frame": "29000000010000000082a174a6617474616368a16184a4636f6c7378a4726f777328a678706978656c00a679706978656c00",
+    "reencodes": true
+  },
+  {
+    "name": "exit",
+    "frame": "12000000010000000082a174a465786974a16181a4636f6465cc82",
+    "reencodes": true
+  },
+  {
+    "name": "claim",
+    "frame": "0c000000010000000082a174a5636c61696da16180",
+    "reencodes": true
+  },
+  {
     "name": "pane bytes",
     "frame": "0300000003000000016c730d",
     "reencodes": true

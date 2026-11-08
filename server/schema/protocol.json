@@ -31,7 +31,8 @@
   "envelopes": [
     "Request",
     "Response",
-    "EventBatch"
+    "EventBatch",
+    "PaneMessage"
   ],
   "methods": [
     {
@@ -56,6 +57,80 @@
     }
   ],
   "events": [],
+  "pane_messages": [
+    {
+      "name": "state",
+      "type": "State",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "attach",
+      "type": "Attach",
+      "since": 1,
+      "senders": [
+        "local"
+      ]
+    },
+    {
+      "name": "resize",
+      "type": "Resize",
+      "since": 1,
+      "senders": [
+        "local"
+      ]
+    },
+    {
+      "name": "claim",
+      "type": "Claim",
+      "since": 1,
+      "senders": [
+        "local"
+      ]
+    },
+    {
+      "name": "lead",
+      "type": "Lead",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "snapshot.start",
+      "type": "SnapshotStart",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "snapshot.end",
+      "type": "SnapshotEnd",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "exit",
+      "type": "Exit",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "take",
+      "type": "Take",
+      "since": 1,
+      "senders": [
+        "local"
+      ]
+    }
+  ],
   "types": [
     {
       "name": "Hello",
@@ -245,6 +320,25 @@
       "cases": []
     },
     {
+      "name": "PaneMessage",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "t",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "a",
+          "type": "raw",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
       "name": "ChannelOpen.Args",
       "kind": "struct",
       "fields": [
@@ -285,6 +379,172 @@
     },
     {
       "name": "ChannelClose.Result",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "State",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "pid",
+          "type": "i64",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "shell_pid",
+          "type": "i64",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "pty",
+          "type": "bin",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "cols",
+          "type": "u16",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "rows",
+          "type": "u16",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Attach",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "cols",
+          "type": "u16",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "rows",
+          "type": "u16",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "xpixel",
+          "type": "u16",
+          "optional": false,
+          "default": "0",
+          "since": 1
+        },
+        {
+          "name": "ypixel",
+          "type": "u16",
+          "optional": false,
+          "default": "0",
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Resize",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "cols",
+          "type": "u16",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "rows",
+          "type": "u16",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "xpixel",
+          "type": "u16",
+          "optional": false,
+          "default": "0",
+          "since": 1
+        },
+        {
+          "name": "ypixel",
+          "type": "u16",
+          "optional": false,
+          "default": "0",
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Claim",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "Lead",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "leader",
+          "type": "bool",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "SnapshotStart",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "scrollback",
+          "type": "bool",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "SnapshotEnd",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "Exit",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "code",
+          "type": "u8",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "signal",
+          "type": "u8",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Take",
       "kind": "struct",
       "fields": [],
       "cases": []

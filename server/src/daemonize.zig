@@ -51,7 +51,7 @@ pub fn createCmdZ(def_shell: []const u8, command: ?[]const []const u8) !Cmd {
 
 /// Runs in the forked child. Either execs or returns an error (caller
 /// must exit on error -- returning would fall through to parent code).
-fn exec(sesh_name: []const u8, cmd: Cmd) !noreturn {
+fn exec(sesh_name: []const u8, cmd: Cmd, session_var: []const u8) !noreturn {
     const gpa = std.heap.c_allocator;
 
     // main() set SIGPIPE to SIG_IGN, which (unlike handlers) survives
@@ -71,8 +71,8 @@ fn exec(sesh_name: []const u8, cmd: Cmd) !noreturn {
 
     const session_env = try std.fmt.allocPrintSentinel(
         gpa,
-        "ZMX_SESSION={s}",
-        .{sesh_name},
+        "{s}={s}",
+        .{ session_var, sesh_name },
         0,
     );
     _ = cross.putenv(session_env.ptr);
@@ -93,6 +93,21 @@ fn exec(sesh_name: []const u8, cmd: Cmd) !noreturn {
 pub const PtyInfo = struct {
     master_fd: c_int = undefined,
     pid: c_int = undefined,
+    /// The path of the slave side, as forkpty names it.
+    name_buf: [128]u8 = @splat(0),
+
+    pub fn name(self: *const PtyInfo) []const u8 {
+        return std.mem.sliceTo(&self.name_buf, 0);
+    }
+};
+
+/// What a v2 session sets apart from v1 (see `daemonize`). The defaults are
+/// v1's.
+pub const SpawnOpts = struct {
+    /// The variable that names the session in the shell's environment.
+    session_var: []const u8 = "ZMX_SESSION",
+    /// The pty's first size. Null reads the size of the caller's terminal.
+    size: ?ipc.Resize = null,
 };
 
 /// spawnPty runs forkpty() and executes the shell or shell command the user
@@ -100,7 +115,8 @@ pub const PtyInfo = struct {
 ///
 /// This is the second fork in the double-fork technique explained in the
 /// daemonize() comment.
-pub fn spawnPty(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize) !PtyInfo {
+/// `session_var` names the session in the shell's environment.
+pub fn spawnPty(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize, session_var: []const u8) !PtyInfo {
     var ws: cross.struct_winsize = .{
         .ws_row = size.rows,
         .ws_col = size.cols,
@@ -108,8 +124,11 @@ pub fn spawnPty(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize) !PtyInfo {
         .ws_ypixel = size.ypixel,
     };
 
+    var info: PtyInfo = .{};
     var master_fd: c_int = undefined;
-    const pid = cross.forkpty(&master_fd, null, null, &ws);
+    // forkpty writes the name with no length: the buffer is larger than any
+    // pty path (Linux /dev/pts/N, macOS /dev/ttysNNN).
+    const pid = cross.forkpty(&master_fd, &info.name_buf, null, &ws);
     if (pid < 0) {
         return error.ForkPtyFailed;
     }
@@ -119,7 +138,7 @@ pub fn spawnPty(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize) !PtyInfo {
         // a returned error falls through to the parent code path below,
         // running a second daemon on the same socket (or worse, hitting
         // errdefers that delete the parent's socket file).
-        exec(sesh_name, cmd) catch |err| {
+        exec(sesh_name, cmd, session_var) catch |err| {
             std.log.err("child setup failed: {s}", .{@errorName(err)});
             lib_posix.exit(1);
         };
@@ -132,10 +151,9 @@ pub fn spawnPty(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize) !PtyInfo {
     const flags = try lib_posix.fcntl(master_fd, lib_posix.F.GETFL, 0);
     _ = try lib_posix.fcntl(master_fd, lib_posix.F.SETFL, flags | lib_posix.O_NONBLOCK);
 
-    return .{
-        .master_fd = master_fd,
-        .pid = pid,
-    };
+    info.master_fd = master_fd;
+    info.pid = pid;
+    return info;
 }
 
 /// State the macOS daemon rebuilds itself from after `reexecDisclaimed`.
@@ -151,6 +169,8 @@ pub const Reexec = struct {
     /// clears that flag: recreating it in the new image would race the
     /// client, which connects the moment the fork returns to it.
     server_sock_fd: i32,
+    /// The hidden subcommand that the new image runs.
+    subcommand: []const u8 = reexec_command,
 };
 
 /// The hidden subcommand the re-exec'd image runs:
@@ -219,7 +239,7 @@ fn reexecDisclaimed(spec: Reexec, size: ipc.Resize) !void {
 
     var argv: std.ArrayList(?[*:0]const u8) = .empty;
     try argv.append(gpa, exe.ptr);
-    try argv.append(gpa, reexec_command);
+    try argv.append(gpa, (try gpa.dupeSentinel(u8, spec.subcommand, 0)).ptr);
     try argv.append(gpa, (try gpa.dupeSentinel(u8, spec.session_name, 0)).ptr);
     if (spec.command) |command| {
         try argv.append(gpa, "--");
@@ -332,7 +352,7 @@ fn parseReexecInt(comptime T: type, name: [:0]const u8) !T {
 ///                 ✝          │ PID≠SID → can't get a tty
 ///                            ▼
 ///                          DAEMON ✓
-pub fn daemonize(sesh_name: []const u8, cmd: Cmd, keep_fds_open: []i32, reexec: ?Reexec) !PtyInfo {
+pub fn daemonize(sesh_name: []const u8, cmd: Cmd, keep_fds_open: []i32, reexec: ?Reexec, opts: SpawnOpts) !PtyInfo {
     // creates the daemon
     const pid = try lib_posix.fork();
     assert(pid != -1);
@@ -352,7 +372,7 @@ pub fn daemonize(sesh_name: []const u8, cmd: Cmd, keep_fds_open: []i32, reexec: 
     _ = try lib_posix.setsid();
 
     // Fetch terminal size before redirecting stdio FDs to /dev/null.
-    const term_size = ipc.getTerminalSize(lib_posix.STDOUT_FILENO);
+    const term_size = opts.size orelse ipc.getTerminalSize(lib_posix.STDOUT_FILENO);
 
     // Redirect stdin/stdout/stderr to /dev/null. The daemon
     // communicates via its unix socket, not stdio. Without
@@ -412,5 +432,5 @@ pub fn daemonize(sesh_name: []const u8, cmd: Cmd, keep_fds_open: []i32, reexec: 
         }
     }
 
-    return spawnPty(sesh_name, cmd, term_size);
+    return spawnPty(sesh_name, cmd, term_size, opts.session_var);
 }

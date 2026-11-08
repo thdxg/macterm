@@ -69,10 +69,13 @@ pub const Metadata = struct {
     trust: []const []const u8,
     /// The frozen first messages: `hello` and `refuse`.
     messages: []const Message,
-    /// The types of the requests, responses and event batches.
+    /// The types of the requests, responses, event batches and pane messages.
     envelopes: []const []const u8,
     methods: []const Method,
     events: []const Message,
+    /// The messages on a pane channel, in `{t, a}`. Empty in metadata from
+    /// before they were added.
+    pane_messages: []const Message = &.{},
     types: []const TypeDef,
 };
 
@@ -83,13 +86,14 @@ fn build() Metadata {
     @setEvalBranchQuota(100_000);
     comptime {
         const handshake = .{ messages.Hello, messages.Refuse };
-        const envelopes = .{ messages.Request, messages.Response, messages.EventBatch };
+        const envelopes = .{ messages.Request, messages.Response, messages.EventBatch, messages.PaneMessage };
 
         var types: []const type = &.{};
         for (handshake) |T| types = collect(T, types);
         for (envelopes) |T| types = collect(T, types);
         for (messages.methods) |M| types = collect(M.Result, collect(M.Args, types));
         for (messages.events) |E| types = collect(E, types);
+        for (messages.pane_messages) |P| types = collect(P, types);
 
         var handshake_out: [handshake.len]Message = undefined;
         for (handshake, 0..) |T, i| handshake_out[i] = message(T);
@@ -106,6 +110,8 @@ fn build() Metadata {
         };
         var event_out: [messages.events.len]Message = undefined;
         for (messages.events, 0..) |E, i| event_out[i] = message(E);
+        var pane_out: [messages.pane_messages.len]Message = undefined;
+        for (messages.pane_messages, 0..) |P, i| pane_out[i] = message(P);
         var type_out: [types.len]TypeDef = undefined;
         for (types, 0..) |T, i| type_out[i] = typeDef(T);
         // Swift declares a nested type in an extension of its parent, so the
@@ -129,6 +135,7 @@ fn build() Metadata {
         const e = envelope_out;
         const ms = method_out;
         const ev = event_out;
+        const pm = pane_out;
         const ty = type_out;
         const tr = trust_out;
         return .{
@@ -139,6 +146,7 @@ fn build() Metadata {
             .envelopes = &e,
             .methods = &ms,
             .events = &ev,
+            .pane_messages = &pm,
             .types = &ty,
         };
     }
@@ -331,6 +339,13 @@ pub fn check(w: *std.Io.Writer, old: ?Metadata, new: Metadata) std.Io.Writer.Err
             n += 1;
         }
     }
+    // A pane message goes to every client of the session, as an event does.
+    for (new.pane_messages) |msg| {
+        if (holdsSecret(new, msg.type, 0)) {
+            try w.print("pane message {s} holds a secret\n", .{msg.name});
+            n += 1;
+        }
+    }
 
     const o = old orelse return n;
 
@@ -341,6 +356,7 @@ pub fn check(w: *std.Io.Writer, old: ?Metadata, new: Metadata) std.Io.Writer.Err
 
     n += try checkMessages(w, "message", o.messages, new.messages, new.level);
     n += try checkMessages(w, "event", o.events, new.events, new.level);
+    n += try checkMessages(w, "pane message", o.pane_messages, new.pane_messages, new.level);
 
     for (o.methods) |om| {
         const nm = findName(Method, new.methods, om.name) orelse {
@@ -534,6 +550,7 @@ pub fn writeSwift(w: *std.Io.Writer, meta: Metadata) std.Io.Writer.Error!void {
 
     for (meta.messages) |msg| try writeSwiftMessage(w, msg);
     for (meta.events) |ev| try writeSwiftMessage(w, ev);
+    for (meta.pane_messages) |pm| try writeSwiftMessage(w, pm);
 }
 
 fn writeSwiftMessage(w: *std.Io.Writer, msg: Message) std.Io.Writer.Error!void {
@@ -827,6 +844,13 @@ pub fn fixtures(arena: std.mem.Allocator) ![]const Fixture {
         .region = .{ .name = @as([]const u8, "eu"), .ids = @as([]const u64, &.{ 1, 70000 }) },
     }, false));
 
+    try m.encodePane(&buf.writer, m.Attach, .{ .cols = 120, .rows = 40 });
+    try list.append(arena, try pane(arena, "attach", try buf.toOwnedSlice()));
+    try m.encodePane(&buf.writer, m.Exit, .{ .code = 130 });
+    try list.append(arena, try pane(arena, "exit", try buf.toOwnedSlice()));
+    try m.encodePane(&buf.writer, m.Claim, .{});
+    try list.append(arena, try pane(arena, "claim", try buf.toOwnedSlice()));
+
     var out: std.Io.Writer.Allocating = .init(arena);
     try frame.write(&out.writer, .{ .channel = 3, .kind = .bytes, .body = "ls\r" });
     try list.append(arena, .{ .name = "pane bytes", .frame = try hex(arena, out.written()) });
@@ -839,6 +863,12 @@ fn control(arena: std.mem.Allocator, name: []const u8, value: anytype, reencodes
     const body = try msgpack.encodeAlloc(arena, value);
     try frame.write(&out.writer, .{ .channel = frame.control_channel, .kind = .msg, .body = body });
     return .{ .name = name, .frame = try hex(arena, out.written()), .reencodes = reencodes };
+}
+
+fn pane(arena: std.mem.Allocator, name: []const u8, body: []const u8) !Fixture {
+    var out: std.Io.Writer.Allocating = .init(arena);
+    try frame.write(&out.writer, .{ .channel = messages.pane_channel, .kind = .msg, .body = body });
+    return .{ .name = name, .frame = try hex(arena, out.written()) };
 }
 
 fn hex(arena: std.mem.Allocator, bytes: []const u8) ![]const u8 {
@@ -1057,6 +1087,11 @@ test "every fixture decodes as the message it names" {
         const parsed = (try frame.parse(bytes)).?;
         try testing.expectEqual(bytes.len, parsed.len);
         if (parsed.frame.kind != .msg) continue;
+        if (parsed.frame.channel == messages.pane_channel) {
+            const msg = try msgpack.decodeSlice(messages.PaneMessage, arena, parsed.frame.body);
+            try testing.expectEqualStrings(f.name, msg.t);
+            continue;
+        }
         const decoded = try messages.decodeControl(arena, parsed.frame.body);
         const expected: std.meta.Tag(messages.Control) = if (std.mem.endsWith(u8, f.name, "request"))
             .request

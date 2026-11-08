@@ -55,6 +55,7 @@ struct ProtocolFixtureTests {
             "channel.open request", "channel.open result",
             "channel.close request", "channel.close result",
             "error", "events", "later hello", "pane bytes",
+            "attach", "exit", "claim",
         ])
     }
 
@@ -63,8 +64,10 @@ struct ProtocolFixtureTests {
         for (name, fixture) in Self.fixtures where fixture.reencodes {
             let parsed = try #require(try ProtocolFrame.parse(fixture.bytes))
             var frame = parsed.frame
-            if frame.kind == .msg {
+            if frame.kind == .msg, frame.channel == ProtocolFrame.controlChannel {
                 frame.body = try #require(ProtocolControl.decode(frame.body).encoded(), "\(name)")
+            } else if frame.kind == .msg {
+                frame.body = try MessagePackWriter.encode(Self.paneMessage(frame.body))
             }
             #expect(try frame.encoded() == fixture.bytes, "\(name)")
         }
@@ -146,6 +149,37 @@ struct ProtocolFixtureTests {
         #expect(hello.level == 9)
         #expect(hello.role == .unknown)
         #expect(hello.caps == ["tcc", "teleport"])
+    }
+
+    /// Decodes a pane message and its fields, and builds it again from them.
+    private static func paneMessage(_ body: Data) throws -> MactermProtocol.PaneMessage {
+        let msg = try MessagePackReader.decode(MactermProtocol.PaneMessage.self, from: body)
+        return switch msg.t {
+        case MactermProtocol.Attach.name: try .init(msg.message(of: MactermProtocol.Attach.self))
+        case MactermProtocol.Exit.name: try .init(msg.message(of: MactermProtocol.Exit.self))
+        case MactermProtocol.Claim.name: try .init(msg.message(of: MactermProtocol.Claim.self))
+        default: msg
+        }
+    }
+
+    /// The pane message of a fixture on the pane channel.
+    private static func pane(_ name: String) throws -> MactermProtocol.PaneMessage {
+        let bytes = try #require(fixtures[name]?.bytes, "no fixture \(name)")
+        let parsed = try #require(try ProtocolFrame.parse(bytes))
+        #expect(parsed.frame.channel == 1)
+        #expect(parsed.frame.kind == .msg)
+        return try MessagePackReader.decode(MactermProtocol.PaneMessage.self, from: parsed.frame.body)
+    }
+
+    @Test
+    func pane_messages_decode_with_their_fields_and_defaults() throws {
+        let attach = try Self.pane("attach")
+        #expect(attach.t == "attach")
+        #expect(try attach.message(of: MactermProtocol.Attach.self) == .init(cols: 120, rows: 40, xpixel: 0, ypixel: 0))
+        let exit = try Self.pane("exit").message(of: MactermProtocol.Exit.self)
+        #expect(exit.code == 130)
+        #expect(exit.signal == nil)
+        #expect(try Self.pane("claim").message(of: MactermProtocol.Claim.self) == .init())
     }
 
     @Test

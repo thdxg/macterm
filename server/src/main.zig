@@ -15,6 +15,8 @@ const loop = @import("loop.zig");
 const daemonize = @import("daemonize.zig");
 const foreground = @import("foreground.zig");
 const schema = @import("protocol/schema.zig");
+const v2session = @import("session.zig");
+const runtime = @import("runtime.zig");
 const Daemon = loop.Daemon;
 const version = build_options.version;
 const ghostty_version = build_options.ghostty_version;
@@ -63,6 +65,16 @@ fn mainImpl(init: std.process.Init) !void {
     // Needs no config, no log and no session directory: CI runs it.
     if (first_arg != null and std.mem.eql(u8, first_arg.?, "__schema")) {
         return schemaCommand(gpa, io, args.next(), args.next());
+    }
+
+    // The v2 session runs before `Cfg`: it uses none of v1's directories or
+    // its log (see session.zig).
+    if (first_arg) |c| {
+        // No log file until the session opens its own: lines go to stderr.
+        log.log_system.io = io;
+        const shell = init.environ_map.get("SHELL") orelse "/bin/sh";
+        if (std.mem.eql(u8, c, "session")) return sessionCommand(gpa, io, init.environ_map, shell, &args);
+        if (std.mem.eql(u8, c, v2session.reexec_command)) return sessionEntry(gpa, io, init.environ_map, &args);
     }
 
     var cfg = try Cfg.init(gpa, io);
@@ -323,6 +335,74 @@ fn daemonEntry(gpa: std.mem.Allocator, io: std.Io, cfg: *Cfg, args: anytype) !vo
     if (state.cwd.len > 0) daemon.setCwd(state.cwd);
     std.log.info("daemon re-exec'd disclaimed session={s} pid={d}", .{ sesh, std.c.getpid() });
     _ = try daemon.resumeAfterReexec(io, state.server_sock_fd, state.size);
+}
+
+/// `session [--cols N] [--rows N] [--cwd DIR] <name> [--] [command...]`: starts
+/// a v2 session (session.zig) and returns once its socket accepts
+/// connections. Not in `help` yet: the server (issue 0048) runs it.
+fn sessionCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, shell: []const u8, args: anytype) !void {
+    var opts: v2session.Options = .{ .name = "", .shell = shell };
+    var command: std.ArrayList([]const u8) = .empty;
+    defer command.deinit(gpa);
+    while (args.next()) |arg| {
+        if (opts.name.len > 0) {
+            if (command.items.len == 0 and std.mem.eql(u8, arg, "--")) continue;
+            try command.append(gpa, arg);
+        } else if (std.mem.eql(u8, arg, "--cols") or std.mem.eql(u8, arg, "--rows")) {
+            const value = args.next() orelse return printError(io, "{s} requires a number", .{arg});
+            const n = std.fmt.parseInt(u16, value, 10) catch 0;
+            if (n == 0) return printError(io, "{s}: not a size: {s}", .{ arg, value });
+            if (arg[2] == 'c') opts.size.cols = n else opts.size.rows = n;
+        } else if (std.mem.eql(u8, arg, "--cwd")) {
+            const dir = args.next() orelse return printError(io, "--cwd requires a directory", .{});
+            const handle = std.Io.Dir.openDirAbsolute(io, dir, .{}) catch |err|
+                return printError(io, "cannot open directory {s}: {s}", .{ dir, @errorName(err) });
+            defer handle.close(io);
+            std.process.setCurrentDir(io, handle) catch |err|
+                return printError(io, "cannot enter directory {s}: {s}", .{ dir, @errorName(err) });
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+            return printError(io, "unknown option \"{s}\"", .{arg});
+        } else {
+            opts.name = arg;
+        }
+    }
+    if (opts.name.len == 0) return printError(io, "session name required", .{});
+    if (command.items.len > 0) opts.command = command.items;
+
+    const dir = runtime.resolveDir(gpa, env) catch return printError(io, "no runtime directory: set {s}", .{runtime.dir_env});
+    defer gpa.free(dir);
+    v2session.start(gpa, io, dir, opts) catch |err| switch (err) {
+        error.InvalidName => return printError(io, "invalid session name \"{s}\": use letters, digits, '-', '_' and '.', not first", .{opts.name}),
+        error.NameTooLong => return printError(io, "session name \"{s}\" is too long for a socket in {s}", .{ opts.name, dir }),
+        error.SessionExists => return printError(io, "session \"{s}\" already exists", .{opts.name}),
+        error.RuntimeDir => {
+            const reason = if (runtime.ensureDir(dir)) |_| "failed the check" else |e| runtime.describe(e);
+            return printError(io, "runtime directory {s} {s}", .{ dir, reason });
+        },
+        else => return printError(io, "cannot start session \"{s}\": {s}", .{ opts.name, @errorName(err) }),
+    };
+}
+
+/// The macOS v2 session after its disclaiming re-exec; not a user command.
+/// argv is `__session <name> [-- command...]`, the rest rides in
+/// `daemonize.reexec_env`, as for `__daemon`.
+fn sessionEntry(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, args: anytype) !void {
+    const name = args.next() orelse return printError(io, "{s}: session name required", .{v2session.reexec_command});
+    var command: std.ArrayList([]const u8) = .empty;
+    defer command.deinit(gpa);
+    if (args.next()) |sep| {
+        if (!std.mem.eql(u8, sep, "--")) return printError(io, "{s}: unexpected argument \"{s}\"", .{ v2session.reexec_command, sep });
+        while (args.next()) |arg| try command.append(gpa, arg);
+    }
+    const state = (try daemonize.takeReexecState(gpa)) orelse
+        return printError(io, "{s}: no re-exec state in the environment", .{v2session.reexec_command});
+    const dir = try runtime.resolveDir(gpa, env);
+    v2session.resumeAfterReexec(dir, .{
+        .name = name,
+        .command = if (command.items.len > 0) command.items else null,
+        .shell = state.shell,
+        .size = state.size,
+    }, state.server_sock_fd);
 }
 
 fn help(io: std.Io) !void {

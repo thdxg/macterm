@@ -1,6 +1,7 @@
 import Foundation
 
-/// A message that the schema names: `hello`, `refuse`, and each event.
+/// A message that the schema names: `hello`, `refuse`, each event and each
+/// pane message.
 protocol ProtocolMessage: ProtocolValue {
     static var name: String { get }
     static var since: UInt32 { get }
@@ -116,5 +117,17 @@ extension MactermProtocol.Response {
         if let ok { return try ok.decode(M.Result.self) }
         if let err { throw ProtocolControlError.errorResponse(err) }
         throw MessagePackError.missingField("ok")
+    }
+}
+
+extension MactermProtocol.PaneMessage {
+    /// `{t, a}` on a pane channel, as `encodePane` in `messages.zig` writes it.
+    init<M: ProtocolMessage>(_ message: M) {
+        self.init(t: M.name, a: ProtocolRaw(encoding: message))
+    }
+
+    /// The fields as the message's type. Read `t` first to choose it.
+    func message<M: ProtocolMessage>(of _: M.Type) throws -> M {
+        try MessagePackReader.decode(M.self, from: a?.bytes ?? Data([0x80]))
     }
 }
