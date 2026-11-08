@@ -369,7 +369,8 @@ pub const Cwd = struct {
     url: msgpack.Bin,
 };
 
-/// The process group that holds the pty (zmx 0010), sent when it changes.
+/// The process group that holds the pty (zmx 0010). Sent when the group or
+/// its leader's name changes, and to a client that connects or catches up.
 pub const Foreground = struct {
     pub const name = "foreground";
     pub const since = 1;

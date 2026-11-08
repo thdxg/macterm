@@ -56,6 +56,9 @@ pub const Watch = struct {
     run_by_progress: bool = false,
     /// The command that runs now, for its `end` mark.
     command: ?[]u8 = null,
+    /// An input mark came, and no output or end mark since: the input
+    /// cells above the cursor are the user's command.
+    at_input: bool = false,
 
     pub fn init(gpa: std.mem.Allocator, term: ghostty_vt.Terminal) Watch {
         return .{ .gpa = gpa, .term = term };
@@ -178,15 +181,38 @@ pub const Watch = struct {
             .prompt_start => {
                 // A continuation or right prompt is part of the same prompt.
                 if (e.prompt_kind != .primary) return;
+                w.at_input = false;
+                // A new prompt ends the command, also when the shell sent no
+                // 133;D (after a full reset, for one).
+                if (w.status.state == .running and !w.run_by_progress) {
+                    w.setCommand(null);
+                    w.setStatus(.done, false);
+                }
                 w.push(.{ .mark = .{ .kind = .prompt } });
             },
-            .input_start => w.push(.{ .mark = .{ .kind = .input } }),
+            .input_start => {
+                w.at_input = true;
+                w.push(.{ .mark = .{ .kind = .input } });
+            },
             .output_start => {
-                w.setCommand(if (e.command.len > 0) w.gpa.dupe(u8, e.command) catch null else inputText(w.gpa, &w.term));
+                // A 133;C with no input mark before it (in a file that
+                // `cat` prints) has no command to read.
+                const command = if (e.command.len > 0)
+                    w.gpa.dupe(u8, e.command) catch null
+                else if (w.at_input)
+                    inputText(w.gpa, &w.term)
+                else
+                    null;
+                w.at_input = false;
+                w.setCommand(command);
                 w.push(.{ .mark = .{ .kind = .output, .command = w.dupeCommand() } });
                 w.startRun(false);
+                // The command owns the run now: a progress report that
+                // started it does not end it.
+                w.run_by_progress = false;
             },
             .command_end => {
+                w.at_input = false;
                 w.push(.{ .mark = .{ .kind = .end, .command = w.dupeCommand(), .exit_code = e.exit_code } });
                 w.setCommand(null);
                 if (w.status.state == .running) w.setStatus(.done, false);
@@ -250,13 +276,12 @@ pub const Watch = struct {
         fromHandler(h).mark(e);
     }
 
-    /// A full reset clears the title and the cwd with no callback, and ends
-    /// the current command with no 133;D.
+    /// A full reset clears the title and the cwd with no callback. The run
+    /// ends at the next 133;D or prompt.
     fn onReset(h: *Handler) void {
         const w = fromHandler(h);
         w.coalesce(.title);
         w.coalesce(.cwd);
-        w.setCommand(null);
     }
 };
 
@@ -268,9 +293,13 @@ fn freeEvent(gpa: std.mem.Allocator, e: Event) void {
     }
 }
 
+/// The most rows above the cursor that `inputText` reads.
+pub const max_input_rows = 100;
+
 /// The text of the input cells from the prompt above the cursor to the
 /// cursor: what the user typed, with no prompt text, a line for each row
-/// that does not wrap. Null when the screen has no prompt or no input.
+/// that does not wrap. Null when no prompt starts in the `max_input_rows`
+/// above the cursor, or when there is no input.
 ///
 /// Not `PageList.highlightSemanticContent`: it ends the input at the first
 /// output cell, and the empty cells after the first row of a command that
@@ -280,7 +309,7 @@ pub fn inputText(gpa: std.mem.Allocator, term: *ghostty_vt.Terminal) ?[]u8 {
     // With no prompt ever seen, the search below walks the whole screen.
     if (!screen.semantic_prompt.seen) return null;
     const cursor = screen.cursor.page_pin.*;
-    var prompts = cursor.promptIterator(.left_up, null);
+    var prompts = cursor.promptIterator(.left_up, cursor.up(max_input_rows));
     const prompt = prompts.next() orelse return null;
 
     var out: std.ArrayList(u8) = .empty;
@@ -289,8 +318,11 @@ pub fn inputText(gpa: std.mem.Allocator, term: *ghostty_vt.Terminal) ?[]u8 {
     var last: ?ghostty_vt.Pin = null;
     while (cells.next()) |p| {
         if (last) |l| if (l.node != p.node or l.y != p.y) {
-            trimEndSpaces(&out);
-            if (!l.rowAndCell().row.wrap) out.append(gpa, '\n') catch return null;
+            // A space at the end of a row that wraps is part of the command.
+            if (!l.rowAndCell().row.wrap) {
+                trimEndSpaces(&out);
+                out.append(gpa, '\n') catch return null;
+            }
         };
         last = p;
         const rac = p.rowAndCell();
@@ -554,10 +586,59 @@ test "events: a full reset sends an empty title and cwd" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
-    f.feed("\x1b]2;x\x07", 0);
+    f.feed("\x1b]2;x\x07\x1b]7;file:///a\x07", 0);
     f.feed("\x1bc", 100);
     const titles = try f.only(.title);
     defer testing.allocator.free(titles);
     try testing.expectEqual(2, titles.len);
     try testing.expectEqualStrings("", titles[1]);
+    const cwds = try f.only(.cwd);
+    defer testing.allocator.free(cwds);
+    try testing.expectEqual(2, cwds.len);
+    try testing.expectEqualStrings("", cwds[1]);
+}
+
+test "events: a new prompt ends a command that had no end mark" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x1b]133;A\x07$ \x1b]133;B\x07reset\r\n\x1b]133;C\x07\x1bc", 0);
+    try testing.expectEqual(.running, f.w.status.state);
+    f.feed("\x1b]133;A\x07$ ", 100);
+    try testing.expectEqual(m.Status{ .state = .done }, f.w.status);
+}
+
+test "events: an output mark with no input mark before it reads no command" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x1b]133;A\x07$ \x1b]133;B\x07cat log\r\n\x1b]133;C\x07", 0);
+    // The file that `cat` prints holds marks of its own.
+    f.feed("\x1b]133;C\x07old output\r\n", 1);
+    const marks = try f.only(.mark);
+    defer testing.allocator.free(marks);
+    try testing.expectEqualStrings("cat log", marks[2].command.?);
+    try testing.expectEqual(null, marks[3].command);
+}
+
+test "events: a command that wraps keeps the space at the end of the row" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    // 40 columns: "$ " and 37 characters, then a space in the last column.
+    f.feed("\x1b]133;A\x07$ \x1b]133;B\x07aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b\r\n\x1b]133;C\x07", 0);
+    const marks = try f.only(.mark);
+    defer testing.allocator.free(marks);
+    try testing.expectEqualStrings("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b", marks[2].command.?);
+}
+
+test "events: an output mark after a progress report owns the run" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x1b]9;4;3\x07\x1b]133;A\x07$ \x1b]133;B\x07make\r\n\x1b]133;C\x07", 0);
+    f.feed("\x1b]9;4;0\x07", 100);
+    try testing.expectEqual(.running, f.w.status.state);
+    f.feed("\x1b]133;D;0\x07", 200);
+    try testing.expectEqual(m.Status{ .state = .done }, f.w.status);
 }

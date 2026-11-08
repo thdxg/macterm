@@ -11,7 +11,7 @@
 #                                                      the Swift tests
 #
 # Usage:
-#   scripts/protocol.sh           build the server, then write the three files
+#   scripts/protocol.sh           build the server, then write the four files
 #   scripts/protocol.sh --check   fail if a file is not current, or if the
 #                                 schema breaks the add-only rule against the
 #                                 metadata on $PROTOCOL_BASE (origin/main), or

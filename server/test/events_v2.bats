@@ -45,17 +45,26 @@ assert c.wait_msg("title")["title"] == b"my title"
 assert c.wait_msg("cwd")["url"] == b"file://h/tmp/a%20b"
 c.wait_msg("bell")
 assert c.wait_msg("progress") == {"state": "set", "percent": 42}
-# The heartbeat: the shell's first output may have used the window.
+# The heartbeat: a new one after a quiet window.
+beats = len(c.messages("activity"))
 time.sleep(0.6)
 c.type("printf 'beat-%s\\n' 2\r")
 c.wait_output("beat-2")
-c.wait_msg("activity")
+c.wait_msg("activity", count=beats + 1)
 # A progress report that sets work starts a run.
 assert c.wait_msg("status")["state"] == "running"
-# An event comes before the output that the program wrote after it.
-title_at = next(i for i, (ch, kind, v) in enumerate(c.frames) if kind == 0 and ch == 1 and v["t"] == "title")
-done_at = next(i for i, (ch, kind, v) in enumerate(c.frames) if kind == 1 and b"done-1" in v)
-assert title_at < done_at, (title_at, done_at)
+
+# In one write, an event goes after the output before its sequence and
+# before the output after it.
+c.type("printf '%s-1\\n\\033]2;between\\007%s-2\\n' aa bb\r")
+c.wait_output("bb-2")
+c.wait(lambda: any(m["a"]["title"] == b"between" for m in c.messages("title")), what="the title")
+def frame_at(pred):
+    return next(i for i, (ch, kind, v) in enumerate(c.frames) if ch == 1 and pred(kind, v))
+title_at = frame_at(lambda kind, v: kind == 0 and v["t"] == "title" and v["a"]["title"] == b"between")
+before_at = frame_at(lambda kind, v: kind == 1 and b"aa-1" in v)
+after_at = frame_at(lambda kind, v: kind == 1 and b"bb-2" in v)
+assert before_at < title_at < after_at, (before_at, title_at, after_at)
 PY
 }
 
@@ -66,12 +75,15 @@ from v2client import Client
 c = Client("s1")
 c.attach()
 c.wait_msg("state")
-c.type("printf '\\033]133;A\\007$ \\033]133;B\\007'; printf '\\033]133;C;cmdline_url=make%%20test\\007'; sleep 0.2; printf '\\033]133;D;3\\007'\r")
+c.type("printf '\\033]133;A\\007$ \\033]133;B\\007'; printf '\\033]133;C;cmdline_url=make%%20test\\007'; sleep 0.2; printf '%s-%s\\n\\033]133;D;3\\007' tail 9\r")
 end = c.wait_msg("mark", count=4)
 kinds = [m["a"]["kind"] for m in c.messages("mark")]
 assert kinds[:4] == ["prompt", "input", "output", "end"], kinds
 assert c.messages("mark")[2]["a"]["command"] == b"make test"
 assert end == {"kind": "end", "command": b"make test", "exit_code": 3}, end
+# The command's last output comes before its end mark, also in one write.
+end_at = next(i for i, (ch, kind, v) in enumerate(c.frames) if kind == 0 and ch == 1 and v["t"] == "mark" and v["a"]["kind"] == "end")
+assert b"tail-9" in b"".join(v for ch, kind, v in c.frames[:end_at] if kind == 1)
 assert c.wait_msg("status", count=1)["state"] == "running"
 # A nonzero exit code is not a failed run.
 assert c.wait_msg("status", count=2) == {"state": "done", "failed": False}
@@ -81,15 +93,20 @@ PY
 @test "events: a title flood coalesces, and the newest title arrives" {
   "$ZMX" session s1 -- /bin/sh
   python3 - <<'PY'
+import time
 from v2client import Client
 c = Client("s1")
 c.attach()
 c.wait_msg("state")
+start = time.time()
 c.type("awk 'BEGIN { for (i = 0; i < 5000; i++) printf \"\\033]0;t%d\\007\", i }'; printf 'flood-%s\\n' done\r")
 c.wait_output("flood-done")
+elapsed_ms = (time.time() - start) * 1000
 c.wait(lambda: any(m["a"]["title"] == b"t4999" for m in c.messages("title")), what="the newest title")
 titles = [m["a"]["title"] for m in c.messages("title")]
-assert len(titles) < 50, len(titles)
+# At most one title at once and one at the end of each 16 ms window.
+assert len(titles) <= 2 * (elapsed_ms / 16 + 2), (len(titles), elapsed_ms)
+assert len(titles) < 1000, len(titles)
 assert titles[-1] == b"t4999", titles[-3:]
 PY
 }
@@ -103,12 +120,13 @@ c.attach()
 first = c.wait_msg("foreground")
 assert first["idle"] is True, first
 c.type("sleep 30\r")
-busy = c.wait_msg("foreground", count=2)
-assert busy["idle"] is False and b"sleep" in busy["comm"], busy
-assert busy["args"] == b"sleep 30", busy
+def last():
+    return c.messages("foreground")[-1]["a"]
+# The group can change before the child `exec`s sleep: wait for its name.
+c.wait(lambda: b"sleep" in last()["comm"], what="the sleep foreground")
+assert last()["idle"] is False and last()["args"] == b"sleep 30", last()
 c.type(b"\x03")
-back = c.wait_msg("foreground", count=3)
-assert back["idle"] is True, back
+c.wait(lambda: last()["idle"] is True, what="the idle foreground")
 PY
 }
 

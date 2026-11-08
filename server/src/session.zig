@@ -282,6 +282,10 @@ const Client = struct {
     /// Close it when its queue is empty (after a refusal).
     closing: bool = false,
     dead: bool = false,
+    /// A bell rang since its queue was last empty. A bell is dropped with
+    /// output, so a client that falls behind gets it again after its
+    /// snapshot.
+    rang: bool = false,
 
     fn deinit(c: *Client, gpa: std.mem.Allocator) void {
         lib_posix.close(c.fd);
@@ -328,11 +332,11 @@ const Session = struct {
     announced: bool = false,
     /// A client took the exit status.
     taken: bool = false,
-    /// The pty's foreground process group at the last `foreground` message,
-    /// and that message, for a client that connects later.
+    /// The pty's foreground process group at the last read, when that read
+    /// was, and a hash of the last `foreground` message sent.
     foreground_pgid: ?lib_posix.pid_t = null,
-    foreground_msg: ?m.Foreground = null,
-    foreground_buf: [std.fs.max_path_bytes + foreground.args_max]u8 = undefined,
+    foreground_read_at: i64 = 0,
+    foreground_hash: u64 = 0,
     etc_shells: ?[]const u8 = null,
     etc_shells_loaded: bool = false,
     etc_shells_buf: [4096]u8 = undefined,
@@ -405,7 +409,7 @@ const Session = struct {
             // Held events whose window ended, and a foreground that changed
             // while the pty was quiet.
             s.watch.flush(s.nowMs());
-            s.checkForeground();
+            s.checkForeground(null);
             s.sendEvents();
 
             if (fds.items[2].revents & lib_posix.POLL.IN != 0) {
@@ -525,18 +529,38 @@ const Session = struct {
             return;
         }
         const data = buf[0..n];
-        // The events of this output, a foreground change first, go before
-        // its bytes: a report that the shell is back lands before the
-        // shell's prompt (zmx 0010).
-        s.checkForeground();
-        s.watch.feed(stream, data, s.nowMs());
-        s.sendEvents();
         s.has_output = true;
         // With no client that shows the pane, answer the terminal queries
         // that a shell waits for (fish waits 10 s), as v1 does.
         if (!s.hasAttached() and s.pty_in.items.len < pty_in_max)
             util.respondToDeviceAttributes(s.gpa, &s.pty_in, data);
 
+        // A foreground change goes before the output: a report that the
+        // shell is back lands before the shell's prompt (zmx 0010).
+        s.checkForeground(null);
+        // Each event goes between the output before the sequence that gave
+        // it and the output after: a client that reads its screen at an end
+        // mark has the command's last line. The terminal parses up to the
+        // end of each sequence (BEL or ST), and the output is cut only where
+        // an event came.
+        const now = s.nowMs();
+        var sent: usize = 0;
+        var at: usize = 0;
+        while (at < data.len) {
+            const stop = sequenceEnd(data, at);
+            s.watch.feed(stream, data[at..stop], now);
+            at = stop;
+            if (s.watch.ready.items.len == 0) continue;
+            s.forwardOutput(data[sent..at]);
+            sent = at;
+            s.sendEvents();
+        }
+        s.forwardOutput(data[sent..]);
+    }
+
+    /// Queues pane output for every client that shows the pane.
+    fn forwardOutput(s: *Session, data: []const u8) void {
+        if (data.len == 0) return;
         const out = util.rewritePromptRedraw(s.gpa, data) orelse data;
         defer if (out.ptr != data.ptr) s.gpa.free(out);
         for (s.clients.items) |c| {
@@ -780,7 +804,9 @@ const Session = struct {
             s.sendSnapshot(c, false);
             // Events went with the dropped output.
             s.sendCurrent(c);
+            if (c.rang) s.sendPane(c, m.Bell, .{});
         }
+        c.rang = false;
     }
 
     fn dropClient(s: *Session, c: *Client) void {
@@ -846,12 +872,24 @@ const Session = struct {
     /// Reads the pty's foreground process group and, when it changed, sends
     /// `foreground` to every client. One ioctl when nothing changed. With no
     /// client, nothing is read: a client that greets reads it then.
-    fn checkForeground(s: *Session) void {
+    ///
+    /// The leader is also read again once in `poll_interval_ms` with no
+    /// change of group: the group changes before its child `exec`s the
+    /// program, and a leader can `exec` in place (`exec zsh`). A message that
+    /// differs from the last one goes to every client.
+    ///
+    /// With `new_client`, the process is read at once, and that client alone
+    /// gets it when nothing changed. No message is kept to send later, so a
+    /// client never gets a name that went stale.
+    fn checkForeground(s: *Session, new_client: ?*Client) void {
         if (!foreground.supported or s.pty_closed or !s.hasGreeted()) return;
         var pgrp: lib_posix.pid_t = 0;
         if (cross.ioctl(s.pty_fd, cross.TIOCGPGRP, &pgrp) != 0 or pgrp <= 0) return;
-        if (s.foreground_pgid == pgrp) return;
+        const now = s.nowMs();
+        const due = now - s.foreground_read_at >= foreground.poll_interval_ms;
+        if (s.foreground_pgid == pgrp and new_client == null and !due) return;
         s.foreground_pgid = pgrp;
+        s.foreground_read_at = now;
         if (!s.etc_shells_loaded) {
             s.etc_shells_loaded = true;
             s.etc_shells = foreground.readEtcShells(&s.etc_shells_buf);
@@ -866,19 +904,19 @@ const Session = struct {
             std.log.info("session {s}: foreground pgid={d} has no readable leader", .{ s.name, pgrp });
             return;
         };
-        // Kept for a client that connects later, so it must not point into
-        // the buffers above.
-        const comm = s.foreground_buf[0..process.comm.len];
-        @memcpy(comm, process.comm);
-        const args = s.foreground_buf[comm.len..][0..process.args.len];
-        @memcpy(args, process.args);
-        s.foreground_msg = .{
+        const msg: m.Foreground = .{
             .idle = pgrp == s.shell_pid,
-            .shell = if (s.etc_shells) |shells| foreground.isListedShell(shells, comm) else null,
-            .comm = .{ .bytes = comm },
-            .args = .{ .bytes = args },
+            .shell = if (s.etc_shells) |shells| foreground.isListedShell(shells, process.comm) else null,
+            .comm = .{ .bytes = process.comm },
+            .args = .{ .bytes = process.args },
         };
-        s.broadcastPane(m.Foreground, s.foreground_msg.?, true);
+        var hasher: std.hash.Wyhash = .init(0);
+        std.hash.autoHashStrat(&hasher, msg, .Deep);
+        const hash = hasher.final();
+        if (hash != s.foreground_hash) {
+            s.foreground_hash = hash;
+            s.broadcastPane(m.Foreground, msg, true);
+        } else if (new_client) |c| s.sendPane(c, m.Foreground, msg);
     }
 
     /// Sends the events that the terminal gave, in order, to every client.
@@ -901,7 +939,10 @@ const Session = struct {
                 .exit_code = mk.exit_code,
             }, false),
             .progress => |p| s.broadcastPane(m.Progress, p, true),
-            .bell => s.broadcastPane(m.Bell, .{}, true),
+            .bell => {
+                for (s.clients.items) |c| c.rang = true;
+                s.broadcastPane(m.Bell, .{}, true);
+            },
             .activity => s.broadcastPane(m.Activity, .{}, true),
             .status => |st| s.broadcastPane(m.Status, st, true),
         }
@@ -910,11 +951,7 @@ const Session = struct {
     /// The current title, cwd, foreground, progress and status, for a client
     /// that just greeted.
     fn sendCurrent(s: *Session, c: *Client) void {
-        // A foreground that changed while no client listened goes to every
-        // client; if it did not change, this one gets it alone.
-        const before = s.foreground_pgid;
-        s.checkForeground();
-        if (s.foreground_pgid == before) if (s.foreground_msg) |f| s.sendPane(c, m.Foreground, f);
+        s.checkForeground(c);
 
         var list: std.ArrayList(events.Event) = .empty;
         defer list.deinit(s.gpa);
@@ -950,6 +987,18 @@ const Session = struct {
         s.dropClient(c);
     }
 };
+
+/// The index after the next string terminator (BEL, or ESC \) at or after
+/// `from`, or the end of `data`.
+fn sequenceEnd(data: []const u8, from: usize) usize {
+    var i = from;
+    while (std.mem.indexOfAnyPos(u8, data, i, "\x07\\")) |j| {
+        if (data[j] == 0x07) return j + 1;
+        if (j > 0 and data[j - 1] == 0x1b) return j + 1;
+        i = j + 1;
+    }
+    return data.len;
+}
 
 /// A size from a client, cut to `max_cells`. Null for a size of 0.
 fn paneSize(cols: u16, rows: u16, xpixel: u16, ypixel: u16) ?ipc.Resize {
@@ -1042,6 +1091,13 @@ test "the out queue never drops a message or a snapshot" {
     try q.append(gpa, 1, .bytes, "out3", true);
     q.drop();
     try testing.expectEqual(2 * (frame.header_len + 4), q.len());
+}
+
+test "the output is cut after each BEL and ST" {
+    const data = "a\x1b]2;t\x07b\\c\x1b]7;u\x1b\\d";
+    try testing.expectEqual(7, sequenceEnd(data, 0));
+    try testing.expectEqual(17, sequenceEnd(data, 7));
+    try testing.expectEqual(data.len, sequenceEnd(data, 17));
 }
 
 test "a pane size is cut to the limit, and 0 is ignored" {
