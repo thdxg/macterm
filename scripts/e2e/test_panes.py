@@ -152,36 +152,22 @@ def test_busy_tab_close_refused_then_forced(app, fresh_tab, live_pane):
     assert fresh_tab["id"] not in {t["id"] for t in app.cli_json("tab", "list")["tabs"]}
 
 
-def test_pane_list_reports_running_then_done(app, fresh_tab):
+def test_pane_list_reports_running_then_done(app, fresh_tab, live_pane):
     """`pane list` reports a command as running, then done, whatever the
     status indicator setting is (#705). Agents wait on these states. The
-    pane is in a tab that is not active, because looking at the active tab
-    acknowledges `done` at once and sets the pane back to idle."""
-    child = app.cli_json("tab", "new", "--no-focus")["tabs"][0]
-    pane = wait_for(lambda: app.panes(tab=child["id"]), message="the background tab's pane")[0]
-    wait_for(lambda: app.pane_text(pane=pane["id"]), timeout=60, message="the background shell prompt")
+    pane's tab was shown, then another tab took its place: looking at the
+    active tab acknowledges `done` at once and sets the pane back to idle."""
+    app.cli_json("tab", "new")
 
     def state():
-        return next(p["state"] for p in app.panes(tab=child["id"]) if p["id"] == pane["id"])
+        return next(p["state"] for p in app.panes(tab=fresh_tab["id"]) if p["id"] == live_pane["id"])
 
-    # `exec` makes `sleep` the foreground process. The tracker reads a shell
-    # in the foreground as idle, and CI's /bin/sh (bash 3.2) does not exec
-    # the last command of `-c` itself.
+    # The marker comes after a pause: the output heartbeat fires at once on
+    # the echo of the command and drops output for 500 ms after it. The next
+    # heartbeat re-reads the foreground while `sh -c` holds it.
     nonce = uuid.uuid4().hex[:12]
-    app.pane_run(f'/bin/sh -c "printf started-%s {nonce}; echo; exec sleep 6"', pane=pane["id"])
-    # The foregrounds seen while waiting go into the failure message.
-    seen = []
-
-    def running():
-        fg = app.pane_inspect(pane=pane["id"]).get("foregroundArgv")
-        if fg not in seen:
-            seen.append(fg)
-        return state() == "running"
-
-    try:
-        wait_for(running, timeout=30, message="pane list to report running")
-    except Exception as error:
-        raise AssertionError(f"{error}; foregrounds seen: {seen}") from error
+    app.pane_run(f'/bin/sh -c "sleep 1; printf started-%s {nonce}; echo; sleep 6"', pane=live_pane["id"])
+    wait_for(lambda: state() == "running", timeout=30, message="pane list to report running")
     wait_for(lambda: state() == "done", timeout=60, message="pane list to report done")
 
 
