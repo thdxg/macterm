@@ -2617,6 +2617,22 @@
         }
       }
     },
+    "Connecting to %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 연결하는 중"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在连接到 %@"
+          }
+        }
+      }
+    },
     "Connects a disconnected pane to its session again when you wake the Mac or return to the app." : {
       "localizations" : {
         "ko" : {

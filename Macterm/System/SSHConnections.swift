@@ -329,6 +329,10 @@ final class SSHConnections {
                 throw Failure.loginFailed(reason)
             }
             try? await Task.sleep(for: .milliseconds(50))
+            if Task.isCancelled {
+                process.terminate()
+                throw CancellationError()
+            }
         }
         stderr.discard()
         let count = logins[destination, default: 0] + 1
@@ -364,8 +368,10 @@ final class SSHConnections {
 ///
 /// One rule for every host, with no match on a vendor's text: the last line
 /// that ssh wrote since the last question, once it has stayed the same for
-/// `delay`. ssh's own warnings ("Warning: Permanently added …") are notices
-/// for a terminal, not a reason to wait, so they do not count.
+/// `delay`. ssh's own warnings ("Warning: Permanently added …", "** WARNING:
+/// connection is not using a post-quantum key exchange …" and the lines
+/// under it) are notices for a terminal, not a reason to wait, so they do
+/// not count.
 struct SSHLoginNotice {
     static let delay: Duration = .seconds(2)
 
@@ -387,7 +393,7 @@ struct SSHLoginNotice {
         let candidate = SSHLoginPrompts.displayText(new)
             .split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .last { !$0.isEmpty && !$0.hasPrefix("Warning: ") }
+            .last { !$0.isEmpty && !$0.hasPrefix("Warning: ") && !$0.hasPrefix("** ") }
         if candidate != line {
             line = candidate
             since = now

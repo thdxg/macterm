@@ -78,8 +78,7 @@ final class SSHLoginPrompts {
     private var answeredSecret: [Asker: String] = [:]
 
     func ask(_ request: Request) async -> Answer {
-        closeNotice()
-        return await withCheckedContinuation { continuation in
+        await withCheckedContinuation { continuation in
             queue.append(Pending(request, continuation))
             presentNext()
         }
@@ -87,7 +86,7 @@ final class SSHLoginPrompts {
 
     /// The master `pid` exited: its askpass is gone, so its questions are too.
     func cancel(sshPID pid: pid_t) {
-        if notice?.sshPID == pid { closeNotice() }
+        showNotice(host: "", sshPID: pid, line: nil)
         answeredSecret = answeredSecret.filter { $0.key.sshPID != pid }
         for pending in queue where pending.request.sshPID == pid {
             pending.continuation.resume(returning: .cancelled)
@@ -103,29 +102,69 @@ final class SSHLoginPrompts {
 
     // MARK: - Notice
 
+    /// The notice of each login that waits, in the order they came. One
+    /// sheet shows the first, when no question is open; the others wait.
+    private var notices: [Notice] = []
+
     private struct Notice {
+        var sshPID: pid_t
+        var host: String
+        var line: String
+    }
+    private var noticeSheet: NoticeSheet?
+    /// Logins whose notice brought the app to the front once.
+    private var activatedNotices: Set<pid_t> = []
+
+    private struct NoticeSheet {
         var sshPID: pid_t
         var alert: NSAlert
         var window: NSWindow
+        var line: String
         /// The Open Link button's target, kept while the sheet is up.
         var opener: LinkOpener?
     }
 
-    private var notice: Notice?
-
-    /// Show `line` for the login of the master `pid`, or close its notice
-    /// when `line` is nil. A question has the window first.
+    /// Show `line` for the login of the master `pid`, or remove its notice
+    /// when `line` is nil.
     func showNotice(host: String, sshPID pid: pid_t, line: String?) {
-        if notice != nil { closeNotice() }
-        guard let line, !line.isEmpty, current == nil, queue.isEmpty else { return }
+        if let line, !line.isEmpty {
+            if let index = notices.firstIndex(where: { $0.sshPID == pid }) {
+                notices[index].line = line
+            } else {
+                notices.append(Notice(sshPID: pid, host: host, line: line))
+            }
+        } else {
+            notices.removeAll { $0.sshPID == pid }
+            activatedNotices.remove(pid)
+        }
+        refreshNotice()
+    }
+
+    /// Show the first notice when no question is open, or close the sheet.
+    private func refreshNotice() {
+        let wanted = current == nil && queue.isEmpty ? notices.first : nil
+        if let sheet = noticeSheet {
+            if let wanted, wanted.sshPID == sheet.sshPID, (Self.link(in: wanted.line) == nil) == (sheet.opener == nil) {
+                // The same login: change the text in place, so that a
+                // line that changes does not open the sheet again.
+                if wanted.line != sheet.line {
+                    sheet.alert.informativeText = wanted.line
+                    if let url = Self.link(in: wanted.line) { sheet.opener?.url = url }
+                    noticeSheet?.line = wanted.line
+                }
+                return
+            }
+            closeNoticeSheet()
+        }
         // No terminal window: no notice. A modal alert would hold the wait
         // for the login that closes it.
-        guard let window = terminalWindow() else { return }
+        guard let wanted, let window = terminalWindow() else { return }
+        let pid = wanted.sshPID
         let alert = NSAlert()
-        alert.messageText = String(localized: "Log In to \(host)")
-        alert.informativeText = line
+        alert.messageText = String(localized: "Connecting to \(wanted.host)")
+        alert.informativeText = wanted.line
         var opener: LinkOpener?
-        if let url = Self.link(in: line) {
+        if let url = Self.link(in: wanted.line) {
             let button = alert.addButton(withTitle: String(localized: "Open Link"))
             // Its own action: the sheet stays up until the login ends.
             let target = LinkOpener(url: url)
@@ -134,26 +173,28 @@ final class SSHLoginPrompts {
             opener = target
         }
         alert.addButton(withTitle: String(localized: "Cancel"))
-        notice = Notice(sshPID: pid, alert: alert, window: window, opener: opener)
-        NSApp.activate()
+        noticeSheet = NoticeSheet(sshPID: pid, alert: alert, window: window, line: wanted.line, opener: opener)
+        if activatedNotices.insert(pid).inserted { NSApp.activate() }
+        let host = wanted.host
         alert.beginSheetModal(for: window) { [weak self] response in
-            guard let self, notice?.alert === alert else { return }
-            notice = nil
+            guard let self, noticeSheet?.alert === alert else { return }
+            noticeSheet = nil
             guard response != .abort else { return }
             logger.info("ssh notice for host=\(host, privacy: .public): cancelled")
+            notices.removeAll { $0.sshPID == pid }
             SSHConnections.shared.cancelLogin(connectionPID: pid)
-            presentNext()
+            refreshNotice()
         }
     }
 
-    private func closeNotice() {
-        guard let notice else { return }
-        self.notice = nil
-        notice.window.endSheet(notice.alert.window, returnCode: .abort)
+    private func closeNoticeSheet() {
+        guard let sheet = noticeSheet else { return }
+        noticeSheet = nil
+        sheet.window.endSheet(sheet.alert.window, returnCode: .abort)
     }
 
     private final class LinkOpener: NSObject {
-        let url: URL
+        var url: URL
 
         init(url: URL) {
             self.url = url
@@ -165,10 +206,11 @@ final class SSHLoginPrompts {
         }
     }
 
-    /// The first https link in `line`, without the punctuation after it.
+    /// The first https link in `line`, without the punctuation around it.
     nonisolated static func link(in line: String) -> URL? {
-        for word in line.split(whereSeparator: \.isWhitespace) where word.lowercased().hasPrefix("https://") {
-            let trimmed = word.trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?)]}>'\""))
+        for word in line.split(whereSeparator: \.isWhitespace) {
+            guard let start = word.range(of: "https://", options: .caseInsensitive)?.lowerBound else { continue }
+            let trimmed = word[start...].trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?)]}>'\""))
             if let url = URL(string: trimmed), url.scheme?.lowercased() == "https", url.host?.isEmpty == false { return url }
         }
         return nil
@@ -190,7 +232,9 @@ final class SSHLoginPrompts {
     }
 
     private func presentNext() {
-        guard current == nil, !queue.isEmpty else { return }
+        guard current == nil, !queue.isEmpty else { return refreshNotice() }
+        // A question has the window first. Its notice comes back after.
+        closeNoticeSheet()
         let pending = queue.removeFirst()
         current = pending
         let request = pending.request
@@ -318,6 +362,7 @@ final class SSHLoginPrompts {
         /// `Enter passphrase for key '<file>': `.
         case passphrase(key: String)
         case hostKey(HostKey)
+        /// ssh's prompt line, or for a yes or no question the lines above it.
         case unknown(line: String)
 
         static func of(_ prompt: String, kind: Kind) -> Question {
@@ -328,6 +373,12 @@ final class SSHLoginPrompts {
                 if let key = passphraseKey(in: text) { return .passphrase(key: key) }
             case .yesNo:
                 if let key = SSHLoginPrompts.hostKey(in: prompt) { return .hostKey(key) }
+                // A yes or no question is about the host's key (a key that
+                // changed, a form that a later OpenSSH writes). Fail closed:
+                // keep ssh's lines above the question, so that the host and
+                // the key stay in view. The buttons ask the question.
+                let lines = SSHLoginPrompts.displayText(prompt).split(whereSeparator: \.isNewline)
+                if lines.count > 1 { return .unknown(line: lines.dropLast().joined(separator: "\n")) }
             case .confirm:
                 break
             }

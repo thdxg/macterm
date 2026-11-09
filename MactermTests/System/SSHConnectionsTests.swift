@@ -129,9 +129,28 @@ struct SSHConnectionsTests {
         let prompt = "Duo two-factor login for bob\n\nEnter a passcode or select one of the following options:\n\n"
             + "Passcode or option (1-3): \u{1B}"
         #expect(SSHLoginPrompts.Question.of(prompt, kind: .secret).text == "Passcode or option (1-3):")
-        let yesNo = "Warning: the ECDSA host key for 'box' differs from the key for the IP address.\n"
+    }
+
+    @Test
+    func a_yes_no_question_that_macterm_does_not_know_keeps_the_lines_above_it() {
+        // A security question fails closed: the host and the key stay in view.
+        let changed = "Warning: the ECDSA host key for 'box' differs from the key for the IP address.\n"
             + "Are you sure you want to continue connecting (yes/no)?"
-        #expect(SSHLoginPrompts.Question.of(yesNo, kind: .yesNo).text == "Are you sure you want to continue connecting (yes/no)?")
+        #expect(SSHLoginPrompts.Question.of(changed, kind: .yesNo)
+            == .unknown(line: "Warning: the ECDSA host key for 'box' differs from the key for the IP address."))
+        // A host-key text in a form that the parser does not read.
+        let future = "The authenticity of host 'box (1.2.3.4)' can't be established.\n"
+            + "ED25519 key fingerprint, SHA256:abc\nAre you sure you want to continue connecting (yes/no/[fingerprint])?"
+        #expect(SSHLoginPrompts.Question.of(future, kind: .yesNo)
+            == .unknown(line: "The authenticity of host 'box (1.2.3.4)' can't be established.\nED25519 key fingerprint, SHA256:abc"))
+        #expect(SSHLoginPrompts.Question.of("Continue (yes/no)?", kind: .yesNo) == .unknown(line: "Continue (yes/no)?"))
+    }
+
+    @Test
+    func a_password_prompt_needs_an_account_with_a_host() {
+        #expect(SSHLoginPrompts.Question.of("root's password: ", kind: .secret) == .unknown(line: "root's password:"))
+        #expect(SSHLoginPrompts.Question.of("@box's password: ", kind: .secret) == .unknown(line: "@box's password:"))
+        #expect(SSHLoginPrompts.Question.of("a b@box's password: ", kind: .secret) == .unknown(line: "a b@box's password:"))
     }
 
     @Test
@@ -167,6 +186,8 @@ struct SSHConnectionsTests {
         // After the question, the banner is old text.
         #expect(notice.update(text: banner, asking: false, now: start + .seconds(9)) == nil)
         let warned = banner + "Warning: Permanently added 'box' (ED25519) to the list of known hosts.\n"
+            + "** WARNING: connection is not using a post-quantum key exchange algorithm.\n"
+            + "** The server may need to be upgraded. See https://openssh.com/pq.html\n"
         _ = notice.update(text: warned, asking: false, now: start + .seconds(10))
         #expect(notice.update(text: warned, asking: false, now: start + .seconds(20)) == nil)
     }
@@ -178,6 +199,8 @@ struct SSHConnectionsTests {
         #expect(SSHLoginPrompts.link(in: "Go to http://example.test/x") == nil)
         #expect(SSHLoginPrompts.link(in: "Waiting for the host") == nil)
         #expect(SSHLoginPrompts.link(in: "see https:// now") == nil)
+        #expect(SSHLoginPrompts.link(in: "Open <https://example.test/y>.")?.absoluteString == "https://example.test/y")
+        #expect(SSHLoginPrompts.link(in: "(https://example.test/z)")?.absoluteString == "https://example.test/z")
     }
 
     @Test(.timeLimit(.minutes(1)))
