@@ -55,9 +55,10 @@ enum V1Sessions {
             .subtracting(daemonPIDs)
             .filter { $0 > 0 }
         var programs = Set(processes.filter { paneSessions.contains($0.sid) }.map(\.pid))
+        var walked = daemonPIDs
         var queue = Array(daemonPIDs)
         while let pid = queue.popLast() {
-            for child in children[pid] ?? [] where !programs.contains(child.pid) {
+            for child in children[pid] ?? [] where walked.insert(child.pid).inserted {
                 programs.insert(child.pid)
                 queue.append(child.pid)
             }
