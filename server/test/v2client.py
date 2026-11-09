@@ -258,7 +258,9 @@ class RelayClient:
     app reaches a host's server through ssh. Each pane is a channel of the
     one stream (src/relay.zig)."""
 
-    def __init__(self, zmx=None):
+    def __init__(self, zmx=None, argv=None):
+        """`argv` runs in place of `<zmx> proxy`: an ssh command that execs
+        the proxy on a host (test/host_install.bats)."""
         import subprocess
 
         ours, theirs = socket.socketpair()
@@ -266,7 +268,7 @@ class RelayClient:
         # server's queues grow soon.
         theirs.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4096)
         ours.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
-        self.proc = subprocess.Popen([zmx or os.environ["ZMX"], "proxy"], stdin=theirs, stdout=theirs)
+        self.proc = subprocess.Popen(argv or [zmx or os.environ["ZMX"], "proxy"], stdin=theirs, stdout=theirs)
         theirs.close()
         self.sock = ours
         self.buf = bytearray()

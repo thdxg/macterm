@@ -365,6 +365,9 @@ const Server = struct {
     exit_peer: ?u64 = null,
     exiting: bool = false,
     idle_since: ?i64 = null,
+    /// A session ended or the server started: look for server files that
+    /// no session runs, once every session settled (`pruneBuilds`).
+    prune_due: bool = true,
 
     fn init(gpa: std.mem.Allocator, io: std.Io, dir: []const u8, fds: Bound) !Server {
         var epoch: u64 = undefined;
@@ -457,6 +460,10 @@ const Server = struct {
             }
             s.timers();
             s.sweep();
+            if (s.prune_due and s.allSettled()) {
+                s.prune_due = false;
+                s.pruneBuilds();
+            }
         }
         // `server.exit`: the reply goes out before the server closes, for at
         // most 1 s. Other clients' queues are dropped.
@@ -725,6 +732,7 @@ const Server = struct {
     fn entryGone(s: *Server, e: *Entry) void {
         if (e.dead) return;
         e.dead = true;
+        s.prune_due = true;
         if (e.state != null) s.announce(e);
         std.log.info("server: session {s} is gone", .{e.id});
         for (e.waiters.items) |w| switch (w.kind) {
@@ -1433,6 +1441,38 @@ const Server = struct {
         };
     }
 
+    /// On a host, removes the file of each server build that no session
+    /// runs (design/002, design/005 step 5). The app installs each build as
+    /// `macterm-<key>` in one folder, and a session keeps the build that
+    /// started it, so a file goes when the last session of its build ends.
+    /// The server never removes its own file.
+    ///
+    /// It fails closed: it does nothing unless the server runs from such a
+    /// file (not the Mac's bundle, not a file that was replaced), and
+    /// nothing while a session's build has no key.
+    fn pruneBuilds(s: *Server) void {
+        const own = buildKey(build_options.version) orelse return;
+        const folder = std.fs.path.dirname(s.exe) orelse return;
+        if (!isBuildFile(std.fs.path.basename(s.exe), own)) return;
+        var keys: std.ArrayList([]const u8) = .empty;
+        defer keys.deinit(s.gpa);
+        for (s.entries.items) |e| {
+            if (e.dead) continue;
+            keys.append(s.gpa, buildKey(e.build) orelse return) catch return;
+        }
+        var dir = std.Io.Dir.openDirAbsolute(s.io, folder, .{ .iterate = true }) catch return;
+        defer dir.close(s.io);
+        var it = dir.iterate();
+        while (it.next(s.io) catch null) |entry| {
+            if (entry.kind != .file or !staleBuild(entry.name, own, keys.items)) continue;
+            dir.deleteFile(s.io, entry.name) catch |err| {
+                std.log.warn("server: cannot remove {s}: {s}", .{ entry.name, @errorName(err) });
+                continue;
+            };
+            std.log.info("server: removed {s}, which no session runs", .{entry.name});
+        }
+    }
+
     fn sweep(s: *Server) void {
         var i: usize = 0;
         while (i < s.peers.items.len) {
@@ -1515,6 +1555,38 @@ fn buildName(build: []const u8) []const u8 {
     return build;
 }
 
+/// The build key in a version (`1.0.1+thdxg.<key>`, `scripts/build-server.sh`):
+/// lowercase hex, at most 40 characters. Null for any other version.
+pub fn buildKey(version: []const u8) ?[]const u8 {
+    const marker = "+thdxg.";
+    const at = std.mem.find(u8, version, marker) orelse return null;
+    const key = version[at + marker.len ..];
+    return if (validKey(key)) key else null;
+}
+
+fn validKey(key: []const u8) bool {
+    if (key.len == 0 or key.len > 40) return false;
+    for (key) |c| if (!std.ascii.isDigit(c) and !(c >= 'a' and c <= 'f')) return false;
+    return true;
+}
+
+/// `macterm-<key>`: the name of the server file of the build `key` on a host.
+fn isBuildFile(name: []const u8, key: []const u8) bool {
+    const prefix = "macterm-";
+    return std.mem.startsWith(u8, name, prefix) and std.mem.eql(u8, name[prefix.len..], key);
+}
+
+/// A server file of another build than `own` that no session runs. A temp
+/// file of an install (`.macterm-…`) is not one.
+fn staleBuild(name: []const u8, own: []const u8, running: []const []const u8) bool {
+    const prefix = "macterm-";
+    if (!std.mem.startsWith(u8, name, prefix)) return false;
+    const key = name[prefix.len..];
+    if (!validKey(key) or std.mem.eql(u8, key, own)) return false;
+    for (running) |k| if (std.mem.eql(u8, k, key)) return false;
+    return true;
+}
+
 /// A pid that the server may signal: above 1, and a `pid_t`.
 fn validPid(pid: i64) bool {
     return pid > 1 and pid <= std.math.maxInt(lib_posix.pid_t);
@@ -1548,6 +1620,29 @@ test "the server signals no pid that reaches a group or every process" {
     try testing.expect(!validPid(-1));
     try testing.expect(!validPid(-500));
     try testing.expect(!validPid(@as(i64, std.math.maxInt(lib_posix.pid_t)) + 1));
+}
+
+test "a build key comes only from a version of the fork" {
+    try testing.expectEqualStrings("2705a118fde2c903", buildKey("1.0.1+thdxg.2705a118fde2c903").?);
+    try testing.expect(buildKey("1.0.1") == null);
+    try testing.expect(buildKey("unknown") == null);
+    try testing.expect(buildKey("1.0.1+thdxg.") == null);
+    try testing.expect(buildKey("1.0.1+thdxg.ABC") == null);
+    try testing.expect(buildKey("1.0.1+thdxg.a/b") == null);
+}
+
+test "a server file goes only when it is another build that no session runs" {
+    const running = [_][]const u8{"bbbb"};
+    try testing.expect(staleBuild("macterm-cccc", "aaaa", &running));
+    try testing.expect(!staleBuild("macterm-aaaa", "aaaa", &running));
+    try testing.expect(!staleBuild("macterm-bbbb", "aaaa", &running));
+    try testing.expect(!staleBuild(".macterm-cccc.123.456", "aaaa", &running));
+    try testing.expect(!staleBuild("macterm-cccc.old", "aaaa", &running));
+    try testing.expect(!staleBuild("zmx", "aaaa", &running));
+    try testing.expect(!staleBuild("macterm-", "aaaa", &running));
+    try testing.expect(isBuildFile("macterm-aaaa", "aaaa"));
+    try testing.expect(!isBuildFile("zmx", "aaaa"));
+    try testing.expect(!isBuildFile("macterm-aaaa (deleted)", "aaaa"));
 }
 
 test "a session's build is kept only as short printable text" {
