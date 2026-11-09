@@ -66,9 +66,11 @@ final class SSHConnections {
         case controlPathTooLong(String)
         case cannotStart(String)
         /// The master exited before it listened: a refused login, a
-        /// cancelled prompt, or no route to the host. ssh's last line of
+        /// failed prompt, or no route to the host. ssh's last line of
         /// stderr.
         case loginFailed(String)
+        /// The user cancelled a question of the login.
+        case cancelled
 
         var description: String {
             switch self {
@@ -76,6 +78,7 @@ final class SSHConnections {
             case let .controlPathTooLong(path): "the control path is too long for a socket: \(path)"
             case let .cannotStart(reason): "cannot start ssh: \(reason)"
             case let .loginFailed(reason): reason.isEmpty ? "the ssh login failed" : "the ssh login failed: \(reason)"
+            case .cancelled: "the ssh login was cancelled"
             }
         }
     }
@@ -87,6 +90,8 @@ final class SSHConnections {
     /// Macterm's own master for each host.
     private var owned: [String: Process] = [:]
     private var connecting: [String: Task<Route, Error>] = [:]
+    /// Masters whose login the user cancelled.
+    private var cancelled: Set<pid_t> = []
     /// New logins for each host in this run.
     private(set) var logins: [String: Int] = [:]
     /// Called when a master exits, with its pid, so that a prompt of its
@@ -140,6 +145,14 @@ final class SSHConnections {
     func disconnect(_ destination: String) {
         owned[destination]?.terminate()
         forget(destination)
+    }
+
+    /// The user cancelled a question of the login of the connection `pid`. End the
+    /// login: ssh would ask again (the next password try, the next method).
+    func cancelLogin(connectionPID pid: pid_t) {
+        guard let process = owned.values.first(where: { $0.processIdentifier == pid }), process.isRunning else { return }
+        cancelled.insert(pid)
+        process.terminate()
     }
 
     /// At quit: end every master of Macterm.
@@ -234,8 +247,10 @@ final class SSHConnections {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = sshArguments([
+            // `-S`, not `-o ControlPath=`: ssh splits an `-o` value at
+            // spaces, and "Macterm Debug" has one.
             "-M", "-N",
-            "-o", "ControlPath=\(path)",
+            "-S", path,
             "-o", "ControlPersist=no",
             "-o", "ConnectTimeout=10",
             "--", destination,
@@ -261,6 +276,8 @@ final class SSHConnections {
             throw Failure.cannotStart(EnglishErrorText.describe(error))
         }
         owned[destination] = process
+        // A pid that an earlier, cancelled master had.
+        cancelled.remove(process.processIdentifier)
 
         // ssh listens on the control socket only after the login.
         while !FileManager.default.fileExists(atPath: path) {
@@ -268,6 +285,10 @@ final class SSHConnections {
                 if process.isRunning { process.terminate() }
                 await stderr.finish(within: ProcessRunner.drainTimeout)
                 if owned[destination] === process { owned[destination] = nil }
+                if cancelled.remove(process.processIdentifier) != nil {
+                    logger.info("ssh: host=\(destination, privacy: .public) login cancelled")
+                    throw Failure.cancelled
+                }
                 let reason = SSHControlPath.lastLine(of: stderr.text)
                 logger.info("ssh: host=\(destination, privacy: .public) login failed: \(reason, privacy: .public)")
                 throw Failure.loginFailed(reason)

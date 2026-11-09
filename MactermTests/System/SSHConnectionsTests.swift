@@ -66,6 +66,29 @@ struct SSHConnectionsTests {
     }
 
     @Test
+    func a_new_host_key_shows_its_type_and_fingerprint() throws {
+        let prompt = """
+        The authenticity of host 'localhost (::1)' can't be established.
+        ED25519 key fingerprint is SHA256:Hx4kP3o0aB+cdEf/ghIjkLmNoPqRsTuVwXyZ0123456.
+        This key is not known by any other names.
+        Are you sure you want to continue connecting (yes/no/[fingerprint])?
+        """
+        let key = try #require(SSHLoginPrompts.hostKey(in: prompt))
+        #expect(key.type == "ED25519")
+        #expect(key.fingerprint == "SHA256:Hx4kP3o0aB+cdEf/ghIjkLmNoPqRsTuVwXyZ0123456")
+        #expect(SSHLoginPrompts.hostKey(in: "bob@box's password:") == nil)
+    }
+
+    @Test
+    func another_yes_no_question_drops_only_the_question_line() {
+        let prompt = "Warning: the ECDSA host key for 'box' differs from the key for the IP address.\n"
+            + "Are you sure you want to continue connecting (yes/no)?"
+        #expect(SSHLoginPrompts.withoutQuestion(prompt)
+            == "Warning: the ECDSA host key for 'box' differs from the key for the IP address.")
+        #expect(SSHLoginPrompts.withoutQuestion("one line (yes/no)?") == "one line (yes/no)?")
+    }
+
+    @Test
     func the_socket_names_the_peer_and_its_parent() {
         var fds: [Int32] = [0, 0]
         #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0)
@@ -100,6 +123,52 @@ struct SSHConnectionsTests {
         #expect(second.stdout == "two\n")
         #expect(connections.logins["box"] == 1)
         #expect(sshd.acceptedLogins() == 1)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_control_directory_with_a_space_works() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        var configuration = sshd.configuration
+        // As "Macterm Debug" in Application Support.
+        configuration.controlDirectory = sshd.directory.appendingPathComponent("M D", isDirectory: true)
+        let connections = SSHConnections(configuration: configuration)
+        defer { connections.disconnectAll() }
+
+        let route = try await connections.connect("box")
+        #expect(route.controlPath.contains("M D/"))
+        #expect(try await connections.run("box", "echo spaced").stdout == "spaced\n")
+        #expect(sshd.acceptedLogins() == 1)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func one_cancel_ends_the_login() async throws {
+        let sshd = try LocalSSHD(passphrase: "open sesame")
+        defer { sshd.stop() }
+        let pidFile = sshd.directory.appendingPathComponent("askpass.pid")
+        let askpass = sshd.directory.appendingPathComponent("askpass")
+        // It waits for an answer that never comes, as a sheet up on screen.
+        try "#!/bin/sh\necho $$ > '\(pidFile.path)'\nsleep 30\n".write(to: askpass, atomically: true, encoding: .utf8)
+        chmod(askpass.path, 0o700)
+        var configuration = sshd.configuration
+        configuration.askpass = askpass.path
+
+        let connections = SSHConnections(configuration: configuration)
+        defer { connections.disconnectAll() }
+        let login = Task { try await connections.connect("box") }
+        var owner: (host: String, pid: pid_t)?
+        for _ in 0 ..< 100 where owner == nil {
+            try await Task.sleep(for: .milliseconds(100))
+            let pid = (try? String(contentsOf: pidFile, encoding: .utf8))
+                .flatMap { pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            owner = pid.flatMap { connections.askpassOwner(forPeer: $0) }
+        }
+        let connection = try #require(owner).pid
+        connections.cancelLogin(connectionPID: connection)
+        await #expect(throws: SSHConnections.Failure.cancelled) { try await login.value }
+        #expect(kill(connection, 0) != 0)
+        #expect(connections.logins["box"] == nil)
+        #expect(sshd.acceptedLogins() == 0)
     }
 
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))

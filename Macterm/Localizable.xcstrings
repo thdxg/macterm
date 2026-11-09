@@ -10651,6 +10651,38 @@
         }
       }
     },
+    "The passphrase is incorrect." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "패스프레이즈가 올바르지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码短语不正确。"
+          }
+        }
+      }
+    },
+    "The password is incorrect." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호가 올바르지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码不正确。"
+          }
+        }
+      }
+    },
     "The project path is not a remote path." : {
       "localizations" : {
         "ko" : {
@@ -10951,6 +10983,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此文件夹不在 Git 仓库中，或者没有安装 Git。"
+          }
+        }
+      }
+    },
+    "This is the first connection to this host. Make sure that its key is the key that you expect." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 호스트에 처음 연결합니다. 호스트 키가 예상한 키인지 확인하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这是首次连接到此主机。请确认其密钥是你预期的密钥。"
           }
         }
       }

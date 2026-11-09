@@ -54,6 +54,9 @@ final class SSHLoginPrompts {
 
     private var queue: [Pending] = []
     private var current: Pending?
+    /// The last secret prompt that each master got an answer to. The same
+    /// prompt again means that ssh did not accept the answer.
+    private var answeredSecret: [pid_t: String] = [:]
 
     func ask(_ request: Request) async -> Answer {
         await withCheckedContinuation { continuation in
@@ -64,6 +67,7 @@ final class SSHLoginPrompts {
 
     /// The master `pid` exited: its askpass is gone, so its questions are too.
     func cancel(sshPID pid: pid_t) {
+        answeredSecret[pid] = nil
         for pending in queue where pending.request.sshPID == pid {
             pending.continuation.resume(returning: .cancelled)
         }
@@ -97,7 +101,33 @@ final class SSHLoginPrompts {
         case .yesNo,
              .confirm: String(localized: "Connect to \(request.host)?")
         }
-        alert.informativeText = Self.displayText(request.prompt)
+        let prompt = Self.displayText(request.prompt)
+        let retry = request.kind == .secret && answeredSecret[request.sshPID] == request.prompt
+        var fingerprint: NSTextField?
+        switch request.kind {
+        case .secret where retry:
+            let incorrect = prompt.lowercased().contains("passphrase")
+                ? String(localized: "The passphrase is incorrect.")
+                : String(localized: "The password is incorrect.")
+            alert.informativeText = incorrect + "\n" + prompt
+        case .yesNo:
+            if let key = Self.hostKey(in: request.prompt) {
+                alert.informativeText = String(
+                    localized: "This is the first connection to this host. Make sure that its key is the key that you expect."
+                )
+                let label = NSTextField(labelWithString: "\(key.type) \(key.fingerprint)")
+                label.font = TerminalFont.shared.nsFont(size: NSFont.smallSystemFontSize)
+                label.isSelectable = true
+                label.lineBreakMode = .byClipping
+                label.sizeToFit()
+                fingerprint = label
+            } else {
+                alert.informativeText = Self.withoutQuestion(prompt)
+            }
+        default:
+            alert.informativeText = prompt
+        }
+        alert.accessoryView = fingerprint
         alert.addButton(withTitle: request.kind == .secret
             ? String(localized: "Log In")
             : String(localized: "Connect", comment: "The button that accepts an ssh question, such as a new host key."))
@@ -129,6 +159,9 @@ final class SSHLoginPrompts {
 
     private func finish(_ pending: Pending, response: NSApplication.ModalResponse, field: NSSecureTextField?, savedID: PasswordEntryID?) {
         let request = pending.request
+        if request.kind == .secret, response == Button.primary {
+            answeredSecret[request.sshPID] = request.prompt
+        }
         let answer: Answer? = switch response {
         case Button.primary: .text(request.kind == .secret ? field?.stringValue ?? "" : request.kind == .yesNo ? "yes" : "")
         case Button.saved: nil
@@ -149,6 +182,7 @@ final class SSHLoginPrompts {
                 )
             )
             if allowed, let password = PasswordVault.shared.password(for: savedID) {
+                answeredSecret[request.sshPID] = request.prompt
                 settle(pending, .text(password))
             } else if kill(request.sshPID, 0) == 0 {
                 current = nil
@@ -178,6 +212,28 @@ final class SSHLoginPrompts {
             prompt: request.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         )
         return PasswordVault.shared.contains(id) ? id : nil
+    }
+
+    /// The key type and fingerprint of ssh's question about a new host key
+    /// ("ED25519 key fingerprint is SHA256:…."), or nil for any other text.
+    static func hostKey(in prompt: String) -> (type: String, fingerprint: String)? {
+        for line in prompt.split(whereSeparator: \.isNewline) {
+            let words = line.trimmingCharacters(in: .whitespaces).split(separator: " ")
+            guard words.count == 5, words[1 ... 3] == ["key", "fingerprint", "is"] else { continue }
+            var fingerprint = String(words[4])
+            if fingerprint.hasSuffix(".") { fingerprint.removeLast() }
+            guard fingerprint.contains(":") else { continue }
+            return (String(words[0]), fingerprint)
+        }
+        return nil
+    }
+
+    /// ssh's text without its last line when that line asks "(yes/no…)?":
+    /// the buttons ask it.
+    static func withoutQuestion(_ text: String) -> String {
+        var lines = text.components(separatedBy: "\n")
+        if lines.count > 1, lines.last?.lowercased().contains("(yes/no") == true { lines.removeLast() }
+        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// ssh's prompt with its control characters removed, and capped.

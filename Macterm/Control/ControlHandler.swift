@@ -1816,6 +1816,9 @@ extension ControlHandler {
             sshPID: owner.pid
         ))
         guard case let .text(text) = answer else {
+            // One Cancel ends the login. Otherwise ssh asks again: the next
+            // password try, then the next method.
+            SSHConnections.shared.cancelLogin(connectionPID: owner.pid)
             throw ControlError(code: .cancelled, message: "the login was cancelled")
         }
         return ControlData(askpass: ControlAskpassReply(answer: text))
