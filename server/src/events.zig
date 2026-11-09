@@ -894,7 +894,9 @@ test "events: each program status state becomes a record" {
         records = lastProgram(&f).?;
         try testing.expectEqual(1, records.len);
         // Progress goes with working and blocked only, kind with blocked.
-        try testing.expectEqual(m.ProgramRecord{ .state = c[1] }, records[0]);
+        try testing.expectEqual(c[1], records[0].state);
+        try testing.expectEqual(null, records[0].kind);
+        try testing.expectEqual(null, records[0].progress);
     }
 
     // A state that this build does not know changes nothing.

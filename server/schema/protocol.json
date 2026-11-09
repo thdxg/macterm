@@ -302,6 +302,14 @@
       "senders": [
         "session"
       ]
+    },
+    {
+      "name": "program_status",
+      "type": "ProgramStatus",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
     }
   ],
   "types": [
@@ -1187,6 +1195,93 @@
         "idle",
         "running",
         "done",
+        "unknown"
+      ]
+    },
+    {
+      "name": "ProgramStatus",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "records",
+          "type": "[ProgramRecord]",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ProgramRecord",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "str",
+          "optional": false,
+          "default": "\"\"",
+          "since": 1
+        },
+        {
+          "name": "state",
+          "type": "ProgramState",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "kind",
+          "type": "ProgramNeed",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "progress",
+          "type": "u8",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "app",
+          "type": "str",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "title",
+          "type": "str",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "msg",
+          "type": "str",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ProgramState",
+      "kind": "enum",
+      "fields": [],
+      "cases": [
+        "idle",
+        "working",
+        "done",
+        "blocked",
+        "error",
+        "unknown"
+      ]
+    },
+    {
+      "name": "ProgramNeed",
+      "kind": "enum",
+      "fields": [],
+      "cases": [
+        "permission",
+        "question",
+        "auth",
         "unknown"
       ]
     }

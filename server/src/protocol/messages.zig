@@ -497,7 +497,6 @@ pub const Refresh = struct {
     pub const senders = from_client;
 };
 
-
 // The session's events (design/003 §5, design/004 §6). The session reads
 // them from its own terminal and pty, so they are right for a client that
 // does not show the pane. Every greeted client gets them; a client that
@@ -712,7 +711,7 @@ pub const max_program_records = 64;
 
 /// Every message on a pane channel. A new one goes here.
 pub const pane_messages = .{
-    State, Attach, Resize,     Claim, Lead,     SnapshotStart, SnapshotEnd, Exit,   Take, End, Refresh,
+    State, Attach, Resize,     Claim, Lead,     SnapshotStart, SnapshotEnd, Exit,   Take,          End, Refresh,
     Title, Cwd,    Foreground, Mark,  Progress, Bell,          Activity,    Status, ProgramStatus,
 };
 
