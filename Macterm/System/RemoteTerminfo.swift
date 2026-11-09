@@ -82,12 +82,16 @@ enum RemoteTerminfo {
     /// can't wedge the task — and `sh -c`-wrapped like every remote command so
     /// any login shell delivers it intact.
     ///
-    /// `tic -x -` compiles from stdin into the user's own
-    /// `~/.terminfo`/`$TERMINFO`, needing no privileges. nil for a local path.
+    /// The script is the one `SSHWrapper.installScript` sends, after the PATH
+    /// preamble: `tic -x -o ~/.terminfo -` compiles from stdin into the
+    /// user's own `~/.terminfo`, needing no privileges, and `infocmp` checks
+    /// that the entry resolves. `-o` keeps a `tic` that runs as root out of
+    /// the system database. Stderr stays, because `run` logs it on a
+    /// failure. nil for a local path.
     static func installArgv(remote: ProjectPath) -> [String]? {
         guard case let .remote(user, host, _) = remote else { return nil }
         let script = RemoteSpawn.assertSingleQuoteFree(
-            RemoteSpawn.remoteEnvPreamble + "exec tic -x -",
+            RemoteSpawn.remoteEnvPreamble + "tic -x -o ~/.terminfo - && infocmp -x \(entryName) >/dev/null",
             onViolation: .failNonZero
         )
         return [
@@ -184,7 +188,7 @@ final class RemoteTerminfoInstaller {
     }
 
     /// `infocmp -x xterm-ghostty` (against our bundled DB) piped to a remote
-    /// `tic -x -`. nonisolated: process I/O has no business on the main actor.
+    /// `tic -x -o ~/.terminfo -`. nonisolated: process I/O has no business on the main actor.
     ///
     /// The source is ~4KB — far under the ~64KB pipe buffer — so writing it to
     /// ssh's stdin in one shot cannot block, and neither side needs the

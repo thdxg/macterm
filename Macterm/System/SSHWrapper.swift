@@ -20,7 +20,7 @@ import Foundation
 /// fork release):
 ///   1. Resolve the destination via `ssh -G` (`user`/`hostname` keys).
 ///   2. Unless cached, install the bundled `xterm-ghostty` terminfo on the
-///      destination — `infocmp -x` piped to a remote `tic -x -` over a
+///      destination — `infocmp -x` piped to a remote `tic -x -o ~/.terminfo -` over a
 ///      throwaway `ControlMaster` connection — and cache success.
 ///   3. Run the real ssh with `-o SetEnv=TERM=…` (`xterm-ghostty` when the
 ///      entry is known installed, else `xterm-256color`) plus `SendEnv`
@@ -102,22 +102,22 @@ enum SSHWrapper {
         return "\(user)@\(host)"
     }
 
-    /// The remote install command: probe for `tic`, make `~/.terminfo` (where
-    /// an unprivileged `tic` compiles to), compile from stdin. Verbose keeps
-    /// tic's stderr — the commonest failure source — visible; quiet discards
-    /// it.
+    /// The remote install command, as ghostty's `+ssh` sends it
+    /// (ghostty-org/ghostty#15061, #15112): compile from stdin into
+    /// `~/.terminfo`, then check that `infocmp` finds the entry. `-o` names
+    /// the folder: without it, a `tic` that runs as root writes the system
+    /// database, where the package manager owns the files. `tic -o` makes the
+    /// folder when it is not there. Verbose keeps tic's stderr (the commonest
+    /// failure source) visible; quiet discards it.
     ///
-    /// One deliberate divergence from ghostty here: its `+ssh` sends the raw
-    /// POSIX script and lets the host's *login shell* parse it, which breaks
-    /// outright on hosts whose login shell isn't POSIX — measured against a
-    /// real sshd with a nushell login shell, where nu rejected `2>&1` and
-    /// every install failed. So the script ships wrapped as
-    /// `sh -c '<single-quote-free single-line script>'`, the same wire rule
-    /// as `RemoteSpawn.remoteShell`: the one form bash/zsh/fish/nu all
-    /// tokenize identically before POSIX `sh` takes over.
+    /// The script runs under `sh -c '<single-quote-free single-line
+    /// script>'`, because sshd gives the remote command to the host's login
+    /// shell, and a login shell that is not POSIX (nushell, tcsh) cannot
+    /// parse it. This is the wire rule of `RemoteSpawn.remoteShell`.
     static func installScript(verbose: Bool) -> String {
-        let tic = verbose ? "exec tic -x -" : "exec tic -x - 2>/dev/null"
-        let script = "command -v tic >/dev/null 2>&1 || exit 1; mkdir -p ~/.terminfo 2>/dev/null; \(tic)"
+        let script = verbose
+            ? "tic -x -o ~/.terminfo - && infocmp -x \(entryName) >/dev/null"
+            : "tic -x -o ~/.terminfo - 2>/dev/null && infocmp -x \(entryName) >/dev/null 2>&1"
         assert(!script.contains("'"), "install script must stay single-quote-free")
         return "sh -c '\(script)'"
     }
