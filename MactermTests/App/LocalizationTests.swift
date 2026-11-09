@@ -40,9 +40,11 @@ struct LocalizationTests {
 
         /// The English text of an entry: its source-language value, which a
         /// semantic key (`String(localized: "tab.status.done", defaultValue:)`)
-        /// has, or else the key, which is the English text.
+        /// has, or else the key, which is the English text. The sync marks a
+        /// source value `new`, never `translated`, so its state is not read.
         func english(_ key: String) -> String {
-            LocalizationTests.values(strings[key] ?? [:], language: sourceLanguage)?.first ?? key
+            let localization = (strings[key]?["localizations"] as? [String: Any])?[sourceLanguage] as? [String: Any]
+            return localization.flatMap { LocalizationTests.units($0).first?["value"] as? String } ?? key
         }
     }
 
