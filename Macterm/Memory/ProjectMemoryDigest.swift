@@ -32,7 +32,7 @@ struct ProjectMemoryDigest: Equatable {
     Mention another branch only when it is part of the same work. \
     When there is no Git state, say what the commands show about the work. \
     Name only branches, commits, files and commands that are in the text; never guess a name or a change. \
-    Name a file only when the text lists it as changed. \
+    Name a file only when the text lists it under Changed files; with no uncommitted changes, name no file. \
     Put commands, branches and file names in backticks. \
     Do not say how long ago things happened: the reader may see the text hours later. \
     Do not use headings, lists or tables. \
@@ -111,7 +111,7 @@ struct ProjectMemoryDigest: Equatable {
         let records = entries.suffix(recentCommandCount).map { "\($0.id.uuidString):\($0.outcome.rawValue)" }
         let branches = git?.branches.map { "\($0.name)@\($0.hash)" } ?? []
         let branchCommits = git?.branchCommits.map(\.hash) ?? []
-        let changedPaths = git?.changedPaths.prefix(changedPathLimit).map { $0 } ?? []
+        let changedPaths = git?.changedPaths.prefix(changedPathLimit).map(\.self) ?? []
         return ([projectName] + records + [git.map(gitLine) ?? "", git?.recentCommits.first?.hash ?? ""] + branches
             + branchCommits + changedPaths).joined(separator: "|")
     }
