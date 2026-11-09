@@ -169,7 +169,19 @@ def test_pane_list_reports_running_then_done(app, fresh_tab):
     # the last command of `-c` itself.
     nonce = uuid.uuid4().hex[:12]
     app.pane_run(f'/bin/sh -c "printf started-%s {nonce}; echo; exec sleep 6"', pane=pane["id"])
-    wait_for(lambda: state() == "running", timeout=30, message="pane list to report running")
+    # The foregrounds seen while waiting go into the failure message.
+    seen = []
+
+    def running():
+        fg = app.pane_inspect(pane=pane["id"]).get("foregroundArgv")
+        if fg not in seen:
+            seen.append(fg)
+        return state() == "running"
+
+    try:
+        wait_for(running, timeout=30, message="pane list to report running")
+    except Exception as error:
+        raise AssertionError(f"{error}; foregrounds seen: {seen}") from error
     wait_for(lambda: state() == "done", timeout=60, message="pane list to report done")
 
 

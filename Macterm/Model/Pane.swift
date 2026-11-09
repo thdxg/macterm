@@ -1,5 +1,8 @@
 import CoreGraphics
 import Foundation
+import os
+
+private let debug705Logger = Logger(subsystem: appBundleID, category: "Debug705")
 
 /// A pane is the leaf of the split tree — one terminal surface.
 @MainActor @Observable
@@ -419,6 +422,16 @@ final class Pane: Identifiable {
         // re-resolving there could disagree with this frame's pid on a wrapped
         // pane and would double the resolver work when the fallback fires.
         let resolvedPID = ProcessInspector.resolvedForegroundPID(forPane: self)
+        // TEMPORARY (#705 CI diagnosis): remove before merge.
+        let debugName = ProcessInspector.runningProcessName(forPane: self)
+        let debugShell = ProcessInspector.foregroundProcessIsShell(forPane: self)
+        let debugRaw = ProcessInspector.terminalInputIsRaw(forPane: self)
+        let debugBefore = executionState
+        defer {
+            debug705Logger.debug(
+                "refresh \(self.sessionName, privacy: .public) pid=\(resolvedPID.map { String($0) } ?? "nil", privacy: .public) name=\(debugName ?? "nil", privacy: .public) shell=\(debugShell, privacy: .public) raw=\(debugRaw, privacy: .public) atPrompt=\(self.isShellAtPrompt, privacy: .public) wrapped=\(String(describing: self.nsView?.isZmxWrapped), privacy: .public) tty=\(ZmxForegroundResolver.daemonTTYPath(sessionName: self.sessionName) ?? "nil", privacy: .public) \(String(describing: debugBefore), privacy: .public)->\(String(describing: self.executionState), privacy: .public)"
+            )
+        }
         applyForegroundRefresh(
             name: ProcessInspector.runningProcessName(forPane: self),
             // The RESOLVED foreground pid (session-side shell/program for a
@@ -658,6 +671,8 @@ final class Pane: Identifiable {
     }
 
     func recordCommandSubmission(hasContent: Bool, at date: Date = Date()) {
+        // TEMPORARY (#705 CI diagnosis): remove before merge.
+        debug705Logger.debug("submission \(self.sessionName, privacy: .public) hasContent=\(hasContent, privacy: .public)")
         // Plain Return is ambiguous in editors and menus. Only a nonempty
         // submission in a recognized AI agent gets the two-heartbeat in-place
         // start heuristic; ordinary programs still use process/row evidence.
