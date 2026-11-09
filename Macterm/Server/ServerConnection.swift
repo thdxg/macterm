@@ -48,11 +48,12 @@ final class ServerConnection: @unchecked Sendable {
     /// local server's socket, or one end of a socket pair whose other end is
     /// the stdio of a host's `macterm proxy` (`RemoteServers`). The
     /// connection owns `fd` from here, and closes it on a failure too.
-    /// `peerPID` is the server's pid, when the kernel names it. It blocks:
+    /// `peerPID` is the server's pid, when the kernel names it. `buffered`
+    /// holds bytes of the stream that the caller read already. It blocks:
     /// call it off the main thread.
-    static func handshake(fd: Int32, peerPID: pid_t?, timeout: TimeInterval) throws -> ServerConnection {
+    static func handshake(fd: Int32, peerPID: pid_t?, timeout: TimeInterval, buffered: Data = Data()) throws -> ServerConnection {
         do {
-            var reader = FrameReader(fd: fd)
+            var reader = FrameReader(fd: fd, buffer: buffered)
             setReceiveTimeout(fd, seconds: timeout)
             let mine = MactermProtocol.Hello(
                 level: MactermProtocol.level,

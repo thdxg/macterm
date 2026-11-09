@@ -258,9 +258,11 @@ class RelayClient:
     app reaches a host's server through ssh. Each pane is a channel of the
     one stream (src/relay.zig)."""
 
-    def __init__(self, zmx=None, argv=None):
+    def __init__(self, zmx=None, argv=None, skip_to=None):
         """`argv` runs in place of `<zmx> proxy`: an ssh command that execs
-        the proxy on a host (test/host_install.bats)."""
+        the proxy on a host (test/host_install.bats). The bytes up to and
+        with `skip_to` are dropped, as the app drops the text before the
+        line of host/attach.sh."""
         import subprocess
 
         ours, theirs = socket.socketpair()
@@ -273,6 +275,7 @@ class RelayClient:
         self.sock = ours
         self.buf = bytearray()
         self.closed = False
+        self.skip_to = skip_to
         self.next_id = 1
         # Channel 0's messages, in order.
         self.control = []
@@ -305,6 +308,12 @@ class RelayClient:
             self.closed = True
             return
         self.buf += data
+        if self.skip_to is not None:
+            at = self.buf.find(self.skip_to)
+            if at < 0:
+                return
+            del self.buf[: at + len(self.skip_to)]
+            self.skip_to = None
         i = 0
         while len(self.buf) - i >= 9:
             n, ch, kind = struct.unpack_from("<IIB", self.buf, i)

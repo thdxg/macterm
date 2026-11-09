@@ -8,13 +8,16 @@ struct RemoteServersTests {
 
     @Test
     func the_check_names_a_missing_server_with_or_without_a_host_id() {
-        #expect(HostCheck.parse(status: 3, stderr: "macterm-host missing Linux x86_64 \n")
-            == .missing(system: "Linux", machine: "x86_64", hostID: nil))
-        #expect(HostCheck.parse(status: 3, stderr: "Warning: added\nmacterm-host missing Darwin arm64 1f2e-3d\n")
-            == .missing(system: "Darwin", machine: "arm64", hostID: "1f2e-3d"))
+        #expect(HostCheck.parse(status: 3, stderr: "macterm-host missing Linux x86_64 - 123\n")
+            == .missing(.init(system: "Linux", machine: "x86_64", hostID: nil, hostKeys: "123")))
+        #expect(HostCheck.parse(status: 3, stderr: "Warning: added\nmacterm-host missing Darwin arm64 1f2e-3d 456\n")
+            == .missing(.init(system: "Darwin", machine: "arm64", hostID: "1f2e-3d", hostKeys: "456")))
         // A host id that is not one plain word is no host id: ask.
-        #expect(HostCheck.parse(status: 3, stderr: "macterm-host missing Linux x86_64 a;b\n")
-            == .missing(system: "Linux", machine: "x86_64", hostID: nil))
+        #expect(HostCheck.parse(status: 3, stderr: "macterm-host missing Linux x86_64 a;b 123\n")
+            == .missing(.init(system: "Linux", machine: "x86_64", hostID: nil, hostKeys: "123")))
+        // Control characters from the host do not reach a log or an error.
+        #expect(HostCheck.parse(status: 4, stderr: "macterm-host unsupported Plan\u{1B}[2J9 x\n")
+            == .unsupported(system: "Plan[2J9", machine: "x"))
         #expect(HostCheck.parse(status: 4, stderr: "macterm-host no-home\n") == .noHome)
         #expect(HostCheck.parse(status: 4, stderr: "macterm-host unsupported FreeBSD amd64\n")
             == .unsupported(system: "FreeBSD", machine: "amd64"))
@@ -25,7 +28,8 @@ struct RemoteServersTests {
         // ssh's own failure, and a status with no line of the script.
         #expect(HostCheck.parse(status: 255, stderr: "ssh: connect to host box port 22: Connection refused\n") == nil)
         #expect(HostCheck.parse(status: 3, stderr: "something else\n") == nil)
-        #expect(HostCheck.parse(status: 0, stderr: "macterm-host missing Linux x86_64 \n") == nil)
+        #expect(HostCheck.parse(status: 0, stderr: "macterm-host missing Linux x86_64 - 123\n") == nil)
+        #expect(HostCheck.parse(status: 3, stderr: "macterm-host missing Linux x86_64 -\n") == nil)
         #expect(HostCheck.parse(status: 3, stderr: "macterm-host no-home\n") == nil)
     }
 
@@ -48,6 +52,16 @@ struct RemoteServersTests {
         #expect(HostScripts.command("echo", ["a;rm"]) == nil)
         #expect(HostScripts.command("echo", [""]) == nil)
         #expect(HostScripts.command("echo", [String(repeating: "a", count: 65)]) == nil)
+        // csh refuses a newline in single quotes, and reads `!x` as history.
+        #expect(HostScripts.command("a\nb", ["abc"]) == nil)
+        #expect(HostScripts.command("echo !x", ["abc"]) == nil)
+        #expect(HostScripts.command("[ ! -e f ] && [ a != b ]", ["abc"]) != nil)
+    }
+
+    @Test
+    func a_script_becomes_one_line_with_no_comments() {
+        let script = "# note\nv=$1;\n\nif [ -n \"$v\" ]; then\n  echo x;  \nfi;\n"
+        #expect(HostScripts.oneLine(script) == "v=$1; if [ -n \"$v\" ]; then echo x; fi;")
     }
 
     @Test
@@ -57,8 +71,25 @@ struct RemoteServersTests {
             .appendingPathComponent("server/host", isDirectory: true)
         let scripts = try #require(HostScripts.load(from: tree))
         #expect(HostScripts.bundled == scripts, "Contents/Resources/host is not server/host: build again")
-        #expect(scripts.attachCommand(key: "abc123") != nil)
-        #expect(scripts.installCommand(key: "abc123", sha256: String(repeating: "f", count: 64), hostID: "id-1") != nil)
+        let attach = try #require(scripts.attachCommand(key: "abc123"))
+        let install = try #require(scripts.installCommand(key: "abc123", sha256: String(repeating: "f", count: 64), hostID: "id-1"))
+        // Each line is valid sh, and the command parses with csh as the
+        // login shell (here as the arguments of `true`).
+        for (script, command) in [(scripts.attach, attach), (scripts.install, install)] {
+            #expect(Self.status("/bin/sh", ["-n", "-c", script]) == 0, "not valid sh: \(script)")
+            #expect(Self.status("/bin/csh", ["-f", "-c", "true " + command.dropFirst("sh -c ".count)]) == 0)
+        }
+    }
+
+    private static func status(_ tool: String, _ arguments: [String]) -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: tool)
+        process.arguments = arguments
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return -1 }
+        process.waitUntilExit()
+        return process.terminationStatus
     }
 
     // MARK: - Rules
@@ -69,19 +100,28 @@ struct RemoteServersTests {
             .init(level: level, minLevel: 1, build: build, role: .server, epoch: 1, caps: [])
         }
         let ours = MactermProtocol.level
-        #expect(!RemoteServers.shouldReplace(hello(level: ours, build: "1.0.1+thdxg.abc"), key: "abc"))
-        #expect(RemoteServers.shouldReplace(hello(level: ours, build: "1.0.1+thdxg.def"), key: "abc"))
-        #expect(RemoteServers.shouldReplace(hello(level: ours, build: "unknown"), key: "abc"))
-        #expect(!RemoteServers.shouldReplace(hello(level: ours + 1, build: "1.0.1+thdxg.def"), key: "abc"))
+        let other = hello(level: ours, build: "1.0.1+thdxg.def")
+        #expect(!RemoteServers.shouldReplace(hello(level: ours, build: "1.0.1+thdxg.abc"), key: "abc", installed: true))
+        // Another build of the same level: only after this connect installed.
+        #expect(RemoteServers.shouldReplace(other, key: "abc", installed: true))
+        #expect(!RemoteServers.shouldReplace(other, key: "abc", installed: false))
+        #expect(RemoteServers.shouldReplace(hello(level: ours, build: "unknown"), key: "abc", installed: true))
+        #expect(!RemoteServers.shouldReplace(hello(level: ours + 1, build: "1.0.1+thdxg.def"), key: "abc", installed: true))
     }
 
     @Test
-    func a_consent_holds_only_for_the_same_destination_and_host_id() {
-        let consents = ["me@box:22": "id-1"]
-        #expect(RemoteServers.consented(consents, destination: "me@box:22", hostID: "id-1"))
-        #expect(!RemoteServers.consented(consents, destination: "me@box:22", hostID: "id-2"))
-        #expect(!RemoteServers.consented(consents, destination: "me@box:22", hostID: nil))
-        #expect(!RemoteServers.consented(consents, destination: "me@other:22", hostID: "id-1"))
+    func a_consent_holds_only_for_the_same_destination_host_id_and_host_keys() {
+        func host(_ id: String?, _ keys: String = "123") -> HostCheck.Missing {
+            .init(system: "Linux", machine: "x86_64", hostID: id, hostKeys: keys)
+        }
+        let consents = ["me@box:22": "id-1 123"]
+        #expect(RemoteServers.consented(consents, destination: "me@box:22", host: host("id-1")))
+        #expect(!RemoteServers.consented(consents, destination: "me@box:22", host: host("id-2")))
+        #expect(!RemoteServers.consented(consents, destination: "me@box:22", host: host("id-1", "999")))
+        #expect(!RemoteServers.consented(consents, destination: "me@box:22", host: host(nil)))
+        #expect(!RemoteServers.consented(consents, destination: "me@other:22", host: host("id-1")))
+        // `ssh -G` failed: ask.
+        #expect(!RemoteServers.consented(consents, destination: nil, host: host("id-1")))
     }
 
     @Test
@@ -109,7 +149,7 @@ struct RemoteServersTests {
             let hostID = try String(
                 contentsOf: host.home.appendingPathComponent(".local/share/macterm/host-id"), encoding: .utf8
             ).trimmingCharacters(in: .whitespacesAndNewlines)
-            #expect(Array(host.consents.values) == [hostID])
+            #expect(host.consents.values.map { $0.split(separator: " ").first.map(String.init) } == [hostID])
             link.close()
 
             let again = try await host.servers.connect("box")
@@ -147,11 +187,20 @@ struct RemoteServersTests {
             same.close()
             try await host.stopServer()
 
+            // Another machine with Macterm's files: another host id.
+            try FileManager.default.removeItem(at: share.appendingPathComponent("bin"))
+            try "other-id\n".write(to: share.appendingPathComponent("host-id"), atomically: true, encoding: .utf8)
+            let changed = try await host.servers.connect("box")
+            #expect(changed.installed)
+            #expect(host.asked.count == 2)
+            changed.close()
+            try await host.stopServer()
+
             // The name now reaches another machine: no files, no host id.
             try FileManager.default.removeItem(at: share)
             let other = try await host.servers.connect("box")
             #expect(other.installed)
-            #expect(host.asked.count == 2)
+            #expect(host.asked.count == 3)
             other.close()
         }
     }
@@ -183,6 +232,14 @@ struct RemoteServersTests {
             link.close()
             let bin = host.home.appendingPathComponent(".local/share/macterm/bin")
             #expect(try Set(FileManager.default.contentsOfDirectory(atPath: bin.path)) == ["macterm-\(host.key)", "macterm-eeee0000"])
+
+            // The first app again: its file is there, so it installs nothing
+            // and uses the server of the later install, as it is.
+            let back = try await host.servers.connect("box")
+            #expect(!back.installed)
+            #expect(back.commands == 1)
+            #expect(back.connection.serverHello.epoch == link.connection.serverHello.epoch)
+            back.close()
         }
     }
 

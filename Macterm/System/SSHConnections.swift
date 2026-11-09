@@ -156,8 +156,9 @@ final class SSHConnections {
     }
 
     /// Start `command` on the host over its connection, with `stdio` as its
-    /// stdin and stdout, for a command that runs on (the server's proxy).
-    /// stderr is collected in the returned pipe. The caller ends the process.
+    /// stdin and stdout. It is for a command that does not end by itself
+    /// (the server's proxy). stderr goes to the returned pipe. The caller
+    /// ends the process.
     func start(_ destination: String, _ command: String, stdio: FileHandle) async throws -> (Process, CollectedPipe) {
         let route = try await connect(destination)
         guard let executable = configuration.ssh.first else { throw Failure.cannotStart("no ssh") }

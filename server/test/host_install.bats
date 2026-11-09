@@ -2,7 +2,7 @@
 # The check, the install and the attach on a host (host/attach.sh,
 # host/install.sh, design/005 steps 3 to 5), over a real sshd on this
 # machine, as the app sends them: `sh -c '<script>' macterm <args>` as the
-# ssh command. Two builds of the server, with the build keys aaaa1111 and
+# ssh command, joined into one line. Two builds of the server, with the build keys aaaa1111 and
 # bbbb2222, stand for two app versions. The app's half (the consent, the
 # replace) is in MactermTests/System/RemoteServerInstallerTests.swift.
 
@@ -85,9 +85,19 @@ sha() {
   if command -v sha256sum >/dev/null; then sha256sum <"$1"; else shasum -a 256 <"$1"; fi | cut -d" " -f1
 }
 
+# A host script as the app sends it: no comment lines, the lines joined
+# with spaces (HostScripts.oneLine).
+one_line() {
+  grep -v '^[[:space:]]*#' "$REPO_DIR/host/$1" | sed 's/^[[:space:]]*//' | grep -v '^$' | tr '\n' ' ' | sed 's/ $//'
+}
+
 # The ssh command of the app's check and attach for the build `$1`.
 attach_command() {
-  printf "sh -c '%s' macterm %s" "$(cat "$REPO_DIR/host/attach.sh")" "$1"
+  printf "sh -c '%s' macterm %s" "$(one_line attach.sh)" "$1"
+}
+
+keys_checksum() {
+  cat /etc/ssh/ssh_host_*_key.pub 2>/dev/null | cut -d " " -f 1-2 | sort | cksum | cut -d " " -f 1
 }
 
 check_host() {
@@ -98,16 +108,16 @@ check_host() {
 install_build() {
   local gz="$BATS_FILE_TMPDIR/$1.gz" bin="$BATS_FILE_TMPDIR/$1/bin/zmx"
   ssh -F "$T/ssh_config" box \
-    "$(printf "sh -c '%s' macterm %s %s %s" "$(cat "$REPO_DIR/host/install.sh")" "$1" "$(sha "$bin")" "$2")" <"$gz"
+    "$(printf "sh -c '%s' macterm %s %s %s" "$(one_line install.sh)" "$1" "$(sha "$bin")" "$2")" <"$gz"
 }
 
 # relay <key>: python code on stdin runs with `c`, a RelayClient whose stream
 # is the ssh command of the check and attach for the build `<key>`.
 relay() {
-  ATTACH_COMMAND="$(attach_command "$1")" python3 -c '
+  ATTACH_COMMAND="${NOISE:-}$(attach_command "$1")" python3 -c '
 import os, sys
 from v2client import RelayClient
-c = RelayClient(argv=["ssh", "-F", os.environ["T"] + "/ssh_config", "box", os.environ["ATTACH_COMMAND"]])
+c = RelayClient(argv=["ssh", "-F", os.environ["T"] + "/ssh_config", "box", os.environ["ATTACH_COMMAND"]], skip_to=b"macterm-host proxy\n")
 c.wait(lambda: c.control, what="hello")
 exec(sys.stdin.read())
 c.close()
@@ -117,7 +127,7 @@ c.close()
 @test "host: the first connect finds no server, and the install puts it in place" {
   run check_host $A
   [ "$status" -eq 3 ]
-  [[ "$output" == "macterm-host missing $(uname -s) $(uname -m) " ]]
+  [[ "$output" == "macterm-host missing $(uname -s) $(uname -m) - $(keys_checksum)" ]]
   # The check writes nothing on the host.
   [ ! -e "$HOST_HOME/.local" ]
 
@@ -159,7 +169,7 @@ PY
   run check_host $B
   [ "$status" -eq 3 ]
   # The host id of the first install stays.
-  [[ "$output" == "macterm-host missing $(uname -s) $(uname -m) first-id" ]]
+  [[ "$output" == "macterm-host missing $(uname -s) $(uname -m) first-id $(keys_checksum)" ]]
   run install_build $B other-id
   [ "$status" -eq 0 ]
   [ "$output" = "macterm-host installed first-id" ]
@@ -180,6 +190,8 @@ assert old and old[0]["state"] == "running" and old[0]["build"] == "1.0.1+thdxg.
 bin = os.environ["HOST_HOME"] + "/.local/share/macterm/bin/"
 # The old session runs the old build: its file stays.
 assert os.path.exists(bin + "macterm-aaaa1111")
+# A file of the last minute stays too (a proxy may still come): make it old.
+os.utime(bin + "macterm-aaaa1111", (time.time() - 120, time.time() - 120))
 c.call("session.kill", id="old")
 deadline = time.time() + 10
 while os.path.exists(bin + "macterm-aaaa1111"):
@@ -198,14 +210,14 @@ PY
   rm -rf "$HOST_HOME/.local"
   run check_host $A
   [ "$status" -eq 3 ]
-  [[ "$output" == "macterm-host missing $(uname -s) $(uname -m) " ]]
+  [[ "$output" == "macterm-host missing $(uname -s) $(uname -m) - $(keys_checksum)" ]]
   run install_build $A second-id
   [ "$output" = "macterm-host installed second-id" ]
 }
 
 @test "host: a wrong checksum installs nothing" {
   run ssh -F "$T/ssh_config" box \
-    "$(printf "sh -c '%s' macterm %s %s %s" "$(cat "$REPO_DIR/host/install.sh")" $A 0000 first-id)" <"$BATS_FILE_TMPDIR/$A.gz"
+    "$(printf "sh -c '%s' macterm %s %s %s" "$(one_line install.sh)" $A 0000 first-id)" <"$BATS_FILE_TMPDIR/$A.gz"
   [ "$status" -eq 5 ]
   [[ "$output" == *"the checksum does not match"* ]]
   [ -z "$(ls -A "$HOST_HOME/.local/share/macterm/bin")" ]
@@ -219,4 +231,12 @@ PY
   run install_build $A first-id
   [ "$status" -eq 0 ]
   [ "$(cat "$HOST_HOME/.local/bin/macterm")" = mine ]
+}
+
+@test "host: text that a shell rc file writes before the proxy is dropped" {
+  install_build $A first-id
+  # As a ~/.bashrc that prints: the login shell writes it before the command.
+  NOISE="echo hello from an rc file;" relay $A <<'PY'
+assert c.control[0]["build"] == "1.0.1+thdxg.aaaa1111", c.control[0]
+PY
 }

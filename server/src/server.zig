@@ -54,6 +54,9 @@ const max_clients = 64;
 /// The send buffer of a client's socket (`SO_SNDBUF`).
 const peer_sndbuf = 32 * 1024;
 
+/// A server file of another build younger than this stays (`pruneBuilds`).
+const fresh_build_ms = 60_000;
+
 /// The most channels that one client can have open.
 const max_channels = 256;
 
@@ -1448,8 +1451,9 @@ const Server = struct {
     /// The server never removes its own file.
     ///
     /// It fails closed: it does nothing unless the server runs from such a
-    /// file (not the Mac's bundle, not a file that was replaced), and
-    /// nothing while a session's build has no key.
+    /// file (not the Mac's bundle, not a file that was replaced), nothing
+    /// while a session's build has no key, and it keeps a file of the last
+    /// minute (`fresh_build_ms`), whose proxy may still come.
     fn pruneBuilds(s: *Server) void {
         const own = buildKey(build_options.version) orelse return;
         const folder = std.fs.path.dirname(s.exe) orelse return;
@@ -1462,9 +1466,14 @@ const Server = struct {
         }
         var dir = std.Io.Dir.openDirAbsolute(s.io, folder, .{ .iterate = true }) catch return;
         defer dir.close(s.io);
+        const now_ms = std.Io.Timestamp.now(s.io, .real).toMilliseconds();
         var it = dir.iterate();
         while (it.next(s.io) catch null) |entry| {
             if (entry.kind != .file or !staleBuild(entry.name, own, keys.items)) continue;
+            // A build that an app just installed: its proxy has not started
+            // yet, so no session reports it.
+            const stat = dir.statFile(s.io, entry.name, .{}) catch continue;
+            if (now_ms - stat.mtime.toMilliseconds() < fresh_build_ms) continue;
             dir.deleteFile(s.io, entry.name) catch |err| {
                 std.log.warn("server: cannot remove {s}: {s}", .{ entry.name, @errorName(err) });
                 continue;

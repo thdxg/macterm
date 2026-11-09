@@ -14,16 +14,22 @@ private let logger = Logger(subsystem: appBundleID, category: "RemoteServers")
 ///    costs this one command.
 /// 2. Exit 3: no server of this build. The first install on a host asks the
 ///    user (`askConsent`, design/006 §5). The answer is kept for the
-///    destination as `ssh -G` resolves it and the host id, so a name that
-///    now points at another machine asks again. Later builds install with
-///    no question.
+///    destination as `ssh -G` resolves it, the host id and a checksum of the
+///    host's public sshd keys, so a name that now points at another machine,
+///    or a host key change, asks again. Later builds install with no
+///    question.
 /// 3. The install (`server/host/install.sh`) streams the bundled gzip build
 ///    for the host's `uname` over the connection, checks its SHA-256 on the
 ///    host and moves it into place. Then step 1 again.
-/// 4. A proxy of this build can reach a server that an older build started.
+/// 4. A proxy of this build can reach a server that another build started.
 ///    The app tells that server to exit (`server.exit`), once for each
-///    connect, and connects again: the sessions keep running. A server of a
-///    higher level stays: an app never downgrades a host.
+///    connect, and connects again: the sessions keep running. It does this
+///    for a lower level, and at the same level only right after it installed
+///    its own build: builds of one level have no order, so the newest
+///    install wins. A server of a higher level stays: an app never
+///    downgrades a host. So two apps of one level on one host (a Debug and
+///    a Release build) share the server of the later install, and do not
+///    take turns.
 ///
 /// The host id is a file that the first install writes
 /// (`~/.local/share/macterm/host-id`), not the machine's own id: a container
@@ -166,8 +172,9 @@ final class RemoteServers {
             case let .connected(connection, process):
                 let link = Link(connection: connection, process: process, installed: installed, commands: commands)
                 let hello = connection.serverHello
-                if !replaced, Self.shouldReplace(hello, key: key) {
-                    logger.info("server: host=\(destination, privacy: .public) replaces build \(hello.build, privacy: .public)")
+                if !replaced, Self.shouldReplace(hello, key: key, installed: installed) {
+                    let old = hello.build
+                    logger.info("server: host=\(destination, privacy: .public) replaces build \(old, privacy: .public)")
                     // The server unlinks its socket before it replies, so the
                     // next proxy starts the new server.
                     _ = try? await connection.call(MactermProtocol.ServerExit.self, .init())
@@ -184,16 +191,16 @@ final class RemoteServers {
                 return link
             case let .ended(status, text):
                 guard let check = HostCheck.parse(status: status, stderr: text) else {
-                    throw Failure.attachFailed(SSHControlPath.lastLine(of: text))
+                    throw Failure.attachFailed(HostCheck.clean(SSHControlPath.lastLine(of: text)))
                 }
                 switch check {
                 case .noHome:
                     throw Failure.noWritableHome
                 case let .unsupported(system, machine):
                     throw Failure.unsupported(system: system, machine: machine)
-                case let .missing(system, machine, hostID):
+                case let .missing(host):
                     guard !installed else { throw Failure.installFailed("the server is not there after the install") }
-                    try await install(destination, key: key, system: system, machine: machine, hostID: hostID)
+                    try await install(destination, key: key, host: host)
                     commands += 1
                     installed = true
                 }
@@ -202,17 +209,24 @@ final class RemoteServers {
     }
 
     /// True when the host's server must make way for this build's: a lower
-    /// level, or another build of the same level. Builds of one level have
-    /// no order, so the app that connects last wins; the sessions stay.
-    nonisolated static func shouldReplace(_ hello: MactermProtocol.Hello, key: String) -> Bool {
+    /// level, or, right after this connect `installed` this build, another
+    /// build of the same level (the type's comment, step 4).
+    nonisolated static func shouldReplace(_ hello: MactermProtocol.Hello, key: String, installed: Bool) -> Bool {
         if hello.level != MactermProtocol.level { return hello.level < MactermProtocol.level }
-        return ZmxVersion.parse(hello.build)?.forkTag != key
+        return installed && ZmxVersion.parse(hello.build)?.forkTag != key
     }
 
-    /// True when the user allowed the install on this host before.
-    nonisolated static func consented(_ consents: [String: String], destination: String, hostID: String?) -> Bool {
-        guard let hostID else { return false }
-        return consents[destination] == hostID
+    /// The kept answer for a host: its host id and host keys.
+    nonisolated static func consentValue(_ host: HostCheck.Missing) -> String? {
+        host.hostID.map { "\($0) \(host.hostKeys)" }
+    }
+
+    /// True when the user allowed the install on this host before. A
+    /// destination that `ssh -G` did not resolve, or a host with no id,
+    /// asks.
+    nonisolated static func consented(_ consents: [String: String], destination: String?, host: HostCheck.Missing) -> Bool {
+        guard let destination, let value = consentValue(host) else { return false }
+        return consents[destination] == value
     }
 
     // MARK: - Steps
@@ -229,7 +243,10 @@ final class RemoteServers {
             throw Failure.attachFailed(String(cString: strerror(errno)))
         }
         let ours = pair[0]
+        // Both ends: a process that another thread starts meanwhile must not
+        // keep a copy. Process gives ssh its own copy as stdin and stdout.
         _ = fcntl(ours, F_SETFD, FD_CLOEXEC)
+        _ = fcntl(pair[1], F_SETFD, FD_CLOEXEC)
         var on: Int32 = 1
         setsockopt(ours, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
         let theirs = FileHandle(fileDescriptor: pair[1], closeOnDealloc: true)
@@ -246,7 +263,14 @@ final class RemoteServers {
         try? theirs.close()
         let timeout = configuration.handshakeTimeout
         let result = await Task.detached {
-            Result { try ServerConnection.handshake(fd: ours, peerPID: nil, timeout: timeout) }
+            Result {
+                // A shell rc file of the user can write to stdout first.
+                guard let rest = Self.skipToProxy(fd: ours, timeout: timeout) else {
+                    Darwin.close(ours)
+                    throw ServerClientError.noAnswer
+                }
+                return try ServerConnection.handshake(fd: ours, peerPID: nil, timeout: timeout, buffered: rest)
+            }
         }.value
         switch result {
         case let .success(connection):
@@ -267,26 +291,20 @@ final class RemoteServers {
         }
     }
 
-    private func install(
-        _ destination: String,
-        key: String,
-        system: String,
-        machine: String,
-        hostID: String?
-    ) async throws {
+    private func install(_ destination: String, key: String, host: HostCheck.Missing) async throws {
         guard let scripts = configuration.scripts else { throw Failure.notBundled }
-        guard let target = ZmxHostTarget.detect(system: system, machine: machine) else {
-            throw Failure.unsupported(system: system, machine: machine)
+        guard let target = ZmxHostTarget.detect(system: host.system, machine: host.machine) else {
+            throw Failure.unsupported(system: host.system, machine: host.machine)
         }
         guard let build = await configuration.builds.build(for: target) else { throw Failure.noBuild(target.rawValue) }
-        let resolved = await connections.resolvedDestination(destination) ?? destination
-        if !Self.consented(configuration.consents.read(), destination: resolved, hostID: hostID) {
+        let resolved = await connections.resolvedDestination(destination)
+        if !Self.consented(configuration.consents.read(), destination: resolved, host: host) {
             guard await configuration.askConsent(ConsentRequest(host: destination, size: build.size)) else {
                 logger.info("server: host=\(destination, privacy: .public) install declined")
                 throw Failure.declined
             }
         }
-        let newID = hostID ?? UUID().uuidString.lowercased()
+        let newID = host.hostID ?? UUID().uuidString.lowercased()
         guard let command = scripts.installCommand(key: key, sha256: build.sha256, hostID: newID) else {
             throw Failure.notBundled
         }
@@ -299,17 +317,44 @@ final class RemoteServers {
         defer { try? file.close() }
         let outcome = try await connections.run(destination, command, input: file, timeout: .seconds(120))
         guard outcome.status == 0, let installedID = HostCheck.installedID(in: outcome.stdout) else {
-            let reason = HostCheck.reason(in: outcome.stderr) ?? SSHControlPath.lastLine(of: outcome.stderr)
+            let reason = HostCheck.clean(HostCheck.reason(in: outcome.stderr) ?? SSHControlPath.lastLine(of: outcome.stderr))
             logger.error("server: host=\(destination, privacy: .public) install failed: \(reason, privacy: .public)")
             throw Failure.installFailed(reason)
         }
-        var consents = configuration.consents.read()
-        consents[resolved] = installedID
-        configuration.consents.write(consents)
+        var kept = host
+        kept.hostID = installedID
+        if let resolved, let value = Self.consentValue(kept) {
+            var consents = configuration.consents.read()
+            consents[resolved] = value
+            configuration.consents.write(consents)
+        }
         logger
             .info(
                 "server: host=\(destination, privacy: .public) installed \(key, privacy: .public) for \(target.rawValue, privacy: .public)"
             )
+    }
+
+    nonisolated static let proxyLine = Data("macterm-host proxy\n".utf8)
+
+    /// Reads `fd` up to and past `proxyLine`, which `attach.sh` prints
+    /// before it execs the proxy, and returns the bytes after it. nil at the
+    /// end of the stream (exit 3 or 4) or after `timeout`. At most 1 MiB
+    /// may come first.
+    nonisolated static func skipToProxy(fd: Int32, timeout: TimeInterval) -> Data? {
+        var limit = timeval(tv_sec: Int(timeout), tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
+        var buffer = Data()
+        var chunk = [UInt8](repeating: 0, count: 16 * 1024)
+        while buffer.count < 1 << 20 {
+            let count = Darwin.read(fd, &chunk, chunk.count)
+            if count < 0, errno == EINTR { continue }
+            guard count > 0 else { return nil }
+            buffer.append(contentsOf: chunk[0 ..< count])
+            if let range = buffer.range(of: proxyLine) {
+                return Data(buffer[range.upperBound...])
+            }
+        }
+        return nil
     }
 
     /// The exit status of `process`, or -1 when it does not end in `limit`
@@ -340,11 +385,23 @@ struct HostScripts: Equatable {
         Bundle.main.resourceURL.flatMap { load(from: $0.appendingPathComponent("host", isDirectory: true)) }
     }
 
+    /// Each script as the one line that goes to the host (`oneLine`).
     static func load(from directory: URL) -> HostScripts? {
         guard let attach = try? String(contentsOf: directory.appendingPathComponent("attach.sh"), encoding: .utf8),
               let install = try? String(contentsOf: directory.appendingPathComponent("install.sh"), encoding: .utf8)
         else { return nil }
-        return HostScripts(attach: attach, install: install)
+        return HostScripts(attach: oneLine(attach), install: oneLine(install))
+    }
+
+    /// The script with no comment lines and no empty lines, its lines joined
+    /// with spaces. sshd gives the command to the user's login shell, and csh
+    /// refuses a newline in single quotes. So each line of a host script is
+    /// valid when it is joined to the next.
+    static func oneLine(_ script: String) -> String {
+        script.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+            .joined(separator: " ")
     }
 
     func attachCommand(key: String) -> String? {
@@ -355,11 +412,22 @@ struct HostScripts: Equatable {
         Self.command(install, [key, sha256, hostID])
     }
 
-    /// nil when the script has a single quote or an argument is not one
-    /// plain word. Fail closed: nothing goes to the host then.
+    /// nil when the script has a single quote, a newline or a `!` that csh
+    /// reads as history (one that a blank, `=` or `(` does not follow), or an argument
+    /// is not one plain word. Fail closed: nothing goes to the host then.
     static func command(_ script: String, _ arguments: [String]) -> String? {
-        guard !script.contains("'"), arguments.allSatisfy(isWord) else { return nil }
+        guard !script.contains("'"), !script.contains(where: \.isNewline), !hasHistoryMark(script),
+              arguments.allSatisfy(isWord)
+        else { return nil }
         return "sh -c '\(script)' macterm " + arguments.joined(separator: " ")
+    }
+
+    static func hasHistoryMark(_ script: String) -> Bool {
+        let characters = Array(script)
+        return characters.indices.contains { index in
+            characters[index] == "!" && index + 1 < characters.count
+                && !(characters[index + 1].isWhitespace || "=(".contains(characters[index + 1]))
+        }
     }
 
     /// Letters, digits and `-`, at most 64: a build key, a checksum, a host id.
@@ -373,20 +441,29 @@ struct HostScripts: Equatable {
 /// What the check of a host says when it finds no server of this build
 /// (`server/host/attach.sh`, exit 3 or 4). Pure.
 enum HostCheck: Equatable {
-    case missing(system: String, machine: String, hostID: String?)
+    case missing(Missing)
     case noHome
     case unsupported(system: String, machine: String)
+
+    struct Missing: Equatable {
+        var system: String
+        var machine: String
+        /// nil before the first install.
+        var hostID: String?
+        /// A checksum of the host's public sshd keys.
+        var hostKeys: String
+    }
 
     static let marker = "macterm-host"
 
     /// nil when the status and the text are not the script's: ssh's own
     /// failure, or a host that printed something else.
     static func parse(status: Int32, stderr: String) -> HostCheck? {
-        guard let words = lastLine(in: stderr) else { return nil }
+        guard let words = lastLine(in: stderr)?.map(clean) else { return nil }
         switch (status, words.first) {
-        case (3, "missing") where words.count == 3 || words.count == 4:
-            let id = words.count == 4 && HostScripts.isWord(words[3]) ? words[3] : nil
-            return .missing(system: words[1], machine: words[2], hostID: id)
+        case (3, "missing") where words.count == 5 && HostScripts.isWord(words[4]):
+            let id = words[3] != "-" && HostScripts.isWord(words[3]) ? words[3] : nil
+            return .missing(Missing(system: words[1], machine: words[2], hostID: id, hostKeys: words[4]))
         case (4, "no-home"):
             return .noHome
         case (4, "unsupported") where words.count == 3:
@@ -407,6 +484,14 @@ enum HostCheck: Equatable {
     /// The reason in the install's last `macterm-host` line.
     static func reason(in stderr: String) -> String? {
         lastLine(in: stderr)?.joined(separator: " ")
+    }
+
+    /// Host text with no control characters, at most 200 characters, for a
+    /// log line and an error (design/006 §3).
+    static func clean(_ text: String) -> String {
+        String(String.UnicodeScalarView(text.unicodeScalars.filter {
+            !CharacterSet.controlCharacters.contains($0)
+        }).prefix(200))
     }
 
     /// The words after the marker on the last line that starts with it.

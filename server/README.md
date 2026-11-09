@@ -90,15 +90,17 @@ start it (design/001, A). Nothing calls it yet.
   `~/.local/share/macterm/bin/macterm-<key>` (`host/`). A server that runs
   from such a file removes the file of each other build that no session
   reports, when its sessions settled and after each session ends. It never
-  removes its own.
+  removes its own, or a file of the last minute (an install whose proxy has
+  not started yet).
 
 ## The host scripts
 
 `host/attach.sh` and `host/install.sh` run on a host over the app's ssh
 connection (design/005, steps 3 and 4). The app bundles them and sends each
-one as `sh -c '<script>' macterm <arguments>`, so they have no single quote.
-`attach.sh` execs `macterm-<key> proxy`, or exits 3 when that build is not
-there. `install.sh` reads the gzip build on stdin, checks its SHA-256 and
+one as one line, `sh -c '<script>' macterm <arguments>`, so they have no
+single quote and each line ends where a join is valid. `attach.sh` prints
+`macterm-host proxy` and execs `macterm-<key> proxy`, or exits 3 when that
+build is not there. `install.sh` reads the gzip build on stdin, checks its SHA-256 and
 moves it into place. `test/host_install.bats` runs both over a real sshd.
 
 ## The v2 attach client
