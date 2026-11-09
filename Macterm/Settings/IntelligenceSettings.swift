@@ -50,8 +50,9 @@ struct IntelligenceSettings: View {
     }
 
     /// Project Insights needs Apple Intelligence. Without it the toggle is
-    /// disabled and shows off, and `Preferences.projectMemory` keeps the
-    /// user's choice for when Apple Intelligence is back.
+    /// disabled, dimmed and off, its caption ends with the reason, and
+    /// `Preferences.projectMemory` keeps the user's choice for when Apple
+    /// Intelligence is back.
     private var modelIsAvailable: Bool {
         ProjectMemory.shared.modelAvailability == .available
     }
