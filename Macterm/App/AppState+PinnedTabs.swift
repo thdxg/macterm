@@ -330,6 +330,15 @@ extension AppState {
 
     /// Session names the not-yet-materialized pinned snapshots claim, for the
     /// launch orphan reaper's `known` set.
+    /// `pendingPinnedSessionNames` without the panes of remote projects.
+    func pendingPinnedLocalSessionNames() -> Set<String> {
+        Set(pendingPinnedLiveRestores.values.flatMap { snapshot in
+            paneSnapshots(of: snapshot.splitRoot)
+                .filter { !ProjectPath.isRemote($0.projectPath) }
+                .compactMap(\.sessionName)
+        })
+    }
+
     func pendingPinnedSessionNames() -> Set<String> {
         Set(pendingPinnedLiveRestores.values.flatMap { paneSnapshots(of: $0.splitRoot).compactMap(\.sessionName) })
     }

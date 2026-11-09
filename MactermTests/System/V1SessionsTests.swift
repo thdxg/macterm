@@ -1,3 +1,4 @@
+import Darwin
 @testable import Macterm
 import Testing
 
@@ -45,5 +46,13 @@ struct V1SessionsTests {
             Proc(pid: 21, ppid: 20, sid: 21, argv: []),
         ]
         #expect(V1Sessions.targets(in: processes, names: ["macterm-a"]) == .init(daemons: [], programs: []))
+    }
+
+    @Test
+    func the_scan_finds_this_process_with_its_parent_and_session() throws {
+        let processes = try #require(V1Sessions.snapshot())
+        let me = try #require(processes.first { $0.pid == getpid() })
+        #expect(me.ppid == getppid())
+        #expect(me.sid == getsid(0))
     }
 }

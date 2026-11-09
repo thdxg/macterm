@@ -1852,7 +1852,7 @@ final class AppState {
         // A failed snapshot LOAD gives no names: nothing is ended (an empty
         // claim set would mark every live session an orphan).
         guard !workspaceStore.loadFailed else { return }
-        endV1SessionsOnce(names: claimedSessionNames())
+        endV1SessionsOnce(names: localSessionNames())
         sweepLocalOrphans()
         // The active project's remote host gets the labelled sweep (#281);
         // other hosts are swept when their projects are selected.
@@ -2108,9 +2108,9 @@ final class AppState {
     /// pane opened a new v2 session of the same name, with a new shell in
     /// its saved folder, so a v1 session left running would be a hidden
     /// shell until a reboot. Only these names: a v1 session that no pane
-    /// names is not ours to judge. Remote sessions stay (their names are not
-    /// in the local folder). The flag is set only when every one of them
-    /// is gone; otherwise the next launch tries again.
+    /// names is not ours to judge. Remote sessions stay: `localSessionNames`
+    /// leaves them out. The flag is set only when every one of them is gone;
+    /// otherwise the next launch tries again.
     private func endV1SessionsOnce(names: Set<String>) {
         guard !v1SessionsEnded.read() else { return }
         let flag = v1SessionsEnded
@@ -2169,6 +2169,16 @@ final class AppState {
     private func claimedSessionNames() -> Set<String> {
         Set(allLivePanes().map(\.sessionName))
             .union(pendingPinnedSessionNames())
+            .union(quickTerminalSessionNames())
+            .union(desktopWidgetSessionNames())
+    }
+
+    /// The claimed names of LOCAL sessions: `claimedSessionNames` without the
+    /// panes of remote projects. A remote project whose host is this Mac
+    /// runs its daemon here too, and `endV1SessionsOnce` must not end it.
+    private func localSessionNames() -> Set<String> {
+        Set(allLivePanes().filter { !$0.isRemote }.map(\.sessionName))
+            .union(pendingPinnedLocalSessionNames())
             .union(quickTerminalSessionNames())
             .union(desktopWidgetSessionNames())
     }

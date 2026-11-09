@@ -68,10 +68,11 @@ enum V1Sessions {
     }
 
     /// Ends the v1 sessions of these names, and removes their sockets from
-    /// `socketDir`. True only when no v1 daemon of the names runs after it.
+    /// `socketDir`. True only when a full scan finds no v1 daemon of the
+    /// names after it. A scan that fails counts as "still running".
     static func end(names: Set<String>, socketDir: String) async -> Bool {
         guard !names.isEmpty else { return true }
-        let first = targets(in: snapshot(), names: names)
+        guard let first = snapshot().map({ targets(in: $0, names: names) }) else { return false }
         if !first.daemons.isEmpty {
             logger.info(
                 "Ending \(first.daemons.count, privacy: .public) v1 session(s), \(first.programs.count, privacy: .public) program(s)"
@@ -84,17 +85,20 @@ enum V1Sessions {
             for pid in first.daemons {
                 kill(pid, SIGTERM)
             }
-            let all = first.daemons + first.programs
-            if await !waitUntilGone(all, timeout: .seconds(2)) {
-                for pid in all where isAlive(pid) {
-                    kill(pid, SIGKILL)
+            if await !waitUntilGone(first.daemons + first.programs, timeout: .seconds(2)) {
+                // Scan again: a pid of the first scan can be gone and used
+                // again, and a program can have started since.
+                if let left = snapshot().map({ targets(in: $0, names: names) }) {
+                    for pid in left.daemons + left.programs {
+                        kill(pid, SIGKILL)
+                    }
+                    _ = await waitUntilGone(left.daemons + left.programs, timeout: .seconds(1))
                 }
-                _ = await waitUntilGone(all, timeout: .seconds(1))
             }
         }
-        let left = targets(in: snapshot(), names: names).daemons
-        guard left.isEmpty else {
-            logger.error("\(left.count, privacy: .public) v1 session(s) still run; trying again at the next launch")
+        guard let left = snapshot().map({ targets(in: $0, names: names) }) else { return false }
+        guard left.daemons.isEmpty else {
+            logger.error("\(left.daemons.count, privacy: .public) v1 session(s) still run; trying again at the next launch")
             return false
         }
         for name in names {
@@ -116,32 +120,44 @@ enum V1Sessions {
         return !pids.contains(where: isAlive)
     }
 
-    /// The user's processes. argv is read only for a process whose name is
-    /// `zmx`; the rest need only the tree and the session.
-    static func snapshot() -> [Process] {
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_UID, Int32(bitPattern: getuid())]
+    /// The processes of the user's real uid, so that a setuid program in a
+    /// pane (`top`, `sudo`) is in it. argv is read only for a process whose
+    /// name is `zmx`. nil when the table or the argv of a `zmx` process
+    /// cannot be read: a daemon that was not read is not known to be gone.
+    static func snapshot() -> [Process]? {
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_RUID, Int32(bitPattern: getuid())]
+        var table: [kinfo_proc] = []
         var size = 0
-        guard sysctl(&mib, 4, nil, &size, nil, 0) == 0, size > 0 else { return [] }
-        // The table can grow between the two calls.
-        size += 16 * MemoryLayout<kinfo_proc>.stride
-        var table = [kinfo_proc](repeating: kinfo_proc(), count: size / MemoryLayout<kinfo_proc>.stride)
-        let ok = table.withUnsafeMutableBytes { raw in
-            sysctl(&mib, 4, raw.baseAddress, &size, nil, 0) == 0
+        var read = false
+        // The table can grow between the size call and the read.
+        for _ in 0 ..< 3 where !read {
+            guard sysctl(&mib, 4, nil, &size, nil, 0) == 0, size > 0 else { return nil }
+            size += 64 * MemoryLayout<kinfo_proc>.stride
+            table = [kinfo_proc](repeating: kinfo_proc(), count: size / MemoryLayout<kinfo_proc>.stride)
+            read = table.withUnsafeMutableBytes { raw in
+                sysctl(&mib, 4, raw.baseAddress, &size, nil, 0) == 0
+            }
+            guard read || errno == ENOMEM else { return nil }
         }
-        guard ok else { return [] }
+        guard read else { return nil }
         table.removeLast(table.count - size / MemoryLayout<kinfo_proc>.stride)
-        return table.compactMap { info -> Process? in
+        var processes: [Process] = []
+        for info in table {
             let pid = info.kp_proc.p_pid
-            guard pid > 0 else { return nil }
+            guard pid > 0 else { continue }
             let comm = withUnsafeBytes(of: info.kp_proc.p_comm) { raw in
                 String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self)
             }
-            return Process(
-                pid: pid,
-                ppid: info.kp_eproc.e_ppid,
-                sid: getsid(pid),
-                argv: comm == "zmx" ? ProcessInspector.argv(pid: pid) ?? [] : []
-            )
+            var argv: [String] = []
+            if comm == "zmx" {
+                if let read = ProcessInspector.argv(pid: pid) {
+                    argv = read
+                } else if kill(pid, 0) == 0 || errno == EPERM {
+                    return nil
+                }
+            }
+            processes.append(Process(pid: pid, ppid: info.kp_eproc.e_ppid, sid: getsid(pid), argv: argv))
         }
+        return processes
     }
 }
