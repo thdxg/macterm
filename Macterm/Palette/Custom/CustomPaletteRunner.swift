@@ -209,9 +209,10 @@ private final class SpawnedCommand: @unchecked Sendable {
     }
 
     /// Records the timeout, then ends the group. The record comes first, so
-    /// a runner that sees the exit status of the SIGTERM also sees it.
+    /// a runner that sees the exit status of the SIGTERM also sees it. A
+    /// process that already exited by itself is not a timeout.
     func timeOut() {
-        lock.withLock { timedOut = true }
+        lock.withLock { if !exited { timedOut = true } }
         terminateGroup()
     }
 
