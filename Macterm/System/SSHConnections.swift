@@ -149,6 +149,9 @@ final class SSHConnections {
 
     /// The user cancelled a question of the login of the connection `pid`. End the
     /// login: ssh would ask again (the next password try, the next method).
+    /// Only the master gets the signal. The ssh of a `ProxyJump` host under
+    /// it can ask once more; the app refuses that askpass (no master), and
+    /// the ssh then exits on the closed connection.
     func cancelLogin(connectionPID pid: pid_t) {
         guard let process = owned.values.first(where: { $0.processIdentifier == pid }), process.isRunning else { return }
         cancelled.insert(pid)

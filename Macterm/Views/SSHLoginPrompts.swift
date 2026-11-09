@@ -21,6 +21,20 @@ final class SSHLoginPrompts {
         var kind: Kind
         /// The master whose askpass asks.
         var sshPID: pid_t
+        /// The ssh that runs the askpass: the master, or the ssh of a
+        /// `ProxyJump` host under it. nil: not known.
+        var askerPID: pid_t?
+
+        /// Who asks. Two hosts of one login can ask the same text (a key
+        /// passphrase), so a retry is the same prompt from the same ssh.
+        var asker: Asker {
+            Asker(sshPID: sshPID, askerPID: askerPID ?? sshPID)
+        }
+    }
+
+    struct Asker: Hashable {
+        var sshPID: pid_t
+        var askerPID: pid_t
     }
 
     enum Kind: Equatable {
@@ -54,9 +68,8 @@ final class SSHLoginPrompts {
 
     private var queue: [Pending] = []
     private var current: Pending?
-    /// The last secret prompt that each master got an answer to. The same
-    /// prompt again means that ssh did not accept the answer.
-    private var answeredSecret: [pid_t: String] = [:]
+    /// The last secret prompt that each ssh got an answer to.
+    private var answeredSecret: [Asker: String] = [:]
 
     func ask(_ request: Request) async -> Answer {
         await withCheckedContinuation { continuation in
@@ -67,7 +80,7 @@ final class SSHLoginPrompts {
 
     /// The master `pid` exited: its askpass is gone, so its questions are too.
     func cancel(sshPID pid: pid_t) {
-        answeredSecret[pid] = nil
+        answeredSecret = answeredSecret.filter { $0.key.sshPID != pid }
         for pending in queue where pending.request.sshPID == pid {
             pending.continuation.resume(returning: .cancelled)
         }
@@ -102,20 +115,16 @@ final class SSHLoginPrompts {
              .confirm: String(localized: "Connect to \(request.host)?")
         }
         let prompt = Self.displayText(request.prompt)
-        let retry = request.kind == .secret && answeredSecret[request.sshPID] == request.prompt
         var fingerprint: NSTextField?
         switch request.kind {
-        case .secret where retry:
-            let incorrect = prompt.lowercased().contains("passphrase")
-                ? String(localized: "The passphrase is incorrect.")
-                : String(localized: "The password is incorrect.")
-            alert.informativeText = incorrect + "\n" + prompt
+        case .secret where Self.isRetry(request, answered: answeredSecret):
+            alert.informativeText = Self.refusal(prompt) + "\n" + prompt
         case .yesNo:
             if let key = Self.hostKey(in: request.prompt) {
                 alert.informativeText = String(
-                    localized: "This is the first connection to this host. Make sure that its key is the key that you expect."
+                    localized: "The key of this host is not known. Make sure that it is the key that you expect."
                 )
-                let label = NSTextField(labelWithString: "\(key.type) \(key.fingerprint)")
+                let label = NSTextField(labelWithString: "\(key.host)\n\(key.type) \(key.fingerprint)")
                 label.font = TerminalFont.shared.nsFont(size: NSFont.smallSystemFontSize)
                 label.isSelectable = true
                 label.lineBreakMode = .byClipping
@@ -160,7 +169,7 @@ final class SSHLoginPrompts {
     private func finish(_ pending: Pending, response: NSApplication.ModalResponse, field: NSSecureTextField?, savedID: PasswordEntryID?) {
         let request = pending.request
         if request.kind == .secret, response == Button.primary {
-            answeredSecret[request.sshPID] = request.prompt
+            answeredSecret[request.asker] = request.prompt
         }
         let answer: Answer? = switch response {
         case Button.primary: .text(request.kind == .secret ? field?.stringValue ?? "" : request.kind == .yesNo ? "yes" : "")
@@ -182,7 +191,7 @@ final class SSHLoginPrompts {
                 )
             )
             if allowed, let password = PasswordVault.shared.password(for: savedID) {
-                answeredSecret[request.sshPID] = request.prompt
+                answeredSecret[request.asker] = request.prompt
                 settle(pending, .text(password))
             } else if kill(request.sshPID, 0) == 0 {
                 current = nil
@@ -214,18 +223,51 @@ final class SSHLoginPrompts {
         return PasswordVault.shared.contains(id) ? id : nil
     }
 
-    /// The key type and fingerprint of ssh's question about a new host key
-    /// ("ED25519 key fingerprint is SHA256:…."), or nil for any other text.
-    static func hostKey(in prompt: String) -> (type: String, fingerprint: String)? {
+    /// The same secret prompt again, from the same ssh, after an answer:
+    /// ssh refused that answer.
+    static func isRetry(_ request: Request, answered: [Asker: String]) -> Bool {
+        request.kind == .secret && answered[request.asker] == request.prompt
+    }
+
+    /// What a refused answer was, named only when the prompt says it.
+    static func refusal(_ prompt: String) -> String {
+        let lowered = prompt.lowercased()
+        if lowered.contains("passphrase") { return String(localized: "The passphrase is incorrect.") }
+        if lowered.contains("password") { return String(localized: "The password is incorrect.") }
+        return String(localized: "The answer is incorrect.")
+    }
+
+    /// The host, key type and fingerprint of ssh's question about a new host
+    /// key ("The authenticity of host 'box (1.2.3.4)' can't be established."
+    /// and "ED25519 key fingerprint is SHA256:…."), or nil when either line
+    /// is missing. With `ProxyJump` the key can be the jump host's, so the
+    /// sheet shows the host that ssh names.
+    static func hostKey(in prompt: String) -> HostKey? {
+        let opening = "The authenticity of host '"
+        var host: String?
+        var key: (type: String, fingerprint: String)?
         for line in prompt.split(whereSeparator: \.isNewline) {
-            let words = line.trimmingCharacters(in: .whitespaces).split(separator: " ")
+            let text = line.trimmingCharacters(in: .whitespaces)
+            if text.hasPrefix(opening) {
+                let rest = text.dropFirst(opening.count)
+                if let end = rest.firstIndex(of: "'"), end > rest.startIndex { host = String(rest[..<end]) }
+                continue
+            }
+            let words = text.split(separator: " ")
             guard words.count == 5, words[1 ... 3] == ["key", "fingerprint", "is"] else { continue }
             var fingerprint = String(words[4])
             if fingerprint.hasSuffix(".") { fingerprint.removeLast() }
             guard fingerprint.contains(":") else { continue }
-            return (String(words[0]), fingerprint)
+            key = (String(words[0]), fingerprint)
         }
-        return nil
+        guard let host, let key else { return nil }
+        return HostKey(host: host, type: key.type, fingerprint: key.fingerprint)
+    }
+
+    struct HostKey: Equatable {
+        var host: String
+        var type: String
+        var fingerprint: String
     }
 
     /// ssh's text without its last line when that line asks "(yes/no…)?":

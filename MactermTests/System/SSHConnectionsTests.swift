@@ -74,9 +74,31 @@ struct SSHConnectionsTests {
         Are you sure you want to continue connecting (yes/no/[fingerprint])?
         """
         let key = try #require(SSHLoginPrompts.hostKey(in: prompt))
+        #expect(key.host == "localhost (::1)")
         #expect(key.type == "ED25519")
         #expect(key.fingerprint == "SHA256:Hx4kP3o0aB+cdEf/ghIjkLmNoPqRsTuVwXyZ0123456")
         #expect(SSHLoginPrompts.hostKey(in: "bob@box's password:") == nil)
+        // No host line: the sheet cannot say whose key it is.
+        #expect(SSHLoginPrompts.hostKey(in: "ED25519 key fingerprint is SHA256:abc.") == nil)
+    }
+
+    @Test
+    func a_retry_is_the_same_prompt_from_the_same_ssh() {
+        let passphrase = "Enter passphrase for key '/Users/bob/.ssh/id_ed25519': "
+        let jump = SSHLoginPrompts.Request(host: "prod", prompt: passphrase, kind: .secret, sshPID: 100, askerPID: 200)
+        let destination = SSHLoginPrompts.Request(host: "prod", prompt: passphrase, kind: .secret, sshPID: 100, askerPID: 100)
+        let answered = [jump.asker: passphrase]
+        #expect(SSHLoginPrompts.isRetry(jump, answered: answered))
+        // The destination asks the same text after the jump host: not a retry.
+        #expect(!SSHLoginPrompts.isRetry(destination, answered: answered))
+        #expect(!SSHLoginPrompts.isRetry(jump, answered: [:]))
+    }
+
+    @Test
+    func a_refusal_names_only_what_the_prompt_names() {
+        #expect(SSHLoginPrompts.refusal("Enter passphrase for key 'k': ") == "The passphrase is incorrect.")
+        #expect(SSHLoginPrompts.refusal("(bob@box) Password:") == "The password is incorrect.")
+        #expect(SSHLoginPrompts.refusal("Verification code: ") == "The answer is incorrect.")
     }
 
     @Test
@@ -155,6 +177,14 @@ struct SSHConnectionsTests {
 
         let connections = SSHConnections(configuration: configuration)
         defer { connections.disconnectAll() }
+        defer {
+            // The fake askpass outlives its master.
+            if let text = try? String(contentsOf: pidFile, encoding: .utf8),
+               let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
+            {
+                kill(pid, SIGKILL)
+            }
+        }
         let login = Task { try await connections.connect("box") }
         var owner: (host: String, pid: pid_t)?
         for _ in 0 ..< 100 where owner == nil {

@@ -1813,7 +1813,8 @@ extension ControlHandler {
             host: owner.host,
             prompt: prompt,
             kind: .of(prompt: prompt, confirm: args.confirm == true),
-            sshPID: owner.pid
+            sshPID: owner.pid,
+            askerPID: ProcessInspector.parentPID(of: peerPID)
         ))
         guard case let .text(text) = answer else {
             // One Cancel ends the login. Otherwise ssh asks again: the next
