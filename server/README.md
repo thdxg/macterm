@@ -86,6 +86,20 @@ start it (design/001, A). Nothing calls it yet.
   this before it replies, so a start that follows starts a new server. A
   client that connects at the moment of an idle exit gets EOF before
   `hello`: it starts a server and connects again.
+- **Old builds on a host.** The app installs each build on a host as
+  `~/.local/share/macterm/bin/macterm-<key>` (`host/`). A server that runs
+  from such a file removes the file of each other build that no session
+  reports, when its sessions settled and after each session ends. It never
+  removes its own.
+
+## The host scripts
+
+`host/attach.sh` and `host/install.sh` run on a host over the app's ssh
+connection (design/005, steps 3 and 4). The app bundles them and sends each
+one as `sh -c '<script>' macterm <arguments>`, so they have no single quote.
+`attach.sh` execs `macterm-<key> proxy`, or exits 3 when that build is not
+there. `install.sh` reads the gzip build on stdin, checks its SHA-256 and
+moves it into place. `test/host_install.bats` runs both over a real sshd.
 
 ## The v2 attach client
 

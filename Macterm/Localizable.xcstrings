@@ -4242,6 +4242,22 @@
         }
       }
     },
+    "Install the Macterm server on %@?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 Macterm 서버를 설치할까요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 上安装 Macterm 服务器？"
+          }
+        }
+      }
+    },
     "Install zmx on %@" : {
       "localizations" : {
         "ko" : {
@@ -5066,6 +5082,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当命令和提示符都匹配时，Macterm 会提供自动填充。没有提示符时，Macterm 不会在提示符处提供此密码。请在命令面板的密码管理器中选择它。"
+          }
+        }
+      }
+    },
+    "Macterm puts it in ~/.local/share/macterm (%@) on that host. It runs only while you use this host." : {
+      "comment" : "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm은 서버를 해당 호스트의 ~/.local/share/macterm(%@)에 넣습니다. 서버는 이 호스트를 사용하는 동안에만 실행됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 会把服务器放到该主机的 ~/.local/share/macterm（%@）。服务器只在你使用此主机时运行。"
           }
         }
       }
