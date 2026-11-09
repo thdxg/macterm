@@ -19,8 +19,11 @@ import Foundation
 ///   action's `config` clears them. Ghostty keeps the override in memory
 ///   only, across config reloads.
 ///
-/// Not followed: upstream's `macos-titlebar-style = tabs|transparent` rule
-/// for terminal windows. Macterm has no such titlebar styles.
+/// Followed in part: with `macos-titlebar-style = tabs|transparent` (its
+/// default), Ghostty.app gives the whole terminal window the scheme of the
+/// background. Macterm gives it only to the window title, which is drawn
+/// over the terminal (`WindowAppearance.titleAppearanceName`). The sidebar
+/// and the toolbar buttons are chrome and keep this scheme.
 ///
 /// The raw values are ghostty's own tag names (`WindowTheme` in
 /// `src/config/Config.zig`), which is what `ghostty_config_get` hands back

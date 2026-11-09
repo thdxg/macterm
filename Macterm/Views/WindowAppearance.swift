@@ -469,6 +469,7 @@ enum WindowAppearance {
         // window is). Without this the titlebar paints its own material
         // and you get a visible seam at y=titlebarHeight.
         syncTitlebar(window: window, isTransparent: effectiveTransparent)
+        syncTitleAppearance(window: window, background: bg)
 
         syncToolbar(window: window)
 
@@ -1205,6 +1206,32 @@ enum WindowAppearance {
         // colors; hide it only when transparent, so the default opaque-mode
         // chrome stays intact.
         container.firstDescendant(withClassName: "NSTitlebarBackgroundView")?.isHidden = isTransparent
+    }
+
+    /// The appearance of the window title (the project name and the path).
+    /// The title is drawn over the terminal, not over the chrome, so it takes
+    /// the scheme of the terminal background, not `window-theme`. Ghostty.app
+    /// does the same: with its default transparent titlebar, the terminal
+    /// window takes the appearance of the background's luminosity
+    /// (`TransparentTitlebarTerminalWindow.syncAppearance`). Here only the
+    /// title follows it, because the sidebar and the toolbar buttons are
+    /// chrome. Without this, `window-theme = light` drew black text on a
+    /// dark terminal.
+    static func titleAppearanceName(background: NSColor) -> NSAppearance.Name {
+        background.prefersDarkForeground ? .aqua : .darkAqua
+    }
+
+    /// Sets the appearance of AppKit's title view. The view keeps it when the
+    /// title text changes, and every `sync` sets it again after AppKit
+    /// rebuilds the titlebar (fullscreen, becomeMain). `background` is the
+    /// window's own tint, so an adaptive background moves the title too.
+    private static func syncTitleAppearance(window: NSWindow, background: NSColor) {
+        guard let titleView = titlebarContainer(in: window)?.firstDescendant(withClassName: "NSToolbarTitleView")
+        else { return }
+        let name = titleAppearanceName(background: background)
+        if titleView.appearance?.name != name {
+            titleView.appearance = NSAppearance(named: name)
+        }
     }
 
     private static func titlebarContainer(in window: NSWindow) -> NSView? {
