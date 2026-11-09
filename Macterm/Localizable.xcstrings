@@ -10988,12 +10988,34 @@
       }
     },
     "This palette needs %@ and %@, which are not on your PATH." : {
-      "comment" : "The first value is a list of program names with commas between them",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "This palette needs %1$@ and %2$@, which are not on your PATH."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 팔레트에는 %@ 및 %@이(가) 필요하지만 PATH에 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此面板需要 %1$@ 和 %2$@，但它们不在你的 PATH 中。"
+          }
+        }
+      }
+    },
+    "This palette needs %@, and %@, which are not on your PATH." : {
+      "comment" : "The first value is a list of program names with commas between them",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This palette needs %1$@, and %2$@, which are not on your PATH."
           }
         },
         "ko" : {

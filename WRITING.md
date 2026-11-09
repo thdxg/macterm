@@ -14,7 +14,7 @@ Use one word for one thing in every file. Do not use a synonym to make the text 
 - Speak to the reader as "you". Use the imperative for steps. Use the simple present for descriptions.
 - Do not write "e.g.", "i.e.", "etc.", "via" or "&". Write "for example", "that is" or a plain list.
 - Do not join two ideas with a dash or a semicolon. Write two sentences.
-- In app text, put a comma before the "and" or "or" at the end of a list of three or more items. For example: "Shows where you left off in each project, its Git branches, and the commands to run next."
+- In GUI text, put a comma before the "and" or "or" at the end of a list of three or more items. For example: "Shows where you left off in each project, its Git branches, and the commands to run next."
 - Do not use a metaphor. Write "keeps running", not "survives". Write "stays", not "lives".
 
 ## Product description
