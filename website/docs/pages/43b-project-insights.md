@@ -23,9 +23,9 @@ The panel works on every Mac with macOS 26. On a Mac that can run Apple Intellig
 Project Insights is off until you turn it on.
 
 1. Open **Settings → Intelligence**.
-2. Turn on **Record commands for Project Insights**.
+2. Turn on the **Enable Project Insights** switch.
 
-You can also open the panel and click **Turn On Project Insights**.
+When it is on, Macterm records the commands that finish in all your projects. The command **Toggle Project Insights** and the panel button in the toolbar are available. When it is off, Macterm records nothing. The command, the button and the panel are not there.
 
 ## Open the panel
 

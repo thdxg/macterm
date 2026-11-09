@@ -3073,6 +3073,22 @@
         }
       }
     },
+    "Enable Project Insights" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 인사이트 사용"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用项目洞察"
+          }
+        }
+      }
+    },
     "Enable for live tab names, close warnings and the Git state of remote projects." : {
       "localizations" : {
         "ko" : {
@@ -4356,22 +4372,6 @@
         }
       }
     },
-    "It removes secrets first and keeps the records on this Mac only." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "비밀 정보를 먼저 제거하고, 기록은 이 Mac에만 보관합니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "它会先移除机密信息，并且只在这台 Mac 上保存记录。"
-          }
-        }
-      }
-    },
     "Jump to Bottom" : {
       "localizations" : {
         "ko" : {
@@ -4400,22 +4400,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跳到顶部"
-          }
-        }
-      }
-    },
-    "Keeps a log of the commands that finish in each project, with their results." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "각 프로젝트에서 끝난 명령과 그 결과를 기록합니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "记录每个项目中已结束的命令及其结果。"
           }
         }
       }
@@ -5066,22 +5050,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当命令和提示符都匹配时，Macterm 会提供自动填充。没有提示符时，Macterm 不会在提示符处提供此密码。请在命令面板的密码管理器中选择它。"
-          }
-        }
-      }
-    },
-    "Macterm records the commands that finish in your projects." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm은 프로젝트에서 끝난 명령을 기록합니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm 会记录项目中已结束的命令。"
           }
         }
       }
@@ -7493,22 +7461,6 @@
         }
       }
     },
-    "Project Insights Is Off" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "프로젝트 인사이트가 꺼져 있음"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "项目洞察已关闭"
-          }
-        }
-      }
-    },
     "Project Insights is off. Turn it on in Settings → Intelligence." : {
       "localizations" : {
         "ko" : {
@@ -7829,22 +7781,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接断开后重新连接窗格"
-          }
-        }
-      }
-    },
-    "Record commands for Project Insights" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "프로젝트 인사이트용 명령 기록"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为项目洞察记录命令"
           }
         }
       }
@@ -8946,22 +8882,6 @@
         }
       }
     },
-    "Secrets are removed first, and the log stays on this Mac." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "비밀 정보는 먼저 제거되고, 기록은 이 Mac에만 남습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "机密信息会先被移除，记录只保留在这台 Mac 上。"
-          }
-        }
-      }
-    },
     "Secure keyboard input is active" : {
       "localizations" : {
         "ko" : {
@@ -9616,6 +9536,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "命令运行时显示旋转指示器。命令结束时显示圆点。"
+          }
+        }
+      }
+    },
+    "Shows where you left off in each project, its Git branches and the commands to run next." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "각 프로젝트에서 마지막으로 하던 작업, Git 브랜치, 다음에 실행할 명령을 보여 줍니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示每个项目中你上次进行到哪里、它的 Git 分支和接下来要运行的命令。"
           }
         }
       }
@@ -11296,38 +11232,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重试"
-          }
-        }
-      }
-    },
-    "Turn On Project Insights" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "프로젝트 인사이트 켜기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开项目洞察"
-          }
-        }
-      }
-    },
-    "Turn it on to see where you left off in each project and the commands to run next." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "켜면 각 프로젝트에서 마지막으로 하던 작업과 다음에 실행할 명령을 볼 수 있습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开后，可以看到每个项目上次进行到哪里，以及接下来要运行的命令。"
           }
         }
       }

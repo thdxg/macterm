@@ -16,6 +16,40 @@ struct ProjectMemoryTests {
         )
     }
 
+    // MARK: - The switch
+
+    /// One switch (Settings → Intelligence): off, Toggle Project Insights
+    /// has no action and no panel shows, whatever the panel's toggle says.
+    /// Synchronous on purpose: no other test on the main actor can run
+    /// between the writes and the restore.
+    @Test
+    func the_switch_gates_the_command_and_the_panel() {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "macterm-memory-switch-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: base.appendingPathComponent("w.json")),
+            projectFiles: ProjectFileStore(directoryURL: base.appendingPathComponent("projects", isDirectory: true))
+        )
+        let ctx = AppCommandContext(appState: state, projectStore: ProjectStore(fileURL: base.appendingPathComponent("p.json")))
+        let preferences = Preferences.shared
+        let (wasOn, wasVisible) = (preferences.projectMemory, preferences.projectMemoryPanelVisible)
+        defer { (preferences.projectMemory, preferences.projectMemoryPanelVisible) = (wasOn, wasVisible) }
+
+        preferences.projectMemoryPanelVisible = true
+        preferences.projectMemory = false
+        #expect(AppCommand.toggleProjectMemory.action(in: ctx) == nil)
+        #expect(!ProjectMemory.isEnabled)
+        #expect(!ProjectMemory.showsPanel)
+
+        preferences.projectMemory = true
+        #expect(AppCommand.toggleProjectMemory.action(in: ctx) != nil)
+        #expect(ProjectMemory.showsPanel)
+        preferences.projectMemoryPanelVisible = false
+        #expect(!ProjectMemory.showsPanel)
+    }
+
     // MARK: - Recording
 
     @Test

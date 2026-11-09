@@ -17,6 +17,7 @@ const foreground = @import("foreground.zig");
 const schema = @import("protocol/schema.zig");
 const v2session = @import("session.zig");
 const v2server = @import("server.zig");
+const v2proxy = @import("proxy.zig");
 const runtime = @import("runtime.zig");
 const v2attach = @import("attach.zig");
 const Daemon = loop.Daemon;
@@ -79,6 +80,7 @@ fn mainImpl(init: std.process.Init) !void {
         if (std.mem.eql(u8, c, v2session.reexec_command)) return sessionEntry(gpa, io, init.environ_map, &args);
         if (std.mem.eql(u8, c, "server")) return serverCommand(gpa, io, init.environ_map, &args);
         if (std.mem.eql(u8, c, "connect")) return connectCommand(gpa, io, init.environ_map, &args);
+        if (std.mem.eql(u8, c, "proxy")) return proxyCommand(gpa, io, init.environ_map, &args);
     }
 
     var cfg = try Cfg.init(gpa, io);
@@ -403,6 +405,24 @@ fn serverCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Env
     };
 }
 
+/// `proxy`: joins stdin and stdout to the server's socket, and starts the
+/// server first when its socket does not answer (design/005, step 3). The
+/// app runs it on a host through ssh, and so reaches every pane of the host
+/// on one stream. Not in `help`: the app runs it.
+fn proxyCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, args: anytype) !void {
+    if (args.next()) |arg| return printError(io, "unexpected argument \"{s}\"", .{arg});
+    const dir = runtime.resolveDir(gpa, env) catch return printError(io, "no runtime directory: set {s}", .{runtime.dir_env});
+    defer gpa.free(dir);
+    const fd = v2proxy.connect(gpa, dir) catch |err| switch (err) {
+        error.RuntimeDir => {
+            const reason = if (runtime.ensureDir(dir)) |_| "failed the check" else |e| runtime.describe(e);
+            return printError(io, "runtime directory {s} {s}", .{ dir, reason });
+        },
+        else => return printError(io, "cannot reach the server: {s}", .{@errorName(err)}),
+    };
+    v2proxy.pump(fd, lib_posix.STDIN_FILENO, lib_posix.STDOUT_FILENO);
+}
+
 /// `zmx connect <name>`: the pane's client of a v2 session (attach.zig). It
 /// becomes `macterm attach` when v1's `attach` goes (design/007 §6).
 fn connectCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, args: anytype) !void {
@@ -547,8 +567,8 @@ fn help(io: std.Io) !void {
     try w.interface.flush();
 }
 
-/// `__schema swift | metadata | fixtures` writes that file of the protocol
-/// schema to stdout. `__schema check [old-metadata.json]` checks this build's
+/// `__schema swift | metadata | fixtures | foreground` writes that file of
+/// the protocol schema to stdout. `__schema check [old-metadata.json]` checks this build's
 /// schema against an older one and exits 1 on a problem (design/003 §3).
 /// Hidden: `scripts/protocol.sh` runs it.
 fn schemaCommand(gpa: std.mem.Allocator, io: std.Io, what: ?[]const u8, path: ?[]const u8) !void {
@@ -559,13 +579,15 @@ fn schemaCommand(gpa: std.mem.Allocator, io: std.Io, what: ?[]const u8, path: ?[
     var buf: [4096]u8 = undefined;
     var out = std.Io.File.stdout().writer(io, &buf);
     const w = &out.interface;
-    const kind = what orelse printError(io, "__schema needs swift, metadata, fixtures or check", .{});
+    const kind = what orelse printError(io, "__schema needs swift, metadata, fixtures, foreground or check", .{});
     if (std.mem.eql(u8, kind, "swift")) {
         try schema.writeSwift(w, schema.metadata);
     } else if (std.mem.eql(u8, kind, "metadata")) {
         try schema.writeMetadata(w, schema.metadata);
     } else if (std.mem.eql(u8, kind, "fixtures")) {
         try schema.writeFixtures(arena, w);
+    } else if (std.mem.eql(u8, kind, "foreground")) {
+        try v2attach.writeForegroundFixtures(w);
     } else if (std.mem.eql(u8, kind, "check")) {
         const old: ?schema.Metadata = if (path) |p| blk: {
             const text = std.Io.Dir.cwd().readFileAlloc(io, p, arena, .limited(16 * 1024 * 1024)) catch |err|

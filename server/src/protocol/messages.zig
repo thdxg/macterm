@@ -171,6 +171,39 @@ pub const ChannelClose = struct {
     pub const Result = struct {};
 };
 
+/// Stops a channel's pane output, for a pane that no one sees. The session's
+/// messages on the channel (its exit, its state) still come (design/003 §6).
+pub const ChannelPause = struct {
+    pub const name = "channel.pause";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { channel: u32 };
+    pub const Result = struct {};
+};
+
+/// Starts a paused channel's output again. A snapshot of the screen comes
+/// first on the channel.
+pub const ChannelResume = struct {
+    pub const name = "channel.resume";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { channel: u32 };
+    pub const Result = struct {};
+};
+
+/// Tells a client that the link is up. Any frame does the same; this one gets
+/// an answer when nothing else moves (design/005, "Reconnect").
+pub const Ping = struct {
+    pub const name = "ping";
+    pub const since = 1;
+    pub const senders = everyone;
+
+    pub const Args = struct {};
+    pub const Result = struct {};
+};
+
 /// What the server knows of one session (design/001). The session process
 /// holds all of it, so a new server reads it again from each session.
 pub const Session = struct {
@@ -272,7 +305,7 @@ pub const ServerExit = struct {
 };
 
 /// Every request method. A new method goes here.
-pub const methods = .{ ChannelOpen, ChannelClose, SessionCreate, SessionList, SessionInfo, SessionKill, ServerExit };
+pub const methods = .{ ChannelOpen, ChannelClose, ChannelPause, ChannelResume, Ping, SessionCreate, SessionList, SessionInfo, SessionKill, ServerExit };
 
 // ── Events ──────────────────────────────────────────────────────────────────
 
@@ -454,8 +487,233 @@ pub const End = struct {
     pub const senders = from_client;
 };
 
+/// The client asks for a snapshot of the screen, after it dropped output or
+/// did not show it (a server's relay, design/003 §6). The session drops the
+/// output that waits for that client and sends the snapshot, with no
+/// scrollback. A client that does not show the pane gets nothing.
+pub const Refresh = struct {
+    pub const name = "refresh";
+    pub const since = 1;
+    pub const senders = from_client;
+};
+
+// The session's events (design/003 §5, design/004 §6). The session reads
+// them from its own terminal and pty, so they are right for a client that
+// does not show the pane. Every greeted client gets them; a client that
+// connects gets the current title, cwd, foreground, progress, status and
+// program status after `State`. Each one is sent before the pane output
+// that follows it.
+//
+// Title, cwd, progress, program status and bell coalesce: the first in a
+// quiet period goes at once, later ones in the next `coalesce_ms` merge and
+// go at its end, newest value wins. Activity goes at most once in
+// `activity_ms`, and the rest is dropped. Foreground, marks and status are
+// never held.
+
+/// The window in which title, cwd, progress, program status and bell
+/// coalesce.
+pub const coalesce_ms = 16;
+
+/// The output heartbeat goes at most once in this time (v1's libghostty
+/// `OUTPUT_ACTIVITY`): leading edge, the rest dropped, never deferred.
+pub const activity_ms = 500;
+
+/// The terminal title (OSC 0 and OSC 2).
+pub const Title = struct {
+    pub const name = "title";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    /// As the program sent it. Not UTF-8 on every program.
+    title: msgpack.Bin,
+};
+
+/// The working directory that the shell reports (OSC 7).
+pub const Cwd = struct {
+    pub const name = "cwd";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    /// The OSC 7 payload as the shell sent it: usually a `file://` URL,
+    /// percent-encoded. The receiver decodes it.
+    url: msgpack.Bin,
+};
+
+/// The process group that holds the pty (zmx 0010). Sent when the group or
+/// its leader's name changes, and to a client that connects or catches up.
+pub const Foreground = struct {
+    pub const name = "foreground";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    /// The group is the session's own shell.
+    idle: bool,
+    /// `comm` is in the host's `/etc/shells`. Null when the host has none.
+    shell: ?bool = null,
+    /// The process name: the executable path on macOS, the kernel `comm` on
+    /// Linux.
+    comm: msgpack.Bin,
+    /// The command line, its arguments joined by spaces.
+    args: msgpack.Bin,
+};
+
+pub const MarkKind = enum {
+    /// The shell starts to draw a prompt (OSC 133;A).
+    prompt,
+    /// The prompt is drawn and the user can type (OSC 133;B).
+    input,
+    /// The user submitted a command and it runs (OSC 133;C).
+    output,
+    /// The command finished (OSC 133;D).
+    end,
+    unknown,
+};
+
+/// A step of a command, from shell integration (OSC 133).
+pub const Mark = struct {
+    pub const name = "mark";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    kind: MarkKind,
+    /// For `output` and `end`: the command line. The shell's own text when
+    /// it sent one, else the input cells of the prompt. Null when there is
+    /// neither.
+    command: ?msgpack.Bin = null,
+    /// For `end`: the exit code, when the shell sent one.
+    exit_code: ?i32 = null,
+};
+
+pub const ProgressState = enum {
+    remove,
+    set,
+    @"error",
+    indeterminate,
+    pause,
+    unknown,
+};
+
+/// A progress report (OSC 9;4).
+pub const Progress = struct {
+    pub const name = "progress";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    state: ProgressState,
+    /// 0 to 100, when the program sent one.
+    percent: ?u8 = null,
+};
+
+/// The program rang the bell (BEL).
+pub const Bell = struct {
+    pub const name = "bell";
+    pub const since = 1;
+    pub const senders = from_session;
+};
+
+/// The pane printed output (the heartbeat, `activity_ms`).
+pub const Activity = struct {
+    pub const name = "activity";
+    pub const since = 1;
+    pub const senders = from_session;
+};
+
+pub const RunState = enum {
+    /// No command ran yet.
+    idle,
+    running,
+    done,
+    unknown,
+};
+
+/// The pane's run, derived from the marks and the progress reports only:
+/// `running` from OSC 133;C or a progress report that sets work, `done` from
+/// OSC 133;D or a report that ends it. A shell with no integration and a
+/// program with no progress report stay `idle`.
+pub const Status = struct {
+    pub const name = "status";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    state: RunState,
+    /// With `done`: a progress report said error (v1's red dot). The exit
+    /// code does not count: it judges the command, not the run.
+    failed: bool = false,
+};
+
+pub const ProgramState = enum {
+    /// At rest, waits for the user's next instruction.
+    idle,
+    working,
+    /// Finished work that the user did not look at yet.
+    done,
+    /// Cannot continue until the user does something.
+    blocked,
+    @"error",
+    unknown,
+};
+
+/// What a blocked program needs from the user.
+pub const ProgramNeed = enum {
+    /// Approval to do something.
+    permission,
+    /// An answer that the user types.
+    question,
+    /// A login, a token or another credential.
+    auth,
+    unknown,
+};
+
+/// One record of a program's status (OSC 7501).
+pub const ProgramRecord = struct {
+    /// The record's id: names joined by `/`, where `a/b` is a child of `a`.
+    /// Empty for the root record, which is the program itself.
+    id: []const u8 = "",
+    state: ProgramState,
+    /// With `blocked`: what the program needs.
+    kind: ?ProgramNeed = null,
+    /// With `working` or `blocked`: 0 to 100. Null when the program gave
+    /// none.
+    progress: ?u8 = null,
+    /// A stable name for the program (`cargo`, `claude-code`). A record that
+    /// gave none has the `app` of its nearest ancestor that gave one, the
+    /// root record included.
+    app: ?[]const u8 = null,
+    /// A short label for the record, decoded. UTF-8 with no control
+    /// characters; still the program's text.
+    title: ?[]const u8 = null,
+    /// One line that says what the record does or waits for, decoded. As
+    /// `title`.
+    msg: ?[]const u8 = null,
+};
+
+/// Every record of the program status protocol (OSC 7501) that the pane
+/// holds now, oldest first. Each change sends all of them, so an empty list
+/// clears them all. It coalesces as the title does.
+///
+/// The session keeps the records as the protocol's terminal does: a report
+/// replaces its record, `clear` removes a record and the records under it, a
+/// new shell prompt (OSC 133;A) and the shell's exit remove the `working`,
+/// `blocked` and `idle` records, and a full reset removes every record. It
+/// keeps at most `max_program_records`, and removes the record that changed
+/// least recently to make space. `done` and `error` stay until the program
+/// replaces or clears them.
+pub const ProgramStatus = struct {
+    pub const name = "program_status";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    records: []const ProgramRecord,
+};
+
+/// The most records that a pane keeps (the protocol requires 64 or more).
+pub const max_program_records = 64;
+
 /// Every message on a pane channel. A new one goes here.
-pub const pane_messages = .{ State, Attach, Resize, Claim, Lead, SnapshotStart, SnapshotEnd, Exit, Take, End };
+pub const pane_messages = .{
+    State, Attach, Resize,     Claim, Lead,     SnapshotStart, SnapshotEnd, Exit,   Take,          End, Refresh,
+    Title, Cwd,    Foreground, Mark,  Progress, Bell,          Activity,    Status, ProgramStatus,
+};
 
 pub fn encodePane(w: *std.Io.Writer, comptime M: type, value: M) std.Io.Writer.Error!void {
     try msgpack.encode(w, struct { t: []const u8, a: M }{ .t = M.name, .a = value });

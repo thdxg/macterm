@@ -145,10 +145,12 @@ PY
 
 # fake_session <name> <level> <min_level> [refuse_needs]: a socket in the
 # runtime directory that sends a session's hello, and a refusal when
-# refuse_needs is set. It answers one connection and exits.
+# refuse_needs is set. It answers one connection and exits when the client
+# closes it. It must not close first: the client writes its hello as a header
+# and a body, and a close between the two fails the client's write (EPIPE).
 fake_session() {
   mkdir -p -m 700 "$MACTERM_RUNTIME_DIR"
-  python3 - "$@" <<'PY' &
+  python3 - "$@" 3>&- <<'PY' &
 import os, socket, sys
 from v2client import pack, frame, MSG, runtime_dir
 name, level, min_level = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
@@ -161,9 +163,9 @@ c, _ = s.accept()
 c.sendall(frame(0, MSG, pack({"level": level, "min_level": min_level, "build": "old",
                               "role": "session", "epoch": 1, "caps": []})))
 if needs is not None:
-    c.recv(4096)
     c.sendall(frame(0, MSG, pack({"reason": "level_too_low", "needs_level": needs})))
-c.recv(4096)
+while c.recv(4096):
+    pass
 PY
   until [[ -e "$MACTERM_RUNTIME_DIR/$1.ready" ]]; do sleep 0.05; done
 }

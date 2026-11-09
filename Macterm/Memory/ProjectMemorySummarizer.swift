@@ -64,7 +64,7 @@ final class ProjectMemorySummarizer {
     /// Whether the panel shows a summary: memory is on, the switch is on,
     /// and the model can run on this Mac.
     static var isEnabled: Bool {
-        ProjectMemory.isRecording
+        ProjectMemory.isEnabled
             && Preferences.shared.projectMemorySummary
             && OnDeviceModel.availability == .available
     }
