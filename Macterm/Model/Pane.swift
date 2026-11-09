@@ -1026,6 +1026,7 @@ final class Pane: Identifiable {
         )
         hasBuiltSurface = true
         view.owningPane = self
+        connectViewCallbacks(view)
         MactermPaneEntity.annotate(view, for: self)
         _nsView = view
         return view
@@ -1146,6 +1147,7 @@ final class Pane: Identifiable {
         view.onCommandFinished = nil
         view.onProgressStarted = nil
         view.onProgressFinished = nil
+        view.onRunEnded = nil
         view.onTerminalRender = nil
         view.onBackgroundColorChange = nil
         view.onAdaptiveBackgroundChange = nil

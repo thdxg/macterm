@@ -447,6 +447,10 @@ final class GhosttyTerminalNSView: NSView {
     /// A progress report ended the run (`TerminalProgressReport`). The Bool is
     /// whether it failed: true for ERROR, false for REMOVE and PAUSE.
     var onProgressFinished: ((Bool) -> Void)?
+    /// A run ended (`onCommandFinished` or `onProgressFinished`), after the
+    /// pane recorded it. The window that draws the pane sets it, to
+    /// acknowledge the run when the user looks at the pane.
+    var onRunEnded: (() -> Void)?
     var onTerminalRender: (() -> Void)?
     var onBackgroundColorChange: ((NSColor) -> Void)?
     var onAdaptiveBackgroundChange: ((NSColor?) -> Void)?
