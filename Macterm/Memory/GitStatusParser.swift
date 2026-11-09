@@ -23,10 +23,14 @@ struct GitStatus: Equatable {
     /// Newest first.
     var recentCommits: [Commit] = []
     /// The commits on the current branch that the main branch does not
-    /// have (`ProjectGit.branchLogArguments`), newest first. Empty on the
-    /// main branch itself, on a detached HEAD, and on a branch that has no
-    /// work of its own yet.
-    var branchCommits: [Commit] = []
+    /// have (`ProjectGit.branchLogScript`), newest first. Empty on a branch
+    /// with no work of its own yet, and on the main branch itself. nil when
+    /// it is not known: a detached HEAD, a repository with no main branch,
+    /// or a read that failed.
+    var branchCommits: [Commit]?
+    /// The refs of the main branch that exist (`ProjectGit.mainRefPatterns`,
+    /// with `origin/HEAD` resolved to its branch). Empty when not known.
+    var mainRefs: [String] = []
     /// The paths with changes of any kind, in the order of `git status`.
     var changedPaths: [String] = []
 
@@ -43,6 +47,13 @@ struct GitStatus: Equatable {
     /// The local branches with the latest commits, newest first, at most
     /// `ProjectGit.recentBranchCount`. The current branch is among them.
     var branches: [Branch] = []
+
+    /// The current branch is a main branch: a main ref names it. A
+    /// `develop` that `origin/HEAD` names is one.
+    var isOnMainBranch: Bool {
+        guard let branch else { return false }
+        return mainRefs.contains { $0 == "refs/heads/\(branch)" || ($0.hasPrefix("refs/remotes/") && $0.hasSuffix("/\(branch)")) }
+    }
 
     /// Files with changes of any kind.
     var changedFiles: Int { staged + unstaged + untracked + conflicted }
@@ -131,6 +142,22 @@ enum GitStatusParser {
         }
     }
 
+    /// The output of `ProjectGit.branchLogScript`: the main refs, then the
+    /// commits, then `end`. nil without the `end`: the read did not finish,
+    /// and an empty list would claim that the branch has no work.
+    static func parseBranchLog(_ text: String) -> (mainRefs: [String], commits: [GitStatus.Commit])? {
+        var lines = text.split(separator: "\n").map(String.init)
+        guard lines.last == "end" else { return nil }
+        lines.removeLast()
+        // `origin/HEAD` resolves to a ref that the list may have already.
+        var mainRefs: [String] = []
+        for line in lines where line.hasPrefix("refs/") && !mainRefs.contains(line) {
+            mainRefs.append(line)
+        }
+        guard !mainRefs.isEmpty else { return nil }
+        return (mainRefs, parseLog(lines.filter { !$0.hasPrefix("refs/") }.joined(separator: "\n")))
+    }
+
     /// `git for-each-ref refs/heads --sort=-committerdate
     /// --format=%(refname:short)%1f%(objectname:short)%1f%(committerdate:unix)%1f%(subject)`.
     static func parseBranches(_ text: String) -> [GitStatus.Branch] {
@@ -174,7 +201,10 @@ enum GitStatusParser {
         var status = parseStatus(statusOutput)
         if status.branch != nil { status.detachedAt = nil }
         status.recentCommits = logOutput.map(parseLog) ?? []
-        status.branchCommits = status.branch == nil ? [] : branchLogOutput.map(parseLog) ?? []
+        if status.branch != nil, let branchLog = branchLogOutput.flatMap(parseBranchLog) {
+            status.mainRefs = branchLog.mainRefs
+            status.branchCommits = branchLog.commits
+        }
         let worktrees = worktreesOutput.map(parseWorktrees) ?? [:]
         status.branches = (branchesOutput.map(parseBranches) ?? []).map { branch in
             var branch = branch

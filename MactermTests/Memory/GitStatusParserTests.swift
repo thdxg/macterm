@@ -43,14 +43,40 @@ struct GitStatusParserTests {
     }
 
     @Test
-    func the_branch_log_is_kept_only_on_a_branch() {
-        let log = "a1b2c3d\u{1F}Apply tax\u{1F}1700000000\n"
-        let onBranch = GitStatusParser.status(statusOutput: "# branch.head feature/tax\n", logOutput: nil, branchLogOutput: log)
-        #expect(onBranch.branchCommits.map(\.subject) == ["Apply tax"])
+    func the_branch_log_has_the_main_refs_and_the_commits_of_the_branch() throws {
+        let log = "refs/heads/main\nrefs/remotes/origin/main\nrefs/remotes/origin/main\na1b2c3d\u{1F}Apply tax\u{1F}1700000000\nend\n"
+        let status = GitStatusParser.status(statusOutput: "# branch.head feature/tax\n", logOutput: nil, branchLogOutput: log)
+        #expect(status.mainRefs == ["refs/heads/main", "refs/remotes/origin/main"])
+        #expect(status.branchCommits?.map(\.subject) == ["Apply tax"])
+        #expect(!status.isOnMainBranch)
+        let none = try #require(GitStatusParser.parseBranchLog("refs/heads/main\nend\n"))
+        #expect(none.commits.isEmpty)
+    }
+
+    @Test
+    func a_branch_log_that_did_not_finish_or_found_no_main_branch_is_unknown() {
+        #expect(GitStatusParser.parseBranchLog("refs/heads/main\na1b2c3d\u{1F}Apply tax\u{1F}1700000000\n") == nil)
+        #expect(GitStatusParser.parseBranchLog("a1b2c3d\u{1F}Apply tax\u{1F}1700000000\nend\n") == nil)
+        #expect(GitStatusParser.parseBranchLog("") == nil)
         let detached = GitStatusParser.status(
-            statusOutput: "# branch.oid abcdef1234567890\n# branch.head (detached)\n", logOutput: nil, branchLogOutput: log
+            statusOutput: "# branch.oid abcdef1234567890\n# branch.head (detached)\n",
+            logOutput: nil,
+            branchLogOutput: "refs/heads/main\nend\n"
         )
-        #expect(detached.branchCommits.isEmpty)
+        #expect(detached.branchCommits == nil)
+    }
+
+    @Test
+    func the_branch_that_a_remote_head_names_is_a_main_branch() {
+        var status = GitStatus(branch: "develop")
+        status.mainRefs = ["refs/remotes/origin/develop"]
+        #expect(status.isOnMainBranch)
+        status.mainRefs = ["refs/heads/main", "refs/remotes/origin/main"]
+        #expect(!status.isOnMainBranch)
+        status.branch = "main"
+        #expect(status.isOnMainBranch)
+        status.branch = "team/main"
+        #expect(!status.isOnMainBranch)
     }
 
     @Test

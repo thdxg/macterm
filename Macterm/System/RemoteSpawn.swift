@@ -417,13 +417,14 @@ enum RemoteSpawn {
     /// `ProjectGit.status` runs locally, with their outputs separated by
     /// `ProjectGit.recordSeparator`. The script exits 2 when the directory
     /// is not there, 3 when the host has no git, 4 when the directory is not
-    /// in a repository, and 0 in all other cases (on a detached HEAD the
-    /// branch log has no output); ssh itself exits 255. `GIT_OPTIONAL_LOCKS=0` and
+    /// in a repository, and 0 in all other cases (`ProjectGit.branchLogScript`
+    /// fails on a detached HEAD, which is not a failure of the read); ssh
+    /// itself exits 255. `GIT_OPTIONAL_LOCKS=0` and
     /// `core.fsmonitor=false` for the same reasons as locally. Never sources
     /// a profile (see `remoteEnvPreamble`). nil for a local path.
     static func gitProbeArgv(remote: ProjectPath) -> [String]? {
         guard case let .remote(user, host, directory) = remote else { return nil }
-        let git = "git -c core.fsmonitor=false --no-pager"
+        let git = (["git"] + ProjectGit.gitOptions).joined(separator: " ")
         let separator = "printf \"\\036\""
         let branchFormat = "%(refname:short)%1f%(objectname:short)%1f%(committerdate:unix)%1f%(subject)"
         let script = assertSingleQuoteFree(
@@ -436,9 +437,7 @@ enum RemoteSpawn {
                 + "\(git) for-each-ref refs/heads --sort=-committerdate --count=\(ProjectGit.recentBranchCount) "
                 + "--format=\"\(branchFormat)\" 2>/dev/null; \(separator); "
                 + "\(git) worktree list --porcelain 2>/dev/null; \(separator); "
-                + "b=$(\(git) symbolic-ref --short -q HEAD) && "
-                + "\(git) \(ProjectGit.branchLogArguments(branch: "$b").map { "\"\($0)\"" }.joined(separator: " ")) "
-                + "2>/dev/null; exit 0",
+                + "{ \(ProjectGit.branchLogScript(git: git)); } 2>/dev/null; exit 0",
             onViolation: .failNonZero
         )
         return [

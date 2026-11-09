@@ -10,15 +10,14 @@ import Foundation
 /// `recentCommandCount` commands is a few hundred tokens, far inside the
 /// 4,096-token window of the model. The text is untrusted all the same: a
 /// command's output, a commit subject or a file name can read as an
-/// instruction, so the instructions say that it is data. The worst result is a wrong sentence in a panel.
+/// instruction, so the instructions say that it is data. The worst result
+/// is a wrong sentence in a panel.
 struct ProjectMemoryDigest: Equatable {
     static let recentCommandCount = 12
     /// The estimated tokens of the digest in one prompt. The instructions
     /// take about 200 tokens and the reply at most `maximumReplyTokens`.
     static let textTokenBudget = 1500
     static let maximumReplyTokens = 160
-    /// The branches whose latest commits are the project's own history.
-    static let mainBranchNames: Set = ["main", "master"]
     /// The changed files that the digest names; the rest is a count.
     static let changedPathLimit = 12
 
@@ -110,7 +109,7 @@ struct ProjectMemoryDigest: Equatable {
     static func key(projectName: String, entries: [MemoryEntry], git: GitStatus?) -> String {
         let records = entries.suffix(recentCommandCount).map { "\($0.id.uuidString):\($0.outcome.rawValue)" }
         let branches = git?.branches.map { "\($0.name)@\($0.hash)" } ?? []
-        let branchCommits = git?.branchCommits.map(\.hash) ?? []
+        let branchCommits = git?.branchCommits.map { ["own"] + $0.map(\.hash) } ?? []
         let changedPaths = git?.changedPaths.prefix(changedPathLimit).map(\.self) ?? []
         return ([projectName] + records + [git.map(gitLine) ?? "", git?.recentCommits.first?.hash ?? ""] + branches
             + branchCommits + changedPaths).joined(separator: "|")
@@ -123,12 +122,13 @@ struct ProjectMemoryDigest: Equatable {
         var lines: [String] = []
         if let git {
             lines.append("Git: " + gitLine(git))
-            if let branch = git.branch, !git.branchCommits.isEmpty {
-                lines.append("Commits on `\(branch)` that the main branch does not have, newest first: " + subjects(git.branchCommits))
-            } else if let branch = git.branch, !mainBranchNames.contains(branch) {
-                // The latest commits of a new branch are the main branch's
-                // history: the model took them for the work of the branch.
-                lines.append("`\(branch)` has no commits of its own yet.")
+            if let branch = git.branch, let own = git.branchCommits, !git.isOnMainBranch {
+                // The latest commits of HEAD on a new branch are the main
+                // branch's history: the model took them for the work of the
+                // branch.
+                lines.append(own.isEmpty
+                    ? "`\(branch)` has no commits of its own yet."
+                    : "Commits on `\(branch)` that the main branch does not have, newest first: " + subjects(own))
             } else if !git.recentCommits.isEmpty {
                 lines.append("Latest commits: " + subjects(git.recentCommits))
             }

@@ -464,10 +464,9 @@ struct RemoteSpawnTests {
         #expect(script.contains("for-each-ref refs/heads --sort=-committerdate --count=6"))
         #expect(script.contains("worktree list --porcelain"))
         #expect(script.contains("GIT_OPTIONAL_LOCKS=0"))
-        #expect(script.contains("b=$(git -c core.fsmonitor=false --no-pager symbolic-ref --short -q HEAD) && "))
-        #expect(script.contains("\"log\" \"-5\" \"--no-merges\" \"--format=%h%x1f%s%x1f%ct\" \"$b\" \"--not\" \"--remotes=*/HEAD\""))
+        #expect(script.contains("{ " + ProjectGit.branchLogScript(git: "git -c core.fsmonitor=false -c core.quotePath=false --no-pager")))
         // A detached HEAD has no branch log, and that is not a failure.
-        #expect(script.hasSuffix("2>/dev/null; exit 0"))
+        #expect(script.hasSuffix("; } 2>/dev/null; exit 0"))
         #expect(script.components(separatedBy: "printf \"\\036\"").count == 5)
         // A git on the host's PATH only; profiles are never sourced.
         #expect(!script.contains("profile"))

@@ -66,6 +66,7 @@ struct ProjectMemoryDigestTests {
     @Test
     func a_branch_shows_its_own_commits_and_the_changed_files_before_the_commands() throws {
         var git = GitStatus(branch: "feature/tax", upstream: "origin/feature/tax")
+        git.mainRefs = ["refs/remotes/origin/main"]
         git.unstaged = 1
         git.untracked = 1
         git.changedPaths = ["Sources/Tax.swift", "Tests/TaxTests.swift"]
@@ -89,10 +90,29 @@ struct ProjectMemoryDigestTests {
     @Test
     func a_new_branch_says_it_has_no_commits_and_leaves_out_the_main_history() throws {
         var git = GitStatus(branch: "feature/tax")
+        git.mainRefs = ["refs/remotes/origin/main"]
+        git.branchCommits = []
         git.recentCommits = [GitStatus.Commit(hash: "m1", subject: "Release 2.0", date: now)]
         let digest = try #require(ProjectMemoryDigest(projectName: "shop", entries: [], git: git, now: now))
         #expect(digest.text.contains("`feature/tax` has no commits of its own yet."))
         #expect(!digest.text.contains("Release 2.0"))
+    }
+
+    @Test
+    func the_main_branch_or_an_unknown_branch_log_shows_the_latest_commits_and_claims_nothing() throws {
+        var git = GitStatus(branch: "develop")
+        git.recentCommits = [GitStatus.Commit(hash: "m1", subject: "Release 2.0", date: now)]
+        // The read failed, or the repository has no main branch.
+        var text = try #require(ProjectMemoryDigest(projectName: "x", entries: [], git: git, now: now)).text
+        #expect(text.contains("Latest commits: \"Release 2.0\""))
+        #expect(!text.contains("of its own"))
+        #expect(!text.contains("does not have"))
+        // `origin/HEAD` names `develop`: it is the main branch.
+        git.mainRefs = ["refs/remotes/origin/develop"]
+        git.branchCommits = []
+        text = try #require(ProjectMemoryDigest(projectName: "x", entries: [], git: git, now: now)).text
+        #expect(text.contains("Latest commits: \"Release 2.0\""))
+        #expect(!text.contains("of its own"))
     }
 
     @Test
@@ -114,9 +134,14 @@ struct ProjectMemoryDigestTests {
         var otherFile = git
         otherFile.changedPaths = ["b.swift"]
         #expect(ProjectMemoryDigest(projectName: "x", entries: [], git: otherFile, now: now)?.key != first.key)
-        var committed = git
+        var known = git
+        known.mainRefs = ["refs/heads/main"]
+        known.branchCommits = []
+        let none = try #require(ProjectMemoryDigest(projectName: "x", entries: [], git: known, now: now))
+        #expect(none.key != first.key)
+        var committed = known
         committed.branchCommits = [GitStatus.Commit(hash: "b1", subject: "Apply tax", date: now)]
-        #expect(ProjectMemoryDigest(projectName: "x", entries: [], git: committed, now: now)?.key != first.key)
+        #expect(ProjectMemoryDigest(projectName: "x", entries: [], git: committed, now: now)?.key != none.key)
     }
 
     @Test

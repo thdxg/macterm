@@ -12,7 +12,7 @@ import Foundation
 /// takes the index lock from the user's own git, and turns the fsmonitor
 /// off: a daemon that it starts could hold the output pipe open.
 ///
-/// A fifth read, `branchLogArguments`, lists the commits of the current
+/// A fifth read, `branchLogScript`, lists the commits of the current
 /// branch that the main branch does not have. The latest commits of HEAD
 /// cannot tell them apart: on a new branch they are mostly the main
 /// branch's own history, and the summary named that as the user's work.
@@ -45,10 +45,7 @@ enum ProjectGit {
             "--format=%(refname:short)\u{1F}%(objectname:short)\u{1F}%(committerdate:unix)\u{1F}%(subject)",
         ], in: path)
         let worktreesOutput = await run(git, ["worktree", "list", "--porcelain"], in: path)
-        var branchLogOutput: String?
-        if let branch = GitStatusParser.parseStatus(statusOutput).branch {
-            branchLogOutput = await run(git, branchLogArguments(branch: branch), in: path)
-        }
+        let branchLogOutput = await runBranchLog(git, in: path)
         return GitStatusParser.status(
             statusOutput: statusOutput,
             logOutput: logOutput,
@@ -58,23 +55,32 @@ enum ProjectGit {
         )
     }
 
-    /// The patterns of the refs that are the main branch: the default
-    /// branch of each remote (`origin/HEAD`), and `main` or `master`,
-    /// local or on a remote. Git ignores a pattern that matches nothing.
-    /// Git reads a pattern with no glob character as a folder (`main` is
-    /// `main/*`), so the local names are a character class.
-    private static let mainBranchPatterns = [
-        "--remotes=*/HEAD", "--branches=[m]ain", "--branches=[m]aster", "--remotes=*/main", "--remotes=*/master",
+    /// The refs that can be the main branch: the default branch of each
+    /// remote (`origin/HEAD`, which the read resolves to the branch it
+    /// names), and `main` or `master`, local or on a remote. A `*` here does
+    /// not match a `/`.
+    static let mainRefPatterns = [
+        "refs/remotes/*/HEAD", "refs/heads/main", "refs/heads/master", "refs/remotes/*/main", "refs/remotes/*/master",
     ]
 
-    /// `git log` of the commits on `branch` that the main branch does not
-    /// have, merges left out (a merge of main into the branch is not its
-    /// work). Empty on the main branch itself. A branch name has no glob
-    /// characters (`git check-ref-format`), and the final `--` keeps it a
-    /// revision.
-    static func branchLogArguments(branch: String) -> [String] {
-        ["log", "-\(recentCommitCount)", "--no-merges", "--format=%h%x1f%s%x1f%ct", branch, "--not"]
-            + mainBranchPatterns + ["--"]
+    /// The fifth read, as a POSIX sh script, the same for a local and a
+    /// remote project. `git` is the command that runs git. It prints the
+    /// main refs that exist, one on each line, then the commits of the
+    /// current branch that none of them has (merges left out: a merge of
+    /// the main branch into the branch is not its work), then `end`.
+    /// Without a branch, a main ref or a successful log, there is no `end`,
+    /// and `GitStatusParser.parseBranchLog` reads that as unknown: with no
+    /// main ref, every commit of HEAD would read as the branch's own.
+    /// A ref name has no space and no glob character (`git
+    /// check-ref-format`), so `$m` splits into the refs.
+    static func branchLogScript(git: String) -> String {
+        let refFormat = "%(if)%(symref)%(then)%(symref)%(else)%(refname)%(end)"
+        let patterns = mainRefPatterns.map { "\"\($0)\"" }.joined(separator: " ")
+        return "b=$(\(git) symbolic-ref --short -q HEAD) && "
+            + "m=$(\(git) for-each-ref \"--format=\(refFormat)\" \(patterns)) && [ -n \"$m\" ] && "
+            + "printf \"%s\\n\" \"$m\" && "
+            + "\(git) log -\(recentCommitCount) --no-merges --format=%h%x1f%s%x1f%ct \"refs/heads/$b\" --not $m -- && "
+            + "echo end"
     }
 
     // MARK: - Remote
@@ -173,14 +179,28 @@ enum ProjectGit {
         return path.isEmpty ? nil : path
     }
 
+    /// The options of every git run. `core.quotePath=false` keeps a path
+    /// with non-ASCII letters as it is, not C-quoted.
+    static let gitOptions = ["-c", "core.fsmonitor=false", "-c", "core.quotePath=false", "--no-pager"]
+
     /// stdout of `git -C path args`, or nil on a failure or a timeout.
     private static func run(_ git: String, _ args: [String], in path: String) async -> String? {
+        await runChecked(git, ["-C", path] + gitOptions + args)
+    }
+
+    /// `branchLogScript` under `/bin/sh`. The git and the path go in as
+    /// arguments, so neither is quoted into the script.
+    private static func runBranchLog(_ git: String, in path: String) async -> String? {
+        let command = (["\"$1\" -C \"$2\""] + gitOptions).joined(separator: " ")
+        return await runChecked("/bin/sh", ["-c", branchLogScript(git: command), "sh", git, path])
+    }
+
+    private static func runChecked(_ executable: String, _ args: [String]) async -> String? {
         var environment = ProcessInfo.processInfo.environment
         environment["GIT_OPTIONAL_LOCKS"] = "0"
         environment["GIT_TERMINAL_PROMPT"] = "0"
-        guard let outcome = await ProcessRunner.run(
-            git, ["-C", path, "-c", "core.fsmonitor=false", "--no-pager"] + args, environment: environment, timeout: timeout
-        ), outcome.status == 0
+        guard let outcome = await ProcessRunner.run(executable, args, environment: environment, timeout: timeout),
+              outcome.status == 0
         else { return nil }
         return outcome.stdout
     }
