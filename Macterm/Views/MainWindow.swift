@@ -184,7 +184,7 @@ struct MainWindow: View {
             // Project memory: a floating glass panel over the terminal, on
             // the trailing side. It covers the panes; it never resizes them.
             .overlay(alignment: .trailing) {
-                if #available(macOS 26.0, *), preferences.projectMemoryPanelVisible,
+                if #available(macOS 26.0, *), ProjectMemory.showsPanel,
                    let project = activeProject, ProjectMemory.covers(project.id)
                 {
                     ProjectMemoryPanel(project: project)
@@ -193,7 +193,7 @@ struct MainWindow: View {
             }
             .animation(
                 NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .smooth(duration: 0.25),
-                value: preferences.projectMemoryPanelVisible
+                value: ProjectMemory.showsPanel
             )
             // Same safe-area reclaim as the sidebar: without it the terminal
             // keeps a blank strip where the hidden titlebar used to be.
@@ -209,7 +209,8 @@ struct MainWindow: View {
                 ToolbarItem(placement: .primaryAction) {
                     UpdateAvailableToolbarButton()
                 }
-                if ProjectMemory.isSupported {
+                // Only while Project Insights is on (Settings → Intelligence).
+                if ProjectMemory.isEnabled {
                     ToolbarItem(placement: .primaryAction) {
                         // Filled while the panel is up, as a toggle's state.
                         Button(

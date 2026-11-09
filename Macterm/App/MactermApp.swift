@@ -142,14 +142,7 @@ struct MactermApp: App {
             }
             CommandGroup(replacing: .sidebar) {
                 AppCommandMenuItem(command: .toggleSidebar, appState: appState, projectStore: projectStore, titleOverride: "Toggle Sidebar")
-                if ProjectMemory.isSupported {
-                    AppCommandMenuItem(
-                        command: .toggleProjectMemory,
-                        appState: appState,
-                        projectStore: projectStore,
-                        titleOverride: "Toggle Project Insights"
-                    )
-                }
+                ProjectInsightsMenuItem(appState: appState, projectStore: projectStore)
                 AppCommandMenuItem(
                     command: .toggleCommandPalette,
                     appState: appState,
@@ -841,7 +834,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // After the restore, so that the project list is the user's.
         appState.performWhenRestored { [weak appState] in
             ProjectMemory.shared.attach(projectStore: projectStore) { [weak appState] projectID in
-                Preferences.shared.projectMemoryPanelVisible
+                ProjectMemory.showsPanel
                     && (appState?.windows.contains { $0.activeProjectID == projectID } ?? false)
             }
         }

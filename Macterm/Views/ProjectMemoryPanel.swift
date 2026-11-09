@@ -42,11 +42,7 @@ struct ProjectMemoryPanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-                if preferences.projectMemory {
-                    content
-                } else {
-                    turnedOff
-                }
+                content
             }
             .padding(16)
         }
@@ -117,27 +113,6 @@ struct ProjectMemoryPanel: View {
                 TabRowIcon(symbol: projectIconSymbol, index: index)
                     .foregroundStyle(MactermTheme.fgMuted)
             }
-        }
-    }
-
-    // MARK: - Turned off
-
-    private var turnedOff: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(String(localized: "Project Insights Is Off"), systemImage: "brain")
-                .font(.headline)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Turn it on to see where you left off in each project and the commands to run next.")
-                Text("Macterm records the commands that finish in your projects.")
-                Text("It removes secrets first and keeps the records on this Mac only.")
-            }
-            .font(.callout)
-            .foregroundStyle(MactermTheme.fgMuted)
-            .fixedSize(horizontal: false, vertical: true)
-            Button(String(localized: "Turn On Project Insights")) {
-                preferences.projectMemory = true
-            }
-            .buttonStyle(.glassProminent)
         }
     }
 
