@@ -605,7 +605,7 @@ struct MactermIntentsTests {
     // MARK: - Where Did I Leave Off reads project memory
 
     @Test
-    func where_did_i_leave_off_answers_from_the_log_and_refuses_while_memory_is_off() async throws {
+    func where_did_i_leave_off_answers_from_the_log_and_refuses_while_memory_or_the_model_is_off() async throws {
         let (appState, projectStore) = makeHost()
         defer { teardown() }
         let project = seedProject(appState, projectStore)
@@ -615,15 +615,29 @@ struct MactermIntentsTests {
         MactermIntentHost.shared.projectMemory = { memory }
         defer { MactermIntentHost.shared.projectMemory = { .shared } }
         let wasOn = Preferences.shared.projectMemory
-        defer { Preferences.shared.projectMemory = wasOn }
+        let wasReader = ProjectMemory.shared.modelReader
+        defer {
+            Preferences.shared.projectMemory = wasOn
+            ProjectMemory.shared.modelReader = wasReader
+            ProjectMemory.shared.refreshModelAvailability()
+        }
 
         let intent = GetMactermProjectMemoryIntent()
         intent.project = MactermProjectEntity(project)
 
+        ProjectMemory.shared.modelReader = { .available }
+        ProjectMemory.shared.refreshModelAvailability()
         Preferences.shared.projectMemory = false
         await #expect(throws: MactermIntentError.self) { try await intent.perform() }
 
+        // Project Insights needs Apple Intelligence, also with its switch on.
         Preferences.shared.projectMemory = true
+        ProjectMemory.shared.modelReader = { .notReady }
+        ProjectMemory.shared.refreshModelAvailability()
+        await #expect(throws: MactermIntentError.self) { try await intent.perform() }
+
+        ProjectMemory.shared.modelReader = { .available }
+        ProjectMemory.shared.refreshModelAvailability()
         store.append(MemoryEntry(command: "make test", directory: "/tmp", exitCode: 2, finishedAt: Date(), duration: 1), to: project.id)
         let result = try await intent.perform()
         #expect(String(describing: result.value).contains("The last command, make test, failed with exit code 2"))

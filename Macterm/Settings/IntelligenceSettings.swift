@@ -12,21 +12,14 @@ struct IntelligenceSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Enable Project Insights", isOn: $preferences.projectMemory)
+                Toggle("Enable Project Insights", isOn: projectInsights)
+                    .disabled(!modelIsAvailable)
+                if !modelIsAvailable {
+                    Text(modelStatus)
+                        .settingsCaption()
+                }
                 Text("Shows where you left off in each project, its Git branches and the commands to run next.")
                     .settingsCaption()
-                Group {
-                    Toggle(isOn: $preferences.projectMemorySummary) {
-                        Text("Summarize with Apple Intelligence").dimsWhenDisabled()
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("A short paragraph at the top of the panel says where you left off.")
-                        Text("Apple's on-device model writes it. Nothing leaves this Mac.")
-                    }
-                    .settingsCaption()
-                }
-                .disabled(!preferences.projectMemory)
-                .padding(.leading, 16)
                 HStack {
                     Text("Recorded commands")
                     Spacer()
@@ -45,6 +38,10 @@ struct IntelligenceSettings: View {
             }
         }
         .formStyle(.grouped)
+        // Macterm also reads it again on each activation
+        // (`ProjectMemory.attach`): the user turns Apple Intelligence on in
+        // System Settings.
+        .onAppear { ProjectMemory.shared.refreshModelAvailability() }
         .confirmationDialog("Forget the insights of all projects?", isPresented: $isConfirmingForgetAll) {
             Button("Forget All", role: .destructive) { ProjectMemory.shared.forgetAll() }
         } message: {
@@ -52,8 +49,22 @@ struct IntelligenceSettings: View {
         }
     }
 
+    /// Project Insights needs Apple Intelligence. Without it the toggle is
+    /// disabled and shows off, and `Preferences.projectMemory` keeps the
+    /// user's choice for when Apple Intelligence is back.
+    private var modelIsAvailable: Bool {
+        ProjectMemory.shared.modelAvailability == .available
+    }
+
+    private var projectInsights: Binding<Bool> {
+        Binding(
+            get: { modelIsAvailable && preferences.projectMemory },
+            set: { preferences.projectMemory = $0 }
+        )
+    }
+
     private var modelStatus: String {
-        switch OnDeviceModel.availability {
+        switch ProjectMemory.shared.modelAvailability {
         case .available: String(localized: "Available")
         case .notReady: String(localized: "Turn on Apple Intelligence in System Settings")
         case .unsupported: String(localized: "Not available on this Mac")
