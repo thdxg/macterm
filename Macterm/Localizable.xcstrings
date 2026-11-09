@@ -502,6 +502,53 @@
         }
       }
     },
+    "%lld commands" : {
+      "comment" : "The number of commands that Project Insights recorded.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld command"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld commands"
+                }
+              }
+            }
+          }
+        },
+        "ko" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "명령 %lld개"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 条命令"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld commands ran in %@, the last one %@." : {
       "localizations" : {
         "en" : {
@@ -12359,6 +12406,30 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@%2$@。"
+          }
+        }
+      }
+    },
+    "settings.intelligence.recordedCommands.none" : {
+      "comment" : "Macterm has recorded no commands.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "None"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无"
           }
         }
       }
