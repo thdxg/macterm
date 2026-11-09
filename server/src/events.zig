@@ -1,8 +1,8 @@
 //! The session's own events (design/003 §5, design/004 §6).
 //!
 //! `Watch` holds the session's terminal and listens to what the terminal
-//! parses: the title, the cwd, the OSC 133 marks, the OSC 9;4 progress and
-//! the bell. It coalesces them (the rules are on `messages.coalesce_ms`),
+//! parses: the title, the cwd, the OSC 133 marks, the OSC 9;4 progress, the
+//! OSC 7501 program status and the bell. It coalesces them (the rules are on `messages.coalesce_ms`),
 //! derives the run status, and keeps the events in `ready`, in order, until
 //! the session sends them. The foreground is the session's: it reads the pty,
 //! not the terminal.
@@ -19,6 +19,8 @@ const m = protocol.messages;
 const Handler = ghostty_vt.TerminalStream.Handler;
 const SemanticPrompt = Handler.SemanticPrompt;
 const ProgressReport = ghostty_vt.osc.Command.ProgressReport;
+const ProgramStatus = ghostty_vt.osc.Command.ProgramStatus;
+const program_status = ghostty_vt.osc.program_status;
 
 /// One event that waits to go out. The slices belong to the `Watch`.
 pub const Event = union(enum) {
@@ -29,10 +31,18 @@ pub const Event = union(enum) {
     bell,
     activity,
     status: m.Status,
+    /// Every program status record, from `Watch.programRecords`.
+    program: []m.ProgramRecord,
 };
 
 /// The values that coalesce.
-const Key = enum { title, cwd, progress, bell };
+const Key = enum { title, cwd, progress, program, bell };
+
+/// A program status record, and when it last changed.
+const Record = struct {
+    rec: m.ProgramRecord,
+    changed: u64,
+};
 
 const Hold = struct {
     /// When the last one went out.
@@ -59,6 +69,13 @@ pub const Watch = struct {
     /// An input mark came, and no output or end mark since: the input
     /// cells above the cursor are the user's command.
     at_input: bool = false,
+    /// The program status records (OSC 7501), oldest first. Their slices
+    /// belong to the watch.
+    records: std.ArrayList(Record) = .empty,
+    /// Counts the record changes, to find the least recently changed one.
+    record_seq: u64 = 0,
+    /// Bytes for the pty: the reply to an OSC 7501 support query.
+    reply: std.ArrayList(u8) = .empty,
 
     pub fn init(gpa: std.mem.Allocator, term: ghostty_vt.Terminal) Watch {
         return .{ .gpa = gpa, .term = term };
@@ -68,6 +85,9 @@ pub const Watch = struct {
         w.clearReady();
         w.ready.deinit(w.gpa);
         if (w.command) |c| w.gpa.free(c);
+        for (w.records.items) |r| freeRecord(w.gpa, r.rec);
+        w.records.deinit(w.gpa);
+        w.reply.deinit(w.gpa);
         w.term.deinit(w.gpa);
     }
 
@@ -81,6 +101,9 @@ pub const Watch = struct {
         handler.effects.progress_report = &onProgress;
         handler.effects.semantic_prompt = &onSemanticPrompt;
         handler.effects.reset = &onReset;
+        // Also makes the terminal answer the OSC 7501 support query.
+        handler.effects.program_status = &onProgramStatus;
+        handler.effects.write_pty = &onWritePty;
     }
 
     /// Parses pty output at time `now`.
@@ -116,12 +139,20 @@ pub const Watch = struct {
     }
 
     /// The events that tell a new client the current state, into `out`.
-    /// The slices belong to the terminal and stay valid until it parses.
+    /// The slices belong to the terminal and stay valid until it parses,
+    /// except the `program` records: free them with `freeProgram`.
     pub fn current(w: *Watch, out: *std.ArrayList(Event)) !void {
         if (w.term.getTitle()) |t| if (t.len > 0) try out.append(w.gpa, .{ .title = t });
         if (w.term.getPwd()) |p| if (p.len > 0) try out.append(w.gpa, .{ .cwd = p });
         if (w.progress) |p| try out.append(w.gpa, .{ .progress = p });
         if (w.status.state != .idle) try out.append(w.gpa, .{ .status = w.status });
+        if (w.records.items.len > 0) {
+            const records = try w.programRecords();
+            out.append(w.gpa, .{ .program = records }) catch |err| {
+                freeProgram(w.gpa, records);
+                return err;
+            };
+        }
     }
 
     /// Frees the events that went out.
@@ -155,6 +186,7 @@ pub const Watch = struct {
             .title => w.pushCopy(.title, w.term.getTitle() orelse ""),
             .cwd => w.pushCopy(.cwd, w.term.getPwd() orelse ""),
             .progress => w.push(.{ .progress = w.progress orelse .{ .state = .remove } }),
+            .program => w.push(.{ .program = w.programRecords() catch return }),
             .bell => w.push(.bell),
         }
     }
@@ -182,6 +214,7 @@ pub const Watch = struct {
                 // A continuation or right prompt is part of the same prompt.
                 if (e.prompt_kind != .primary) return;
                 w.at_input = false;
+                w.endPromptRecords();
                 // A new prompt ends the command, also when the shell sent no
                 // 133;D (after a full reset, for one).
                 if (w.status.state == .running and !w.run_by_progress) {
@@ -252,6 +285,132 @@ pub const Watch = struct {
         }
     }
 
+    /// Applies one report: a `clear` removes the record and the records
+    /// under it (every record with no id), any other state replaces the
+    /// record.
+    fn programReport(w: *Watch, r: ProgramStatus.Report) void {
+        const id = r.readOption(.id) orelse "";
+        if (r.state == .clear) {
+            if (!w.removeRecords(id, .clear)) return;
+        } else {
+            w.putRecord(id, r) catch {
+                std.log.warn("program status dropped: out of memory", .{});
+                return;
+            };
+        }
+        w.coalesce(.program);
+    }
+
+    fn putRecord(w: *Watch, id: []const u8, r: ProgramStatus.Report) !void {
+        var rec: m.ProgramRecord = .{
+            .state = switch (r.state) {
+                .idle => .idle,
+                .working => .working,
+                .done => .done,
+                .blocked => .blocked,
+                .@"error" => .@"error",
+                .clear => unreachable,
+            },
+            .kind = if (r.readOption(.kind)) |k| switch (k) {
+                .permission => .permission,
+                .question => .question,
+                .auth => .auth,
+            } else null,
+            .progress = r.readOption(.progress),
+        };
+        errdefer freeRecord(w.gpa, rec);
+        rec.id = try w.gpa.dupe(u8, id);
+        if (r.readOption(.app)) |a| rec.app = try w.gpa.dupe(u8, a);
+        rec.title = try decodeText(w.gpa, r, .title);
+        rec.msg = try decodeText(w.gpa, r, .msg);
+
+        w.record_seq += 1;
+        for (w.records.items) |*old| if (std.mem.eql(u8, old.rec.id, id)) {
+            freeRecord(w.gpa, old.rec);
+            old.* = .{ .rec = rec, .changed = w.record_seq };
+            return;
+        };
+        try w.records.ensureUnusedCapacity(w.gpa, 1);
+        if (w.records.items.len >= m.max_program_records) {
+            var oldest: usize = 0;
+            for (w.records.items, 0..) |o, i| {
+                if (o.changed < w.records.items[oldest].changed) oldest = i;
+            }
+            freeRecord(w.gpa, w.records.orderedRemove(oldest).rec);
+        }
+        w.records.appendAssumeCapacity(.{ .rec = rec, .changed = w.record_seq });
+    }
+
+    const Removal = enum {
+        /// The record `id` and the records under it; every record for "".
+        clear,
+        /// The records of a program that no longer runs.
+        prompt,
+    };
+
+    /// True if a record went.
+    fn removeRecords(w: *Watch, id: []const u8, how: Removal) bool {
+        var removed = false;
+        var i: usize = 0;
+        while (i < w.records.items.len) {
+            const rec = w.records.items[i].rec;
+            const goes = switch (how) {
+                .clear => id.len == 0 or (std.mem.startsWith(u8, rec.id, id) and
+                    (rec.id.len == id.len or rec.id[id.len] == '/')),
+                // `working` and `blocked` must go at a new shell prompt;
+                // `idle` may, and goes, so that no record outlives its
+                // program. `done` and `error` wait for the user.
+                .prompt => rec.state != .done and rec.state != .@"error",
+            };
+            if (!goes) {
+                i += 1;
+                continue;
+            }
+            freeRecord(w.gpa, w.records.orderedRemove(i).rec);
+            removed = true;
+        }
+        return removed;
+    }
+
+    fn endPromptRecords(w: *Watch) void {
+        if (w.removeRecords("", .prompt)) w.coalesce(.program);
+    }
+
+    /// A copy of every record, with the `app` that each one inherits.
+    fn programRecords(w: *Watch) ![]m.ProgramRecord {
+        const out = try w.gpa.alloc(m.ProgramRecord, w.records.items.len);
+        var n: usize = 0;
+        errdefer {
+            for (out[0..n]) |r| freeRecord(w.gpa, r);
+            w.gpa.free(out);
+        }
+        for (w.records.items) |r| {
+            const app = w.inheritedApp(r.rec.id);
+            out[n] = try dupeRecord(w.gpa, r.rec, app);
+            n += 1;
+        }
+        return out;
+    }
+
+    /// The `app` of the record `id`, else of its nearest ancestor that has
+    /// one. The root record is the ancestor of every other record.
+    fn inheritedApp(w: *const Watch, id: []const u8) ?[]const u8 {
+        var at: ?[]const u8 = id;
+        while (at) |path| {
+            for (w.records.items) |r| if (std.mem.eql(u8, r.rec.id, path)) {
+                if (r.rec.app) |a| return a;
+                break;
+            };
+            at = if (path.len == 0)
+                null
+            else if (std.mem.lastIndexOfScalar(u8, path, '/')) |slash|
+                path[0..slash]
+            else
+                "";
+        }
+        return null;
+    }
+
     fn fromHandler(h: *Handler) *Watch {
         return @fieldParentPtr("term", h.terminal);
     }
@@ -272,12 +431,26 @@ pub const Watch = struct {
         fromHandler(h).report(r);
     }
 
+    fn onProgramStatus(h: *Handler, r: ProgramStatus.Report) void {
+        fromHandler(h).programReport(r);
+    }
+
+    /// Keeps only the OSC 7501 support reply. The terminal of the client that
+    /// shows the pane answers every other query, and a second answer would
+    /// reach the program as input. That terminal does not answer this one.
+    fn onWritePty(h: *Handler, data: []const u8) void {
+        if (!std.mem.startsWith(u8, data, "\x1b]7501;")) return;
+        const w = fromHandler(h);
+        w.reply.appendSlice(w.gpa, data) catch {};
+    }
+
     fn onSemanticPrompt(h: *Handler, e: SemanticPrompt) void {
         fromHandler(h).mark(e);
     }
 
     /// A full reset clears the title and the cwd with no callback. The run
-    /// ends at the next 133;D or prompt.
+    /// ends at the next 133;D or prompt. The terminal cleared the program
+    /// status records before this, through `onProgramStatus`.
     fn onReset(h: *Handler) void {
         const w = fromHandler(h);
         w.coalesce(.title);
@@ -289,8 +462,42 @@ fn freeEvent(gpa: std.mem.Allocator, e: Event) void {
     switch (e) {
         .title, .cwd => |s| gpa.free(s),
         .mark => |mk| if (mk.command) |c| gpa.free(c),
+        .program => |records| freeProgram(gpa, records),
         else => {},
     }
+}
+
+/// Frees the records of a `program` event.
+pub fn freeProgram(gpa: std.mem.Allocator, records: []m.ProgramRecord) void {
+    for (records) |r| freeRecord(gpa, r);
+    gpa.free(records);
+}
+
+fn freeRecord(gpa: std.mem.Allocator, r: m.ProgramRecord) void {
+    gpa.free(r.id);
+    if (r.app) |a| gpa.free(a);
+    if (r.title) |t| gpa.free(t);
+    if (r.msg) |t| gpa.free(t);
+}
+
+/// A copy of `r` that owns its slices, with `app` in place of its own.
+fn dupeRecord(gpa: std.mem.Allocator, r: m.ProgramRecord, app: ?[]const u8) !m.ProgramRecord {
+    var out: m.ProgramRecord = .{ .state = r.state, .kind = r.kind, .progress = r.progress };
+    errdefer freeRecord(gpa, out);
+    out.id = try gpa.dupe(u8, r.id);
+    if (app) |a| out.app = try gpa.dupe(u8, a);
+    if (r.title) |t| out.title = try gpa.dupe(u8, t);
+    if (r.msg) |t| out.msg = try gpa.dupe(u8, t);
+    return out;
+}
+
+/// The decoded text of `title` or `msg`, or null when the report has none.
+fn decodeText(gpa: std.mem.Allocator, r: ProgramStatus.Report, comptime key: ProgramStatus.Option) !?[]u8 {
+    if (r.readOption(key) == null) return null;
+    var buf: [program_status.max_msg_bytes]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buf);
+    r.writeText(key, &writer) catch unreachable;
+    return try gpa.dupe(u8, writer.buffered());
 }
 
 /// The most rows above the cursor that `inputText` reads.
@@ -641,4 +848,176 @@ test "events: an output mark after a progress report owns the run" {
     try testing.expectEqual(.running, f.w.status.state);
     f.feed("\x1b]133;D;0\x07", 200);
     try testing.expectEqual(m.Status{ .state = .done }, f.w.status);
+}
+
+/// The records of the last `program` event that is ready.
+fn lastProgram(f: *Fixture) ?[]m.ProgramRecord {
+    var last: ?[]m.ProgramRecord = null;
+    for (f.w.ready.items) |e| if (e == .program) {
+        last = e.program;
+    };
+    return last;
+}
+
+fn programEvents(f: *Fixture) usize {
+    var n: usize = 0;
+    for (f.w.ready.items) |e| n += @intFromBool(e == .program);
+    return n;
+}
+
+test "events: each program status state becomes a record" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x1b]7501;state=working:app=cargo:progress=40:msg=QnVpbGRpbmc=\x1b\\", 0);
+    var records = lastProgram(&f).?;
+    try testing.expectEqual(1, records.len);
+    try testing.expectEqualStrings("", records[0].id);
+    try testing.expectEqual(.working, records[0].state);
+    try testing.expectEqual(40, records[0].progress.?);
+    try testing.expectEqualStrings("cargo", records[0].app.?);
+    try testing.expectEqualStrings("Building", records[0].msg.?);
+
+    // A report replaces its record: no `app` now means none.
+    f.feed("\x1b]7501;state=blocked:kind=permission:msg=QWxsb3cgZWRpdD8=\x07", m.coalesce_ms);
+    records = lastProgram(&f).?;
+    try testing.expectEqual(1, records.len);
+    try testing.expectEqual(.blocked, records[0].state);
+    try testing.expectEqual(.permission, records[0].kind.?);
+    try testing.expectEqual(null, records[0].progress);
+    try testing.expectEqual(null, records[0].app);
+    try testing.expectEqualStrings("Allow edit?", records[0].msg.?);
+
+    const cases = .{ .{ "done", m.ProgramState.done }, .{ "error", m.ProgramState.@"error" }, .{ "idle", m.ProgramState.idle } };
+    inline for (cases, 2..) |c, i| {
+        f.feed("\x1b]7501;state=" ++ c[0] ++ ":progress=50:kind=auth\x07", @intCast(i * m.coalesce_ms));
+        records = lastProgram(&f).?;
+        try testing.expectEqual(1, records.len);
+        // Progress goes with working and blocked only, kind with blocked.
+        try testing.expectEqual(m.ProgramRecord{ .state = c[1] }, records[0]);
+    }
+
+    // A state that this build does not know changes nothing.
+    const n = programEvents(&f);
+    f.feed("\x1b]7501;state=sleeping\x07", 10 * m.coalesce_ms);
+    try testing.expectEqual(n, programEvents(&f));
+    try testing.expectEqual(.idle, f.w.records.items[0].rec.state);
+}
+
+test "events: program status records keep their ids, inherit app, and clear with their children" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x1b]7501;state=working:app=deploy\x07" ++
+        "\x1b]7501;state=working:id=deploy:title=dXMtZWFzdA==\x07" ++
+        "\x1b]7501;state=blocked:id=deploy/eu:app=eu\x07" ++
+        "\x1b]7501;state=done:id=deployer\x07", 0);
+    f.w.flush(m.coalesce_ms);
+    var records = lastProgram(&f).?;
+    try testing.expectEqual(4, records.len);
+    try testing.expectEqualStrings("deploy", records[1].id);
+    try testing.expectEqualStrings("us-east", records[1].title.?);
+    // A record with no `app` takes its nearest ancestor's, the root's here.
+    try testing.expectEqualStrings("deploy", records[1].app.?);
+    try testing.expectEqualStrings("eu", records[2].app.?);
+    try testing.expectEqualStrings("deploy", records[3].app.?);
+    // The stored record keeps its own value.
+    try testing.expectEqual(null, f.w.records.items[1].rec.app);
+
+    // A clear takes the record and the records under it, not `deployer`.
+    f.feed("\x1b]7501;state=clear:id=deploy\x07", 2 * m.coalesce_ms);
+    records = lastProgram(&f).?;
+    try testing.expectEqual(2, records.len);
+    try testing.expectEqualStrings("", records[0].id);
+    try testing.expectEqualStrings("deployer", records[1].id);
+
+    // A clear of a record that is not there sends nothing.
+    const n = programEvents(&f);
+    f.feed("\x1b]7501;state=clear:id=nothing\x07", 4 * m.coalesce_ms);
+    try testing.expectEqual(n, programEvents(&f));
+
+    // A clear with no id takes every record.
+    f.feed("\x1b]7501;state=clear\x07", 6 * m.coalesce_ms);
+    try testing.expectEqual(0, lastProgram(&f).?.len);
+    try testing.expectEqual(0, f.w.records.items.len);
+}
+
+test "events: a full reset clears every program status record" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x1b]7501;state=working\x07\x1b]7501;state=done:id=a\x07", 0);
+    f.feed("\x1bc", 100);
+    try testing.expectEqual(0, lastProgram(&f).?.len);
+    try testing.expectEqual(0, f.w.records.items.len);
+}
+
+test "events: a new shell prompt removes the records of the program that ran" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x1b]7501;state=working:id=a\x07\x1b]7501;state=blocked:id=b\x07" ++
+        "\x1b]7501;state=idle:id=c\x07\x1b]7501;state=done:id=d\x07\x1b]7501;state=error:id=e\x07", 0);
+    // A continuation prompt is the same prompt.
+    f.feed("\x1b]133;P;k=c\x07", 100);
+    try testing.expectEqual(5, f.w.records.items.len);
+    f.feed("\x1b]133;A\x07$ ", 200);
+    const records = lastProgram(&f).?;
+    try testing.expectEqual(2, records.len);
+    try testing.expectEqualStrings("d", records[0].id);
+    try testing.expectEqualStrings("e", records[1].id);
+}
+
+test "events: program status reports coalesce to the first and the newest" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    var buf: [64]u8 = undefined;
+    for (0..100) |i| f.feed(try std.fmt.bufPrint(&buf, "\x1b]7501;state=working:progress={d}\x07", .{i}), 5);
+    try testing.expectEqual(1, programEvents(&f));
+    try testing.expectEqual(0, lastProgram(&f).?[0].progress.?);
+    f.w.flush(5 + m.coalesce_ms);
+    try testing.expectEqual(2, programEvents(&f));
+    try testing.expectEqual(99, lastProgram(&f).?[0].progress.?);
+}
+
+test "events: past the most records, the one that changed least recently goes" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    var buf: [64]u8 = undefined;
+    for (0..m.max_program_records) |i| f.feed(try std.fmt.bufPrint(&buf, "\x1b]7501;state=idle:id=r{d}\x07", .{i}), 0);
+    // r0 changes, so r1 is now the oldest.
+    f.feed("\x1b]7501;state=working:id=r0\x07", 0);
+    f.feed("\x1b]7501;state=idle:id=new\x07", 0);
+    try testing.expectEqual(m.max_program_records, f.w.records.items.len);
+    try testing.expectEqualStrings("r0", f.w.records.items[0].rec.id);
+    try testing.expectEqualStrings("r2", f.w.records.items[1].rec.id);
+    try testing.expectEqualStrings("new", f.w.records.items[m.max_program_records - 1].rec.id);
+}
+
+test "events: the session answers the program status query and no other query" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x1b[c\x1b[6n\x1b]7501;?\x1b\\", 0);
+    try testing.expectEqualStrings("\x1b]7501;" ++ program_status.query_reply ++ "\x1b\\", f.w.reply.items);
+    f.w.reply.clearRetainingCapacity();
+    f.feed("\x1b]7501;?\x07", 1);
+    try testing.expectEqualStrings("\x1b]7501;" ++ program_status.query_reply ++ "\x07", f.w.reply.items);
+}
+
+test "events: a new client gets the program status records" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x1b]7501;state=working:app=make\x07\x1b]7501;state=blocked:id=x:kind=question\x07", 0);
+    var out: std.ArrayList(Event) = .empty;
+    defer out.deinit(testing.allocator);
+    try f.w.current(&out);
+    defer for (out.items) |e| if (e == .program) freeProgram(testing.allocator, e.program);
+    const records = out.items[out.items.len - 1].program;
+    try testing.expectEqual(2, records.len);
+    try testing.expectEqualStrings("make", records[1].app.?);
+    try testing.expectEqual(.question, records[1].kind.?);
 }
