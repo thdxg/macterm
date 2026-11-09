@@ -68,6 +68,8 @@ MactermApp (SwiftUI @main)
 
 A `Pane` owns its `GhosttyTerminalNSView`. `TerminalSurface.makeNSView` returns `pane.ensureNSView()`. This is a cached instance that lives as long as the `Pane`. `dismantleNSView` does nothing. The view dies only through `pane.destroySurface()`. A Ghostty surface is welded to its `NSView` and `CAMetalLayer`. If SwiftUI made the view again when the tree changes shape or you switch tabs, the surface would die. `SurfaceIncubator` is a window that is always invisible. It gives a pane that is off screen a window with a size, so that `createSurface()` can succeed early.
 
+**The pane connects the callbacks of its view when it makes the view** (`Pane.connectViewCallbacks`, from `ensureNSView`): execution tracking, titles, search, bells, notifications and project memory. A pane that no window drew (a `tab new --no-focus` tab, a background tab that a launch warmed) therefore records its submissions and output, and `pane list` follows its runs. `TerminalSurface.configure` sets only the callbacks that need the window that draws the pane: focus, splits, zoom, process exit, tab titles, links, the adaptive background, and `onRunEnded` (the acknowledgement of a run that the user looks at). Before this rule, `configure` set all of them, and such a pane stayed `idle`. The poll pauses while the app is inactive and no window is visible (`PollCadence`). The output heartbeat is then the only signal of a run in such a pane.
+
 ### State
 
 - **`AppState`** is the single `@Observable` root. It is passed with `.environment()`. Every change to a workspace, tab, pane or window goes through it. You can inject `WorkspaceStore` for tests.
