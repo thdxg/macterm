@@ -23,8 +23,6 @@ struct ProjectMemoryPanel: View {
     private var projectIconSymbol: String
 
     static let width: CGFloat = 320
-    static let inset: CGFloat = 10
-    static let cornerRadius: CGFloat = 22
     /// The failure card's corner: the rows are cards like it.
     static let rowCornerRadius: CGFloat = 12
     static let recentLimit = 8
@@ -49,8 +47,8 @@ struct ProjectMemoryPanel: View {
         .scrollIndicators(.never)
         .frame(width: Self.width)
         .frame(maxHeight: .infinity, alignment: .top)
-        .glassPanel(cornerRadius: Self.cornerRadius)
-        .padding(Self.inset)
+        .glassPanel(cornerRadius: GlassPanelMetrics.sidePanelCornerRadius)
+        .padding(GlassPanelMetrics.sidePanelInset)
         .task(id: project.id) {
             memory.store.prepare(project.id)
             // The stored summary, for the paragraph. Nothing is written

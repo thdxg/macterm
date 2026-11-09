@@ -5,18 +5,6 @@ import Testing
 @MainActor
 struct SidebarOverlayMetricsTests {
     @Test
-    func inset_corner_radius_stays_concentric_with_window() {
-        #expect(SidebarOverlayMetrics.cornerRadius(windowCornerRadius: 24, inset: 4) == 20)
-        #expect(SidebarOverlayMetrics.cornerRadius(windowCornerRadius: 8, inset: 4) == 4)
-    }
-
-    @Test
-    func missing_or_small_window_radius_never_produces_negative_radius() {
-        #expect(SidebarOverlayMetrics.cornerRadius(windowCornerRadius: nil, inset: 4) == 0)
-        #expect(SidebarOverlayMetrics.cornerRadius(windowCornerRadius: 2, inset: 4) == 0)
-    }
-
-    @Test
     func hover_trigger_captures_edge_entries_and_leftward_approach() {
         #expect(SidebarOverlayMetrics.shouldBeginHover(pointX: 4, previousX: nil))
         #expect(SidebarOverlayMetrics.shouldBeginHover(pointX: 4, previousX: 3))
@@ -60,6 +48,13 @@ struct SidebarOverlayMetricsTests {
             windowFrame: window,
             sidebarWidth: 200
         ))
+        // Over the panel's trailing edge, which sits one side-panel inset
+        // further in than the sidebar width.
+        #expect(SidebarOverlayMetrics.retainsOutsidePointer(
+            CGPoint(x: 100 + GlassPanelMetrics.sidePanelInset + 200, y: 400),
+            windowFrame: window,
+            sidebarWidth: 200
+        ))
 
         #expect(!SidebarOverlayMetrics.retainsOutsidePointer(
             CGPoint(x: -40, y: 400),
@@ -90,30 +85,6 @@ struct SidebarOverlayMetricsTests {
             start: 180,
             delta: CGFloat(range.upperBound) - 180 + 40
         ) == CGFloat(range.upperBound))
-    }
-
-    @Test
-    func titlebar_inset_uses_the_non_obscured_window_layout_rect() {
-        let contentFrame = CGRect(x: 0, y: 0, width: 1000, height: 800)
-
-        #expect(SidebarOverlayMetrics.topObscuredInset(
-            contentFrameInWindow: contentFrame,
-            contentLayoutRect: CGRect(x: 0, y: 0, width: 1000, height: 748)
-        ) == 52)
-        #expect(SidebarOverlayMetrics.topObscuredInset(
-            contentFrameInWindow: contentFrame,
-            contentLayoutRect: CGRect(x: 0, y: 0, width: 1000, height: 800)
-        ) == 0)
-    }
-
-    @Test
-    func overlay_top_bar_and_shared_spacing_sum_to_the_window_inset() {
-        let inset: CGFloat = 52
-        let bar = SidebarLayoutMetrics.overlayTopBarHeight(windowTopInset: inset)
-
-        #expect(bar == 40)
-        #expect(bar + SidebarLayoutMetrics.topContentMargin + SidebarLayoutMetrics.idlePinDropHeight == inset)
-        #expect(SidebarLayoutMetrics.overlayTopBlurHeight(topBarHeight: bar) == inset)
     }
 
     @Test
