@@ -478,9 +478,8 @@ private struct TerminalSurface: NSViewRepresentable {
             // rather than waiting for the next poll tick: the adaptive poll
             // slows to 2s when the app is inactive and stops entirely once no
             // window is visible, which is why a finished agent's icon and name
-            // used to linger until the user clicked or typed. Unconditional —
-            // names and agent icons are shown whether or not the status
-            // indicator is on, and `notePromptReturned` feeds the naming gate.
+            // used to linger until the user clicked or typed.
+            // `notePromptReturned` feeds the naming gate.
             pane.notePromptReturned()
             pane.refreshForegroundProcess()
             // The remote analogue of the refresh above: the local process

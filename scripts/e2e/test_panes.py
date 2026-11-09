@@ -152,6 +152,24 @@ def test_busy_tab_close_refused_then_forced(app, fresh_tab, live_pane):
     assert fresh_tab["id"] not in {t["id"] for t in app.cli_json("tab", "list")["tabs"]}
 
 
+
+def test_pane_list_reports_running_then_done(app, fresh_tab):
+    """`pane list` reports a command as running, then done, whatever the
+    status indicator setting is (#705). Agents wait on these states. The
+    pane is in a tab that is not active, because looking at the active tab
+    acknowledges `done` at once and sets the pane back to idle."""
+    child = app.cli_json("tab", "new", "--no-focus")["tabs"][0]
+    pane = wait_for(lambda: app.panes(tab=child["id"]), message="the background tab's pane")[0]
+    wait_for(lambda: app.pane_text(pane=pane["id"]), timeout=60, message="the background shell prompt")
+
+    def state():
+        return next(p["state"] for p in app.panes(tab=child["id"]) if p["id"] == pane["id"])
+
+    nonce = uuid.uuid4().hex[:12]
+    app.pane_run(f'/bin/sh -c "printf started-%s {nonce}; echo; sleep 5"', pane=pane["id"])
+    wait_for(lambda: state() == "running", timeout=30, message="pane list to report running")
+    wait_for(lambda: state() == "done", timeout=60, message="pane list to report done")
+
 def _app_log(app):
     try:
         with open(app.log_stream_path) as f:

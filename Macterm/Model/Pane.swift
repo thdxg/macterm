@@ -284,8 +284,8 @@ final class Pane: Identifiable {
     }
 
     /// Note an execution boundary reported outside the execution tracker —
-    /// the OSC 133;D hook in `TerminalSurface`. Posts a poll event so a slowed or paused poll wakes
-    /// to fire the probe now.
+    /// the OSC 133;D hook in `TerminalSurface`. Posts a poll event so a
+    /// slowed or paused poll wakes to fire the probe now.
     func noteRemoteCommandBoundary() {
         guard isRemote, !remoteForegroundIsPushed else { return }
         remoteProbeRequest.request()
@@ -450,8 +450,7 @@ final class Pane: Identifiable {
     /// so a non-shell foreground there can only be such a hook. A shell name
     /// (and `nil`) is always allowed through, so returning to the prompt
     /// restores the shell name at once. Shell-ness is decided by basename
-    /// (`/etc/shells` + login shell + `$SHELL` — a set lookup, no syscall)
-    /// rather than the caller's `foregroundIsShell`, so a name alone decides.
+    /// (`/etc/shells` + login shell + `$SHELL` — a set lookup, no syscall).
     ///
     /// This gates the name and icon only. `programTitle` expiry stays keyed on
     /// the foreground pid, so a title can never be misattributed. A long-lived
@@ -517,14 +516,14 @@ final class Pane: Identifiable {
         cancelActivityQuietPollIfNeeded()
     }
 
-    /// The shell returned to a prompt (OSC 133;D). The naming path uses it to
-    /// reject prompt-hook processes.
     /// Whether the shell sits at its prompt (OSC 133;D since the last real
     /// submission). A foreground seen then is a prompt hook, not a command —
     /// the rule the tracker's own start gate and the naming path apply; the
     /// widget recipe capture reads it for the same reason.
     var isShellAtPrompt: Bool { executionTracker.isShellAtPrompt }
 
+    /// The shell returned to a prompt (OSC 133;D). The naming path uses it to
+    /// reject prompt-hook processes.
     func notePromptReturned() {
         executionTracker.notePromptReturned()
         // On a remote pane, OSC 133;D is the host's shell saying it owns the
