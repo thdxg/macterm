@@ -15,8 +15,6 @@ struct ProjectMemoryPanel: View {
     private var appState
     @Environment(ProjectStore.self)
     private var projectStore
-    @State
-    private var preferences = Preferences.shared
     /// The sidebar's project icon (Settings → Appearance → Project icon), so
     /// the header shows the same glyph as the project's row.
     @AppStorage(Preferences.Keys.projectIconSymbol)
@@ -219,7 +217,7 @@ struct ProjectMemoryPanel: View {
     /// Git state alone, which is what a project shows before its first
     /// command (`ProjectMemoryDigest` is nil with neither).
     private var summaryEnabled: Bool {
-        preferences.projectMemorySummary && ProjectMemorySummarizer.isEnabled
+        ProjectMemorySummarizer.isEnabled
             && (!entries.isEmpty || memory.git[project.id] != nil)
     }
 
