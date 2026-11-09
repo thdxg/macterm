@@ -2086,9 +2086,9 @@ final class AppState {
     /// `destroySurface` nils `onProcessExit` first (so the dead surface can't
     /// race a `requestClosePane` at us mid-rebuild) and retires the old
     /// NSView; the reattach tick then makes `TerminalSurface.updateNSView`
-    /// run `ensureScrollView` → `attach` → `configure` (reinstalling the
-    /// callbacks the destroy just nil'd) → `createSurface`, which re-dials
-    /// ssh against the same persisted session name.
+    /// run `ensureScrollView` (a new view, with the pane's callbacks) →
+    /// `attach` → `configure` (the window's callbacks) → `createSurface`,
+    /// which re-dials ssh against the same persisted session name.
     private func reconnectSurface(of pane: Pane) {
         pane.destroySurface()
         pane.requestSurfaceReattach()

@@ -14,9 +14,8 @@ extension Pane {
         view.onInteraction = { [weak self] in
             self?.recordUserInteraction()
         }
-        // Typed input is what zmx moves leadership on, local or remote; the
-        // NSView has no back-reference to its Pane, so this is where the pane
-        // gets attached to the report (see `.terminalUserInput`).
+        // Typed input is what zmx moves leadership on, local or remote. The
+        // report carries the pane (see `.terminalUserInput`).
         view.onUserInput = { [weak self] in
             guard let self else { return }
             NotificationCenter.default.post(name: .terminalUserInput, object: id)
