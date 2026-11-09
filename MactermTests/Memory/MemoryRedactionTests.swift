@@ -18,6 +18,7 @@ struct MemoryRedactionTests {
     ])
     func a_secret_is_masked(input: String, expected: String) {
         #expect(MemoryRedaction.redact(input) == expected)
+        #expect(MemoryRedaction.redactCommand(input) == expected)
     }
 
     @Test(arguments: [
@@ -38,11 +39,11 @@ struct MemoryRedactionTests {
         ("curl -u admin:hunter2|jq", "curl -u admin:•••|jq"),
     ])
     func a_separator_after_a_secret_is_kept(input: String, expected: String) {
-        #expect(MemoryRedaction.redact(input) == expected)
+        #expect(MemoryRedaction.redactCommand(input) == expected)
     }
 
     /// A separator that is quoted or escaped is part of the secret, and so is
-    /// all that follows a quote with no end.
+    /// the rest of a word with an unclosed quote. A `)` inside a word is too.
     @Test(arguments: [
         ("TOKEN=ab\\;cd; make", "TOKEN=•••; make"),
         ("TOKEN=ab';'cd; make", "TOKEN=•••; make"),
@@ -54,9 +55,26 @@ struct MemoryRedactionTests {
         ("TOKEN=ab'cd|ef gh", "TOKEN=••• gh"),
         ("TOKEN=\"abc", "TOKEN=•••"),
         ("curl -u admin:pa\\|ss|jq", "curl -u admin:•••|jq"),
+        ("TOKEN=ab\\ cd; make", "TOKEN=•••; make"),
+        ("DB_PASSWORD=ab)cd", "DB_PASSWORD=•••"),
+        ("mysql --password=p@ss)w0rd db", "mysql --password=••• db"),
+        ("(TOKEN=abc); make", "(TOKEN=•••); make"),
     ])
     func a_quoted_or_escaped_separator_stays_masked(input: String, expected: String) {
-        #expect(MemoryRedaction.redact(input) == expected)
+        #expect(MemoryRedaction.redactCommand(input) == expected)
+    }
+
+    /// Output does not follow shell rules, so a separator in it is part of the
+    /// secret.
+    @Test(arguments: [
+        ("Error: login failed: password=p@ss;w0rd&!", "Error: login failed: password=•••"),
+        ("PASSWORD=Xy7;k&9q", "PASSWORD=•••"),
+        ("api_key=abc|def", "api_key=•••"),
+        ("export TOKEN=ab<cd>ef", "export TOKEN=•••"),
+        ("TOKEN=;abc", "TOKEN=•••"),
+    ])
+    func a_separator_in_output_stays_masked(output: String, expected: String) {
+        #expect(MemoryRedaction.redact(output) == expected)
     }
 
     @Test(arguments: [
@@ -68,6 +86,7 @@ struct MemoryRedactionTests {
     ])
     func an_ordinary_command_is_unchanged(command: String) {
         #expect(MemoryRedaction.redact(command) == command)
+        #expect(MemoryRedaction.redactCommand(command) == command)
     }
 
     @Test
