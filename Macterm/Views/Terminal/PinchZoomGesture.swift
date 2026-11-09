@@ -16,6 +16,7 @@ struct PinchZoomGesture {
     }
 
     /// Total magnification (the sum of `NSEvent.magnification`) that fires.
+    /// Not measured: the UI review of the change checks it on a trackpad.
     static let threshold: CGFloat = 0.15
 
     private var total: CGFloat = 0
@@ -23,7 +24,13 @@ struct PinchZoomGesture {
 
     /// Adds one magnify event. Returns the pinch direction for the one event
     /// that passes the threshold, and nil for every other event.
+    /// An event with no phase (not from a trackpad) is a gesture of its own.
     mutating func track(phase: NSEvent.Phase, magnification: CGFloat) -> Direction? {
+        if phase.isEmpty {
+            total = 0
+            fired = false
+            return abs(magnification) >= Self.threshold ? (magnification > 0 ? .outward : .inward) : nil
+        }
         if phase.contains(.began) {
             total = 0
             fired = false

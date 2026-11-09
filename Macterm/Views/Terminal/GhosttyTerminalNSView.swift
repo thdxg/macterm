@@ -430,7 +430,7 @@ final class GhosttyTerminalNSView: NSView {
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
     var onZoomRequest: (() -> Void)?
     var isZoomed: Bool = false
-    /// The pane shares its tab with another pane, so a pinch out can zoom it.
+    /// The tab shows more than one pane, so a pinch out can zoom this one.
     var isSplit = false
     private var pinchZoom = PinchZoomGesture()
     var onSearchStart: ((String?) -> Void)?
@@ -1691,7 +1691,7 @@ final class GhosttyTerminalNSView: NSView {
     override func magnify(with event: NSEvent) {
         guard let direction = pinchZoom.track(phase: event.phase, magnification: event.magnification),
               PinchZoomGesture.togglesZoom(direction, isZoomed: isZoomed, isSplit: isSplit)
-        else { return }
+        else { return super.magnify(with: event) }
         onInteraction?()
         if direction == .outward { window?.makeFirstResponder(self) }
         onZoomRequest?()

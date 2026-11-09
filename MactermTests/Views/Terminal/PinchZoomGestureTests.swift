@@ -44,7 +44,24 @@ struct PinchZoomGestureTests {
         var pinch = PinchZoomGesture()
         #expect(pinch.track(phase: .began, magnification: 0.1) == nil)
         #expect(pinch.track(phase: .cancelled, magnification: 0) == nil)
-        #expect(pinch.track(phase: .began, magnification: 0.1) == nil)
+        // No `.began` after the cancel: only the cancel cleared the total.
+        #expect(pinch.track(phase: .changed, magnification: 0.1) == nil)
+    }
+
+    @Test
+    func a_cancelled_gesture_can_fire_again() {
+        var pinch = PinchZoomGesture()
+        #expect(pinch.track(phase: .began, magnification: 0.2) == .outward)
+        #expect(pinch.track(phase: .cancelled, magnification: 0) == nil)
+        #expect(pinch.track(phase: .changed, magnification: 0.2) == .outward)
+    }
+
+    @Test
+    func an_event_with_no_phase_is_a_gesture_of_its_own() {
+        var pinch = PinchZoomGesture()
+        #expect(pinch.track(phase: [], magnification: 0.1) == nil)
+        #expect(pinch.track(phase: [], magnification: 0.2) == .outward)
+        #expect(pinch.track(phase: [], magnification: -0.2) == .inward)
     }
 
     @Test
