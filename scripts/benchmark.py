@@ -29,18 +29,18 @@ Subcommands:
 """
 
 import argparse
-import ctypes
 import json
 import os
 import re
 import socket
 import statistics
-import struct
 import subprocess
 import sys
 import time
 
-from _harness import HarnessError, MactermHarness, notify, runner_info, sh, wait_for_load
+from _harness import (
+    HarnessError, MactermHarness, notify, phys_footprint, runner_info, sh, wait_for_load,
+)
 
 # The benchmark samples one idle state as a sanity baseline plus the two
 # workload states that carry the real signal — an app doing terminal work,
@@ -86,23 +86,6 @@ def ps_sample(pid):
     if result.returncode != 0 or len(fields) != 1:
         return None
     return parse_cputime(fields[0])
-
-
-_LIBPROC = ctypes.CDLL("/usr/lib/libproc.dylib") if sys.platform == "darwin" else None
-# proc_pid_rusage flavor RUSAGE_INFO_V2; ri_phys_footprint follows a 16-byte
-# uuid and seven uint64 fields.
-_RUSAGE_INFO_V2 = 2
-_PHYS_FOOTPRINT_OFFSET = 72
-
-
-def phys_footprint(pid):
-    """The process's phys_footprint in bytes (what Activity Monitor calls
-    Memory), or None if the process is gone. RSS from `ps` counts shared
-    pages and misses compressed memory, so it is not used for memory."""
-    buffer = ctypes.create_string_buffer(512)
-    if _LIBPROC is None or _LIBPROC.proc_pid_rusage(pid, _RUSAGE_INFO_V2, buffer) != 0:
-        return None
-    return struct.unpack_from("Q", buffer.raw, _PHYS_FOOTPRINT_OFFSET)[0]
 
 
 def process_tree(root_pid, zmx_path):

@@ -488,24 +488,22 @@ final class ControlHandler {
     }
 
     private func sessionList() async throws -> ControlData {
-        // One `zmx ls` for both the client counts and the leader pids, instead
-        // of two separate fork/execs.
-        guard let snapshot = await zmx.sessionListSnapshot() else {
+        guard let sessions = await zmx.listSessions() else {
             throw ControlError(
                 code: .internalError,
                 message: "zmx session listing unavailable",
                 action: "check Settings → session persistence for details"
             )
         }
-        let entries = snapshot.entries
-        let leaders = snapshot.leaders
         let panesBySession = paneIDsBySessionName()
-        let infos = entries.map { entry in
-            let bound = panesBySession[entry.name] ?? []
+        // A session whose shell exited is ended at once (`LocalSessions`):
+        // only running sessions are listed, as `zmx ls` listed live daemons.
+        let infos = sessions.filter(\.isRunning).map { session in
+            let bound = panesBySession[session.name] ?? []
             return ControlSessionInfo(
-                name: entry.name,
-                clients: entry.clients,
-                leaderPID: leaders[entry.name],
+                name: session.name,
+                clients: session.clients,
+                leaderPID: session.shellPID,
                 paneID: bound.first,
                 paneIDs: bound.isEmpty ? nil : bound
             )
@@ -1404,10 +1402,10 @@ final class ControlHandler {
         guard let name = args.session, !name.isEmpty else {
             throw ControlError(code: .badRequest, message: "session.kill requires a session name")
         }
-        guard let entries = await zmx.listSessionsWithClients() else {
+        guard let sessions = await zmx.listSessions() else {
             throw ControlError(code: .internalError, message: "zmx session listing unavailable")
         }
-        guard entries.contains(where: { $0.name == name }) else {
+        guard sessions.contains(where: { $0.name == name && $0.isRunning }) else {
             throw ControlError(
                 code: .notFound,
                 message: "no zmx session named \"\(name)\"",

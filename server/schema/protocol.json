@@ -649,6 +649,12 @@
           "optional": false,
           "default": "24",
           "since": 1
+        },
+        {
+          "name": "env",
+          "type": "[bin]",
+          "optional": true,
+          "since": 1
         }
       ],
       "cases": []
@@ -733,6 +739,12 @@
         {
           "name": "signal",
           "type": "u8",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "clients",
+          "type": "u16",
           "optional": true,
           "since": 1
         }
@@ -883,6 +895,12 @@
           "name": "rows",
           "type": "u16",
           "optional": false,
+          "since": 1
+        },
+        {
+          "name": "clients",
+          "type": "u16",
+          "optional": true,
           "since": 1
         }
       ],

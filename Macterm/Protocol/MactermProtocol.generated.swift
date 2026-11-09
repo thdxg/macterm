@@ -645,6 +645,7 @@ extension MactermProtocol.SessionCreate {
         var command: [ProtocolBin]?
         var cols: UInt16 = 80
         var rows: UInt16 = 24
+        var env: [ProtocolBin]?
     }
 }
 
@@ -655,6 +656,7 @@ extension MactermProtocol.SessionCreate.Args: ProtocolValue {
         var command: [ProtocolBin]?
         var cols: UInt16?
         var rows: UInt16?
+        var env: [ProtocolBin]?
         try reader.readMap { key, reader in
             switch key {
             case "id": id = try String(from: &reader)
@@ -662,6 +664,7 @@ extension MactermProtocol.SessionCreate.Args: ProtocolValue {
             case "command": command = try reader.readOptional([ProtocolBin].self)
             case "cols": cols = try UInt16(from: &reader)
             case "rows": rows = try UInt16(from: &reader)
+            case "env": env = try reader.readOptional([ProtocolBin].self)
             default: return false
             }
             return true
@@ -671,12 +674,14 @@ extension MactermProtocol.SessionCreate.Args: ProtocolValue {
         self.command = command
         self.cols = cols ?? 80
         self.rows = rows ?? 24
+        self.env = env
     }
 
     func encode(to writer: inout MessagePackWriter) {
         var keyCount = 3
         if cwd != nil { keyCount += 1 }
         if command != nil { keyCount += 1 }
+        if env != nil { keyCount += 1 }
         writer.writeMapHeader(keyCount)
         writer.writeString("id")
         id.encode(to: &writer)
@@ -692,6 +697,10 @@ extension MactermProtocol.SessionCreate.Args: ProtocolValue {
         cols.encode(to: &writer)
         writer.writeString("rows")
         rows.encode(to: &writer)
+        if let env {
+            writer.writeString("env")
+            env.encode(to: &writer)
+        }
     }
 }
 
@@ -734,6 +743,7 @@ extension MactermProtocol {
         var rows: UInt16?
         var code: UInt8?
         var signal: UInt8?
+        var clients: UInt16?
     }
 }
 
@@ -750,6 +760,7 @@ extension MactermProtocol.Session: ProtocolValue {
         var rows: UInt16?
         var code: UInt8?
         var signal: UInt8?
+        var clients: UInt16?
         try reader.readMap { key, reader in
             switch key {
             case "id": id = try String(from: &reader)
@@ -763,6 +774,7 @@ extension MactermProtocol.Session: ProtocolValue {
             case "rows": rows = try reader.readOptional(UInt16.self)
             case "code": code = try reader.readOptional(UInt8.self)
             case "signal": signal = try reader.readOptional(UInt8.self)
+            case "clients": clients = try reader.readOptional(UInt16.self)
             default: return false
             }
             return true
@@ -778,6 +790,7 @@ extension MactermProtocol.Session: ProtocolValue {
         self.rows = rows
         self.code = code
         self.signal = signal
+        self.clients = clients
     }
 
     func encode(to writer: inout MessagePackWriter) {
@@ -789,6 +802,7 @@ extension MactermProtocol.Session: ProtocolValue {
         if rows != nil { keyCount += 1 }
         if code != nil { keyCount += 1 }
         if signal != nil { keyCount += 1 }
+        if clients != nil { keyCount += 1 }
         writer.writeMapHeader(keyCount)
         writer.writeString("id")
         id.encode(to: &writer)
@@ -825,6 +839,10 @@ extension MactermProtocol.Session: ProtocolValue {
         if let signal {
             writer.writeString("signal")
             signal.encode(to: &writer)
+        }
+        if let clients {
+            writer.writeString("clients")
+            clients.encode(to: &writer)
         }
     }
 }
@@ -1061,6 +1079,7 @@ extension MactermProtocol {
         var pty: ProtocolBin
         var cols: UInt16
         var rows: UInt16
+        var clients: UInt16?
     }
 }
 
@@ -1071,6 +1090,7 @@ extension MactermProtocol.State: ProtocolValue {
         var pty: ProtocolBin?
         var cols: UInt16?
         var rows: UInt16?
+        var clients: UInt16?
         try reader.readMap { key, reader in
             switch key {
             case "pid": pid = try Int64(from: &reader)
@@ -1078,6 +1098,7 @@ extension MactermProtocol.State: ProtocolValue {
             case "pty": pty = try ProtocolBin(from: &reader)
             case "cols": cols = try UInt16(from: &reader)
             case "rows": rows = try UInt16(from: &reader)
+            case "clients": clients = try reader.readOptional(UInt16.self)
             default: return false
             }
             return true
@@ -1087,10 +1108,13 @@ extension MactermProtocol.State: ProtocolValue {
         self.pty = try MessagePackReader.required(pty, "pty")
         self.cols = try MessagePackReader.required(cols, "cols")
         self.rows = try MessagePackReader.required(rows, "rows")
+        self.clients = clients
     }
 
     func encode(to writer: inout MessagePackWriter) {
-        writer.writeMapHeader(5)
+        var keyCount = 5
+        if clients != nil { keyCount += 1 }
+        writer.writeMapHeader(keyCount)
         writer.writeString("pid")
         pid.encode(to: &writer)
         writer.writeString("shell_pid")
@@ -1101,6 +1125,10 @@ extension MactermProtocol.State: ProtocolValue {
         cols.encode(to: &writer)
         writer.writeString("rows")
         rows.encode(to: &writer)
+        if let clients {
+            writer.writeString("clients")
+            clients.encode(to: &writer)
+        }
     }
 }
 

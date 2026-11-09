@@ -11,14 +11,14 @@ import Foundation
 /// same-uid processes are readable, which the pane's foreground process is.
 enum ProcessInspector {
     /// The pid to inspect for a pane's foreground process. When the pane's
-    /// shell is wrapped in zmx, libghostty's `foregroundPID` points at the
-    /// local `zmx attach` client (whose `comm` is just `zmx`), while the real
-    /// shell / program runs under the zmx daemon — a detached process tree
-    /// reachable only by session name. `ZmxForegroundResolver` maps the name
-    /// to the daemon's pty foreground process; use that when available, else
-    /// fall back to libghostty's pid (no zmx, over-budget bypass, or before
-    /// the first `zmx ls` populates the cache).
-    /// The resolved foreground pid for a pane — the zmx daemon-side shell/program
+    /// shell is wrapped in its session, libghostty's `foregroundPID` points at
+    /// the local `zmx connect` client (whose `comm` is just `zmx`), while the
+    /// real shell / program runs in the session process — a detached process
+    /// tree reachable only by session name. `ZmxForegroundResolver` maps the
+    /// name to the session pty's foreground process; use that when available,
+    /// else fall back to libghostty's pid (no zmx, over-budget bypass, or
+    /// before the first session listing populates the cache).
+    /// The resolved foreground pid for a pane — the session-side shell/program
     /// when wrapped, else libghostty's client pid — the SAME value the title
     /// provenance gate (`foregroundProgramPID`) and name lookups resolve through.
     /// Callers comparing against `Pane.programTitlePID` (the title's pin) MUST use
@@ -41,9 +41,9 @@ enum ProcessInspector {
         if let resolved = ZmxForegroundResolver.foregroundPID(sessionName: pane.sessionName) {
             return resolved
         }
-        // For a zmx-WRAPPED pane, libghostty's `foregroundPID` is the local
-        // `zmx attach` CLIENT — never the real shell (that runs under the
-        // daemon, reachable only by session name via the resolver above). If
+        // For a WRAPPED pane, libghostty's `foregroundPID` is the local
+        // `zmx connect` CLIENT — never the real shell (that runs in the
+        // session, reachable only by session name via the resolver above). If
         // the resolver hasn't populated the cache yet (the async-registration
         // race right after spawn/restore), returning the client pid would make
         // the tab read `zmx` and Save Layout capture the wrapper argv as a
@@ -357,14 +357,14 @@ enum ProcessInspector {
     /// perpetual work without app-specific process-name exclusions.
     @MainActor
     static func terminalInputIsRaw(forPane pane: Pane) -> Bool {
-        // For a zmx-wrapped pane, probe the DAEMON's pty: the `zmx attach`
+        // For a wrapped pane, probe the SESSION's pty: the `zmx connect`
         // client keeps the client-side pty raw permanently (it forwards
         // keystrokes), which would misread every wrapped pane as a raw-mode
         // TUI and break the status indicator's canonical-command detection.
         let daemonTTY = ZmxForegroundResolver.daemonTTYPath(sessionName: pane.sessionName)
         if daemonTTY == nil, pane.nsView?.isZmxWrapped == true {
-            // A wrapped pane whose daemon tty isn't cached yet must NOT fall
-            // back to the client-side tty: the zmx attach client keeps that
+            // A wrapped pane whose session tty isn't cached yet must NOT fall
+            // back to the client-side tty: the zmx connect client keeps that
             // pty permanently raw, so the answer would flap raw/canonical
             // across cache refreshes — each flip republishes execution state
             // and re-renders, which is one edge of the frozen-render loop.
@@ -401,7 +401,7 @@ enum ProcessInspector {
     /// iTerm2's.
     ///
     /// Read from the same tty `terminalInputIsRaw` reads, for the same reason:
-    /// libghostty's own check sees the `zmx attach` client's pty, which is
+    /// libghostty's own check sees the `zmx connect` client's pty, which is
     /// permanently raw, so under zmx it never fires. A remote project's pane
     /// has no local zmx, so its surface pty is where its ssh asks.
     @MainActor

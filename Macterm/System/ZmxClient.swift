@@ -3,18 +3,16 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "ZmxClient")
 
-/// Per-surface session-persistence wrapper around the bundled `zmx` multiplexer
-/// (https://github.com/neurosnap/zmx). Each terminal surface launches its shell
-/// under `zmx attach <id>` (injected as ghostty's `command-wrapper`), so the
-/// shell survives app quit; on the next launch the same session id re-attaches
-/// to the still-running daemon and the buffer + process come back.
+/// The session paths of Macterm's panes. A local pane is a v2 session of the
+/// local server: its surface runs `zmx connect <id> -- <shell>` (injected as
+/// ghostty's `command-wrapper`, `ZmxAttach`), which attaches to the session
+/// or asks the server to make it, so the shell survives app quit and the
+/// same id attaches again at the next launch. Listing and ending local
+/// sessions go through the server (`LocalSessions`).
 ///
-/// Cache-free by design: zmx itself is authoritative for attach-vs-create, so we
-/// never gate launch on a stale local snapshot of daemon state. Adapted from
-/// Supacode's `ZmxClient`, trimmed to Macterm's single-window model (no
-/// per-worktree concept). Remote panes (#104) attach on the REMOTE host's
-/// daemon — only their teardown flows through here (`killRemoteSession`);
-/// listing/reaping stay local-only (see `reapOrphans`).
+/// Remote panes (#104) still run v1's `zmx attach` on the REMOTE host
+/// (`RemoteSpawn`); their teardown, foreground probe and orphan sweep go
+/// over ssh from here.
 struct ZmxClient {
     /// Bundled zmx executable URL when the socket-path budget probe passed,
     /// otherwise nil. Use for the wrap-vs-bypass decision on NEW surfaces.
@@ -52,27 +50,21 @@ struct ZmxClient {
         _ sessionNames: [String],
         _ ownerID: String
     ) async -> [ZmxSessionListParser.Entry]?
-    /// Each live Macterm session with its attached-client count, or nil when the
-    /// probe failed/timed out. nil means UNKNOWN (never reap); `[]` is a
-    /// successful empty listing. An entry's `clients == nil` marks an unknown
-    /// count (err/status line) the reaper must also spare.
-    var listSessionsWithClients: @Sendable () async -> [ZmxSessionListParser.Entry]?
-    /// `macterm-…` session name → daemon session-leader pid, parsed from
-    /// `zmx ls`. Feeds `ZmxForegroundResolver`'s cache so `ProcessInspector`
-    /// can see past the `zmx attach` client to the real foreground process.
-    /// Empty when the probe fails or no sessions exist.
-    var sessionLeaderPIDs: @Sendable () async -> [String: pid_t]
-    /// Both projections of a SINGLE `zmx ls`: the client-count entries (nil =
-    /// probe failed) and the leader-pid map. Callers that need both (the
-    /// control CLI's `session list`) use this instead of running `zmx ls`
-    /// twice via `listSessionsWithClients` + `sessionLeaderPIDs`.
-    var sessionListSnapshot: @Sendable () async -> (entries: [ZmxSessionListParser.Entry], leaders: [String: pid_t])?
+    /// Every local v2 session from the server (`LocalSessions`), or nil when
+    /// the server cannot be reached. nil means UNKNOWN: a caller never ends
+    /// or restarts anything on it.
+    var listSessions: @Sendable () async -> [LocalSession]?
+    /// Ends v1's local zmx sessions of these names and their programs
+    /// (`V1Sessions`), at the first v2 launch (design/008 §4). True only
+    /// when none of them runs after it. False on the unit-test host, which
+    /// tries nothing.
+    var endV1Sessions: @Sendable (_ names: [String]) async -> Bool
 }
 
 extension ZmxClient {
     /// 5-second cap on any `zmx` subprocess so a stuck daemon never blocks the
-    /// app's close / quit paths. Every call we issue (ls / kill) completes in
-    /// <100ms in practice; if it doesn't, log + continue beats hanging.
+    /// app's close / quit paths. Every call we issue completes in <100ms in
+    /// practice; if it doesn't, log + continue beats hanging.
     static let subprocessTimeout: Duration = .seconds(5)
 
     static let live: ZmxClient = {
@@ -94,16 +86,6 @@ extension ZmxClient {
             cachedBundledURL
         }
 
-        // Every local `zmx ls` goes through this one gate: see `ZmxListingGate`.
-        let listingGate = ZmxListingGate()
-
-        @Sendable
-        func listLocal() async -> String? {
-            await listingGate.run {
-                await runZmx(["ls"], executable: bundledExecutable(), captureStdout: true)
-            }
-        }
-
         // Remote ops resolve `ssh` via PATH (through /usr/bin/env), NOT a
         // hardcoded /usr/bin/ssh: the PANE's own ssh is PATH-resolved (its
         // command runs through a shell), so ops must dial the same client —
@@ -115,7 +97,9 @@ extension ZmxClient {
             executableURL: resolveExecutable,
             isBundled: { bundledExecutable() != nil },
             killSession: { sessionID in
-                _ = await runZmx(["kill", sessionID], executable: bundledExecutable())
+                // As `listSessions`: no server for the unit-test host.
+                guard resolveExecutable() != nil else { return }
+                await LocalSessions.shared.kill(sessionID)
             },
             killRemoteSession: { remote, sessionID, zmxPath in
                 guard let argv = RemoteSpawn.opArgv(
@@ -153,8 +137,7 @@ extension ZmxClient {
                 )
                 else { return nil }
                 // nil (spawn error / timeout / non-zero ssh exit) = UNKNOWN:
-                // the caller reaps nothing, same contract as the local
-                // listSessionsWithClients.
+                // the caller reaps nothing.
                 guard let stdout = await runZmx(
                     remoteSSHArgv(argv),
                     executable: remoteSSHExecutable,
@@ -164,24 +147,15 @@ extension ZmxClient {
                 else { return nil }
                 return ZmxSessionListParser.parse(stdout)
             },
-            listSessionsWithClients: {
-                // nil from runZmx is the UNKNOWN signal (spawn error / timeout /
-                // non-zero exit); preserve it so the reaper never kills on a
-                // failed probe.
-                guard let stdout = await listLocal() else { return nil }
-                return ZmxSessionListParser.parse(stdout)
+            listSessions: {
+                // The unit-test host starts no server (`ZmxBypass.unitTestHost`).
+                guard resolveExecutable() != nil else { return nil }
+                return await LocalSessions.shared.list()
             },
-            sessionLeaderPIDs: {
-                guard let stdout = await listLocal() else { return [:] }
-                return ZmxForegroundResolver.parseLeaderPIDs(stdout)
-            },
-            sessionListSnapshot: {
-                // Single `zmx ls`, both projections — no second fork/exec.
-                guard let stdout = await listLocal() else { return nil }
-                return (
-                    entries: ZmxSessionListParser.parse(stdout),
-                    leaders: ZmxForegroundResolver.parseLeaderPIDs(stdout)
-                )
+            endV1Sessions: { names in
+                // The unit-test host ends nothing: its names are not v1's.
+                guard resolveExecutable() != nil else { return false }
+                return await V1Sessions.end(names: Set(names), socketDir: ZmxSocketBudget.v1SocketDir())
             }
         )
     }()
@@ -200,9 +174,8 @@ extension ZmxClient {
         killRemoteSession: { _, _, _ in },
         remoteForegrounds: { _, _ in .unreachable },
         sweepRemoteOrphans: { _, _, _, _ in nil },
-        listSessionsWithClients: { [] },
-        sessionLeaderPIDs: { [:] },
-        sessionListSnapshot: { (entries: [], leaders: [:]) }
+        listSessions: { [] },
+        endV1Sessions: { _ in true }
     )
 
     /// Why this process starts new panes without zmx, or nil when it wraps
@@ -227,37 +200,6 @@ extension ZmxClient {
         if environment["XCTestConfigurationFilePath"] != nil { return .unitTestHost }
         if let reason = ZmxSocketBudget.probe(env: environment) { return .socketPathTooLong(reason) }
         return nil
-    }
-
-    /// Kill every `macterm-*` session the live daemon hosts that no live/persisted
-    /// pane claims and that has no attached client — i.e. crash / force-quit
-    /// orphans. Attach-aware and prefix-scoped: a session with a live client
-    /// (`clients > 0`), an unknown client count (`clients == nil`, an err/status
-    /// line), or a non-`macterm-` name (e.g. a co-resident Supacode `supa-*`
-    /// session) is spared, and a failed probe (`listSessionsWithClients` → nil)
-    /// reaps nothing. `knownSessionNames` are the persisted session names every
-    /// live + restored pane owns this launch (names are stored verbatim, never
-    /// re-derived — see `ZmxSessionName`).
-    ///
-    /// LOCAL-ONLY by design, not oversight (#104): `listSessionsWithClients`
-    /// probes the local daemon, so remote sessions never enter the orphan set.
-    /// Reaping a remote host would be wrong even if we could — another
-    /// machine's Macterm legitimately parks zero-client `macterm-*` sessions
-    /// there, and we'd destroy them. Remote crash leftovers are the user's to
-    /// `zmx kill` until sessions carry a per-installation marker.
-    func reapOrphans(knownSessionNames: Set<String>) async {
-        guard let live = await listSessionsWithClients() else {
-            logger.info("Skipping orphan reap: zmx session probe unavailable")
-            return
-        }
-        let orphans = ZmxReaper.orphans(in: live, known: knownSessionNames)
-        guard !orphans.isEmpty else { return }
-        logger.info("Reaping \(orphans.count, privacy: .public) orphan zmx session(s)")
-        await withTaskGroup(of: Void.self) { group in
-            for name in orphans {
-                group.addTask { await self.killSession(name) }
-            }
-        }
     }
 
     /// Runs a zmx subcommand — directly (the bundled binary) or through ssh
@@ -296,18 +238,15 @@ extension ZmxClient {
         _ arguments: [String],
         executable: URL?,
         captureStdout: Bool = false,
-        timeout: Duration = subprocessTimeout
+        timeout: Duration = subprocessTimeout,
+        environment: [String: String]? = nil
     ) async -> SubprocessOutcome? {
         guard let executable else { return nil }
         let commandDesc = "\(executable.lastPathComponent) " + arguments.joined(separator: " ")
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
-        // Pin ZMX_DIR so the subprocess resolves the same socket dir as the
-        // wrapped shell (defense-in-depth against env divergence).
-        var env = ProcessInfo.processInfo.environment
-        env["ZMX_DIR"] = ZmxSocketBudget.socketDir(env: env)
-        process.environment = env
+        if let environment { process.environment = environment }
 
         // macOS pipe buffer is ~64KB; a child that emits more without us draining
         // would deadlock on write while we await termination. Drain captured
@@ -526,51 +465,6 @@ enum ZmxListLexer {
     }
 }
 
-/// Runs Macterm's local `zmx ls` calls one at a time, in the order that they
-/// arrive.
-///
-/// zmx counts the clients of a session as every connection to its socket
-/// except the connection that asks (`Daemon.handleInfo`:
-/// `clients.items.len - 1`), and `zmx ls` connects to each session in turn.
-/// Two listings at the same time can therefore count each other as a client.
-/// Macterm lists from many places: the poll of the foreground resolver,
-/// `session list` and `session info`, the reapers, and the restores of pinned
-/// tabs and widgets. A split starts a burst of polls. An e2e test read
-/// `clients:2` for a new session with one real client: the second client was
-/// the listing of the resolver. Measured with the bundled zmx: two listings
-/// at the same time showed a client that does not exist in 6 of 200 runs.
-/// Serial listings showed one in 0 of 200 runs.
-///
-/// Only listings go through the gate. A `zmx kill` connects only to the
-/// session that it ends. A `zmx ls` from a process outside Macterm can still
-/// add one to a count. An extra count only makes the reaper spare a session.
-actor ZmxListingGate {
-    private var busy = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    func run<T: Sendable>(_ body: @Sendable () async -> T) async -> T {
-        await acquire()
-        defer { release() }
-        return await body()
-    }
-
-    private func acquire() async {
-        guard busy else {
-            busy = true
-            return
-        }
-        await withCheckedContinuation { waiters.append($0) }
-    }
-
-    private func release() {
-        if waiters.isEmpty {
-            busy = false
-        } else {
-            waiters.removeFirst().resume()
-        }
-    }
-}
-
 /// Pure parser for zmx's full (`ls`, non-`--short`) tab-delimited listing.
 /// Each line is `[→ |  ]name=<name>\tk=v\t...`; a healthy session carries
 /// `clients=<n>`, an unreachable one carries `err=`/`status=` (no count).
@@ -604,28 +498,33 @@ enum ZmxSessionListParser {
     }
 }
 
-/// Pure orphan-selection logic, split out so the reap policy is unit-testable
-/// without spawning subprocesses.
+/// Pure orphan-selection logic, split out so the reap policy is
+/// unit-testable without a server or subprocesses.
 enum ZmxReaper {
-    /// Names safe to reap: a `macterm-` session with `clients == 0` that the
-    /// `known` set doesn't claim. Spares unknown counts (`clients == nil`),
-    /// attached sessions (`clients > 0`), foreign-prefix sessions, and anything
-    /// still owned by a live/restored pane.
-    static func orphans(in entries: [ZmxSessionListParser.Entry], known: Set<String>) -> [String] {
-        entries.compactMap { entry in
-            guard entry.name.hasPrefix(ZmxSessionName.prefix),
-                  entry.clients == 0,
-                  !known.contains(entry.name)
+    /// Local sessions safe to end: a running `macterm-` session that no
+    /// client shows (`clients == 0`) and that the `known` set doesn't claim.
+    /// An unknown count (`clients == nil`) is spared. The runtime folder is
+    /// this build flavor's own (`LocalServer.folderName`), so every session
+    /// in it was made by an app of this flavor. These are the leftovers of a
+    /// crash, or of a close whose kill did not reach the server.
+    static func localOrphans(in sessions: [LocalSession], known: Set<String>) -> [String] {
+        sessions.compactMap { session in
+            guard session.isRunning,
+                  session.name.hasPrefix(ZmxSessionName.prefix),
+                  session.clients == 0,
+                  !known.contains(session.name)
             else { return nil }
-            return entry.name
+            return session.name
         }
     }
 
-    /// The REMOTE variant (#281): everything the local rule requires, plus the
-    /// session must carry OUR `macterm.owner` label. A shared host legitimately
-    /// parks zero-client `macterm-*` sessions belonging to other machines, so
-    /// an unlabelled or foreign-owned session is spared unconditionally — the
-    /// sweep only ever stamps names our own panes claim
+    /// Names safe to reap: a `macterm-` session with `clients == 0` that the
+    /// `known` set doesn't claim, and that carries OUR `macterm.owner` label.
+    /// Spares unknown counts (`clients == nil`), attached sessions, foreign
+    /// prefixes, and anything still owned by a live/restored pane. A shared
+    /// host legitimately parks zero-client `macterm-*` sessions belonging to
+    /// other machines, so an unlabelled or foreign-owned session is spared
+    /// unconditionally — the sweep only ever stamps names our own panes claim
     /// (`RemoteSpawn.orphanSweepScript`), which is what makes `owner == ours`
     /// mean "this installation created it and later failed to kill it".
     static func orphans(
@@ -633,8 +532,13 @@ enum ZmxReaper {
         known: Set<String>,
         owner: String
     ) -> [String] {
-        orphans(in: entries, known: known).filter { name in
-            entries.first { $0.name == name }?.owner == owner
+        entries.compactMap { entry in
+            guard entry.name.hasPrefix(ZmxSessionName.prefix),
+                  entry.clients == 0,
+                  !known.contains(entry.name),
+                  entry.owner == owner
+            else { return nil }
+            return entry.name
         }
     }
 
@@ -662,34 +566,40 @@ enum ZmxReaper {
     }
 }
 
-/// Why new panes start as plain shells, without `zmx attach`
+/// Why new panes start as plain shells, without `zmx connect`
 /// (`ZmxClient.liveBypass`).
 enum ZmxBypass: Equatable {
     /// The unit-test host is the full app: it boots, spawns the active
     /// project's panes, and then dies without the quit sweep, so wrapping
-    /// would orphan a zmx daemon on every `mise run test`. This is on
-    /// purpose, so Settings says nothing about it.
+    /// would orphan a session on every `mise run test`. It also starts no
+    /// server. This is on purpose, so Settings says nothing about it.
     case unitTestHost
-    /// `<ZMX_DIR>/<session-name>` would overflow `sun_path`
+    /// `<runtime dir>/<session-name>` would overflow `sun_path`
     /// (`ZmxSocketBudget.probe`). The payload is the reason for the log.
     case socketPathTooLong(String)
 }
 
 /// Socket-path budget against macOS' `sockaddr_un.sun_path` limit. If
-/// `<ZMX_DIR>/<session-name>` would overflow, the bundled zmx is unusable and we
-/// bypass wrapping (no persistence) rather than hand ghostty a command that dies
-/// silently in `zmx attach`.
+/// `<runtime dir>/<session-name>` would overflow, no session can listen, and
+/// we bypass wrapping (no persistence) rather than hand ghostty a command
+/// that dies in `zmx connect`.
 enum ZmxSocketBudget {
     static let sunPathLimit = 104
     static let safetyMargin = 2
     /// Worst-case `macterm-<slug>-<hex>` name (33 bytes with a full-length slug).
     static let sessionNameByteCount = ZmxSessionName.maxByteCount
 
-    /// Resolved zmx socket dir: `ZMX_DIR`, then `XDG_RUNTIME_DIR`/zmx, then
-    /// `TMPDIR`/zmx-<uid>, then `/tmp/zmx-<uid>`. Mirrors zmx's own resolver
-    /// (incl. trailing-slash trim) so kill and the wrapped shell can't diverge.
-    /// `env` is injectable for deterministic tests.
-    static func socketDir(env: [String: String] = ProcessInfo.processInfo.environment) -> String {
+    /// The v2 runtime directory, which holds the server's and the sessions'
+    /// sockets (`LocalServer.runtimeDirectory`). nil when the environment
+    /// names none.
+    static func socketDir(env: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+        LocalServer.runtimeDirectory(environment: env)?.path
+    }
+
+    /// v1's zmx socket dir: `ZMX_DIR`, then `XDG_RUNTIME_DIR`/zmx, then
+    /// `TMPDIR`/zmx-<uid>, then `/tmp/zmx-<uid>`, as v1's zmx resolves it.
+    /// Only the first v2 launch uses it, to end v1's sessions.
+    static func v1SocketDir(env: [String: String] = ProcessInfo.processInfo.environment) -> String {
         if let custom = env["ZMX_DIR"], !custom.isEmpty { return custom }
         let uid = getuid()
         if let xdg = env["XDG_RUNTIME_DIR"], !xdg.isEmpty { return "\(trimTrailingSlash(xdg))/zmx" }
@@ -707,7 +617,7 @@ enum ZmxSocketBudget {
 
     /// Non-nil reason when `<dir>/macterm-<UUID>` would not fit; nil = safe.
     static func probe(env: [String: String] = ProcessInfo.processInfo.environment) -> String? {
-        let dir = socketDir(env: env)
+        guard let dir = socketDir(env: env) else { return "no runtime directory: HOME, TMPDIR and MACTERM_RUNTIME_DIR are unset" }
         let totalLen = dir.utf8.count + 1 + sessionNameByteCount
         let budget = sunPathLimit - safetyMargin
         if totalLen > budget {
@@ -729,7 +639,7 @@ enum ZmxEnvironment {
     /// is never right for this process's own panes (zmx re-exports the
     /// correct value inside each wrapped shell), so scrub it before anything
     /// spawns. `ZMX_DIR` is deliberately kept — that's user socket-dir
-    /// config, honored by `ZmxSocketBudget.socketDir`.
+    /// config, honored by `ZmxSocketBudget.v1SocketDir`.
     static func scrubInheritedSession() {
         unsetenv("ZMX_SESSION")
     }
@@ -802,17 +712,20 @@ enum ZmxForegroundEvents {
 
 /// Resolves how a surface launches under zmx.
 enum ZmxAttach {
-    /// The `command-wrapper` argv that wraps a surface's shell in zmx:
-    /// `[zmx, attach, macterm-<id>]`, prepended to ghostty's fully-resolved
-    /// command so the real shell runs (and is shell-integrated) as a child of
-    /// the wrapper. Empty when `executablePath` is nil (zmx unbundled or over the
-    /// socket-path budget) → the surface launches a plain, unpersisted shell.
+    /// The `command-wrapper` argv that runs a surface's shell in its v2
+    /// session: `[zmx, connect, macterm-<id>, --]`, put before ghostty's
+    /// fully-resolved command, so the real shell (shell-integrated, under
+    /// login(1)) is the session's command when the session is new, with the
+    /// surface's folder and environment. A session that exists is attached,
+    /// and the command is not run. Empty when `executablePath` is nil (zmx
+    /// unbundled or over the socket-path budget) → the surface launches a
+    /// plain, unpersisted shell.
     ///
     /// A declared `run:` is NOT folded in here — the surface types it into the
     /// wrapped shell via `initial_input`, preserving the same semantics as a
     /// non-persisted run.
     static func wrapperArgv(executablePath: String?, sessionID: String) -> [String] {
         guard let executablePath else { return [] }
-        return [executablePath, "attach", sessionID]
+        return [executablePath, "connect", sessionID, "--"]
     }
 }

@@ -285,16 +285,17 @@ extension AppState {
         return restored
     }
 
-    /// Ask zmx which restored widgets' sessions survived the quit, respawn
-    /// the rest from their recipe, and only then draw them — the pinned
-    /// tabs' rule, for the same reason: a surface attaching first would get
-    /// zmx's fresh empty shell (attach is an upsert) and never run the
+    /// Ask the server which restored widgets' sessions survived the quit,
+    /// respawn the rest from their recipe, and only then draw them — the
+    /// pinned tabs' rule, for the same reason: a surface attaching first
+    /// would get a fresh empty shell (`zmx connect --` makes a missing
+    /// session) and never run the
     /// widget's command. A failed listing reattaches everything: fail toward
     /// reattach, never toward respawning over sessions that may be alive.
     func materializeRestoredDesktopWidgets(_ ids: Set<UUID>) async {
         guard !ids.isEmpty else { return }
         let alive: Set<String>? = if zmx.isBundled() {
-            await zmx.listSessionsWithClients().map { Set($0.map(\.name)) }
+            await zmx.listSessions().map { Set($0.filter(\.isRunning).map(\.name)) }
         } else {
             []
         }

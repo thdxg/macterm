@@ -233,7 +233,7 @@ final class ProjectMemory {
             ScreenCommandExtractor.screenCommand(screenCommand.command, shows: command.command) ? screenCommand.output : nil
         }
         var entry = MemoryEntry(
-            command: MemoryRedaction.redact(command.command),
+            command: MemoryRedaction.redactCommand(command.command),
             directory: finish.directory,
             exitCode: finish.exitCode,
             finishedAt: finish.finishedAt,

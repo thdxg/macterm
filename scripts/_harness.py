@@ -15,24 +15,27 @@ piece of it earned against real CI runners:
   a TCC grant, so a stock headless CI runner can script the GUI app.
 - Isolate the instance: a throwaway $HOME (shell rc files, ~/.config/macterm),
   MACTERM_BENCHMARK_DATA_DIR (App Support resolves via the user record, NOT
-  $HOME — projects/workspaces/control.sock need the explicit override), and
-  ZMX_DIR (the zmx socket dir defaults to a per-*user* path — TMPDIR/zmx-<uid>
-  — that a throwaway $HOME does NOT move, so without this override a hermetic
-  instance would share the session namespace with the developer's real
-  Macterm: its `session list` would see their sessions, and its orphan reaper
-  could kill their detached-but-persistent shells).
-- Root the home in /tmp, NOT the default $TMPDIR: control.sock and the zmx
+  $HOME — projects/workspaces/control.sock need the explicit override),
+  MACTERM_RUNTIME_DIR (the folder of the session server and its sessions
+  defaults to TMPDIR/macterm, a per-*user* path that a throwaway $HOME does
+  NOT move, so without this override a hermetic instance would use the
+  developer's real server: its `session list` would see their sessions), and
+  ZMX_DIR (v1's zmx socket dir, where the first v2 launch ends v1 sessions).
+- Root the home in /tmp, NOT the default $TMPDIR: control.sock and the
   session sockets must fit sun_path (~104 bytes), and CI runners' $TMPDIR
   (/var/folders/…/T/) pushes the paths right past that.
 """
 
+import ctypes
 import json
 import os
 import platform
 import re
 import shutil
 import signal
+import struct
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -92,6 +95,38 @@ def runner_info():
     return info
 
 
+_LIBPROC = ctypes.CDLL("/usr/lib/libproc.dylib") if sys.platform == "darwin" else None
+# proc_pid_rusage flavor RUSAGE_INFO_V2: a 16-byte uuid, then uint64 fields.
+# ri_interrupt_wkups is at 40, ri_phys_footprint at 72.
+_RUSAGE_INFO_V2 = 2
+_INTERRUPT_WAKEUPS_OFFSET = 40
+_PHYS_FOOTPRINT_OFFSET = 72
+
+
+def _rusage(pid):
+    buffer = ctypes.create_string_buffer(512)
+    if _LIBPROC is None or _LIBPROC.proc_pid_rusage(pid, _RUSAGE_INFO_V2, buffer) != 0:
+        return None
+    return buffer.raw
+
+
+def phys_footprint(pid):
+    """The process's phys_footprint in bytes (what Activity Monitor calls
+    Memory), or None if the process is gone. RSS from `ps` counts shared
+    pages and misses compressed memory, so it is not used for memory."""
+    raw = _rusage(pid)
+    return None if raw is None else struct.unpack_from("Q", raw, _PHYS_FOOTPRINT_OFFSET)[0]
+
+
+def wakeups(pid):
+    """The process's wakeups since it started, or None if the process is
+    gone. The kernel counts a package idle wakeup also as an interrupt
+    wakeup, so this is the interrupt count alone. It needs no sudo, also on
+    a virtual runner."""
+    raw = _rusage(pid)
+    return None if raw is None else struct.unpack_from("Q", raw, _INTERRUPT_WAKEUPS_OFFSET)[0]
+
+
 def wait_for_load(max_load, timeout):
     """Wait until the 1-minute load average is below max_load, and return
     the record of the gate. Load decides latency and CPU on a shared runner.
@@ -124,6 +159,7 @@ class MactermHarness:
             "MACTERM_BENCHMARK": "1",
             "MACTERM_BENCHMARK_DATA_DIR": self.data_dir,
             "HOME": self.home,
+            "MACTERM_RUNTIME_DIR": os.path.join(self.home, "run"),
             "ZMX_DIR": os.path.join(self.home, "zmx"),
         }
         self.pid = None
@@ -285,16 +321,15 @@ class MactermHarness:
         self.pid = None
 
     def kill_sessions(self):
-        """Kill every zmx session attached to one of this instance's live
-        panes, so their shells don't keep running after teardown. Scoped by
-        pane attachment, never by name: with a shared ZMX_DIR the daemon
-        could list sessions belonging to another Macterm, and those must
-        survive. Best-effort — teardown proceeds to SIGKILL regardless."""
+        """Kill every session of this instance, so their shells don't keep
+        running after teardown. The runtime directory is the instance's own,
+        so every session that its server lists is one of ours. With no
+        session and no client, the server then exits by itself. Best-effort
+        — teardown proceeds to SIGKILL regardless."""
         try:
             sessions = self.cli_json("session", "list").get("sessions") or []
             for session in sessions:
-                if session.get("paneID"):
-                    self.cli("session", "kill", session["name"], check=False)
+                self.cli("session", "kill", session["name"], check=False)
         except Exception:
             pass
 

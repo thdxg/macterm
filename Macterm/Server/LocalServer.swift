@@ -35,16 +35,35 @@ struct LocalServer {
     }
 
     /// The runtime directory as `resolveDir` in `server/src/runtime.zig`
-    /// finds it on macOS.
-    static func runtimeDirectory(environment: [String: String]) -> URL? {
+    /// finds it on macOS, with one folder for each build flavor: `macterm`
+    /// for the Release app, `macterm-debug` for the Debug app. So the Debug
+    /// app and the Release app never share a server, and a Release pane's
+    /// session never runs from the Debug binary (whose signature is not the
+    /// app's). The app gives the directory to the server and to every
+    /// `zmx connect` in `MACTERM_RUNTIME_DIR`, so the server's own default
+    /// never decides.
+    static func runtimeDirectory(
+        environment: [String: String],
+        bundleID: String? = Bundle.main.bundleIdentifier
+    ) -> URL? {
         func nonEmpty(_ key: String) -> String? {
             environment[key].flatMap { $0.isEmpty ? nil : $0 }
         }
         if let dir = nonEmpty(directoryVariable) { return URL(fileURLWithPath: dir, isDirectory: true) }
-        if let dir = nonEmpty("XDG_RUNTIME_DIR") { return URL(fileURLWithPath: dir, isDirectory: true).appending(path: "macterm") }
-        if let dir = nonEmpty("TMPDIR") { return URL(fileURLWithPath: dir, isDirectory: true).appending(path: "macterm") }
+        let name = folderName(bundleID: bundleID)
+        if let dir = nonEmpty("XDG_RUNTIME_DIR") { return URL(fileURLWithPath: dir, isDirectory: true).appending(path: name) }
+        if let dir = nonEmpty("TMPDIR") { return URL(fileURLWithPath: dir, isDirectory: true).appending(path: name) }
         guard let home = nonEmpty("HOME") else { return nil }
-        return URL(fileURLWithPath: home, isDirectory: true).appending(path: ".local/state/macterm/run")
+        return URL(fileURLWithPath: home, isDirectory: true).appending(path: ".local/state/\(name)/run")
+    }
+
+    /// `macterm` for the Release bundle id, `macterm-<suffix>` for another
+    /// flavor (`com.thdxg.macterm.debug` → `macterm-debug`).
+    static func folderName(bundleID: String?) -> String {
+        let release = "com.thdxg.macterm"
+        guard let bundleID, bundleID.hasPrefix(release + "."), bundleID.count > release.count + 1 else { return "macterm" }
+        let suffix = bundleID.dropFirst(release.count + 1).filter { $0.isLetter || $0.isNumber || $0 == "-" }
+        return suffix.isEmpty ? "macterm" : "macterm-\(suffix)"
     }
 
     var socketPath: String {

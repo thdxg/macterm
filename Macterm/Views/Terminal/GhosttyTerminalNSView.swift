@@ -739,15 +739,15 @@ final class GhosttyTerminalNSView: NSView {
             }
         }
 
-        // Wrap the resolved shell in zmx for session persistence (LOCAL panes
-        // only — a remote pane's persistence is the remote daemon's job, and
-        // nesting local zmx around the ssh client is broken upstream). The
-        // `command_wrapper` argv is prepended to ghostty's fully-resolved
-        // command (after login(1) + shell integration), so OSC 7 cwd / OSC 133
-        // framing stay intact — the shell just runs as a child of
-        // `zmx attach <sessionName>`, which upserts the session and re-attaches
-        // the live daemon on relaunch. nil executable (zmx unbundled or over
-        // the socket-path budget) → no wrapper, a plain unpersisted shell.
+        // Wrap the resolved shell in its v2 session for persistence (LOCAL
+        // panes only — a remote pane's persistence is the remote daemon's
+        // job). The `command_wrapper` argv is prepended to ghostty's
+        // fully-resolved command (after login(1) + shell integration), so
+        // OSC 7 cwd / OSC 133 framing stay intact — `zmx connect
+        // <sessionName> --` makes the session with that command through the
+        // server when it is missing, and attaches the live session on
+        // relaunch. nil executable (zmx unbundled or over the socket-path
+        // budget) → no wrapper, a plain unpersisted shell.
         // The argv element buffers come from `cString` (freed in
         // destroySurface); the pointer array is bound around the spawn below.
         var wrapper = remoteSpec != nil ? [] : ZmxAttach.wrapperArgv(
@@ -788,13 +788,11 @@ final class GhosttyTerminalNSView: NSView {
                 envVars.append(ghostty_env_var_s(key: k, value: v))
             }
         }
-        if !wrapperArgv.isEmpty {
-            // Pin the socket dir into the WRAPPED SHELL's env, not just our own
-            // zmx subprocesses: a user's shell rc re-exporting ZMX_DIR/TMPDIR
-            // would otherwise move where a *nested* zmx invocation resolves
-            // sockets, past what the budget probe validated — kill and attach
-            // could then target different dirs. (Same defense Supacode ships.)
-            if let k = cString("ZMX_DIR"), let v = cString(ZmxSocketBudget.socketDir()) {
+        if !wrapperArgv.isEmpty, let dir = ZmxSocketBudget.socketDir() {
+            // Pin the runtime dir for `zmx connect`, so that it finds the
+            // server and the sessions where the app's `LocalSessions` looks
+            // and where the budget probe measured.
+            if let k = cString(LocalServer.directoryVariable), let v = cString(dir) {
                 envVars.append(ghostty_env_var_s(key: k, value: v))
             }
         }
