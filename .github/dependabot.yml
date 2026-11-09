@@ -1,7 +1,12 @@
 version: 2
 updates:
+  # The workflows and the composite actions in .github/actions. Each action
+  # gets one PR for all the directories (group-by), so that a pin in a
+  # composite action cannot stay behind the workflows.
   - package-ecosystem: github-actions
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: weekly
       day: monday
@@ -14,6 +19,7 @@ updates:
       include: scope
     groups:
       actions:
+        group-by: dependency-name
         patterns:
           - "*"
 

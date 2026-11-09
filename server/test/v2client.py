@@ -253,6 +253,123 @@ class ServerClient(Client):
         return struct.unpack("3i", self.sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))[0]
 
 
+class RelayClient:
+    """A GUI that reaches the server through `zmx proxy` on its stdio, as the
+    app reaches a host's server through ssh. Each pane is a channel of the
+    one stream (src/relay.zig)."""
+
+    def __init__(self, zmx=None):
+        import subprocess
+
+        ours, theirs = socket.socketpair()
+        # Small buffers, as a pipe to ssh: a reader that stops makes the
+        # server's queues grow soon.
+        theirs.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4096)
+        ours.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
+        self.proc = subprocess.Popen([zmx or os.environ["ZMX"], "proxy"], stdin=theirs, stdout=theirs)
+        theirs.close()
+        self.sock = ours
+        self.buf = bytearray()
+        self.closed = False
+        self.next_id = 1
+        # Channel 0's messages, in order.
+        self.control = []
+        # For each channel: its frames in order, as ("msg", value) or
+        # ("bytes", length), and its output.
+        self.frames = {}
+        self.output = {}
+        # The channels whose output is only counted, not kept.
+        self.count_only = set()
+        self.send_msg(CONTROL, hello())
+
+    def send(self, channel, kind, body):
+        self.sock.sendall(frame(channel, kind, body))
+
+    def send_msg(self, channel, value):
+        self.send(channel, MSG, pack(value))
+
+    def pane(self, channel, t, **a):
+        self.send_msg(channel, {"t": t, "a": a})
+
+    def type(self, channel, text):
+        self.send(channel, BYTES, text.encode())
+
+    def pump(self, timeout=0.05):
+        r, _, _ = select.select([self.sock], [], [], timeout)
+        if not r:
+            return
+        data = self.sock.recv(1 << 20)
+        if not data:
+            self.closed = True
+            return
+        self.buf += data
+        i = 0
+        while len(self.buf) - i >= 9:
+            n, ch, kind = struct.unpack_from("<IIB", self.buf, i)
+            if len(self.buf) - i < 9 + n:
+                break
+            body = bytes(self.buf[i + 9 : i + 9 + n])
+            i += 9 + n
+            if ch == CONTROL:
+                self.control.append(unpack(body)[0])
+            elif kind == MSG:
+                self.frames.setdefault(ch, []).append(("msg", unpack(body)[0]))
+            else:
+                self.frames.setdefault(ch, []).append(("bytes", len(body)))
+                if ch not in self.count_only:
+                    self.output[ch] = self.output.get(ch, b"") + body
+        del self.buf[:i]
+
+    def wait(self, pred, timeout=10, what="condition"):
+        deadline = time.time() + timeout
+        while not pred():
+            if self.closed:
+                raise AssertionError("stream closed before %s" % what)
+            if time.time() > deadline:
+                raise AssertionError("timed out waiting for %s" % what)
+            self.pump()
+
+    def send_request(self, method, **args):
+        rid = self.next_id
+        self.next_id += 1
+        self.send_msg(CONTROL, {"id": rid, "m": method, "a": args})
+        return rid
+
+    def response(self, rid):
+        found = [v for v in self.control if isinstance(v, dict) and v.get("re") == rid]
+        return found[0] if found else None
+
+    def request(self, method, timeout=10, **args):
+        rid = self.send_request(method, **args)
+        self.wait(lambda: self.response(rid) is not None, timeout, "a response to %s" % method)
+        return self.response(rid)
+
+    def call(self, method, timeout=10, **args):
+        res = self.request(method, timeout, **args)
+        assert "ok" in res, "%s failed: %r" % (method, res)
+        return res["ok"]
+
+    def messages(self, channel, t=None):
+        return [v for kind, v in self.frames.get(channel, []) if kind == "msg" and (t is None or v.get("t") == t)]
+
+    def wait_msg(self, channel, t, count=1, timeout=10):
+        self.wait(lambda: len(self.messages(channel, t)) >= count, timeout, "message %s on %d" % (t, channel))
+        return self.messages(channel, t)[count - 1].get("a", {})
+
+    def wait_output(self, channel, text, timeout=10):
+        b = text.encode()
+        self.wait(lambda: b in self.output.get(channel, b""), timeout, "output %r on %d" % (text, channel))
+
+    def open(self, session, cols=80, rows=24):
+        ch = self.call("channel.open", session=session)["channel"]
+        self.pane(ch, "attach", cols=cols, rows=rows)
+        return ch
+
+    def close(self):
+        self.sock.close()
+        self.proc.wait(5)
+
+
 def alive(pid):
     try:
         os.kill(pid, 0)

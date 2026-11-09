@@ -1201,7 +1201,7 @@ final class ControlHandler {
         let summary = ProjectMemorySummary(entries: entries)
         let actions = memory.suggestedActions(projectID: project.id, entries: entries)
         return ControlData(memory: ControlMemoryState(
-            recording: ProjectMemory.isRecording,
+            recording: ProjectMemory.isEnabled,
             entries: entries.map {
                 ControlMemoryState.Entry(command: $0.command, directory: $0.directory, exitCode: $0.exitCode, failureTail: $0.failureTail)
             },
