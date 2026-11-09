@@ -1,8 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// The terminal window toolbar's right-click menu: Hide Toolbar, plus the tab
-/// switcher's two settings, so the bar can be arranged from the bar itself
+/// The terminal window toolbar's right-click menu: Hide Toolbar, the tab
+/// switcher's two settings and the Project Insights button, so the bar can
+/// be arranged from the bar itself
 /// rather than only from Settings → Appearance → Toolbar.
 ///
 /// AppKit offers no hook for it. The bar is SwiftUI's `NSToolbar`, whose own
@@ -114,6 +115,18 @@ final class ToolbarMenu: NSObject, NSMenuDelegate {
         let parent = NSMenuItem(title: String(localized: "Tab Switcher"), action: nil, keyEquivalent: "")
         parent.submenu = switcher
         menu.addItem(parent)
+
+        // Only where the button can show, as in Settings.
+        if ProjectMemory.isEnabled {
+            let insights = NSMenuItem(
+                title: String(localized: "Project Insights Button"),
+                action: #selector(toggleProjectInsightsButton(_:)),
+                keyEquivalent: ""
+            )
+            insights.target = self
+            insights.state = prefs.showProjectInsightsButton ? .on : .off
+            menu.addItem(insights)
+        }
     }
 
     /// A preference's choices with the current one checked; each item carries
@@ -137,6 +150,11 @@ final class ToolbarMenu: NSObject, NSMenuDelegate {
     @objc
     private func hideToolbar(_: NSMenuItem) {
         Preferences.shared.hideTitleBar = true
+    }
+
+    @objc
+    private func toggleProjectInsightsButton(_: NSMenuItem) {
+        Preferences.shared.showProjectInsightsButton.toggle()
     }
 
     @objc

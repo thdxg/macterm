@@ -635,6 +635,13 @@ final class Preferences {
         didSet { Keys.tabSwitcherPosition.write(tabSwitcherPosition, to: defaults) }
     }
 
+    /// Whether the toolbar shows the Project Insights button. It hides only
+    /// the button: Toggle Project Insights and View → Project Insights still
+    /// show and hide the panel.
+    var showProjectInsightsButton: Bool {
+        didSet { Keys.showProjectInsightsButton.write(showProjectInsightsButton, to: defaults) }
+    }
+
     /// The keys of copy mode: Helix or Vim. `CopyModeController.enter` reads
     /// it, so a change applies to the next time the mode starts.
     var copyModeKeymap: CopyModeKeymap {
@@ -1060,6 +1067,7 @@ final class Preferences {
         updateChannel = Keys.updateChannel.read(defaults)
         tabSwitcherVisibility = Keys.tabSwitcherVisibility.read(defaults)
         tabSwitcherPosition = Keys.tabSwitcherPosition.read(defaults)
+        showProjectInsightsButton = Keys.showProjectInsightsButton.read(defaults)
         copyModeKeymap = Keys.copyModeKeymap.read(defaults)
         Self.runOneTimeMigrations(defaults: defaults)
     }
@@ -1253,6 +1261,7 @@ final class Preferences {
             "macterm.toolbar.tabSwitcherVisibility", default: TabSwitcherVisibility.whenMultiple
         )
         static let tabSwitcherPosition = PreferenceStorageKey("macterm.toolbar.tabSwitcherPosition", default: TabSwitcherPosition.trailing)
+        static let showProjectInsightsButton = PreferenceStorageKey("macterm.toolbar.showProjectInsightsButton", default: true)
         static let copyModeKeymap = PreferenceStorageKey("macterm.copyMode.keymap", default: CopyModeKeymap.vim)
 
         static let loadsDefaultGhosttyConfigFiles = "macterm.ghostty.loadsDefaultConfigFiles"
