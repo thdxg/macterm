@@ -1,8 +1,8 @@
 //! The session's own events (design/003 §5, design/004 §6).
 //!
 //! `Watch` holds the session's terminal and listens to what the terminal
-//! parses: the title, the cwd, the OSC 133 marks, the OSC 9;4 progress, the
-//! OSC 7501 program status and the bell. It coalesces them (the rules are on `messages.coalesce_ms`),
+//! parses: the title, the cwd, the OSC 133 marks, the OSC 9;4 progress,
+//! the OSC 7501 program status and the bell. It coalesces them (the rules are on `messages.coalesce_ms`),
 //! derives the run status, and keeps the events in `ready`, in order, until
 //! the session sends them. The foreground is the session's: it reads the pty,
 //! not the terminal.
@@ -345,7 +345,7 @@ pub const Watch = struct {
         /// The record `id` and the records under it; every record for "".
         clear,
         /// The records of a program that no longer runs.
-        prompt,
+        ended,
     };
 
     /// True if a record went.
@@ -357,10 +357,10 @@ pub const Watch = struct {
             const goes = switch (how) {
                 .clear => id.len == 0 or (std.mem.startsWith(u8, rec.id, id) and
                     (rec.id.len == id.len or rec.id[id.len] == '/')),
-                // `working` and `blocked` must go at a new shell prompt;
-                // `idle` may, and goes, so that no record outlives its
+                // `working` and `blocked` must go at a new shell prompt and
+                // when the shell exits; `idle` may, and goes, so that no record outlives its
                 // program. `done` and `error` wait for the user.
-                .prompt => rec.state != .done and rec.state != .@"error",
+                .ended => rec.state != .done and rec.state != .@"error",
             };
             if (!goes) {
                 i += 1;
@@ -373,7 +373,16 @@ pub const Watch = struct {
     }
 
     fn endPromptRecords(w: *Watch) void {
-        if (w.removeRecords("", .prompt)) w.coalesce(.program);
+        if (w.removeRecords("", .ended)) w.coalesce(.program);
+    }
+
+    /// The shell exited: the records of the program that ran go, with no
+    /// hold, so that the event goes before the exit.
+    pub fn shellExited(w: *Watch, now: i64) void {
+        w.now_ms = now;
+        if (!w.removeRecords("", .ended)) return;
+        w.holds[@intFromEnum(Key.program)] = .{ .sent_at = now };
+        w.emit(.program);
     }
 
     /// A copy of every record, with the `app` that each one inherits.
@@ -968,6 +977,24 @@ test "events: a new shell prompt removes the records of the program that ran" {
     try testing.expectEqual(2, records.len);
     try testing.expectEqualStrings("d", records[0].id);
     try testing.expectEqualStrings("e", records[1].id);
+}
+
+test "events: the shell's exit removes the records of the program that ran, at once" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x1b]7501;state=blocked:id=a\x07\x1b]7501;state=done:id=b\x07", 0);
+    // In the window of the last event: the exit does not wait for it.
+    f.w.shellExited(1);
+    const records = lastProgram(&f).?;
+    try testing.expectEqual(1, records.len);
+    try testing.expectEqualStrings("b", records[0].id);
+    try testing.expectEqual(null, f.w.deadline());
+
+    // Nothing to remove sends nothing.
+    const n = programEvents(&f);
+    f.w.shellExited(2);
+    try testing.expectEqual(n, programEvents(&f));
 }
 
 test "events: program status reports coalesce to the first and the newest" {

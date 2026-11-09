@@ -468,6 +468,8 @@ const Session = struct {
         if (s.announced) return;
         const status = s.exited() orelse return;
         s.announced = true;
+        s.watch.shellExited(s.nowMs());
+        s.sendEvents();
         for (s.clients.items) |c| {
             if (c.greeted) s.sendExit(c, status);
         }

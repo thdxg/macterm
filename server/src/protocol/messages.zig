@@ -693,10 +693,10 @@ pub const ProgramRecord = struct {
 ///
 /// The session keeps the records as the protocol's terminal does: a report
 /// replaces its record, `clear` removes a record and the records under it, a
-/// new shell prompt (OSC 133;A) removes the `working` and `blocked` records,
-/// and a full reset removes every record. It keeps at most
-/// `max_program_records`, and removes the record that changed least
-/// recently to make space. `done` and `error` stay until the program
+/// new shell prompt (OSC 133;A) and the shell's exit remove the `working`,
+/// `blocked` and `idle` records, and a full reset removes every record. It
+/// keeps at most `max_program_records`, and removes the record that changed
+/// least recently to make space. `done` and `error` stay until the program
 /// replaces or clears them.
 pub const ProgramStatus = struct {
     pub const name = "program_status";
