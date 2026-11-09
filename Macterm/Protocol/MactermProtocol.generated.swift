@@ -1657,6 +1657,152 @@ extension MactermProtocol.RunState: ProtocolValue {
     }
 }
 
+extension MactermProtocol {
+    struct ProgramStatus: Equatable {
+        var records: [MactermProtocol.ProgramRecord]
+    }
+}
+
+extension MactermProtocol.ProgramStatus: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var records: [MactermProtocol.ProgramRecord]?
+        try reader.readMap { key, reader in
+            switch key {
+            case "records": records = try [MactermProtocol.ProgramRecord](from: &reader)
+            default: return false
+            }
+            return true
+        }
+        self.records = try MessagePackReader.required(records, "records")
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(1)
+        writer.writeString("records")
+        records.encode(to: &writer)
+    }
+}
+
+extension MactermProtocol {
+    struct ProgramRecord: Equatable {
+        var id: String = ""
+        var state: MactermProtocol.ProgramState
+        var kind: MactermProtocol.ProgramNeed?
+        var progress: UInt8?
+        var app: String?
+        var title: String?
+        var msg: String?
+    }
+}
+
+extension MactermProtocol.ProgramRecord: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var id: String?
+        var state: MactermProtocol.ProgramState?
+        var kind: MactermProtocol.ProgramNeed?
+        var progress: UInt8?
+        var app: String?
+        var title: String?
+        var msg: String?
+        try reader.readMap { key, reader in
+            switch key {
+            case "id": id = try String(from: &reader)
+            case "state": state = try MactermProtocol.ProgramState(from: &reader)
+            case "kind": kind = try reader.readOptional(MactermProtocol.ProgramNeed.self)
+            case "progress": progress = try reader.readOptional(UInt8.self)
+            case "app": app = try reader.readOptional(String.self)
+            case "title": title = try reader.readOptional(String.self)
+            case "msg": msg = try reader.readOptional(String.self)
+            default: return false
+            }
+            return true
+        }
+        self.id = id ?? ""
+        self.state = try MessagePackReader.required(state, "state")
+        self.kind = kind
+        self.progress = progress
+        self.app = app
+        self.title = title
+        self.msg = msg
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        var keyCount = 2
+        if kind != nil { keyCount += 1 }
+        if progress != nil { keyCount += 1 }
+        if app != nil { keyCount += 1 }
+        if title != nil { keyCount += 1 }
+        if msg != nil { keyCount += 1 }
+        writer.writeMapHeader(keyCount)
+        writer.writeString("id")
+        id.encode(to: &writer)
+        writer.writeString("state")
+        state.encode(to: &writer)
+        if let kind {
+            writer.writeString("kind")
+            kind.encode(to: &writer)
+        }
+        if let progress {
+            writer.writeString("progress")
+            progress.encode(to: &writer)
+        }
+        if let app {
+            writer.writeString("app")
+            app.encode(to: &writer)
+        }
+        if let title {
+            writer.writeString("title")
+            title.encode(to: &writer)
+        }
+        if let msg {
+            writer.writeString("msg")
+            msg.encode(to: &writer)
+        }
+    }
+}
+
+extension MactermProtocol {
+    enum ProgramState: String, Equatable {
+        case idle
+        case working
+        case done
+        case blocked
+        case error
+        case unknown
+    }
+}
+
+extension MactermProtocol.ProgramState: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        let tag = try reader.readString()
+        self = Self(rawValue: tag) ?? .unknown
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeString(rawValue)
+    }
+}
+
+extension MactermProtocol {
+    enum ProgramNeed: String, Equatable {
+        case permission
+        case question
+        case auth
+        case unknown
+    }
+}
+
+extension MactermProtocol.ProgramNeed: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        let tag = try reader.readString()
+        self = Self(rawValue: tag) ?? .unknown
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeString(rawValue)
+    }
+}
+
 extension MactermProtocol.Hello: ProtocolMessage {
     static let name = "hello"
     static let since: UInt32 = 1
@@ -1785,6 +1931,12 @@ extension MactermProtocol.Activity: ProtocolMessage {
 
 extension MactermProtocol.Status: ProtocolMessage {
     static let name = "status"
+    static let since: UInt32 = 1
+    static let senders: [MactermProtocol.Trust] = [.session]
+}
+
+extension MactermProtocol.ProgramStatus: ProtocolMessage {
+    static let name = "program_status"
     static let since: UInt32 = 1
     static let senders: [MactermProtocol.Trust] = [.session]
 }

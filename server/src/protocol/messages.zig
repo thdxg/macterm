@@ -497,19 +497,21 @@ pub const Refresh = struct {
     pub const senders = from_client;
 };
 
-
 // The session's events (design/003 §5, design/004 §6). The session reads
 // them from its own terminal and pty, so they are right for a client that
 // does not show the pane. Every greeted client gets them; a client that
-// connects gets the current title, cwd, foreground, progress and status
-// after `State`. Each one is sent before the pane output that follows it.
+// connects gets the current title, cwd, foreground, progress, status and
+// program status after `State`. Each one is sent before the pane output
+// that follows it.
 //
-// Title, cwd, progress and bell coalesce: the first in a quiet period goes at
-// once, later ones in the next `coalesce_ms` merge and go at its end, newest
-// value wins. Activity goes at most once in `activity_ms`, and the rest is
-// dropped. Foreground, marks and status are never held.
+// Title, cwd, progress, program status and bell coalesce: the first in a
+// quiet period goes at once, later ones in the next `coalesce_ms` merge and
+// go at its end, newest value wins. Activity goes at most once in
+// `activity_ms`, and the rest is dropped. Foreground, marks and status are
+// never held.
 
-/// The window in which title, cwd, progress and bell coalesce.
+/// The window in which title, cwd, progress, program status and bell
+/// coalesce.
 pub const coalesce_ms = 16;
 
 /// The output heartbeat goes at most once in this time (v1's libghostty
@@ -639,10 +641,78 @@ pub const Status = struct {
     failed: bool = false,
 };
 
+pub const ProgramState = enum {
+    /// At rest, waits for the user's next instruction.
+    idle,
+    working,
+    /// Finished work that the user did not look at yet.
+    done,
+    /// Cannot continue until the user does something.
+    blocked,
+    @"error",
+    unknown,
+};
+
+/// What a blocked program needs from the user.
+pub const ProgramNeed = enum {
+    /// Approval to do something.
+    permission,
+    /// An answer that the user types.
+    question,
+    /// A login, a token or another credential.
+    auth,
+    unknown,
+};
+
+/// One record of a program's status (OSC 7501).
+pub const ProgramRecord = struct {
+    /// The record's id: names joined by `/`, where `a/b` is a child of `a`.
+    /// Empty for the root record, which is the program itself.
+    id: []const u8 = "",
+    state: ProgramState,
+    /// With `blocked`: what the program needs.
+    kind: ?ProgramNeed = null,
+    /// With `working` or `blocked`: 0 to 100. Null when the program gave
+    /// none.
+    progress: ?u8 = null,
+    /// A stable name for the program (`cargo`, `claude-code`). A record that
+    /// gave none has the `app` of its nearest ancestor that gave one, the
+    /// root record included.
+    app: ?[]const u8 = null,
+    /// A short label for the record, decoded. UTF-8 with no control
+    /// characters; still the program's text.
+    title: ?[]const u8 = null,
+    /// One line that says what the record does or waits for, decoded. As
+    /// `title`.
+    msg: ?[]const u8 = null,
+};
+
+/// Every record of the program status protocol (OSC 7501) that the pane
+/// holds now, oldest first. Each change sends all of them, so an empty list
+/// clears them all. It coalesces as the title does.
+///
+/// The session keeps the records as the protocol's terminal does: a report
+/// replaces its record, `clear` removes a record and the records under it, a
+/// new shell prompt (OSC 133;A) and the shell's exit remove the `working`,
+/// `blocked` and `idle` records, and a full reset removes every record. It
+/// keeps at most `max_program_records`, and removes the record that changed
+/// least recently to make space. `done` and `error` stay until the program
+/// replaces or clears them.
+pub const ProgramStatus = struct {
+    pub const name = "program_status";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    records: []const ProgramRecord,
+};
+
+/// The most records that a pane keeps (the protocol requires 64 or more).
+pub const max_program_records = 64;
+
 /// Every message on a pane channel. A new one goes here.
 pub const pane_messages = .{
-    State, Attach, Resize,     Claim, Lead,     SnapshotStart, SnapshotEnd, Exit,   Take, End, Refresh,
-    Title, Cwd,    Foreground, Mark,  Progress, Bell,          Activity,    Status,
+    State, Attach, Resize,     Claim, Lead,     SnapshotStart, SnapshotEnd, Exit,   Take,          End, Refresh,
+    Title, Cwd,    Foreground, Mark,  Progress, Bell,          Activity,    Status, ProgramStatus,
 };
 
 pub fn encodePane(w: *std.Io.Writer, comptime M: type, value: M) std.Io.Writer.Error!void {
