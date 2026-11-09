@@ -239,7 +239,8 @@ final class SSHLoginPrompts {
 
     /// The host, key type and fingerprint of ssh's question about a new host
     /// key ("The authenticity of host 'box (1.2.3.4)' can't be established."
-    /// and "ED25519 key fingerprint is SHA256:…."), or nil when either line
+    /// and "ED25519 key fingerprint is SHA256:…." or, from OpenSSH 10.5,
+    /// "ED25519 key fingerprint is: SHA256:…"), or nil when either line
     /// is missing. With `ProxyJump` the key can be the jump host's, so the
     /// sheet shows the host that ssh names.
     static func hostKey(in prompt: String) -> HostKey? {
@@ -254,7 +255,10 @@ final class SSHLoginPrompts {
                 continue
             }
             let words = text.split(separator: " ")
-            guard words.count == 5, words[1 ... 3] == ["key", "fingerprint", "is"] else { continue }
+            // OpenSSH 10.5 and later writes "is:", older releases "is".
+            guard words.count == 5, words[1 ... 2] == ["key", "fingerprint"],
+                  words[3] == "is" || words[3] == "is:"
+            else { continue }
             var fingerprint = String(words[4])
             if fingerprint.hasSuffix(".") { fingerprint.removeLast() }
             guard fingerprint.contains(":") else { continue }

@@ -83,6 +83,21 @@ struct SSHConnectionsTests {
     }
 
     @Test
+    func a_new_host_key_from_openssh_10_5_has_a_colon_after_is() throws {
+        // The text of OpenSSH 10.5 in the VM (UI review of PR 745).
+        let prompt = """
+        The authenticity of host 'localhost (::1)' can't be established.
+        ED25519 key fingerprint is: SHA256:+5/x06NnIxLuUAhlw-D7oo5lEV3KR37gqnojrjti4mV0
+        This key is not known by any other names.
+        Are you sure you want to continue connecting (yes/no/[fingerprint])?
+        """
+        let key = try #require(SSHLoginPrompts.hostKey(in: prompt))
+        #expect(key.host == "localhost (::1)")
+        #expect(key.type == "ED25519")
+        #expect(key.fingerprint == "SHA256:+5/x06NnIxLuUAhlw-D7oo5lEV3KR37gqnojrjti4mV0")
+    }
+
+    @Test
     func a_retry_is_the_same_prompt_from_the_same_ssh() {
         let passphrase = "Enter passphrase for key '/Users/bob/.ssh/id_ed25519': "
         let jump = SSHLoginPrompts.Request(host: "prod", prompt: passphrase, kind: .secret, sshPID: 100, askerPID: 200)
