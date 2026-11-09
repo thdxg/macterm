@@ -198,9 +198,10 @@ jobs:
       - name: Build and benchmark
         run: mise run bench --verbose
 
-      # Session-layer latency (scripts/session_bench.py), headless, with the
-      # zmx of the built app. A failure here must not cost the window-state
-      # report, so it does not fail the job.
+      # The session layer (scripts/session_bench.py), headless, with the zmx
+      # of the built app: v1's and v2's local panes side by side (typing echo,
+      # reattach, idle memory and wakeups). A failure here must not cost the
+      # window-state report, so it does not fail the job.
       - name: Session layer
         continue-on-error: true
         run: |
@@ -252,10 +253,11 @@ jobs:
             args+=(--baseline baseline/results-*.json)
           fi
           python3 scripts/benchmark.py report "${args[@]}" > report.md
-          cat report.md >> "$GITHUB_STEP_SUMMARY"
+          # The v1/v2 pairs go into the PR comment too.
           if [ -f build/benchmark/session-macos.json ]; then
-            python3 scripts/session_bench.py report build/benchmark/session-macos.json >> "$GITHUB_STEP_SUMMARY"
+            python3 scripts/session_bench.py report build/benchmark/session-macos.json >> report.md
           fi
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
 
       # Hand the rendered report + verdict + PR number to benchmark-report.yml.
       # That companion runs on `workflow_run` with a read/write token (this job
@@ -278,9 +280,10 @@ jobs:
 
   # Session-layer latency over ssh (scripts/session_bench.py). A remote pane
   # of v1 is `ssh` + `zmx attach`, one ssh login for each pane. This job runs
-  # the same arms as the macOS job plus the ssh arms, against sshd on
+  # the latency arms of the macOS job plus the ssh arms, against sshd on
   # localhost with 25 ms of delay each way (50 ms round trip). Linux, because
-  # sshd and netem are an apt install there.
+  # sshd and netem are an apt install there. The idle arm reads libproc, so it
+  # runs on macOS only.
   session-linux:
     name: Session Layer (Linux)
     needs: [changes, server]

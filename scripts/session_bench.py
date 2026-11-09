@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
-"""Session-layer latency benchmark.
+"""Session-layer benchmark.
 
-Measures the part of typing latency and reattach time that the session layer
-(zmx, and ssh for remote panes) adds. It runs no app: a pty driver plays the
-part of the terminal, so it runs on any CI runner, macOS or Linux.
+Measures what the session layer (zmx, and ssh for remote panes) adds to
+typing, reattach, memory and idle cost, for v1's and v2's local panes side by
+side. It runs no app: a pty driver plays the part of the terminal, so it runs
+on any CI runner, macOS or Linux.
+
+Local panes (one zmx binary has both):
+
+  v1         `zmx attach <s> <command>`: a v1 session daemon for each pane.
+  v2         `zmx connect <s> -- <command>`: a v2 session, made through the
+             server (`macterm attach` later, design/007).
 
 Arms (each is a program on a pty that this script drives):
 
   bare       /bin/cat on a pty in line mode: kernel echo only. The floor.
-  zmx        `zmx attach <s> /bin/cat`. A local pane of Macterm v1.
+  v1, v2     /bin/cat in a local pane.
   ssh        `ssh -tt <host> /bin/cat`. The floor for a remote pane.
   ssh-zmx    `ssh -tt <host> zmx attach <s> /bin/cat`. A remote pane of v1.
 
@@ -17,11 +24,20 @@ Remote pane open: time from the start of `ssh … zmx attach` to the first
 echo after the session prints its ready marker. v1 makes a new ssh login for
 each remote pane.
 Reattach: fill a session with --reattach-lines lines of 200 columns, detach,
-then time a new `zmx attach` until the echo of a marker line that is sent
-after the client takes the terminal. The echo comes after the replay.
+then time a new client until the echo of a marker line that is sent after the
+client takes the terminal. The echo comes after the replay.
+Idle (macOS): open --idle-panes panes of /bin/cat in each layer, then read the
+phys_footprint and the wakeups of the session side (v1: the daemons; v2: the
+server and the sessions) and of the clients. The programs in the panes are
+not counted: they are the same in both layers.
 
-Load decides latency on a shared runner, so each arm first waits for the
-1-minute load average to drop below --max-load and records the load.
+Every v1/v2 pair runs in one run on one runner, alternated: the echo keys go
+in rounds to v1 and v2 in turn, the reattaches alternate, and the idle panes
+of both layers are measured in the same window. A shared runner changes
+speed over minutes, so a pair is compared only within one run.
+
+Load decides latency on a shared runner, so each measurement first waits for
+the 1-minute load average to drop below --max-load and records the load.
 
 Subcommands:
   run     measure every arm, write a results JSON
@@ -36,6 +52,7 @@ import select
 import shlex
 import shutil
 import signal
+import socket
 import statistics
 import struct
 import subprocess
@@ -45,11 +62,12 @@ import termios
 import time
 import uuid
 
-from _harness import runner_info, wait_for_load
+from _harness import phys_footprint, runner_info, wait_for_load, wakeups
 
 COLUMNS = 200
 ROWS = 50
 DETACH_KEY = b"\x1c"  # ctrl+\: zmx detaches the current client.
+LAYERS = ("v1", "v2")
 
 
 class BenchError(Exception):
@@ -223,13 +241,24 @@ def wait_ready(program, takes_terminal=True, marker=None, timeout=30):
 # ── Arms ─────────────────────────────────────────────────────────────────
 
 
+def alternated(index):
+    """The order of the two layers in round `index`: v1 first, then v2 first."""
+    return LAYERS if index % 2 == 0 else LAYERS[::-1]
+
+
 class Bench:
     def __init__(self, args):
         self.args = args
         self.nonce = uuid.uuid4().hex[:8]
         # /tmp, not $TMPDIR: zmx socket paths must fit sun_path.
         self.zmx_dir = tempfile.mkdtemp(prefix="macterm-session-bench-", dir="/tmp")
-        self.env = dict(os.environ, ZMX_DIR=self.zmx_dir, TERM="xterm-256color")
+        # v2's server and sessions live in the runtime directory. Without
+        # this, they would be the user's own (TMPDIR/macterm).
+        self.runtime_dir = os.path.join(self.zmx_dir, "run")
+        self.env = dict(
+            os.environ, ZMX_DIR=self.zmx_dir, MACTERM_RUNTIME_DIR=self.runtime_dir,
+            TERM="xterm-256color",
+        )
         self.local_sessions = []
         self.remote_sessions = []
 
@@ -247,6 +276,13 @@ class Bench:
 
     def zmx_attach(self, name, command=None):
         return [self.args.zmx, "attach", name, *(command or [])]
+
+    def pane(self, layer, name, command=None):
+        """The client of a local pane. With a command, it makes the session
+        when none has the name; without, it attaches to the session."""
+        if layer == "v1":
+            return self.zmx_attach(name, command)
+        return [self.args.zmx, "connect", name, *(["--", *command] if command else [])]
 
     def ssh(self, remote_command):
         return [
@@ -276,6 +312,34 @@ class Bench:
         print(f"  {result}", flush=True)
         return result
 
+    def echo_pair(self):
+        """Echo latency of a v1 and a v2 pane, both open, the keys in rounds
+        that alternate between them."""
+        rounds = self.args.rounds
+        per_round = max(1, self.args.keys // rounds)
+        gate = self.gate()
+        print(f"echo v1/v2: load {gate['load']}, {rounds} rounds of {per_round} keys", flush=True)
+        command, marker = self.ready_cat()
+        programs, samples = {}, {layer: [] for layer in LAYERS}
+        try:
+            for layer in LAYERS:
+                programs[layer] = PtyProgram(
+                    self.pane(layer, self.session(f"echo-{layer}"), command), self.env
+                )
+                wait_ready(programs[layer], marker=marker)
+            for i in range(rounds):
+                for layer in alternated(i):
+                    samples[layer] += echo_latencies(programs[layer], per_round)
+        finally:
+            for program in programs.values():
+                program.close()
+        results = {}
+        for layer in LAYERS:
+            results[layer] = summarize(samples[layer])
+            results[layer]["load_gate"] = gate
+            print(f"  {layer}: {results[layer]}", flush=True)
+        return results
+
     def remote_pane_open(self):
         """Time a new remote pane: ssh login, then zmx attach, until the
         first echo."""
@@ -296,9 +360,11 @@ class Bench:
         print(f"  {result}", flush=True)
         return result
 
-    def reattach(self):
+    def fill(self, layer):
+        """Make a session of the layer with --reattach-lines lines of output,
+        and detach from it. Returns its name."""
         lines = self.args.reattach_lines
-        name = self.session("reattach")
+        name = self.session(f"reattach-{layer}")
         marker = f"fill-done-{self.nonce}"
         # 6 characters of line number and 193 dots: 199 columns, so that no
         # line wraps on the 200-column terminal.
@@ -307,49 +373,170 @@ class Bench:
             f"i=$((i+1)); done; printf '%s\\n' {marker}; stty -echo; "
             "exec awk '{print \"got-\" $0; fflush()}'"
         )
-        fill = PtyProgram(self.zmx_attach(name, ["/bin/sh", "-c", script]), self.env)
+        fill = PtyProgram(self.pane(layer, name, ["/bin/sh", "-c", script]), self.env)
         try:
             fill.wait_raw(30)
             fill.read_until(marker.encode(), timeout=120, since=0)
             fill.write(DETACH_KEY)
             if not fill.wait_exit(10):
-                raise BenchError("zmx did not detach the filling client")
+                raise BenchError(f"the {layer} client did not detach")
         finally:
             fill.close()
+        return name
 
+    def reattach_pair(self):
+        names = {layer: self.fill(layer) for layer in LAYERS}
         gate = self.gate()
-        print(f"reattach: load {gate['load']}, {lines} lines, {self.args.attaches} attaches",
-              flush=True)
-        samples, replay_bytes = [], []
+        print(f"reattach v1/v2: load {gate['load']}, {self.args.reattach_lines} lines, "
+              f"{self.args.attaches} attaches each", flush=True)
+        samples = {layer: [] for layer in LAYERS}
+        replay_bytes = {layer: [] for layer in LAYERS}
         for i in range(self.args.attaches):
-            token = f"m{self.nonce}r{i}x"
-            program = PtyProgram(self.zmx_attach(name), self.env)
-            try:
-                program.wait_raw(30)
-                program.write(f"{token}\n".encode())
-                end = program.read_until(f"got-{token}".encode(), timeout=60, since=0)
-                samples.append((end - program.started) * 1000)
-                replay_bytes.append(len(program.output))
-                program.write(DETACH_KEY)
-                program.wait_exit(10)
-            finally:
+            for layer in alternated(i):
+                token = f"m{self.nonce}{layer}r{i}x"
+                program = PtyProgram(self.pane(layer, names[layer]), self.env)
+                try:
+                    program.wait_raw(30)
+                    program.write(f"{token}\n".encode())
+                    end = program.read_until(f"got-{token}".encode(), timeout=60, since=0)
+                    samples[layer].append((end - program.started) * 1000)
+                    replay_bytes[layer].append(len(program.output))
+                    program.write(DETACH_KEY)
+                    program.wait_exit(10)
+                finally:
+                    program.close()
+        results = {}
+        for layer in LAYERS:
+            result = summarize(samples[layer])
+            result["lines"] = self.args.reattach_lines
+            result["columns"] = COLUMNS
+            result["replay_bytes"] = int(statistics.median(replay_bytes[layer]))
+            result["load_gate"] = gate
+            results[layer] = result
+            print(f"  {layer}: {result}", flush=True)
+        return results
+
+    # ── Idle cost (macOS) ──
+
+    def server_pid(self):
+        """The pid of v2's server, from its socket (LOCAL_PEERPID). Its argv
+        is the client's that started it, so `ps` cannot tell it from one."""
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            sock.connect(os.path.join(self.runtime_dir, ".server"))
+            return struct.unpack("i", sock.getsockopt(0, 2, 4))[0]  # SOL_LOCAL, LOCAL_PEERPID
+        except OSError as exc:
+            raise BenchError(f"no v2 server in {self.runtime_dir}: {exc}")
+        finally:
+            sock.close()
+
+    def session_pids(self, entry, names):
+        """The pids of the session processes (`zmx <entry> <name> …`) of
+        these names: v1's `__daemon`, v2's `__session`."""
+        listing = subprocess.run(
+            ["ps", "-axo", "pid=,command="], capture_output=True, text=True, check=True
+        ).stdout
+        pids = []
+        for line in listing.splitlines():
+            pid, _, command = line.strip().partition(" ")
+            if not command.startswith(self.args.zmx + " "):
+                continue
+            words = command[len(self.args.zmx):].split()
+            if len(words) >= 2 and words[0] == entry and words[1] in names:
+                pids.append(int(pid))
+        if len(pids) != len(names):
+            raise BenchError(f"found {len(pids)} {entry} processes for {len(names)} sessions")
+        return pids
+
+    def idle_groups(self, clients, names):
+        """The pids to measure: for each layer, its session side and its
+        clients. The programs in the panes are left out."""
+        return {
+            ("v1", "session"): self.session_pids("__daemon", names["v1"]),
+            ("v2", "session"): [self.server_pid(), *self.session_pids("__session", names["v2"])],
+            ("v1", "client"): [program.pid for program in clients["v1"]],
+            ("v2", "client"): [program.pid for program in clients["v2"]],
+        }
+
+    def idle_sample(self, groups):
+        """The median footprint of each group over three reads, then its
+        wakeups over --idle-seconds."""
+        footprints = {group: [] for group in groups}
+        for _ in range(3):
+            for group, pids in groups.items():
+                footprints[group].append(sum(phys_footprint(pid) or 0 for pid in pids))
+            time.sleep(1)
+
+        def count(pids):
+            counts = [wakeups(pid) for pid in pids]
+            if None in counts:
+                raise BenchError("a session process ended during the idle measurement")
+            return sum(counts)
+
+        before = {group: count(pids) for group, pids in groups.items()}
+        start = time.monotonic()
+        time.sleep(self.args.idle_seconds)
+        elapsed = time.monotonic() - start
+        after = {group: count(pids) for group, pids in groups.items()}
+
+        result = {}
+        for (layer, side), pids in groups.items():
+            data = result.setdefault(layer, {})
+            data[f"{side}_mb"] = round(statistics.median(footprints[(layer, side)]) / 1048576, 2)
+            data[f"{side}_wakeups_per_s"] = round(
+                (after[(layer, side)] - before[(layer, side)]) / elapsed, 2
+            )
+            data[f"{side}_processes"] = len(pids)
+        return result
+
+    def idle_pair(self):
+        """Footprint and wakeups of idle panes, v1 and v2 open at once, at
+        each size of --idle-panes."""
+        sizes = sorted(set(self.args.idle_panes))
+        gate = self.gate()
+        print(f"idle v1/v2: load {gate['load']}, {sizes} panes, "
+              f"{self.args.idle_seconds}s windows", flush=True)
+        command, marker = self.ready_cat()
+        clients = {layer: [] for layer in LAYERS}
+        names = {layer: [] for layer in LAYERS}
+        result = {"seconds": self.args.idle_seconds, "panes": {}, "load_gate": gate}
+        try:
+            for size in sizes:
+                for layer in LAYERS:
+                    while len(clients[layer]) < size:
+                        name = self.session(f"idle-{layer}-{len(names[layer])}")
+                        names[layer].append(name)
+                        clients[layer].append(PtyProgram(self.pane(layer, name, command), self.env))
+                        wait_ready(clients[layer][-1], marker=marker)
+                time.sleep(self.args.idle_settle)
+                result["panes"][str(size)] = self.idle_sample(self.idle_groups(clients, names))
+                print(f"  {size} panes: {result['panes'][str(size)]}", flush=True)
+        finally:
+            for program in clients["v1"] + clients["v2"]:
                 program.close()
-        result = summarize(samples)
-        result["lines"] = lines
-        result["columns"] = COLUMNS
-        result["replay_bytes"] = int(statistics.median(replay_bytes))
-        result["load_gate"] = gate
-        print(f"  {result}", flush=True)
         return result
 
     def cleanup(self):
         # A session with no client keeps running and drops terminal replies,
-        # so every session that this run made is killed, local and remote.
+        # so every session that this run made is ended, local and remote.
         if self.local_sessions:
             subprocess.run(
                 [self.args.zmx, "kill", *self.local_sessions, "--force"],
                 env=self.env, capture_output=True, timeout=30, check=False,
             )
+            # `zmx kill` ends v1's sessions. v2's sessions and the server
+            # carry a session name of this run in their argv: end them.
+            listing = subprocess.run(
+                ["ps", "-axo", "pid=,command="], capture_output=True, text=True, check=False
+            ).stdout
+            ours = set(self.local_sessions)
+            for line in listing.splitlines():
+                pid, _, command = line.strip().partition(" ")
+                if command.startswith(self.args.zmx + " ") and ours & set(command.split()):
+                    try:
+                        os.kill(int(pid), signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
         if self.remote_sessions:
             subprocess.run(
                 ["ssh", "-o", "BatchMode=yes", self.args.ssh_host,
@@ -372,11 +559,9 @@ def cmd_run(args):
     arms = {}
     try:
         arms["bare"] = bench.echo_arm("bare", ["/bin/cat"], takes_terminal=False)
-        command, marker = bench.ready_cat()
-        arms["zmx"] = bench.echo_arm(
-            "zmx", bench.zmx_attach(bench.session("echo"), command), marker=marker
-        )
+        arms.update(bench.echo_pair())
         if args.ssh_host:
+            command, marker = bench.ready_cat()
             arms["ssh"] = bench.echo_arm(
                 "ssh", bench.ssh(" ".join(shlex.quote(word) for word in command)), marker=marker
             )
@@ -386,7 +571,11 @@ def cmd_run(args):
                 marker=marker,
             )
             arms["remote-pane-open"] = bench.remote_pane_open()
-        arms["reattach"] = bench.reattach()
+        for layer, result in bench.reattach_pair().items():
+            arms[f"reattach-{layer}"] = result
+        # phys_footprint and the wakeup counts are read through libproc.
+        if sys.platform == "darwin":
+            arms["idle"] = bench.idle_pair()
     except BenchError as exc:
         sys.exit(f"error: {exc}")
     finally:
@@ -394,7 +583,7 @@ def cmd_run(args):
 
     version = subprocess.run([args.zmx, "version"], capture_output=True, text=True, check=False)
     payload = {
-        "schema": 1,
+        "schema": 2,
         "commit": os.environ.get("GITHUB_SHA") or subprocess.run(
             ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False
         ).stdout.strip() or "unknown",
@@ -414,16 +603,44 @@ def cmd_run(args):
 
 ARM_LABELS = {
     "bare": "Echo, bare pty (floor)",
-    "zmx": "Echo, local pane (zmx)",
+    "v1": "Echo, local pane, v1",
+    "v2": "Echo, local pane, v2",
     "ssh": "Echo, ssh (floor)",
     "ssh-zmx": "Echo, remote pane (ssh + zmx)",
     "remote-pane-open": "New remote pane, to first echo",
-    "reattach": "Reattach, to first echo after replay",
+    "reattach-v1": "Reattach, v1, to first echo after replay",
+    "reattach-v2": "Reattach, v2, to first echo after replay",
 }
 
 
+def ratio(v1, v2):
+    return f"{v2 / v1:.2f}" if v1 else "—"
+
+
+def pair_rows(arms):
+    """The v1/v2 pairs of local panes: (measurement, v1, v2, format)."""
+    rows = []
+    if "v1" in arms and "v2" in arms:
+        rows += [
+            ("Echo p50 (ms)", arms["v1"]["p50_ms"], arms["v2"]["p50_ms"], "{:.3f}"),
+            ("Echo p95 (ms)", arms["v1"]["p95_ms"], arms["v2"]["p95_ms"], "{:.3f}"),
+        ]
+    if "reattach-v1" in arms and "reattach-v2" in arms:
+        rows.append(("Reattach p50 (ms)", arms["reattach-v1"]["p50_ms"],
+                     arms["reattach-v2"]["p50_ms"], "{:.1f}"))
+    for size, layers in (arms.get("idle") or {}).get("panes", {}).items():
+        def total(layer, key):
+            return layers[layer][f"session_{key}"] + layers[layer][f"client_{key}"]
+        rows += [
+            (f"Memory, {size} idle panes (MB)", total("v1", "mb"), total("v2", "mb"), "{:.1f}"),
+            (f"Wakeups/s, {size} idle panes", total("v1", "wakeups_per_s"),
+             total("v2", "wakeups_per_s"), "{:.1f}"),
+        ]
+    return rows
+
+
 def cmd_report(args):
-    lines = ["## Session-layer latency", ""]
+    lines = ["## Session layer", ""]
     for path in args.results:
         with open(path) as f:
             result = json.load(f)
@@ -433,6 +650,22 @@ def cmd_report(args):
         ) or f"{runner.get('system')} {runner.get('release')}"
         title = f"### {runner.get('system')} ({image}, {runner.get('cpus')} CPUs)"
         lines += [title, ""]
+        arms = result["arms"]
+
+        pairs = pair_rows(arms)
+        if pairs:
+            lines += [
+                "Local panes, v1 and v2 in one run, alternated:",
+                "",
+                "| Measurement | v1 | v2 | v2 / v1 |",
+                "|---|---:|---:|---:|",
+            ]
+            for label, v1, v2, number in pairs:
+                lines.append(
+                    f"| {label} | {number.format(v1)} | {number.format(v2)} | {ratio(v1, v2)} |"
+                )
+            lines.append("")
+
         if result.get("network"):
             lines += [f"Network: {result['network']}.", ""]
         if result.get("ssh"):
@@ -442,7 +675,7 @@ def cmd_report(args):
             "|---|---:|---:|---:|---:|---:|---:|",
         ]
         for arm, label in ARM_LABELS.items():
-            data = result["arms"].get(arm)
+            data = arms.get(arm)
             if not data:
                 continue
             gate = data.get("load_gate", {})
@@ -455,13 +688,36 @@ def cmd_report(args):
                 f"| {label} | {data['n']} | {data['p50_ms']:.3f} | {tail} "
                 f"| {data['max_ms']:.3f} | {load} |"
             )
-        reattach = result["arms"].get("reattach")
-        if reattach:
+        for layer in LAYERS:
+            reattach = arms.get(f"reattach-{layer}")
+            if reattach:
+                lines += [
+                    "",
+                    f"Reattach, {layer}, replays {reattach['lines']} lines of "
+                    f"{reattach['columns']} columns: {reattach['replay_bytes'] / 1024:.0f} KiB.",
+                ]
+
+        idle = arms.get("idle")
+        if idle:
+            gate = idle.get("load_gate", {})
+            load = f"{gate.get('load', '—')}" + ("" if gate.get("passed", True) else " ⚠️")
             lines += [
                 "",
-                f"Reattach replays {reattach['lines']} lines of {reattach['columns']} columns: "
-                f"{reattach['replay_bytes'] / 1024:.0f} KiB.",
+                f"Idle panes, wakeups over {idle['seconds']} s, load {load}. The session side "
+                "is v1's daemons, or v2's server and sessions:",
+                "",
+                "| Panes | Layer | Session side MB | Clients MB | Session side wakeups/s "
+                "| Clients wakeups/s |",
+                "|---:|---|---:|---:|---:|---:|",
             ]
+            for size, layers in idle["panes"].items():
+                for layer in LAYERS:
+                    data = layers[layer]
+                    lines.append(
+                        f"| {size} | {layer} | {data['session_mb']:.1f} | {data['client_mb']:.1f} "
+                        f"| {data['session_wakeups_per_s']:.1f} "
+                        f"| {data['client_wakeups_per_s']:.1f} |"
+                    )
         lines.append("")
     lines.append(
         "_Load is the 1-minute load average when the measurement started. ⚠️ means "
@@ -479,6 +735,8 @@ def main():
     run.add_argument("--zmx", required=True, help="path to the zmx binary")
     run.add_argument("--out", required=True, help="path for the results JSON")
     run.add_argument("--keys", type=int, default=500, help="keys per echo arm")
+    run.add_argument("--rounds", type=int, default=10,
+                     help="rounds in which the echo keys alternate between v1 and v2")
     run.add_argument("--ssh-host",
                      help="also measure the ssh arms against this host, which has zmx "
                           "at the same path as --zmx")
@@ -486,7 +744,13 @@ def main():
     run.add_argument("--panes", type=int, default=5, help="new remote panes to time")
     run.add_argument("--reattach-lines", type=int, default=10000,
                      help="lines of 200 columns in the reattached session")
-    run.add_argument("--attaches", type=int, default=5, help="reattaches to time")
+    run.add_argument("--attaches", type=int, default=5, help="reattaches to time, in each layer")
+    run.add_argument("--idle-panes", type=lambda v: [int(n) for n in v.split(",")],
+                     default=[1, 9], help="pane counts at which to measure idle cost (macOS)")
+    run.add_argument("--idle-seconds", type=int, default=60,
+                     help="seconds over which to count the wakeups of idle panes")
+    run.add_argument("--idle-settle", type=int, default=5,
+                     help="seconds to wait after the panes open, before the idle reads")
     run.add_argument("--max-load", type=float,
                      help="1-minute load average to wait for before each arm "
                           "(default: half the CPU count, at least 1)")

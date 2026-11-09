@@ -26,13 +26,16 @@ piece of it earned against real CI runners:
   (/var/folders/…/T/) pushes the paths right past that.
 """
 
+import ctypes
 import json
 import os
 import platform
 import re
 import shutil
 import signal
+import struct
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -90,6 +93,40 @@ def runner_info():
     if platform.system() == "Darwin":
         info["macos"] = platform.mac_ver()[0]
     return info
+
+
+_LIBPROC = ctypes.CDLL("/usr/lib/libproc.dylib") if sys.platform == "darwin" else None
+# proc_pid_rusage flavor RUSAGE_INFO_V2: a 16-byte uuid, then uint64 fields.
+# ri_pkg_idle_wkups is at 32, ri_interrupt_wkups at 40, ri_phys_footprint at 72.
+_RUSAGE_INFO_V2 = 2
+_WAKEUPS_OFFSET = 32
+_PHYS_FOOTPRINT_OFFSET = 72
+
+
+def _rusage(pid):
+    buffer = ctypes.create_string_buffer(512)
+    if _LIBPROC is None or _LIBPROC.proc_pid_rusage(pid, _RUSAGE_INFO_V2, buffer) != 0:
+        return None
+    return buffer.raw
+
+
+def phys_footprint(pid):
+    """The process's phys_footprint in bytes (what Activity Monitor calls
+    Memory), or None if the process is gone. RSS from `ps` counts shared
+    pages and misses compressed memory, so it is not used for memory."""
+    raw = _rusage(pid)
+    return None if raw is None else struct.unpack_from("Q", raw, _PHYS_FOOTPRINT_OFFSET)[0]
+
+
+def wakeups(pid):
+    """The process's wakeups since it started (package idle plus interrupt,
+    the two columns that powermetrics adds), or None if the process is gone.
+    The kernel counts them, so this needs no sudo, also on a virtual runner."""
+    raw = _rusage(pid)
+    if raw is None:
+        return None
+    pkg_idle, interrupt = struct.unpack_from("QQ", raw, _WAKEUPS_OFFSET)
+    return pkg_idle + interrupt
 
 
 def wait_for_load(max_load, timeout):
