@@ -1277,7 +1277,7 @@ Macterm-side settings go through `Preferences`. Settings that have the shape of 
   - `disownFrameAutosave` clears the autosave name of the window at attach (one owner). `pruneChurnedAutosaveKeys` sweeps both families of stale keys.
   - Macterm centers a restored frame on the main screen at its saved size when it has less than 60 pt on any screen. An example is the corner of a hidden workspace of a window manager.
 - **Never leave persistent window state to an autosave of SwiftUI**. We measured every one of them (sidebar column, window frame). Each one uses a key with a runtime address, so it resets in silence at every launch and update. A stable key in `WindowSnapshot` is the rule.
-- The spacing and the blur of the overlay sidebar are separate layers. The transparent `safeAreaBar` reserves the space of the titlebar. `SidebarTopBlurBar` stays above the rows and is not interactive.
+- **The overlay sidebar peek is a side panel, the same as the Project Insights panel** (`SidebarOverlayPanel`). It has the same surface (`glassPanel`) and the same corner and inset (`GlassPanelMetrics.sidePanelCornerRadius` and `sidePanelInset`), and it starts below the toolbar. Its hover exit edge counts the inset (`SidebarOverlayMetrics.exitEdge`).
 
 ## Known Limitations
 

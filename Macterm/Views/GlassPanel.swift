@@ -33,4 +33,11 @@ extension View {
 enum GlassPanelMetrics {
     /// Matches the macOS Tahoe window corner radius.
     static let cornerRadius: CGFloat = 16
+    /// The corner of a full-height side panel: Project Insights on the
+    /// trailing side, the overlay sidebar peek on the leading side. One
+    /// value, so the two panels cannot drift apart.
+    static let sidePanelCornerRadius: CGFloat = 22
+    /// The gap between a side panel and the edges of the window content,
+    /// below the toolbar.
+    static let sidePanelInset: CGFloat = 10
 }
