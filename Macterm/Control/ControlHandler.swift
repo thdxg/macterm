@@ -1798,9 +1798,10 @@ final class ControlHandler {
 
 extension ControlHandler {
     /// `macterm askpass`: ask the user what an ssh master's login asks. The
-    /// answer goes only to a process whose parent is the ssh of a login of
-    /// Macterm (design/006 §4). Any other process of the user could otherwise pose
-    /// as askpass and get a saved password.
+    /// answer goes only to a process under the ssh of a login of Macterm
+    /// (`SSHConnections.askpassOwner(forPeer:)`, design/006 §4). Any other
+    /// process of the user could otherwise pose as askpass and get a saved
+    /// password.
     func sshAskpass(_ args: ControlArgs, peerPID: pid_t?) async throws -> ControlData {
         guard let peerPID, let owner = SSHConnections.shared.askpassOwner(forPeer: peerPID) else {
             logger.warning("askpass refused: pid \(peerPID ?? 0, privacy: .public) is not a child of an ssh of Macterm")

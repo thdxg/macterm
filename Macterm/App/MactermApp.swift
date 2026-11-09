@@ -833,7 +833,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SSHConnections.shared.onConnectionExit = { SSHLoginPrompts.shared.cancel(sshPID: $0) }
         SSHConnections.shared.onLoginNotice = { SSHLoginPrompts.shared.showNotice(host: $0, sshPID: $1, line: $2) }
         // The unit-test host must not end a master of the developer's Debug app.
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+        if ZmxClient.liveBypass != .unitTestHost {
             Task { await SSHConnections.shared.endStaleConnections() }
         }
         finderServices.attach(appState: appState, projectStore: projectStore)

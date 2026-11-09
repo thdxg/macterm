@@ -347,6 +347,46 @@ struct SSHConnectionsTests {
     }
 
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_config_change_ends_only_the_own_connection_and_never_the_users() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let connections = SSHConnections(configuration: sshd.configuration)
+        let own = try await connections.connect("box")
+
+        let userPath = sshd.directory.appendingPathComponent("user-cm").path
+        try sshd.addToConfig("ControlPath \(userPath)")
+        let user = try sshd.startUsersOwnControl(controlPath: userPath)
+        defer { user.terminate() }
+        try sshd.addToConfig("HostName localhost")
+
+        #expect(try await connections.connect("box") == .init(controlPath: userPath, isUsersOwn: true))
+        #expect(!FileManager.default.fileExists(atPath: own.controlPath))
+        await connections.endStaleConnections()
+        await connections.disconnect("box")
+        #expect(user.isRunning)
+        #expect(FileManager.default.fileExists(atPath: userPath))
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_connection_that_two_destinations_share_ends_only_with_the_last() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let connections = SSHConnections(configuration: sshd.configuration)
+        // The same user, host and port: one path.
+        let other = "\(NSUserName())@box"
+        let route = try await connections.connect("box")
+        #expect(try await connections.connect(other) == route)
+
+        await connections.disconnect("box")
+        #expect(FileManager.default.fileExists(atPath: route.controlPath))
+        #expect(try await connections.run(other, "echo shared").stdout == "shared\n")
+        #expect(sshd.acceptedLogins() == 1)
+
+        await connections.disconnect(other)
+        #expect(!FileManager.default.fileExists(atPath: route.controlPath))
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
     func the_login_asks_its_askpass_for_a_passphrase() async throws {
         let sshd = try LocalSSHD(passphrase: "open sesame")
         defer { sshd.stop() }

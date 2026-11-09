@@ -21,14 +21,16 @@ private let logger = Logger(subsystem: appBundleID, category: "SSHConnections")
 ///   that Macterm started exits. The next launch finds the master on the
 ///   same path and logs in to no host again. `ServerAlive*` ends the master
 ///   when the host stops answering, after a network change or a long sleep.
-/// - Each connect reads `ssh -G` again. The own path is a hash of the user,
-///   host, port and jump that it resolves, so a changed config logs in
-///   again, also while Macterm runs. `connections.json` in the control
-///   directory records the path of each master that Macterm started. When
-///   the config no longer gives that path (at the next connect, and at
-///   launch for each record, `endStaleConnections`), Macterm ends the old
-///   master. The hosts of an ssh config cannot be listed (`Host *.lan`), so
-///   the record is the list.
+/// - Each connect reads `ssh -G` again. The own path is a hash of where it
+///   sends the host (`SSHControlPath.endpointKeys`), so a changed config
+///   logs in again, also while Macterm runs.
+/// - `connections.json` in the control directory records the path of each
+///   master that Macterm started. The hosts of an ssh config cannot be
+///   listed (`Host *.lan`), so the record is the list. When the config no
+///   longer gives the recorded path, or `ssh -G` refuses the config, Macterm
+///   ends the old master: at the next connect, and at launch for each
+///   record (`endStaleConnections`). A master that two destinations record
+///   ends only with the last record (`release`).
 /// - A command over the master (`run`) never logs in by itself: `BatchMode`
 ///   refuses a prompt, and `ProxyCommand=/usr/bin/false` stops the direct
 ///   connection that ssh tries when the master does not answer. It fails
@@ -85,6 +87,8 @@ final class SSHConnections {
         case invalidDestination(String)
         case controlPathTooLong(String)
         case cannotStart(String)
+        /// `ssh -G` refused the config (exit 255). ssh's last line.
+        case configUnreadable(String)
         /// The master exited before it listened: a refused login, a
         /// failed prompt, or no route to the host. ssh's last line of
         /// stderr.
@@ -97,6 +101,7 @@ final class SSHConnections {
             case let .invalidDestination(destination): "not an ssh destination: \(destination)"
             case let .controlPathTooLong(path): "the control path is too long for a socket: \(path)"
             case let .cannotStart(reason): "cannot start ssh: \(reason)"
+            case let .configUnreadable(reason): "ssh cannot read the config: \(reason)"
             case let .loginFailed(reason): reason.isEmpty ? "the ssh login failed" : "the ssh login failed: \(reason)"
             case .cancelled: "the ssh login was cancelled"
             }
@@ -164,23 +169,28 @@ final class SSHConnections {
     func disconnect(_ destination: String) async {
         loggingIn[destination]?.terminate()
         loggingIn[destination] = nil
-        var paths = Set([owned[destination]].compactMap(\.self))
-        if let config = try? await resolvedConfig(destination) {
-            paths.insert(SSHControlPath.own(forConfig: config, in: configuration.controlDirectory))
+        let current = try? await SSHControlPath.own(forConfig: resolvedConfig(destination), in: configuration.controlDirectory)
+        await release(destination)
+        if let current, !owned.values.contains(current) {
+            await endConnection(destination, at: current)
         }
-        for path in paths {
-            await endConnection(destination, at: path)
-        }
-        record(destination, nil)
     }
 
     /// At launch: end each recorded master whose path the config no longer
-    /// gives, or whose destination `ssh -G` cannot read. Drop the record of
-    /// a master that is gone.
+    /// gives, or whose config `ssh -G` refuses. Drop the record of a master
+    /// that is gone. An `ssh -G` that fails in another way (a time-out)
+    /// changes nothing.
     func endStaleConnections() async {
         for (destination, path) in owned {
-            let config = try? await resolvedConfig(destination)
-            let current = config.map { SSHControlPath.own(forConfig: $0, in: configuration.controlDirectory) }
+            let current: String?
+            do {
+                current = try await SSHControlPath.own(forConfig: resolvedConfig(destination), in: configuration.controlDirectory)
+            } catch Failure.configUnreadable(_) {
+                current = nil
+            } catch {
+                continue
+            }
+            guard owned[destination] == path else { continue }
             if current == path {
                 // A connect in flight can start a master on this same path.
                 if await !controlAnswers(destination, at: path), connecting[destination] == nil, owned[destination] == path {
@@ -188,8 +198,7 @@ final class SSHConnections {
                 }
                 continue
             }
-            await endConnection(destination, at: path)
-            if owned[destination] == path { record(destination, nil) }
+            await release(destination)
         }
     }
 
@@ -260,18 +269,14 @@ final class SSHConnections {
         let config: String
         do {
             config = try await resolvedConfig(destination)
-        } catch {
-            if let old = owned[destination] {
-                await endConnection(destination, at: old)
-                record(destination, nil)
-            }
-            throw error
+        } catch let failure as Failure {
+            if case .configUnreadable = failure { await release(destination) }
+            throw failure
         }
         let own = SSHControlPath.own(forConfig: config, in: configuration.controlDirectory)
         if let old = owned[destination], old != own {
             logger.info("ssh: host=\(destination, privacy: .public) has a changed config, its old master ends")
-            await endConnection(destination, at: old)
-            record(destination, nil)
+            await release(destination)
         }
         if let path = SSHControlPath.userPath(fromConfig: config), await controlAnswers(destination, at: path) {
             logger.debug("ssh: host=\(destination, privacy: .public) uses the user's master")
@@ -286,8 +291,22 @@ final class SSHConnections {
         guard let outcome = await runSSH(["-G", "--", destination], timeout: .seconds(5)) else {
             throw Failure.cannotStart(configuration.ssh.joined(separator: " "))
         }
-        guard outcome.status == 0 else { throw Failure.loginFailed(SSHControlPath.lastLine(of: outcome.stderr)) }
-        return outcome.stdout
+        let reason = SSHControlPath.lastLine(of: outcome.stderr)
+        switch outcome.status {
+        case 0: return outcome.stdout
+        // ssh's exit for an error. A time-out is SIGTERM.
+        case 255: throw Failure.configUnreadable(reason)
+        default: throw Failure.cannotStart("ssh -G exited with \(outcome.status) \(reason)")
+        }
+    }
+
+    /// Drop the record of `destination`, and end its master unless another
+    /// destination records the same master (`box` and `bob@box` can).
+    private func release(_ destination: String) async {
+        guard let path = owned[destination] else { return }
+        record(destination, nil)
+        guard !owned.values.contains(path) else { return }
+        await endConnection(destination, at: path)
     }
 
     private func controlAnswers(_ destination: String, at path: String) async -> Bool {
