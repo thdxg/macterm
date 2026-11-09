@@ -327,7 +327,7 @@ struct PinnedTabsTests {
         )
         var dead = ZmxClient.noop
         dead.isBundled = { true }
-        dead.listSessionsWithClients = { [] }
+        dead.listSessions = { [] }
         state2.zmx = dead
         state2.incubatePane = { _ in }
         state2.restorePinnedState(WorkspaceStore(fileURL: fx.storeURL).load().pinned)
@@ -380,7 +380,7 @@ struct PinnedTabsTests {
         )
         var alive = ZmxClient.noop
         alive.isBundled = { true }
-        alive.listSessionsWithClients = { [ZmxSessionListParser.Entry(name: sessionName, clients: 0)] }
+        alive.listSessions = { [LocalSession(name: sessionName)] }
         state2.zmx = alive
         state2.incubatePane = { _ in }
         state2.restorePinnedState(WorkspaceStore(fileURL: fx.storeURL).load().pinned)
@@ -407,7 +407,7 @@ struct PinnedTabsTests {
         )
         var unknown = ZmxClient.noop
         unknown.isBundled = { true }
-        unknown.listSessionsWithClients = { nil } // probe failed → unknown
+        unknown.listSessions = { nil } // probe failed → unknown
         state2.zmx = unknown
         state2.incubatePane = { _ in }
         state2.restorePinnedState(WorkspaceStore(fileURL: fx.storeURL).load().pinned)
@@ -499,11 +499,11 @@ struct PinnedTabsTests {
         )
         // Computed on the main actor first — the client closure is @Sendable.
         let sessionEntries = [first, second].flatMap { $0.splitRoot.allPanes() }.map {
-            ZmxSessionListParser.Entry(name: $0.sessionName, clients: 0)
+            LocalSession(name: $0.sessionName)
         }
         var alive = ZmxClient.noop
         alive.isBundled = { true }
-        alive.listSessionsWithClients = { sessionEntries }
+        alive.listSessions = { sessionEntries }
         state2.zmx = alive
         state2.incubatePane = { _ in }
         state2.restorePinnedState(loaded.pinned, activeTabID: loaded.pinnedActiveTabID)

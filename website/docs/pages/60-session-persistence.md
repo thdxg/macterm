@@ -15,7 +15,7 @@ When you **close** a pane, a tab or a project, its shell ends. If a program is r
 To list the live sessions, run this command in any pane:
 
 ```sh
-zmx ls
+macterm session list
 ```
 
 > Local sessions do not keep running after you restart your Mac. The panes start again in their last working directory. Sessions in [remote projects](/docs/remote-projects) run on the host, so they keep running.

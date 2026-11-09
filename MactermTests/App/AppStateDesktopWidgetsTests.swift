@@ -31,7 +31,7 @@ struct AppStateDesktopWidgetsTests {
         // A listing that fails reattaches every restored widget — the
         // default here, so no test respawns a session it didn't ask to.
         var zmx = recordingZmx(into: WidgetKills())
-        zmx.listSessionsWithClients = { nil }
+        zmx.listSessions = { nil }
         state.zmx = zmx
         return state
     }
@@ -44,9 +44,8 @@ struct AppStateDesktopWidgetsTests {
             killRemoteSession: { _, name, _ in await killed.append(name) },
             remoteForegrounds: { _, _ in .unreachable },
             sweepRemoteOrphans: { _, _, _, _ in nil },
-            listSessionsWithClients: { [] },
-            sessionLeaderPIDs: { [:] },
-            sessionListSnapshot: { (entries: [], leaders: [:]) }
+            listSessions: { [] },
+            endV1Sessions: { _ in true }
         )
     }
 
@@ -262,29 +261,31 @@ struct AppStateDesktopWidgetsTests {
         #expect(DesktopWidgetGrid.isReachable(restored.frame, on: [Self.screen]))
     }
 
-    /// The launch sweep kills zero-client sessions nobody claims. A restored
-    /// widget attaches only once its window builds a surface, so its session
-    /// is zero-client at exactly that moment and must count as claimed.
+    /// The first v2 launch ends the v1 sessions that the restored panes
+    /// name: a restored widget's is one of them.
     @Test
-    func the_launch_sweep_spares_restored_widget_sessions() async throws {
+    func the_first_v2_launch_ends_a_restored_widgets_v1_session() async throws {
         let (writer, storeURL, dir) = try makeFixture()
         defer { try? FileManager.default.removeItem(at: dir) }
         writer.restoreSelection(projects: [])
         let widget = writer.createDesktopWidget()
         let widgetSession = try #require(widget.pane?.sessionName)
 
-        let orphan = "macterm-widget-0123456789ab"
-        let killed = WidgetKills()
-        var zmx = recordingZmx(into: killed)
-        zmx.listSessionsWithClients = {
-            [widgetSession, orphan].map { ZmxSessionListParser.Entry(name: $0, clients: 0, owner: nil) }
+        let ended = WidgetKills()
+        var zmx = recordingZmx(into: ended)
+        zmx.endV1Sessions = { names in
+            for name in names {
+                await ended.append(name)
+            }
+            return true
         }
         let state = makeState(storeURL: storeURL, dir: dir)
         state.zmx = zmx
+        state.v1SessionsEnded = .init(read: { false }, write: {})
         state.restoreSelection(projects: [])
 
-        await killed.settle(expecting: 1)
-        #expect(await killed.names == [orphan])
+        await ended.settle(expecting: 1)
+        #expect(await ended.names.contains(widgetSession))
     }
 
     // MARK: - Remove / exit
@@ -662,7 +663,7 @@ extension AppStateDesktopWidgetsTests {
         let killed = WidgetKills()
         let state = makeState(storeURL: storeURL, dir: dir)
         var zmx = recordingZmx(into: killed)
-        zmx.listSessionsWithClients = { nil }
+        zmx.listSessions = { nil }
         state.zmx = zmx
         state.restoreSelection(projects: [])
 
@@ -756,7 +757,7 @@ extension AppStateDesktopWidgetsTests {
 
         let state = makeState(storeURL: storeURL, dir: dir)
         var zmx = recordingZmx(into: WidgetKills())
-        zmx.listSessionsWithClients = { [ZmxSessionListParser.Entry(name: survivorSession, clients: 0, owner: nil)] }
+        zmx.listSessions = { [LocalSession(name: survivorSession)] }
         state.zmx = zmx
         let presenter = RecordingPresenter()
         state.attachDesktopWidgetPresenter(presenter)

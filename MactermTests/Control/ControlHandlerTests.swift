@@ -267,8 +267,7 @@ struct ControlHandlerTests {
 
     private func stubZmx(
         _ appState: AppState,
-        entries: [ZmxSessionListParser.Entry]?,
-        leaders: [String: pid_t] = [:]
+        sessions: [LocalSession]?
     ) {
         appState.zmx = ZmxClient(
             executableURL: { nil },
@@ -277,9 +276,8 @@ struct ControlHandlerTests {
             killRemoteSession: { _, _, _ in },
             remoteForegrounds: { _, _ in .unreachable },
             sweepRemoteOrphans: { _, _, _, _ in nil },
-            listSessionsWithClients: { entries },
-            sessionLeaderPIDs: { leaders },
-            sessionListSnapshot: { entries.map { (entries: $0, leaders: leaders) } }
+            listSessions: { sessions },
+            endV1Sessions: { _ in true }
         )
     }
 
@@ -290,11 +288,11 @@ struct ControlHandlerTests {
         let pane = try #require(appState.workspaces[project.id]?.activeTab?.splitRoot.allPanes().first)
         stubZmx(
             appState,
-            entries: [
-                .init(name: pane.sessionName, clients: 1),
-                .init(name: "macterm-orphan-aaaabbbbcccc", clients: 0),
-            ],
-            leaders: [pane.sessionName: 4242]
+            sessions: [
+                LocalSession(name: pane.sessionName, shellPID: 4242, clients: 1),
+                LocalSession(name: "macterm-orphan-aaaabbbbcccc"),
+                LocalSession(name: "macterm-exited-aaaabbbbcccc", isRunning: false),
+            ]
         )
         let response = await handler.handle(request("session.list"))
         let sessions = response.data?.sessions
@@ -310,7 +308,7 @@ struct ControlHandlerTests {
     @Test
     func session_list_probe_failure_is_internal_error() async {
         let (handler, appState, _) = makeHandler()
-        stubZmx(appState, entries: nil)
+        stubZmx(appState, sessions: nil)
         let response = await handler.handle(request("session.list"))
         #expect(response.error?.code == .internalError)
     }
@@ -318,7 +316,7 @@ struct ControlHandlerTests {
     @Test
     func session_info_finds_by_name_or_404s() async {
         let (handler, appState, _) = makeHandler()
-        stubZmx(appState, entries: [.init(name: "macterm-x-000011112222", clients: 0)])
+        stubZmx(appState, sessions: [LocalSession(name: "macterm-x-000011112222")])
 
         let hit = await handler.handle(request("session.info", args: ControlArgs(session: "macterm-x-000011112222")))
         #expect(hit.ok)
@@ -1495,9 +1493,8 @@ struct ControlHandlerTests {
             killRemoteSession: { _, _, _ in },
             remoteForegrounds: { _, _ in .unreachable },
             sweepRemoteOrphans: { _, _, _, _ in nil },
-            listSessionsWithClients: { [.init(name: "macterm-x-000011112222", clients: 0)] },
-            sessionLeaderPIDs: { [:] },
-            sessionListSnapshot: { (entries: [.init(name: "macterm-x-000011112222", clients: 0)], leaders: [:]) }
+            listSessions: { [LocalSession(name: "macterm-x-000011112222")] },
+            endV1Sessions: { _ in true }
         )
 
         let miss = await handler.handle(request("session.kill", args: ControlArgs(session: "macterm-y-000011112222")))

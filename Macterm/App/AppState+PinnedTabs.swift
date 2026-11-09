@@ -313,7 +313,8 @@ extension AppState {
 
     /// Rebuild the records from the workspace snapshot. Live tab snapshots
     /// are NOT materialized here — they wait for `materializeRestoredPinnedTabs`
-    /// to ask zmx which sessions survived, because `zmx attach` is an upsert:
+    /// to ask the server which sessions survived, because `zmx connect --`
+    /// makes a missing session:
     /// eagerly restoring a dead session would silently hand the user a bare
     /// shell where the declaration should have re-run its command.
     func restorePinnedState(_ snapshots: [PinnedTabSnapshot], activeTabID: UUID? = nil) {
@@ -329,6 +330,15 @@ extension AppState {
 
     /// Session names the not-yet-materialized pinned snapshots claim, for the
     /// launch orphan reaper's `known` set.
+    /// `pendingPinnedSessionNames` without the panes of remote projects.
+    func pendingPinnedLocalSessionNames() -> Set<String> {
+        Set(pendingPinnedLiveRestores.values.flatMap { snapshot in
+            paneSnapshots(of: snapshot.splitRoot)
+                .filter { !ProjectPath.isRemote($0.projectPath) }
+                .compactMap(\.sessionName)
+        })
+    }
+
     func pendingPinnedSessionNames() -> Set<String> {
         Set(pendingPinnedLiveRestores.values.flatMap { paneSnapshots(of: $0.splitRoot).compactMap(\.sessionName) })
     }
@@ -340,7 +350,7 @@ extension AppState {
     /// one that was already unloaded at quit, or hand-added to `pinned.yaml`
     /// — rebuilds from its declaration, re-running its `run:` commands. A tab
     /// with any REMOTE pane always reattaches — its sessions live on the
-    /// remote host, which a local `zmx ls` can't see (and which survive this
+    /// remote host, which the local server can't see (and which survive this
     /// machine's reboots by design). A failed listing (nil) also reattaches
     /// everything: fail toward reattach, never toward respawning over
     /// sessions that may be alive.
@@ -355,8 +365,8 @@ extension AppState {
         if pendingPinnedLiveRestores.isEmpty {
             aliveNames = []
         } else if zmx.isBundled() {
-            if let entries = await zmx.listSessionsWithClients() {
-                aliveNames = Set(entries.map(\.name))
+            if let sessions = await zmx.listSessions() {
+                aliveNames = Set(sessions.filter(\.isRunning).map(\.name))
             }
         } else {
             // No persistence layer: nothing survived the quit.

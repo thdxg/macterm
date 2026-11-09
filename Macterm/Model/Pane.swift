@@ -426,9 +426,9 @@ final class Pane: Identifiable {
         let resolvedPID = ProcessInspector.resolvedForegroundPID(forPane: self)
         applyForegroundRefresh(
             name: ProcessInspector.runningProcessName(forPane: self),
-            // The RESOLVED foreground pid (daemon-side shell/program for a
-            // wrapped pane), NOT the raw `nsView.foregroundPID` (the zmx attach
-            // client). `programTitlePID` is pinned to this resolved pid, so the
+            // The RESOLVED foreground pid (session-side shell/program for a
+            // wrapped pane), NOT the raw `nsView.foregroundPID` (the zmx
+            // connect client). `programTitlePID` is pinned to this resolved pid, so the
             // expiry compare in `applyForegroundRefresh` must use the same
             // source — otherwise a wrapped pane's client pid never matches and
             // every adopted OSC title (e.g. Claude Code's "✳ Claude Code")
@@ -1310,8 +1310,8 @@ final class Pane: Identifiable {
     }
 
     /// A second pane attached to `source`'s zmx session — the same running
-    /// shell shown twice (#345). `zmx attach` is an upsert and its daemon
-    /// broadcasts output to every client, so both panes render the same live
+    /// shell shown twice (#345). `zmx connect` attaches to the session that
+    /// runs, and the session broadcasts output to every client, so both panes render the same live
     /// session; only one of them (zmx's "leader") drives the pty size.
     ///
     /// This exists as its own initializer rather than as a call-site
@@ -1358,8 +1358,9 @@ final class Pane: Identifiable {
     /// Permanently kill this pane's zmx session. Call ONLY when the pane is
     /// gone for good (closed, tab/project removed, dropped by a layout apply)
     /// — NOT on transient teardown (window hide, tab-switch churn), where the
-    /// daemon must survive. Fire-and-forget: close paths aren't blocked on it
-    /// and ZmxClient's subprocess timeout bounds a stuck daemon. The client is
+    /// session must survive. Fire-and-forget: close paths aren't blocked on
+    /// it; `LocalSessions.requestTimeout` (local) and ZmxClient's subprocess
+    /// timeout (remote) bound a stuck peer. The client is
     /// a parameter so AppState's injectable instance flows through in tests.
     func killPersistentSession(using zmx: ZmxClient) {
         let name = sessionName

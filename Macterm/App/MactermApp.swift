@@ -428,6 +428,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // get a `starting` error until installResponders attaches the
         // handler.
         controlServer.start()
+        // Connect to the session server early: this replaces a server that
+        // an older build left running (design/002) before most panes ask it
+        // for their sessions. A pane's `zmx connect` starts the server too,
+        // so nothing waits for this.
+        if ZmxClient.liveBypass == nil {
+            Task { await LocalSessions.shared.prepare() }
+        }
         // Registering here is what lets a Services-menu pick launch the app:
         // AppKit delivers the pending request as soon as the provider exists.
         NSApp.servicesProvider = finderServices
@@ -878,7 +885,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Quit is always a DETACH: every pane's session survives and reattaches
         // on relaunch — the quick terminal's included, since the snapshot saved
         // by onTerminate carries its tab alongside the workspaces. Nothing is
-        // killed here; a session nobody claims next launch is the reaper's.
+        // killed here; a pane's close is what ends its session.
     }
 
     func applicationShouldTerminate(_: NSApplication) -> NSApplication.TerminateReply {

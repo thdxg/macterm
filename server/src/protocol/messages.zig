@@ -227,6 +227,9 @@ pub const Session = struct {
     /// The signal number, when `state` is `exited` and a signal ended the
     /// shell.
     signal: ?u8 = null,
+    /// The clients that show the session (they sent `attach`). Null when
+    /// the session did not say (a session of an older build).
+    clients: ?u16 = null,
 };
 
 pub const SessionState = enum {
@@ -259,6 +262,11 @@ pub const SessionCreate = struct {
         command: ?[]const msgpack.Bin = null,
         cols: u16 = 80,
         rows: u16 = 24,
+        /// The session's environment, as `NAME=value` entries, in place of
+        /// the server's. The server sets its own runtime directory in it.
+        /// A pane's client sends its own, so that the shell gets the
+        /// environment that the terminal made for it.
+        env: ?[]const msgpack.Bin = null,
     };
     pub const Result = struct { session: Session };
 };
@@ -393,6 +401,9 @@ pub const State = struct {
     pty: msgpack.Bin,
     cols: u16,
     rows: u16,
+    /// The clients that sent `attach`. The session sends `state` again to
+    /// its other connections (the server's) each time this count changes.
+    clients: ?u16 = null,
 };
 
 /// The first message of a client that shows the pane: its size. When the

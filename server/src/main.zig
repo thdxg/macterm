@@ -423,14 +423,23 @@ fn proxyCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Envi
     v2proxy.pump(fd, lib_posix.STDIN_FILENO, lib_posix.STDOUT_FILENO);
 }
 
-/// `zmx connect <name>`: the pane's client of a v2 session (attach.zig). It
-/// becomes `macterm attach` when v1's `attach` goes (design/007 §6).
+/// `zmx connect <name> [-- command...]`: the pane's client of a v2 session
+/// (attach.zig). With `--`, a missing session is made through the server
+/// and runs the command. It becomes `macterm attach` when v1's `attach`
+/// goes (design/007 §6).
 fn connectCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, args: anytype) !void {
     const name = args.next() orelse return printError(io, "session name required", .{});
-    if (args.next()) |extra| return printError(io, "unexpected argument \"{s}\"", .{extra});
+    var create: ?v2attach.Create = null;
+    var command: std.ArrayList([]const u8) = .empty;
+    defer command.deinit(gpa);
+    if (args.next()) |sep| {
+        if (!std.mem.eql(u8, sep, "--")) return printError(io, "unexpected argument \"{s}\"", .{sep});
+        while (args.next()) |arg| try command.append(gpa, arg);
+        create = .{ .command = if (command.items.len > 0) command.items else null };
+    }
     const dir = runtime.resolveDir(gpa, env) catch return printError(io, "no runtime directory: set {s}", .{runtime.dir_env});
     defer gpa.free(dir);
-    const outcome = v2attach.run(gpa, dir, name) catch |err| switch (err) {
+    const outcome = v2attach.run(gpa, dir, name, create) catch |err| switch (err) {
         error.Sighup, error.Sigint, error.Sigterm => return err,
         error.InvalidName => return printError(io, "invalid session name \"{s}\"", .{name}),
         error.RuntimeDir => return printError(io, "runtime directory {s} failed the check", .{dir}),
@@ -448,6 +457,7 @@ fn connectCommand(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.En
             return printError(io, "session \"{s}\" refused this build: {s}", .{ name, r.reason });
         },
         .closed => return printError(io, "session \"{s}\" closed", .{name}),
+        .not_created => |text| return printError(io, "cannot start session \"{s}\": {s}", .{ name, text }),
         else => std.process.exit(v2attach.exitCode(outcome)),
     }
 }
