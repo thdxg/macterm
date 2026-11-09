@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # The events of a v2 session (src/events.zig, src/session.zig): title, cwd,
-# foreground, marks, progress, bell, the heartbeat and the run status, from a
-# shell that a test types into. test/v2client.py is the client; `zmx
+# foreground, marks, progress, bell, the heartbeat, the run status and the
+# program status (OSC 7501), from a shell that a test types into. test/v2client.py is the client; `zmx
 # connect` runs on a pty (test/ptyrun.py).
 
 load test_helper
@@ -176,5 +176,49 @@ q.wait_output("plain-1")
 assert b"\x1b_zmx;foreground" not in q.output, q.output[-300:]
 q.type(b"\x1c")
 assert q.wait_exit() == 0
+PY
+}
+
+@test "events: program status reports become records, and the session answers the query" {
+  query_py="$RT/query.py"
+  printf '%s\n' \
+    'import os, sys, termios, tty' \
+    'old = termios.tcgetattr(0)' \
+    'tty.setraw(0)' \
+    'os.write(1, b"\x1b]7501;?\x07")' \
+    'got = b""' \
+    'while not got.endswith(b"\x07"): got += os.read(0, 1)' \
+    'termios.tcsetattr(0, termios.TCSANOW, old)' \
+    'print("reply=" + got[1:-1].decode())' >"$query_py"
+  export query_py
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+import os
+from v2client import Client
+a = Client("s1")
+a.attach()
+a.wait_msg("state")
+a.type("python3 " + os.environ["query_py"] + "\r")
+a.wait_output("reply=]7501;?:states=idle,working,done,blocked,error")
+
+a.type("printf '\\033]7501;state=working:app=make\\007\\033]7501;state=blocked:id=x:kind=question:msg=QWxsb3cgZWRpdD8=\\007'; printf 'st-%s\\n' 1\r")
+a.wait_output("st-1")
+a.wait(lambda: any(len(m["a"]["records"]) == 2 for m in a.messages("program_status")), what="two records")
+records = a.messages("program_status")[-1]["a"]["records"]
+assert records[0]["state"] == "working" and records[0]["app"] == "make", records
+assert records[1] == {"id": "x", "state": "blocked", "kind": "question", "app": "make", "msg": "Allow edit?"}, records[1]
+
+# A client that connects later gets the records.
+b = Client("s1")
+b.wait_msg("state")
+assert len(b.wait_msg("program_status")["records"]) == 2
+
+# The shell's exit removes them before the exit message.
+a.type("exit\r")
+a.wait_msg("exit")
+kinds = [v["t"] for ch, kind, v in a.frames if ch == 1 and kind == 0]
+last = len(kinds) - 1 - kinds[::-1].index("program_status")
+assert a.messages("program_status")[-1]["a"]["records"] == []
+assert last < kinds.index("exit"), kinds
 PY
 }

@@ -468,6 +468,8 @@ const Session = struct {
         if (s.announced) return;
         const status = s.exited() orelse return;
         s.announced = true;
+        s.watch.shellExited(s.nowMs());
+        s.sendEvents();
         for (s.clients.items) |c| {
             if (c.greeted) s.sendExit(c, status);
         }
@@ -551,6 +553,10 @@ const Session = struct {
             const stop = sequenceEnd(data, at);
             s.watch.feed(stream, data[at..stop], now);
             at = stop;
+            if (s.watch.reply.items.len > 0) {
+                s.queueInput(s.watch.reply.items);
+                s.watch.reply.clearRetainingCapacity();
+            }
             if (s.watch.ready.items.len == 0) continue;
             s.forwardOutput(data[sent..at]);
             sent = at;
@@ -991,22 +997,25 @@ const Session = struct {
             },
             .activity => s.broadcastPane(m.Activity, .{}, true),
             .status => |st| s.broadcastPane(m.Status, st, true),
+            .program => |records| s.broadcastPane(m.ProgramStatus, .{ .records = records }, true),
         }
     }
 
-    /// The current title, cwd, foreground, progress and status, for a client
-    /// that just greeted.
+    /// The current title, cwd, foreground, progress, status and program
+    /// status, for a client that just greeted.
     fn sendCurrent(s: *Session, c: *Client) void {
         s.checkForeground(c);
 
         var list: std.ArrayList(events.Event) = .empty;
         defer list.deinit(s.gpa);
+        defer for (list.items) |e| if (e == .program) events.freeProgram(s.gpa, e.program);
         s.watch.current(&list) catch return;
         for (list.items) |e| switch (e) {
             .title => |t| s.sendPane(c, m.Title, .{ .title = .{ .bytes = t } }),
             .cwd => |u| s.sendPane(c, m.Cwd, .{ .url = .{ .bytes = u } }),
             .progress => |p| s.sendPane(c, m.Progress, p),
             .status => |st| s.sendPane(c, m.Status, st),
+            .program => |records| s.sendPane(c, m.ProgramStatus, .{ .records = records }),
             else => {},
         };
     }
