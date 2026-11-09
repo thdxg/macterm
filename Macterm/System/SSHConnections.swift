@@ -19,8 +19,10 @@ private let logger = Logger(subsystem: appBundleID, category: "SSHConnections")
 ///   `ControlPersist=yes` on the command line wins over the user's config:
 ///   after the login, ssh moves the master into the background, and the ssh
 ///   that Macterm started exits. The next launch finds the master on the
-///   same path and logs in to no host again. `ServerAlive*` ends the master
-///   when the host stops answering, after a network change or a long sleep.
+///   same path and logs in to no host again. The path follows the user, host,
+///   port and jump that `ssh -G` resolves, so a changed config never uses an
+///   old master. `ServerAlive*` ends the master when the host stops
+///   answering, after a network change or a long sleep.
 /// - A command over the master (`run`) never logs in by itself: `BatchMode`
 ///   refuses a prompt, and `ProxyCommand=/usr/bin/false` stops the direct
 ///   connection that ssh tries when the master does not answer. It fails
@@ -105,8 +107,8 @@ final class SSHConnections {
     private var cancelled: Set<pid_t> = []
     /// New logins for each host in this run.
     private(set) var logins: [String: Int] = [:]
-    /// Called when a master exits, with its pid, so that a prompt of its
-    /// askpass that is still up goes away.
+    /// Called when the ssh of a login exits, with its pid, so that a prompt
+    /// of its askpass that is still up goes away.
     var onConnectionExit: ((pid_t) -> Void)?
     /// Called with ssh's last line while a login waits with no question,
     /// and with nil when that ends (`SSHLoginNotice`).
@@ -156,9 +158,13 @@ final class SSHConnections {
     /// stays.
     func disconnect(_ destination: String) async {
         loggingIn[destination]?.terminate()
+        let route = routes[destination]
         forget(destination)
-        let path = SSHControlPath.own(for: destination, in: configuration.controlDirectory)
-        if await controlAnswers(destination, at: path) {
+        var path = route.flatMap { $0.isUsersOwn ? nil : $0.controlPath }
+        if path == nil, let config = try? await resolvedConfig(destination) {
+            path = SSHControlPath.own(forConfig: config, in: configuration.controlDirectory)
+        }
+        if let path, await controlAnswers(destination, at: path) {
             _ = await runSSH(["-O", "exit", "-S", path, "--", destination], timeout: .seconds(5))
         }
     }
@@ -227,17 +233,22 @@ final class SSHConnections {
     // MARK: - Connect
 
     private func open(_ destination: String) async throws -> Route {
-        if let path = await userControlPath(destination), await controlAnswers(destination, at: path) {
+        let config = try await resolvedConfig(destination)
+        if let path = SSHControlPath.userPath(fromConfig: config), await controlAnswers(destination, at: path) {
             logger.info("ssh: host=\(destination, privacy: .public) uses the user's master")
             return Route(controlPath: path, isUsersOwn: true)
         }
-        return try await startConnection(destination)
+        return try await startConnection(destination, path: SSHControlPath.own(forConfig: config, in: configuration.controlDirectory))
     }
 
-    private func userControlPath(_ destination: String) async -> String? {
-        let outcome = await runSSH(["-G", "--", destination], timeout: .seconds(5))
-        guard let outcome, outcome.status == 0 else { return nil }
-        return SSHControlPath.userPath(fromConfig: outcome.stdout)
+    /// The output of `ssh -G`. A config that ssh cannot read fails here, as
+    /// the login would.
+    private func resolvedConfig(_ destination: String) async throws -> String {
+        guard let outcome = await runSSH(["-G", "--", destination], timeout: .seconds(5)) else {
+            throw Failure.cannotStart(configuration.ssh.joined(separator: " "))
+        }
+        guard outcome.status == 0 else { throw Failure.loginFailed(SSHControlPath.lastLine(of: outcome.stderr)) }
+        return outcome.stdout
     }
 
     private func controlAnswers(_ destination: String, at path: String) async -> Bool {
@@ -258,8 +269,7 @@ final class SSHConnections {
         Array(configuration.ssh.dropFirst()) + configuration.options + arguments
     }
 
-    private func startConnection(_ destination: String) async throws -> Route {
-        let path = SSHControlPath.own(for: destination, in: configuration.controlDirectory)
+    private func startConnection(_ destination: String, path: String) async throws -> Route {
         guard SSHControlPath.fitsSocket(path) else { throw Failure.controlPathTooLong(path) }
         try FileManager.default.createDirectory(
             at: configuration.controlDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]
@@ -297,9 +307,10 @@ final class SSHConnections {
         process.standardOutput = FileHandle.nullDevice
         let stderr = CollectedPipe()
         process.standardError = stderr.pipe
+        // The wait below ends the login when this ssh exits.
         process.terminationHandler = { [weak self] process in
             let pid = process.processIdentifier
-            Task { @MainActor in self?.connectionExited(destination, process: process, pid: pid) }
+            Task { @MainActor in self?.onConnectionExit?(pid) }
         }
         do {
             try process.run()
@@ -351,13 +362,6 @@ final class SSHConnections {
         logins[destination] = count
         logger.info("ssh login: host=\(destination, privacy: .public) logins=\(count, privacy: .public)")
         return Route(controlPath: path, isUsersOwn: false)
-    }
-
-    private func connectionExited(_ destination: String, process: Process, pid: pid_t) {
-        onConnectionExit?(pid)
-        guard loggingIn[destination] === process else { return }
-        logger.info("ssh: host=\(destination, privacy: .public) login ended")
-        forget(destination)
     }
 
     private func forget(_ destination: String) {
@@ -417,10 +421,23 @@ struct SSHLoginNotice {
 
 /// ControlPath rules. Pure.
 enum SSHControlPath {
-    /// Macterm's own path for `destination`: a hash, so that any destination
-    /// gives a short name with no special characters.
-    static func own(for destination: String, in directory: URL) -> String {
-        let digest = SHA256.hash(data: Data(destination.utf8))
+    /// The `ssh -G` keys that name where a master goes, as OpenSSH's `%C`.
+    static let endpointKeys = ["user", "hostname", "port", "proxyjump", "proxycommand"]
+
+    /// Macterm's own path for a host, from the output of `ssh -G`: a hash of
+    /// `endpointKeys`, so that a short name with no special characters
+    /// changes when the config sends the host somewhere else.
+    static func own(forConfig output: String, in directory: URL) -> String {
+        var values: [String: String] = [:]
+        for line in output.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: " ", maxSplits: 1)
+            let key = parts[0].lowercased()
+            if endpointKeys.contains(key), values[key] == nil {
+                values[key] = parts.count == 2 ? String(parts[1]) : ""
+            }
+        }
+        let endpoint = endpointKeys.map { "\($0)=\(values[$0] ?? "")" }.joined(separator: "\n")
+        let digest = SHA256.hash(data: Data(endpoint.utf8))
         let name = digest.prefix(8).map { String(format: "%02x", $0) }.joined()
         return directory.appendingPathComponent(name).path
     }

@@ -26,11 +26,15 @@ struct SSHConnectionsTests {
     }
 
     @Test
-    func the_own_path_is_short_and_the_same_for_one_destination() {
+    func the_own_path_is_short_and_follows_where_the_config_sends_the_host() {
         let directory = URL(fileURLWithPath: "/tmp/cm")
-        let path = SSHControlPath.own(for: "bob@example.com", in: directory)
-        #expect(path == SSHControlPath.own(for: "bob@example.com", in: directory))
-        #expect(path != SSHControlPath.own(for: "alice@example.com", in: directory))
+        let config = "user bob\nhostname example.com\nport 22\ncontrolpersist no\n"
+        let path = SSHControlPath.own(forConfig: config, in: directory)
+        // Keys that do not change the endpoint do not change the path.
+        #expect(path == SSHControlPath.own(forConfig: config + "serveraliveinterval 60\n", in: directory))
+        #expect(path != SSHControlPath.own(forConfig: "user alice\nhostname example.com\nport 22\n", in: directory))
+        #expect(path != SSHControlPath.own(forConfig: "user bob\nhostname example.com\nport 2222\n", in: directory))
+        #expect(path != SSHControlPath.own(forConfig: config + "proxyjump bastion\n", in: directory))
         #expect(path.hasPrefix("/tmp/cm/"))
         #expect((path as NSString).lastPathComponent.count == 16)
         #expect(SSHControlPath.fitsSocket(path))
@@ -214,6 +218,7 @@ struct SSHConnectionsTests {
         try """
         #!/bin/sh
         case " $* " in
+          *" -G "*) echo 'hostname box'; exit 0 ;;
           *" -M "*) echo 'To authenticate, visit: https://example.test/x' >&2; exec sleep 30 ;;
           *) exit 255 ;;
         esac
@@ -371,10 +376,23 @@ struct SSHConnectionsTests {
         #expect(try await second.run("box", "echo two").stdout == "two\n")
         #expect(second.logins["box"] == nil)
         #expect(sshd.acceptedLogins() == 1)
-        // The askpass of a master is in its own environment, never in the
-        // app's, so a pane's ssh does not get it.
-        #expect(ProcessInfo.processInfo.environment["SSH_ASKPASS"] == nil)
-        #expect(ProcessInfo.processInfo.environment[SSHConnections.askpassSocketVariable] == nil)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_changed_config_does_not_use_the_connection_of_an_earlier_run() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let first = SSHConnections(configuration: sshd.configuration)
+        let old = try await first.connect("box")
+        first.endLogins()
+
+        // ssh takes the first value: the host now has another name.
+        try sshd.addToConfig("HostName localhost")
+        let second = SSHConnections(configuration: sshd.configuration)
+        let new = try await second.connect("box")
+        #expect(new.controlPath != old.controlPath)
+        #expect(second.logins["box"] == 1)
+        #expect(sshd.acceptedLogins() == 2)
     }
 
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
