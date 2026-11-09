@@ -31,6 +31,26 @@ struct GitStatusParserTests {
         #expect(status.untracked == 2)
         #expect(status.changedFiles == 8)
         #expect(!status.isClean)
+        #expect(status.changedPaths == [
+            "Sources/App.swift", "README.md", "Package.swift", "New.swift", "Conflict.swift", "notes.md", "scratch/",
+        ])
+    }
+
+    @Test
+    func a_path_with_spaces_is_kept_whole() {
+        let output = "1 .M N... 100644 100644 100644 aaa bbb Docs/Read Me.md\n? My Notes.txt\n"
+        #expect(GitStatusParser.parseStatus(output).changedPaths == ["Docs/Read Me.md", "My Notes.txt"])
+    }
+
+    @Test
+    func the_branch_log_is_kept_only_on_a_branch() {
+        let log = "a1b2c3d\u{1F}Apply tax\u{1F}1700000000\n"
+        let onBranch = GitStatusParser.status(statusOutput: "# branch.head feature/tax\n", logOutput: nil, branchLogOutput: log)
+        #expect(onBranch.branchCommits.map(\.subject) == ["Apply tax"])
+        let detached = GitStatusParser.status(
+            statusOutput: "# branch.oid abcdef1234567890\n# branch.head (detached)\n", logOutput: nil, branchLogOutput: log
+        )
+        #expect(detached.branchCommits.isEmpty)
     }
 
     @Test

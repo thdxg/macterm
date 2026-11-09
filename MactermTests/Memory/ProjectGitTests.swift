@@ -12,7 +12,7 @@ struct ProjectGitTests {
     """
 
     @Test
-    func a_remote_reply_splits_into_the_four_outputs() throws {
+    func a_remote_reply_splits_into_the_five_outputs() throws {
         let reply = [
             status,
             "abc1234\u{1F}Fix the build\u{1F}1800000000\n",
@@ -20,6 +20,7 @@ struct ProjectGitTests {
                 + "feature/tax\u{1F}def5678\u{1F}1799990000\u{1F}Add tax\n",
             "worktree /work/app\nHEAD 1234567890abcdef\nbranch refs/heads/main\n\n"
                 + "worktree /work/tax\nHEAD def5678\nbranch refs/heads/feature/tax\n\n",
+            "abc1234\u{1F}Fix the build\u{1F}1800000000\n",
         ].joined(separator: String(ProjectGit.recordSeparator))
         let git = try #require(ProjectGit.parseRemoteOutput(reply))
         #expect(git.branch == "main")
@@ -29,6 +30,17 @@ struct ProjectGitTests {
         #expect(git.recentCommits.map(\.subject) == ["Fix the build"])
         #expect(git.branches.map(\.name) == ["main", "feature/tax"])
         #expect(git.branches.last?.worktree == "/work/tax")
+        #expect(git.branchCommits.map(\.hash) == ["abc1234"])
+    }
+
+    @Test
+    func the_branch_log_leaves_out_the_main_branch_and_merges() {
+        let args = ProjectGit.branchLogArguments(branch: "feature/tax")
+        #expect(args.prefix(4) == ["log", "-5", "--no-merges", "--format=%h%x1f%s%x1f%ct"])
+        #expect(Array(args.drop { $0 != "feature/tax" }) == [
+            "feature/tax", "--not",
+            "--remotes=*/HEAD", "--branches=[m]ain", "--branches=[m]aster", "--remotes=*/main", "--remotes=*/master", "--",
+        ])
     }
 
     @Test
@@ -37,6 +49,7 @@ struct ProjectGitTests {
         #expect(git.branch == "main")
         #expect(git.recentCommits.isEmpty)
         #expect(git.branches.isEmpty)
+        #expect(git.branchCommits.isEmpty)
     }
 
     @Test

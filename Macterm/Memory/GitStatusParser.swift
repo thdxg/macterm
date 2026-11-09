@@ -22,6 +22,13 @@ struct GitStatus: Equatable {
     var stashes = 0
     /// Newest first.
     var recentCommits: [Commit] = []
+    /// The commits on the current branch that the main branch does not
+    /// have (`ProjectGit.branchLogArguments`), newest first. Empty on the
+    /// main branch itself, on a detached HEAD, and on a branch that has no
+    /// work of its own yet.
+    var branchCommits: [Commit] = []
+    /// The paths with changes of any kind, in the order of `git status`.
+    var changedPaths: [String] = []
 
     /// A local branch, with the worktree that has it checked out.
     struct Branch: Equatable {
@@ -62,15 +69,29 @@ enum GitStatusParser {
                 let xy = Array(fields[1])
                 if xy[0] != "." { status.staged += 1 }
                 if xy[1] != "." { status.unstaged += 1 }
+                // The path is after 8 fields, or after 9 for a rename, whose
+                // old path follows a tab.
+                if let path = field(line, after: line.first == "1" ? 8 : 9) {
+                    status.changedPaths.append(String(path.prefix { $0 != "\t" }))
+                }
             case "u":
                 status.conflicted += 1
+                if let path = field(line, after: 10) { status.changedPaths.append(String(path)) }
             case "?":
                 status.untracked += 1
+                status.changedPaths.append(String(line.dropFirst(2)))
             default:
                 continue
             }
         }
         return status
+    }
+
+    /// The rest of `line` after `count` space-separated fields: a path,
+    /// which can have spaces of its own.
+    private static func field(_ line: Substring, after count: Int) -> Substring? {
+        let fields = line.split(separator: " ", maxSplits: count, omittingEmptySubsequences: false)
+        return fields.count == count + 1 ? fields[count] : nil
     }
 
     private static func parseHeader(_ header: Substring, into status: inout GitStatus) {
@@ -147,11 +168,13 @@ enum GitStatusParser {
         statusOutput: String,
         logOutput: String?,
         branchesOutput: String? = nil,
-        worktreesOutput: String? = nil
+        worktreesOutput: String? = nil,
+        branchLogOutput: String? = nil
     ) -> GitStatus {
         var status = parseStatus(statusOutput)
         if status.branch != nil { status.detachedAt = nil }
         status.recentCommits = logOutput.map(parseLog) ?? []
+        status.branchCommits = status.branch == nil ? [] : branchLogOutput.map(parseLog) ?? []
         let worktrees = worktreesOutput.map(parseWorktrees) ?? [:]
         status.branches = (branchesOutput.map(parseBranches) ?? []).map { branch in
             var branch = branch

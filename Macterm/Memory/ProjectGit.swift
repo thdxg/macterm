@@ -12,7 +12,12 @@ import Foundation
 /// takes the index lock from the user's own git, and turns the fsmonitor
 /// off: a daemon that it starts could hold the output pipe open.
 ///
-/// A remote read is one ssh connection that runs the same four commands on
+/// A fifth read, `branchLogArguments`, lists the commits of the current
+/// branch that the main branch does not have. The latest commits of HEAD
+/// cannot tell them apart: on a new branch they are mostly the main
+/// branch's own history, and the summary named that as the user's work.
+///
+/// A remote read is one ssh connection that runs the same five commands on
 /// the host (`RemoteSpawn.gitProbeArgv`), with the outputs separated by
 /// `recordSeparator`. It is a background connection like the foreground
 /// probe, so `Preferences.backgroundSSHConnections` gates it (#272), and a
@@ -24,7 +29,7 @@ enum ProjectGit {
     static let remoteTimeout: Duration = .seconds(15)
     static let recentCommitCount = 5
     static let recentBranchCount = 6
-    /// Between the four outputs of a remote read (ASCII record separator).
+    /// Between the five outputs of a remote read (ASCII record separator).
     static let recordSeparator: Character = "\u{1E}"
 
     /// The git state of the repository at `path`, or nil when it is not in
@@ -40,12 +45,36 @@ enum ProjectGit {
             "--format=%(refname:short)\u{1F}%(objectname:short)\u{1F}%(committerdate:unix)\u{1F}%(subject)",
         ], in: path)
         let worktreesOutput = await run(git, ["worktree", "list", "--porcelain"], in: path)
+        var branchLogOutput: String?
+        if let branch = GitStatusParser.parseStatus(statusOutput).branch {
+            branchLogOutput = await run(git, branchLogArguments(branch: branch), in: path)
+        }
         return GitStatusParser.status(
             statusOutput: statusOutput,
             logOutput: logOutput,
             branchesOutput: branchesOutput,
-            worktreesOutput: worktreesOutput
+            worktreesOutput: worktreesOutput,
+            branchLogOutput: branchLogOutput
         )
+    }
+
+    /// The patterns of the refs that are the main branch: the default
+    /// branch of each remote (`origin/HEAD`), and `main` or `master`,
+    /// local or on a remote. Git ignores a pattern that matches nothing.
+    /// Git reads a pattern with no glob character as a folder (`main` is
+    /// `main/*`), so the local names are a character class.
+    private static let mainBranchPatterns = [
+        "--remotes=*/HEAD", "--branches=[m]ain", "--branches=[m]aster", "--remotes=*/main", "--remotes=*/master",
+    ]
+
+    /// `git log` of the commits on `branch` that the main branch does not
+    /// have, merges left out (a merge of main into the branch is not its
+    /// work). Empty on the main branch itself. A branch name has no glob
+    /// characters (`git check-ref-format`), and the final `--` keeps it a
+    /// revision.
+    static func branchLogArguments(branch: String) -> [String] {
+        ["log", "-\(recentCommitCount)", "--no-merges", "--format=%h%x1f%s%x1f%ct", branch, "--not"]
+            + mainBranchPatterns + ["--"]
     }
 
     // MARK: - Remote
@@ -90,7 +119,7 @@ enum ProjectGit {
         }
     }
 
-    /// The four outputs of `RemoteSpawn.gitProbeArgv`, split at the record
+    /// The five outputs of `RemoteSpawn.gitProbeArgv`, split at the record
     /// separator, through `GitStatusParser`. A reply with fewer parts has
     /// the rest as nil.
     static func parseRemoteOutput(_ output: String) -> GitStatus? {
@@ -103,7 +132,8 @@ enum ProjectGit {
             statusOutput: statusOutput,
             logOutput: parts.count > 1 ? parts[1] : nil,
             branchesOutput: parts.count > 2 ? parts[2] : nil,
-            worktreesOutput: parts.count > 3 ? parts[3] : nil
+            worktreesOutput: parts.count > 3 ? parts[3] : nil,
+            branchLogOutput: parts.count > 4 ? parts[4] : nil
         )
     }
 
