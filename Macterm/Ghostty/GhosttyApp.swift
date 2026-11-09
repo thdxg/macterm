@@ -167,10 +167,10 @@ final class GhosttyApp {
     private func systemAppearanceMayHaveChanged() {
         let scheme = Self.readSystemScheme()
         guard scheme != systemScheme else { return }
-        let oldSplitScheme = splitScheme
+        let oldScheme = windowScheme
         systemScheme = scheme
         logger.info("system appearance changed: \(scheme == .dark ? "dark" : "light", privacy: .public)")
-        appearanceDidChange(splitSchemeChanged: splitScheme != oldSplitScheme)
+        appearanceDidChange(schemeChanged: windowScheme != oldScheme)
     }
 
     // MARK: - Window theme (`window-theme`, `set_window_theme`)
@@ -185,43 +185,47 @@ final class GhosttyApp {
         WindowTheme.resolve(configValue: read(WindowTheme.key))
     }
 
-    /// The scheme that `window-theme` and the override set, or nil when the
-    /// chrome follows the terminal background (`auto`). See `WindowTheme`.
-    var windowScheme: ThemeResolver.Scheme? {
-        WindowTheme.scheme(configured: windowTheme, override: windowThemeOverride, system: systemScheme)
-    }
-
-    /// The side of a `theme = light:X,dark:Y` split, for the surfaces and the
-    /// chrome. Ghostty.app picks it from the app's appearance, so a fixed
-    /// window theme picks its own side. `auto` picks the system side:
-    /// libghostty turns `auto` into `system` for a real split, and a theme
-    /// that is not a split has no side to pick.
-    var splitScheme: ThemeResolver.Scheme {
-        windowScheme ?? systemScheme
+    /// The light or dark scheme of the app: the chrome
+    /// (`MactermTheme.colorScheme`), and the scheme that each surface gets,
+    /// which picks the side of a `theme = light:X,dark:Y` split and which
+    /// programs read. Ghostty.app sets `NSApp.appearance` from the same rule
+    /// and gives the surfaces its effective appearance. See `WindowTheme`.
+    ///
+    /// `auto` reads the background off the app config, never
+    /// `backgroundColor`: its theme-file fallback reads this scheme. For a
+    /// split with two different sides libghostty turns `auto` into `system`,
+    /// so the app config holds `auto` only for a theme with one side.
+    var windowScheme: ThemeResolver.Scheme {
+        WindowTheme.scheme(
+            configured: windowTheme,
+            override: windowThemeOverride,
+            system: systemScheme,
+            backgroundIsLight: (read(Keys.background) ?? Self.fallbackBackground).prefersDarkForeground
+        )
     }
 
     /// Apply `set_window_theme`. A nil override (`config`) goes back to the
     /// key.
     func setWindowThemeOverride(_ override: WindowTheme.Override?) {
         guard override != windowThemeOverride else { return }
-        let oldSplitScheme = splitScheme
+        let oldScheme = windowScheme
         windowThemeOverride = override
         logger.info("window theme override: \(String(describing: override), privacy: .public)")
-        appearanceDidChange(splitSchemeChanged: splitScheme != oldSplitScheme)
+        appearanceDidChange(schemeChanged: windowScheme != oldScheme)
     }
 
     /// Re-derive the chrome after the system scheme, the override or the key
     /// changed.
-    private func appearanceDidChange(splitSchemeChanged: Bool) {
-        if splitSchemeChanged {
-            resyncSplitScheme()
+    private func appearanceDidChange(schemeChanged: Bool) {
+        if schemeChanged {
+            resyncSurfaceScheme()
         }
         configVersion += 1
         NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
     }
 
-    /// Push a new split side to every surface.
-    private func resyncSplitScheme() {
+    /// Push a new scheme to every surface.
+    private func resyncSurfaceScheme() {
         // A window held by preferredColorScheme never delivers
         // viewDidChangeEffectiveAppearance — push the scheme to surfaces
         // directly; each push re-emits CONFIG_CHANGE with the new side.
@@ -280,7 +284,7 @@ final class GhosttyApp {
         guard let app else { return ReloadResult(diagnostics: []) }
         let (newConfig, result) = loadConfig()
         guard let newConfig else { return result }
-        let oldSplitScheme = splitScheme
+        let oldScheme = windowScheme
         ghostty_app_update_config(app, newConfig)
         // Also update each existing surface so changes take effect immediately
         for view in GhosttyTerminalNSView.allLiveViews() {
@@ -290,9 +294,9 @@ final class GhosttyApp {
         }
         if let old = config { ghostty_config_free(old) }
         config = newConfig
-        // A changed `window-theme` can move the split side.
-        if splitScheme != oldSplitScheme {
-            resyncSplitScheme()
+        // A changed `window-theme` or background can change the scheme.
+        if windowScheme != oldScheme {
+            resyncSurfaceScheme()
         }
         configVersion += 1
         applyAppIcon()
@@ -390,6 +394,9 @@ final class GhosttyApp {
         return false
     }
 
+    /// The background when no config gives one.
+    private static let fallbackBackground = NSColor(srgbRed: 0.11, green: 0.11, blue: 0.14, alpha: 1)
+
     /// Color accessors prefer the colors libghostty resolved for a live surface
     /// (`resolvedColors`, fed by `GHOSTTY_ACTION_CONFIG_CHANGE`): that config has
     /// the active `theme = light:X,dark:Y` side applied, so it's correct for both
@@ -400,7 +407,7 @@ final class GhosttyApp {
     var backgroundColor: NSColor {
         if let rgb = resolvedColors?.background { return nsColor(rgb) }
         if let hex = resolvedThemeColors()?.background, let c = nsColor(fromHex: hex) { return c }
-        return read(Keys.background) ?? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.14, alpha: 1)
+        return read(Keys.background) ?? Self.fallbackBackground
     }
 
     /// The color space the renderer paints in (the user's
@@ -724,7 +731,7 @@ final class GhosttyApp {
             configText += "\n" + userText
         }
         guard let themeValue = ThemeResolver.themeValue(inConfigText: configText),
-              let side = ThemeResolver.resolve(themeValue: themeValue, scheme: splitScheme)
+              let side = ThemeResolver.resolve(themeValue: themeValue, scheme: windowScheme)
         else { return nil }
 
         // A theme value is either a bare name (resolved against the bundled

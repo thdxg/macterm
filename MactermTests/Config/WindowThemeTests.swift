@@ -18,20 +18,23 @@ struct WindowThemeTests {
         #expect(WindowTheme.resolve(configValue: " Dark ") == .dark)
     }
 
-    /// `auto` keeps the rule from before the key counted: the chrome follows
-    /// the terminal background.
+    /// `auto` follows the terminal background, also for the surfaces, as in
+    /// Ghostty.app. It is the rule from before the key counted.
     @Test
     func autoFollowsTheBackground() {
         for system in [ThemeResolver.Scheme.light, .dark] {
-            #expect(WindowTheme.scheme(configured: .auto, override: nil, system: system) == nil)
+            #expect(WindowTheme.scheme(configured: .auto, override: nil, system: system, backgroundIsLight: true) == .light)
+            #expect(WindowTheme.scheme(configured: .auto, override: nil, system: system, backgroundIsLight: false) == .dark)
         }
     }
 
     @Test
-    func lightAndDarkIgnoreTheSystem() {
+    func lightAndDarkIgnoreTheSystemAndTheBackground() {
         for system in [ThemeResolver.Scheme.light, .dark] {
-            #expect(WindowTheme.scheme(configured: .light, override: nil, system: system) == .light)
-            #expect(WindowTheme.scheme(configured: .dark, override: nil, system: system) == .dark)
+            for light in [true, false] {
+                #expect(WindowTheme.scheme(configured: .light, override: nil, system: system, backgroundIsLight: light) == .light)
+                #expect(WindowTheme.scheme(configured: .dark, override: nil, system: system, backgroundIsLight: light) == .dark)
+            }
         }
     }
 
@@ -40,18 +43,36 @@ struct WindowThemeTests {
     @Test
     func systemAndGhosttyFollowTheSystem() {
         for configured in [WindowTheme.system, .ghostty] {
-            #expect(WindowTheme.scheme(configured: configured, override: nil, system: .light) == .light)
-            #expect(WindowTheme.scheme(configured: configured, override: nil, system: .dark) == .dark)
+            #expect(WindowTheme.scheme(configured: configured, override: nil, system: .light, backgroundIsLight: false) == .light)
+            #expect(WindowTheme.scheme(configured: configured, override: nil, system: .dark, backgroundIsLight: true) == .dark)
         }
     }
 
     @Test
     func theOverrideWinsOverEveryKey() {
         for configured in WindowTheme.allCases {
-            #expect(WindowTheme.scheme(configured: configured, override: .light, system: .dark) == .light)
-            #expect(WindowTheme.scheme(configured: configured, override: .dark, system: .light) == .dark)
-            #expect(WindowTheme.scheme(configured: configured, override: .system, system: .dark) == .dark)
-            #expect(WindowTheme.scheme(configured: configured, override: .system, system: .light) == .light)
+            #expect(WindowTheme.scheme(configured: configured, override: .light, system: .dark, backgroundIsLight: false) == .light)
+            #expect(WindowTheme.scheme(configured: configured, override: .dark, system: .light, backgroundIsLight: true) == .dark)
+            #expect(WindowTheme.scheme(configured: configured, override: .system, system: .dark, backgroundIsLight: true) == .dark)
+            #expect(WindowTheme.scheme(configured: configured, override: .system, system: .light, backgroundIsLight: false) == .light)
         }
+    }
+
+    /// The background is read only for `auto` with no override. The read
+    /// goes to the app config, so it must not run where it is not needed.
+    @Test
+    func readsTheBackgroundOnlyForAuto() {
+        var reads = 0
+        func light() -> Bool {
+            reads += 1
+            return true
+        }
+        for configured in WindowTheme.allCases where configured != .auto {
+            _ = WindowTheme.scheme(configured: configured, override: nil, system: .dark, backgroundIsLight: light())
+        }
+        _ = WindowTheme.scheme(configured: .auto, override: .dark, system: .dark, backgroundIsLight: light())
+        #expect(reads == 0)
+        _ = WindowTheme.scheme(configured: .auto, override: nil, system: .dark, backgroundIsLight: light())
+        #expect(reads == 1)
     }
 }

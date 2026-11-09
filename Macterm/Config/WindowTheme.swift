@@ -2,8 +2,8 @@ import Foundation
 
 /// The user's ghostty `window-theme`, and the `set_window_theme` action that
 /// overrides it for the session. Together they decide the light or dark
-/// scheme of the app: the chrome (`MactermTheme.colorScheme`) and the side of
-/// a `theme = light:X,dark:Y` split (`GhosttyApp.splitScheme`).
+/// scheme of the app (`GhosttyApp.windowScheme`): the chrome, and the scheme
+/// of each surface, which picks the side of a `theme = light:X,dark:Y` split.
 ///
 /// The rule is Ghostty.app's (`NSAppearance(ghosttyConfig:)` and
 /// `AppDelegate.setAppearance` in upstream `macos/`):
@@ -18,6 +18,9 @@ import Foundation
 /// - The action's `light`, `dark` and `system` win over the key until the
 ///   action's `config` clears them. Ghostty keeps the override in memory
 ///   only, across config reloads.
+///
+/// Not followed: upstream's `macos-titlebar-style = tabs|transparent` rule
+/// for terminal windows. Macterm has no such titlebar styles.
 ///
 /// The raw values are ghostty's own tag names (`WindowTheme` in
 /// `src/config/Config.zig`), which is what `ghostty_config_get` hands back
@@ -41,7 +44,7 @@ enum WindowTheme: String, CaseIterable {
     }
 
     /// An unset, unreadable or unknown value is `auto`, ghostty's default,
-    /// so a failed read keeps the chrome as it was before this key counted.
+    /// so a failed read keeps the scheme as it was before this key counted.
     static func resolve(configValue: String?) -> WindowTheme {
         guard let raw = configValue?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else {
             return .auto
@@ -49,13 +52,14 @@ enum WindowTheme: String, CaseIterable {
         return WindowTheme(rawValue: raw.lowercased()) ?? .auto
     }
 
-    /// The scheme that the key and the override set, or nil when the scheme
-    /// follows the terminal background (`auto` with no override).
+    /// The scheme of the app. `backgroundIsLight` is read only for `auto`
+    /// with no override.
     static func scheme(
         configured: WindowTheme,
         override: Override?,
-        system: ThemeResolver.Scheme
-    ) -> ThemeResolver.Scheme? {
+        system: ThemeResolver.Scheme,
+        backgroundIsLight: @autoclosure () -> Bool
+    ) -> ThemeResolver.Scheme {
         switch override {
         case .light: return .light
         case .dark: return .dark
@@ -67,7 +71,7 @@ enum WindowTheme: String, CaseIterable {
         case .dark: return .dark
         case .system,
              .ghostty: return system
-        case .auto: return nil
+        case .auto: return backgroundIsLight() ? .light : .dark
         }
     }
 }
