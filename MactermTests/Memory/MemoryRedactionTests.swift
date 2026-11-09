@@ -21,6 +21,45 @@ struct MemoryRedactionTests {
     }
 
     @Test(arguments: [
+        ("TOKEN=abc; make", "TOKEN=•••; make"),
+        ("TOKEN=abc;make", "TOKEN=•••;make"),
+        ("TOKEN=abc&& make", "TOKEN=•••&& make"),
+        ("TOKEN=abc& make", "TOKEN=•••& make"),
+        ("TOKEN=abc|| make", "TOKEN=•••|| make"),
+        ("TOKEN=abc| base64", "TOKEN=•••| base64"),
+        ("(TOKEN=abc)", "(TOKEN=•••)"),
+        ("echo $(TOKEN=abc env)", "echo $(TOKEN=••• env)"),
+        ("TOKEN=abc>out", "TOKEN=•••>out"),
+        ("TOKEN=abc<in", "TOKEN=•••<in"),
+        ("/bin/sh -c 'echo token=ghp_abcdefghijklmnopqrstuvwxyz0123456789; exit 3'", "/bin/sh -c 'echo token=•••; exit 3'"),
+        ("tool --token abc; make", "tool --token •••; make"),
+        ("tool --password=abc&& make", "tool --password=•••&& make"),
+        ("curl -u admin:hunter2; echo", "curl -u admin:•••; echo"),
+        ("curl -u admin:hunter2|jq", "curl -u admin:•••|jq"),
+    ])
+    func a_separator_after_a_secret_is_kept(input: String, expected: String) {
+        #expect(MemoryRedaction.redact(input) == expected)
+    }
+
+    /// A separator that is quoted or escaped is part of the secret, and so is
+    /// all that follows a quote with no end.
+    @Test(arguments: [
+        ("TOKEN=ab\\;cd; make", "TOKEN=•••; make"),
+        ("TOKEN=ab';'cd; make", "TOKEN=•••; make"),
+        ("TOKEN=ab\";\"cd; make", "TOKEN=•••; make"),
+        ("TOKEN=\"a\\\"b; c\"; make", "TOKEN=•••; make"),
+        ("TOKEN=$(pass show x); make", "TOKEN=•••; make"),
+        ("TOKEN=`pass show x`; make", "TOKEN=•••; make"),
+        ("TOKEN=ab\"cd;ef", "TOKEN=•••"),
+        ("TOKEN=ab'cd|ef gh", "TOKEN=••• gh"),
+        ("TOKEN=\"abc", "TOKEN=•••"),
+        ("curl -u admin:pa\\|ss|jq", "curl -u admin:•••|jq"),
+    ])
+    func a_quoted_or_escaped_separator_stays_masked(input: String, expected: String) {
+        #expect(MemoryRedaction.redact(input) == expected)
+    }
+
+    @Test(arguments: [
         "git commit --author \"Ann <a@b.c>\" -m fix",
         "npm test",
         "ls -la ~/dev",

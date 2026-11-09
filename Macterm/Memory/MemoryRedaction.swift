@@ -52,15 +52,25 @@ enum MemoryRedaction {
     private static let secretName = #"[A-Za-z0-9_]*(?:token|secret|passw(?:or)?d|pass|pwd|"#
         + #"api[_-]?key|access[_-]?key|private[_-]?key|auth(?!or)|credential)[A-Za-z0-9_]*"#
 
+    /// A secret value, read as one shell word. It ends at a space or at a
+    /// separator that is not quoted or escaped (`;`, `&`, `|`, `)`, `<`, `>`),
+    /// so `TOKEN=abc; make` keeps its `;`. A quote, a backtick or a backslash
+    /// that has no end takes the rest of the word, so the mask never stops
+    /// inside a secret.
+    private static let value = #"(?:\\.|"(?:\\.|[^"\\])*"|'[^']*'|`[^`]*`|\$\([^)]*\)"#
+        + #"|[^\s;&|<>)"'`\\]|["'`\\]\S*)+"#
+
     private static let rules: [Rule] = [
         // `NAME=value`, `export NAME=value`, `$env.NAME = value`.
-        Rule(#"(\b"# + secretName + #"\s*=\s*)("[^"]*"|'[^']*'|\S+)"#, "$1" + mask),
+        Rule(#"(\b"# + secretName + #"\s*=\s*)"# + value, "$1" + mask),
         // `Authorization: Bearer abc`, `X-Api-Key: abc` in a header argument.
+        // A header is almost always quoted, where a `;` is part of the value,
+        // so this value ends only at a space or a quote.
         Rule(#"((?:authorization|proxy-authorization|x-[a-z-]*(?:key|token))\s*:\s*)(?:(?:bearer|basic|token)\s+)?[^\s"']+"#, "$1" + mask),
         // `--password value`, `--token=value`, `-p=value`.
-        Rule(#"(--?"# + secretName + #"(?:=|\s+))("[^"]*"|'[^']*'|\S+)"#, "$1" + mask),
+        Rule(#"(--?"# + secretName + #"(?:=|\s+))"# + value, "$1" + mask),
         // `curl -u user:pass`, `--user user:pass`.
-        Rule(#"((?:-u|--user)\s+[^\s:]+:)\S+"#, "$1" + mask),
+        Rule(#"((?:-u|--user)\s+[^\s:]+:)"# + value, "$1" + mask),
         // `https://user:pass@host`.
         Rule(#"([a-z][a-z0-9+.-]*://[^\s/:@]+:)[^\s/@]+(@)"#, "$1" + mask + "$2"),
         // Keys with a known shape: GitHub, Slack, AWS, OpenAI and Anthropic, JWTs.
