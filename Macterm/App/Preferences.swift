@@ -636,8 +636,8 @@ final class Preferences {
     }
 
     /// Whether the toolbar shows the Project Insights button. It hides only
-    /// the button: Toggle Project Insights and View → Project Insights still
-    /// show and hide the panel.
+    /// the button: Toggle Project Insights (⌘I, the palette and the View menu)
+    /// still shows and hides the panel.
     var showProjectInsightsButton: Bool {
         didSet { Keys.showProjectInsightsButton.write(showProjectInsightsButton, to: defaults) }
     }

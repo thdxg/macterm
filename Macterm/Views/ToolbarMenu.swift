@@ -3,8 +3,8 @@ import SwiftUI
 
 /// The terminal window toolbar's right-click menu: Hide Toolbar, the tab
 /// switcher's two settings and the Project Insights button, so the bar can
-/// be arranged from the bar itself
-/// rather than only from Settings → Appearance → Toolbar.
+/// be arranged from the bar itself rather than only from Settings →
+/// Appearance → Toolbar.
 ///
 /// AppKit offers no hook for it. The bar is SwiftUI's `NSToolbar`, whose own
 /// context menu is empty once display-mode customization is locked
