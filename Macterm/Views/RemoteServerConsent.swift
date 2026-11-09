@@ -10,7 +10,11 @@ enum RemoteServerConsent {
         alert.messageText = String(localized: "Install the Macterm server on \(request.host)?")
         let size = ByteCountFormatter.string(fromByteCount: request.size, countStyle: .file)
         alert.informativeText = String(
-            localized: "Macterm puts it in ~/.local/share/macterm (\(size)) on that host. It runs only while you use this host.",
+            localized: """
+            With the server, your sessions on this host keep running when you quit Macterm or the \
+            connection stops. Macterm puts it in ~/.local/share/macterm (\(size)). It runs while you \
+            have sessions on this host. Without it, your shells end when the connection stops.
+            """,
             comment: "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is."
         )
         alert.addButton(withTitle: String(localized: "Install"))

@@ -5054,23 +5054,6 @@
         }
       }
     },
-    "Macterm puts it in ~/.local/share/macterm (%@) on that host. It runs only while you use this host." : {
-      "comment" : "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is.",
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm은 서버를 해당 호스트의 ~/.local/share/macterm(%@)에 넣습니다. 서버는 이 호스트를 사용하는 동안에만 실행됩니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm 会把服务器放到该主机的 ~/.local/share/macterm（%@）。服务器只在你使用此主机时运行。"
-          }
-        }
-      }
-    },
     "Macterm removes the password for “%@” from your keychain." : {
       "localizations" : {
         "ko" : {
@@ -11951,6 +11934,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "窗口"
+          }
+        }
+      }
+    },
+    "With the server, your sessions on this host keep running when you quit Macterm or the connection stops. Macterm puts it in ~/.local/share/macterm (%@). It runs while you have sessions on this host. Without it, your shells end when the connection stops." : {
+      "comment" : "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서버가 있으면 Macterm을 종료하거나 연결이 끊겨도 이 호스트의 세션이 계속 실행됩니다. Macterm은 서버를 ~/.local/share/macterm(%@)에 넣습니다. 서버는 이 호스트에 세션이 있는 동안 실행됩니다. 서버가 없으면 연결이 끊길 때 셸이 종료됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有了服务器，即使你退出 Macterm 或连接中断，此主机上的会话也会继续运行。Macterm 会把服务器放到 ~/.local/share/macterm（%@）。只要此主机上有会话，服务器就会运行。没有服务器，连接中断时你的 shell 会结束。"
           }
         }
       }
