@@ -2949,6 +2949,39 @@ struct AppStateTests {
         try await Task.sleep(for: .milliseconds(100))
         #expect(calls.value == 0)
     }
+
+    /// A v1 session that is still running after the try leaves the flag
+    /// unset, so that the next launch tries again.
+    @Test
+    func a_v1_session_that_did_not_end_leaves_the_flag_unset() async throws {
+        let (writer, _, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        writer.saveWorkspaces()
+
+        let calls = LockedBox(0)
+        var zmx = ZmxClient.noop
+        zmx.endV1Sessions = { _ in
+            calls.mutate { $0 += 1 }
+            return false
+        }
+        let endedFlag = LockedBox(false)
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: QuickTerminalSplitState()
+        )
+        state.zmx = zmx
+        state.v1SessionsEnded = .init(read: { endedFlag.value }, write: { endedFlag.mutate { $0 = true } })
+        state.restoreSelection(projects: [])
+
+        let deadline = Date().addingTimeInterval(5)
+        while calls.value == 0, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(calls.value == 1)
+        #expect(!endedFlag.value)
+    }
 }
 
 /// Actor recording killed session names across the fire-and-forget kill tasks.

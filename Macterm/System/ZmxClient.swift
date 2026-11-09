@@ -54,9 +54,10 @@ struct ZmxClient {
     /// the server cannot be reached. nil means UNKNOWN: a caller never ends
     /// or restarts anything on it.
     var listSessions: @Sendable () async -> [LocalSession]?
-    /// Ends v1's local zmx sessions of these names (`zmx kill`, in v1's
-    /// socket folder), once, at the first v2 launch (design/008 §4). False
-    /// when nothing was tried (no zmx, or the unit-test host).
+    /// Ends v1's local zmx sessions of these names and their programs
+    /// (`V1Sessions`), at the first v2 launch (design/008 §4). True only
+    /// when none of them runs after it. False on the unit-test host, which
+    /// tries nothing.
     var endV1Sessions: @Sendable (_ names: [String]) async -> Bool
 }
 
@@ -154,12 +155,7 @@ extension ZmxClient {
             endV1Sessions: { names in
                 // The unit-test host ends nothing: its names are not v1's.
                 guard resolveExecutable() != nil else { return false }
-                guard !names.isEmpty else { return true }
-                var env = ProcessInfo.processInfo.environment
-                env["ZMX_DIR"] = ZmxSocketBudget.v1SocketDir(env: env)
-                // `zmx kill` exits 1 when no session of the names runs.
-                _ = await runZmxProcess(["kill"] + names, executable: bundledExecutable(), environment: env)
-                return true
+                return await V1Sessions.end(names: Set(names), socketDir: ZmxSocketBudget.v1SocketDir())
             }
         )
     }()

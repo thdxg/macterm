@@ -2109,10 +2109,8 @@ final class AppState {
     /// its saved folder, so a v1 session left running would be a hidden
     /// shell until a reboot. Only these names: a v1 session that no pane
     /// names is not ours to judge. Remote sessions stay (their names are not
-    /// in the local folder). The flag is set after one try, also when the
-    /// kill failed or timed out (a v1 daemon from before zmx 1.0 does not
-    /// answer `zmx kill`): a second try would fail the same way at each
-    /// launch.
+    /// in the local folder). The flag is set only when every one of them
+    /// is gone; otherwise the next launch tries again.
     private func endV1SessionsOnce(names: Set<String>) {
         guard !v1SessionsEnded.read() else { return }
         let flag = v1SessionsEnded
