@@ -22,7 +22,7 @@ Open **Shortcuts**, create a shortcut, and search the action list for `Macterm`.
 | --- | --- |
 | **New Project** | Adds a folder as a project, selects it and brings the window forward. The name is optional. The default is the name of the folder. `Pinned` is a reserved name. Macterm refuses it, and it adds a folder with the name Pinned as `Pinned 2`. The action always creates a new project, also when a project already has that folder. |
 | **Focus Project** | Shows a project. A window that already shows the project comes forward. |
-| **Where Did I Leave Off** | Returns where you left off in a project, as text. Siri says it. The text is the [Project Insights](/docs/project-insights) summary of the project when Macterm wrote one, then the latest command and its result. Without a summary, it is the latest command and its result, and a command that failed and did not succeed since. The action reads what Macterm already recorded. It does not write a summary. It needs macOS 26 and project memory turned on. |
+| **Where Did I Leave Off** | Returns where you left off in a project, as text. Siri says it. The text is the [Project Insights](/docs/project-insights) summary of the project when Macterm wrote one, then the latest command and its result. Without a summary, it is the latest command and its result, and a command that failed and did not succeed since. The action reads what Macterm already recorded. It does not write a summary. It needs macOS 26, Apple Intelligence, and Project Insights turned on. |
 
 ## Tabs
 

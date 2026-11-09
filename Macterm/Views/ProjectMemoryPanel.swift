@@ -15,16 +15,12 @@ struct ProjectMemoryPanel: View {
     private var appState
     @Environment(ProjectStore.self)
     private var projectStore
-    @State
-    private var preferences = Preferences.shared
     /// The sidebar's project icon (Settings → Appearance → Project icon), so
     /// the header shows the same glyph as the project's row.
     @AppStorage(Preferences.Keys.projectIconSymbol)
     private var projectIconSymbol: String
 
     static let width: CGFloat = 320
-    static let inset: CGFloat = 10
-    static let cornerRadius: CGFloat = 22
     /// The failure card's corner: the rows are cards like it.
     static let rowCornerRadius: CGFloat = 12
     static let recentLimit = 8
@@ -49,8 +45,8 @@ struct ProjectMemoryPanel: View {
         .scrollIndicators(.never)
         .frame(width: Self.width)
         .frame(maxHeight: .infinity, alignment: .top)
-        .glassPanel(cornerRadius: Self.cornerRadius)
-        .padding(Self.inset)
+        .glassPanel(cornerRadius: GlassPanelMetrics.sidePanelCornerRadius)
+        .padding(GlassPanelMetrics.sidePanelInset)
         .task(id: project.id) {
             memory.store.prepare(project.id)
             // The stored summary, for the paragraph. Nothing is written
@@ -221,7 +217,7 @@ struct ProjectMemoryPanel: View {
     /// Git state alone, which is what a project shows before its first
     /// command (`ProjectMemoryDigest` is nil with neither).
     private var summaryEnabled: Bool {
-        preferences.projectMemorySummary && ProjectMemorySummarizer.isEnabled
+        ProjectMemorySummarizer.isEnabled
             && (!entries.isEmpty || memory.git[project.id] != nil)
     }
 

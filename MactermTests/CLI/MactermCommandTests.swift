@@ -215,7 +215,7 @@ private final class RecordingSocket {
         let dropLater = dropAfterFirstRequest
         server = ControlSocketServer(socketPath: self.path)
         server.start()
-        server.attach { [received, version, dropLater, probeFails] raw in
+        server.attach { [received, version, dropLater, probeFails] raw, _ in
             let request = try? ControlProtocol.decodeRequest(raw)
             let drop = dropLater && received.value.count >= 1
             if let request { received.mutate { $0.append(request) } }

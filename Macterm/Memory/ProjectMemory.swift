@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import GhosttyKit
 import os
 
@@ -12,8 +12,9 @@ private let logger = Logger(subsystem: appBundleID, category: "ProjectMemory")
 ///   (`ProjectMemoryStore`). Never the scrollback.
 /// - Reads the project's git state (`ProjectGit`), cached for each project.
 ///
-/// macOS 26 and later only (`isSupported`), and off until the user turns it
-/// on (`isEnabled`). The pinned and scratch workspaces, the
+/// macOS 26 and later only (`isSupported`), needs Apple Intelligence
+/// (`modelAvailability`), and is off until the user turns it on
+/// (`isEnabled`). The pinned and scratch workspaces, the
 /// quick terminal and desktop widgets are not projects, and are never
 /// recorded.
 @MainActor @Observable
@@ -59,8 +60,25 @@ final class ProjectMemory {
     @ObservationIgnored var summaryAllowed: () -> Bool = { ProjectMemorySummarizer.isEnabled }
     @ObservationIgnored private var quietTimers: [UUID: Task<Void, Never>] = [:]
 
+    /// Whether Apple's on-device model can run. Project Insights needs it.
+    /// The user turns Apple Intelligence on and off in System Settings, so
+    /// it is read again each time Macterm becomes active
+    /// (`refreshModelAvailability`). Observable, so that the toolbar button,
+    /// the menu and Settings follow it.
+    private(set) var modelAvailability: OnDeviceModel.Availability
+    /// The seam of `modelAvailability`. The DEBUG `project memory` verb
+    /// replaces it, because no CI runner has Apple Intelligence.
+    @ObservationIgnored var modelReader: () -> OnDeviceModel.Availability = { OnDeviceModel.availability }
+    @ObservationIgnored private var activationObserver: (any NSObjectProtocol)?
+
     init(store: ProjectMemoryStore = ProjectMemoryStore()) {
         self.store = store
+        modelAvailability = OnDeviceModel.availability
+    }
+
+    func refreshModelAvailability() {
+        let availability = modelReader()
+        if availability != modelAvailability { modelAvailability = availability }
     }
 
     /// Whether this Mac has the feature at all.
@@ -69,11 +87,13 @@ final class ProjectMemory {
     }
 
     /// Whether Project Insights is on: the one switch, Settings →
-    /// Intelligence (`Preferences.projectMemory`). While it is off, nothing
-    /// is recorded, Toggle Project Insights has no action, and the toolbar
-    /// button and the panel are not there.
+    /// Intelligence (`Preferences.projectMemory`), and Apple Intelligence
+    /// on. While it is off, nothing is recorded, Toggle Project Insights has
+    /// no action, and the toolbar button and the panel are not there. The
+    /// switch keeps its value while Apple Intelligence is off, so the
+    /// feature comes back when the user turns it on again.
     static var isEnabled: Bool {
-        isSupported && Preferences.shared.projectMemory
+        isSupported && Preferences.shared.projectMemory && shared.modelAvailability == .available
     }
 
     /// Whether a window shows the panel: the feature is on and the panel's
@@ -233,7 +253,7 @@ final class ProjectMemory {
             ScreenCommandExtractor.screenCommand(screenCommand.command, shows: command.command) ? screenCommand.output : nil
         }
         var entry = MemoryEntry(
-            command: MemoryRedaction.redact(command.command),
+            command: MemoryRedaction.redactCommand(command.command),
             directory: finish.directory,
             exitCode: finish.exitCode,
             finishedAt: finish.finishedAt,
@@ -411,6 +431,13 @@ final class ProjectMemory {
     func attach(projectStore: ProjectStore, panelShows: @escaping (UUID) -> Bool) {
         projectLookup = { [weak projectStore] id in projectStore?.projects.first { $0.id == id } }
         self.panelShows = panelShows
+        if activationObserver == nil {
+            activationObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { ProjectMemory.shared.refreshModelAvailability() }
+            }
+        }
         guard Self.isSupported, !projectStore.loadFailed else { return }
         store.prune(keeping: Set(projectStore.projects.map(\.id)))
     }

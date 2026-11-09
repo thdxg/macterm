@@ -30,6 +30,9 @@ enum Output {
         if let memory = data.memory { renderMemory(memory) }
         if let widgets = data.widgets { renderWidgets(widgets) }
         if let palettes = data.palettes { renderPalettes(palettes) }
+        if let host = data.host {
+            print("host=\(host.host) controlPath=\(host.controlPath) usersOwn=\(host.usersOwn) logins=\(host.logins)")
+        }
     }
 
     private static func renderPassword(_ state: ControlPasswordState) {

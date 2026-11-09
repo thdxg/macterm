@@ -20,7 +20,9 @@ private let logger = Logger(subsystem: appBundleID, category: "ControlSocketServ
 /// benchmark harness waiting for readiness) sees a well-formed response
 /// instead of a hang.
 final class ControlSocketServer: @unchecked Sendable {
-    typealias Handler = @MainActor @Sendable (Data) async -> Data
+    /// The request, and the pid of the process that sent it (`LOCAL_PEERPID`,
+    /// nil when the kernel does not say).
+    typealias Handler = @MainActor @Sendable (Data, pid_t?) async -> Data
 
     private let socketPath: String
     /// Guards `listenFD`, `isRunning`, and `handler` — touched by the control
@@ -304,14 +306,23 @@ final class ControlSocketServer: @unchecked Sendable {
             finish()
             return
         }
+        let peer = Self.peerPID(fd)
         Task { @MainActor in
-            let response = await handler(raw)
+            let response = await handler(raw, peer)
             Self.write(fd: fd, data: response)
             finish()
         }
     }
 
     // MARK: - Socket IO
+
+    /// The pid of the process at the other end of `fd`.
+    static func peerPID(_ fd: Int32) -> pid_t? {
+        var pid: pid_t = 0
+        var length = socklen_t(MemoryLayout<pid_t>.size)
+        guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &length) == 0, pid > 0 else { return nil }
+        return pid
+    }
 
     /// Upper bound on a single request so a client that streams without ever
     /// half-closing can't balloon memory. Control requests are tiny JSON lines;

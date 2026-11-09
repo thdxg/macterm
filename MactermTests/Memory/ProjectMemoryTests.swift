@@ -34,8 +34,14 @@ struct ProjectMemoryTests {
         )
         let ctx = AppCommandContext(appState: state, projectStore: ProjectStore(fileURL: base.appendingPathComponent("p.json")))
         let preferences = Preferences.shared
-        let (wasOn, wasVisible) = (preferences.projectMemory, preferences.projectMemoryPanelVisible)
-        defer { (preferences.projectMemory, preferences.projectMemoryPanelVisible) = (wasOn, wasVisible) }
+        let memory = ProjectMemory.shared
+        let (wasOn, wasVisible, wasReader) = (preferences.projectMemory, preferences.projectMemoryPanelVisible, memory.modelReader)
+        defer {
+            (preferences.projectMemory, preferences.projectMemoryPanelVisible, memory.modelReader) = (wasOn, wasVisible, wasReader)
+            memory.refreshModelAvailability()
+        }
+        memory.modelReader = { .available }
+        memory.refreshModelAvailability()
 
         preferences.projectMemoryPanelVisible = true
         preferences.projectMemory = false
@@ -48,6 +54,35 @@ struct ProjectMemoryTests {
         #expect(ProjectMemory.showsPanel)
         preferences.projectMemoryPanelVisible = false
         #expect(!ProjectMemory.showsPanel)
+    }
+
+    /// Project Insights needs Apple Intelligence: without the model, the
+    /// switch keeps its value, and the feature is off until the model is
+    /// back.
+    @Test
+    func the_feature_is_off_while_apple_intelligence_is_off() {
+        let preferences = Preferences.shared
+        let memory = ProjectMemory.shared
+        let (wasOn, wasVisible, wasReader) = (preferences.projectMemory, preferences.projectMemoryPanelVisible, memory.modelReader)
+        defer {
+            (preferences.projectMemory, preferences.projectMemoryPanelVisible, memory.modelReader) = (wasOn, wasVisible, wasReader)
+            memory.refreshModelAvailability()
+        }
+        preferences.projectMemory = true
+        preferences.projectMemoryPanelVisible = true
+
+        for availability in [OnDeviceModel.Availability.notReady, .unsupported] {
+            memory.modelReader = { availability }
+            memory.refreshModelAvailability()
+            #expect(!ProjectMemory.isEnabled)
+            #expect(!ProjectMemory.showsPanel)
+            #expect(!ProjectMemorySummarizer.isEnabled)
+            #expect(preferences.projectMemory)
+        }
+
+        memory.modelReader = { .available }
+        memory.refreshModelAvailability()
+        #expect(ProjectMemory.isEnabled == ProjectMemory.isSupported)
     }
 
     // MARK: - Recording

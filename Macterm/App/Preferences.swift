@@ -436,16 +436,10 @@ final class Preferences {
     /// Record the commands that finish in each project for the project
     /// memory panel (`ProjectMemory`, Settings → Intelligence). Off by
     /// default: a log of commands is the user's to start, never a surprise.
-    /// macOS 26 and later only.
+    /// macOS 26 and later only. It takes effect only while Apple Intelligence
+    /// is on (`ProjectMemory.isEnabled`), and keeps its value while it is off.
     var projectMemory: Bool {
         didSet { Keys.projectMemory.write(projectMemory, to: defaults) }
-    }
-
-    /// A paragraph at the top of the memory panel, by Apple's on-device
-    /// model (`ProjectMemorySummarizer`). On by default: it runs only where
-    /// memory is on and the model is available, and nothing leaves the Mac.
-    var projectMemorySummary: Bool {
-        didSet { Keys.projectMemorySummary.write(projectMemorySummary, to: defaults) }
     }
 
     /// Whether the Project Insights panel (`ProjectMemoryPanel`) is shown.
@@ -1048,7 +1042,6 @@ final class Preferences {
         autoAssignProjectColors = Keys.autoAssignProjectColors.read(defaults)
         autoUpdateExtensions = Keys.autoUpdateExtensions.read(defaults)
         projectMemory = Keys.projectMemory.read(defaults)
-        projectMemorySummary = Keys.projectMemorySummary.read(defaults)
         projectMemoryPanelVisible = Keys.projectMemoryPanelVisible.read(defaults)
         showNewProjectButton = Keys.showNewProjectButton.read(defaults)
         showProjectNewTabButton = Keys.showProjectNewTabButton.read(defaults)
@@ -1151,6 +1144,13 @@ final class Preferences {
             defaults.removeObject(forKey: "macterm.tabs.autoName")
             defaults.set(true, forKey: Keys.migrationRetiredAutoNameTabs)
         }
+        // Project Insights needs Apple Intelligence as a whole now, so the
+        // toggle of its summary is gone. The key `macterm.memory.summary` is
+        // retired.
+        if !defaults.bool(forKey: Keys.migrationRetiredMemorySummary) {
+            defaults.removeObject(forKey: "macterm.memory.summary")
+            defaults.set(true, forKey: Keys.migrationRetiredMemorySummary)
+        }
     }
 
     /// Reads the two-layer config preference. The single-path key came from the
@@ -1232,7 +1232,6 @@ final class Preferences {
         static let autoAssignProjectColors = PreferenceStorageKey("macterm.projects.autoAssignColors", default: false)
         static let autoUpdateExtensions = PreferenceStorageKey("macterm.extensions.autoUpdate", default: true)
         static let projectMemory = PreferenceStorageKey("macterm.memory.enabled", default: false)
-        static let projectMemorySummary = PreferenceStorageKey("macterm.memory.summary", default: true)
         static let projectMemoryPanelVisible = PreferenceStorageKey("macterm.memory.panelVisible", default: false)
         static let showNewProjectButton = PreferenceStorageKey("macterm.sidebar.showNewProjectButton", default: true)
         static let showProjectNewTabButton = PreferenceStorageKey("macterm.sidebar.showProjectNewTabButton", default: true)
@@ -1273,6 +1272,7 @@ final class Preferences {
         static let migrationRetiredGhosttyOwnedKeys = "macterm.migration.retired_ghostty_owned_keys"
         static let migrationRetiredWidgetDefaultSize = "macterm.migration.retired_widget_default_size"
         static let migrationRetiredAutoNameTabs = "macterm.migration.retired_auto_name_tabs"
+        static let migrationRetiredMemorySummary = "macterm.migration.retired_memory_summary"
     }
 }
 

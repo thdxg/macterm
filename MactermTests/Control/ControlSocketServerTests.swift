@@ -78,7 +78,7 @@ struct ControlSocketServerTests {
         let server = ControlSocketServer(socketPath: path)
         server.start()
         defer { server.stop() }
-        server.attach { raw in
+        server.attach { raw, _ in
             let request = (try? ControlProtocol.decodeRequest(raw))
             return ControlProtocol.encode(.success(
                 id: request?.id ?? "",

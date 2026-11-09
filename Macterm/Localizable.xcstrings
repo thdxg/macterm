@@ -827,22 +827,6 @@
         }
       }
     },
-    "A short paragraph at the top of the panel says where you left off." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "패널 맨 위의 짧은 문단이 마지막으로 하던 작업을 알려 줍니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "面板顶部的一小段文字会说明你上次进行到哪里。"
-          }
-        }
-      }
-    },
     "A shortcut wants to run an action in %@. It can create projects and tabs. It can also type into your terminals." : {
       "localizations" : {
         "ko" : {
@@ -1404,22 +1388,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Apple 智能不可用。请在系统设置中打开它。"
-          }
-        }
-      }
-    },
-    "Apple's on-device model writes it. Nothing leaves this Mac." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple의 기기 내 모델이 작성합니다. 아무것도 이 Mac 밖으로 나가지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "由 Apple 的设备端模型撰写。任何内容都不会离开这台 Mac。"
           }
         }
       }
@@ -2580,6 +2548,55 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "与 %@ 冲突"
+          }
+        }
+      }
+    },
+    "Connect" : {
+      "comment" : "The button that accepts an ssh question, such as a new host key.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接"
+          }
+        }
+      }
+    },
+    "Connect to %@?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 연결하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要连接到 %@ 吗？"
+          }
+        }
+      }
+    },
+    "Connecting to %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 연결하는 중"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在连接到 %@"
           }
         }
       }
@@ -4723,6 +4740,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地文件夹…"
+          }
+        }
+      }
+    },
+    "Log In" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录"
+          }
+        }
+      }
+    },
+    "Log In to %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 로그인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录到 %@"
           }
         }
       }
@@ -7412,6 +7461,38 @@
         }
       }
     },
+    "Project Insights needs Apple Intelligence. Turn it on in System Settings." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 인사이트에는 Apple Intelligence가 필요합니다. 시스템 설정에서 켜십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目洞察需要 Apple 智能。请在系统设置中打开。"
+          }
+        }
+      }
+    },
+    "Project Insights needs a Mac with Apple Intelligence." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 인사이트에는 Apple Intelligence를 지원하는 Mac이 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目洞察需要支持 Apple 智能的 Mac。"
+          }
+        }
+      }
+    },
     "Project Insights needs macOS 26 or later." : {
       "localizations" : {
         "ko" : {
@@ -9781,22 +9862,6 @@
         }
       }
     },
-    "Summarize with Apple Intelligence" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Intelligence로 요약"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用 Apple 智能生成摘要"
-          }
-        }
-      }
-    },
     "Summarizing…" : {
       "localizations" : {
         "ko" : {
@@ -10088,6 +10153,22 @@
         }
       }
     },
+    "The answer is incorrect." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "답이 올바르지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回答不正确。"
+          }
+        }
+      }
+    },
     "The background matches the color of each full-screen program." : {
       "localizations" : {
         "ko" : {
@@ -10344,6 +10425,22 @@
         }
       }
     },
+    "The key of this host is not known. Make sure that it is the key that you expect." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 호스트의 키를 알 수 없습니다. 예상한 키인지 확인하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此主机的密钥未知。请确认它是你预期的密钥。"
+          }
+        }
+      }
+    },
     "The keys that move the cursor and select text in copy mode. A change applies the next time the mode starts." : {
       "localizations" : {
         "ko" : {
@@ -10518,6 +10615,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "该窗格正在运行命令。请先完成或停止它。"
+          }
+        }
+      }
+    },
+    "The passphrase is incorrect." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "패스프레이즈가 올바르지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码短语不正确。"
+          }
+        }
+      }
+    },
+    "The password is incorrect." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호가 올바르지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码不正确。"
           }
         }
       }
@@ -11203,6 +11332,38 @@
         }
       }
     },
+    "Type the passphrase for the key %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키 %@의 암호문을 입력하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入密钥 %@ 的密码短语。"
+          }
+        }
+      }
+    },
+    "Type the password for %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 암호를 입력하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入 %@ 的密码。"
+          }
+        }
+      }
+    },
     "Type the password. When it works, Macterm offers to update the saved password." : {
       "localizations" : {
         "ko" : {
@@ -11505,6 +11666,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更新"
+          }
+        }
+      }
+    },
+    "Use Saved Password" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 암호 사용"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用已存储的密码"
           }
         }
       }
@@ -12158,6 +12335,30 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "rows: %@ 指定了路径，但输出不是 JSON"
+          }
+        }
+      }
+    },
+    "settings.intelligence.projectInsights.unavailableCaption" : {
+      "comment" : "The description of Project Insights, then the reason that it is not available.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@%2$@。"
           }
         }
       }

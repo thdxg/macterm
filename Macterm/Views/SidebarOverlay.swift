@@ -1,50 +1,30 @@
 import SwiftUI
 
 /// The overlay peek is a separate visual surface, never a second split-view
-/// column. Its inset exposes the terminal around a rounded Liquid Glass panel
-/// while the sidebar content keeps the titlebar's safe area.
+/// column. It is a side panel with the surface of the Project Insights panel
+/// (`glassPanel`, `GlassPanelMetrics.sidePanelCornerRadius`), mirrored on the
+/// leading side: it starts below the toolbar and keeps the same inset from
+/// the window content.
 struct SidebarOverlayPanel: View {
     let width: CGFloat
     let chromeHidden: Bool
-    let windowCornerRadius: CGFloat?
-    let windowTopSafeAreaInset: CGFloat
     let presentation: SidebarPresentationState
     let isInteractive: Bool
     let onResize: (CGFloat) -> Void
     let onResizeStateChanged: (Bool) -> Void
-
-    private var cornerRadius: CGFloat {
-        SidebarOverlayMetrics.cornerRadius(
-            windowCornerRadius: windowCornerRadius,
-            inset: SidebarOverlayMetrics.panelInset
-        )
-    }
 
     var body: some View {
         SidebarContent(
             presentation: presentation,
             isInteractive: isInteractive,
             paintsFallbackFooterBackground: false,
-            forcesScrollEdgeEffects: true,
-            topSafeAreaBarHeight: chromeHidden
-                ? 0
-                : SidebarLayoutMetrics.overlayTopBarHeight(windowTopInset: windowTopSafeAreaInset)
+            forcesScrollEdgeEffects: true
         )
-        .safeAreaPadding(.top, chromeHidden ? SidebarOverlayMetrics.panelInset : 0)
-        .safeAreaPadding(.bottom, SidebarOverlayMetrics.panelInset)
         .frame(width: width)
         .frame(maxHeight: .infinity)
-        .ignoresSafeArea(chromeHidden ? [] : .container, edges: .top)
-        .mask {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .padding(.vertical, SidebarOverlayMetrics.panelInset)
-                .ignoresSafeArea(.container, edges: .vertical)
-        }
-        .background {
-            SidebarOverlayBackground(cornerRadius: cornerRadius)
-                .padding(.vertical, SidebarOverlayMetrics.panelInset)
-                .ignoresSafeArea(.container, edges: .vertical)
-        }
+        // The rows scroll inside the panel's corners, not over its stroke.
+        .clipShape(RoundedRectangle(cornerRadius: GlassPanelMetrics.sidePanelCornerRadius, style: .continuous))
+        .glassPanel(cornerRadius: GlassPanelMetrics.sidePanelCornerRadius)
         .overlay(alignment: .trailing) {
             ResizeDragBand(
                 axis: .horizontal,
@@ -57,7 +37,11 @@ struct SidebarOverlayPanel: View {
             )
             .frame(width: SplitDividerMetrics.bandThickness)
         }
-        .padding(.leading, SidebarOverlayMetrics.panelInset)
+        .padding(GlassPanelMetrics.sidePanelInset)
+        // With the title bar hidden, SwiftUI keeps the titlebar's safe area.
+        // Ignore it, so the inset counts from the window top, as the detail
+        // column (and the Project Insights panel in it) does.
+        .ignoresSafeArea(chromeHidden ? .container : [], edges: .top)
     }
 }
 
@@ -118,19 +102,28 @@ enum SidebarPeekInteraction {
             && (interactionOwnsPointer || (context.windowIsKey && context.pointerIsRetained))
     }
 
+    /// The pointer x past which a peek of `style` ends. The overlay panel
+    /// sits `GlassPanelMetrics.sidePanelInset` in from the leading edge, so
+    /// its exit edge moves with it: both styles keep `hoverExitPadding`
+    /// past the edge that the user sees.
+    static func exitEdge(style: SidebarPeekStyle, sidebarWidth: CGFloat) -> CGFloat {
+        switch style {
+        case .resizeTerminal:
+            sidebarWidth + SidebarOverlayMetrics.hoverExitPadding
+        case .overlayTerminal:
+            SidebarOverlayMetrics.exitEdge(sidebarWidth: sidebarWidth)
+        }
+    }
+
     static func shouldCollapseAfterResize(lastHoverX: CGFloat?, sidebarWidth: CGFloat) -> Bool {
         guard let lastHoverX else { return false }
-        return lastHoverX > sidebarWidth + SidebarOverlayMetrics.hoverExitPadding
+        return lastHoverX > SidebarOverlayMetrics.exitEdge(sidebarWidth: sidebarWidth)
     }
 }
 
-/// Geometry shared by the overlay panel and its resize band. The corner-radius
-/// formula is the concentric rounded-rectangle rule: an edge inset by `d`
-/// receives radius `outerRadius - d`. Reading the outer radius from NSWindow
-/// lets macOS define the proportions for every OS/window style.
+/// Geometry shared by the overlay panel and its hover rules.
 @MainActor
 enum SidebarOverlayMetrics {
-    static let panelInset: CGFloat = 4
     /// The strip at the leading edge that opens a peek by itself. Both trigger
     /// widths stay inside the terminal's 12-point `window-padding-x`
     /// (`MactermConfig.defaultsBody`), so no pointer over text can open a peek:
@@ -174,24 +167,21 @@ enum SidebarOverlayMetrics {
         sidebarWidth: CGFloat
     ) -> Bool {
         let minX = windowFrame.minX - outsideAcquisitionDepth
-        let maxX = min(windowFrame.minX + sidebarWidth + hoverExitPadding, windowFrame.maxX)
+        let maxX = min(windowFrame.minX + exitEdge(sidebarWidth: sidebarWidth), windowFrame.maxX)
         let minY = windowFrame.minY - outsideVerticalTolerance
         let maxY = windowFrame.maxY + outsideVerticalTolerance
         return (minX ... maxX).contains(pointer.x) && (minY ... maxY).contains(pointer.y)
     }
 
-    static func cornerRadius(windowCornerRadius: CGFloat?, inset: CGFloat) -> CGFloat {
-        guard let windowCornerRadius, windowCornerRadius > 0 else { return 0 }
-        return max(windowCornerRadius - inset, 0)
+    /// `hoverExitPadding` past the panel's trailing edge, from the window's
+    /// leading edge.
+    static func exitEdge(sidebarWidth: CGFloat) -> CGFloat {
+        GlassPanelMetrics.sidePanelInset + sidebarWidth + hoverExitPadding
     }
 
     static func resizedWidth(start: CGFloat, delta: CGFloat) -> CGFloat {
         let range = Preferences.sidebarWidthRange
         return min(max(start + delta, CGFloat(range.lowerBound)), CGFloat(range.upperBound))
-    }
-
-    static func topObscuredInset(contentFrameInWindow: CGRect, contentLayoutRect: CGRect) -> CGFloat {
-        max(contentFrameInWindow.maxY - contentLayoutRect.maxY, 0)
     }
 }
 
@@ -245,33 +235,5 @@ struct SidebarWidthHandoff {
     /// target only ever holds the current `width`.
     mutating func endNativeHandoff() {
         pendingNativeWidth = nil
-    }
-}
-
-private struct SidebarOverlayBackground: View {
-    let cornerRadius: CGFloat
-
-    var body: some View {
-        if #available(macOS 26.0, *) {
-            Color.clear
-                .glassEffect(in: .rect(cornerRadius: cornerRadius))
-                .shadow(
-                    color: MactermTheme.border,
-                    radius: max(cornerRadius, 1),
-                    x: SidebarOverlayMetrics.panelInset
-                )
-        } else {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(.regularMaterial)
-                .overlay {
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .strokeBorder(MactermTheme.border, lineWidth: 1)
-                }
-                .shadow(
-                    color: MactermTheme.border,
-                    radius: max(cornerRadius, 1),
-                    x: SidebarOverlayMetrics.panelInset
-                )
-        }
     }
 }
