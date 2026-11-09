@@ -12,7 +12,7 @@ Press <kbd>⌘P</kbd>. One list searches everything:
 
 - **Palettes**: the screens below. This is the first section after your recent projects. A row with an icon and a chevron opens a screen in the same place.
 - **Commands**: split, close and focus panes. Create, rename, pin and switch tabs. Show or hide parts of the window. Each row shows its current keybind.
-- **Projects**: go to any project. With nothing typed, the recent projects are first. Rename, unload or remove the current project with its commands.
+- **Projects**: go to any project. With nothing typed, the recent projects are first. Rename or remove the current project with its commands.
 
 **To open a folder as a project**, type a path that starts with `/` or `~`. The palette changes to path mode and completes folder names.
 

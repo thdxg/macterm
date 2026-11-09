@@ -44,8 +44,8 @@ usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
 # that reaches the archive: Swift sources, the xcodegen spec, the Info.plist /
 # entitlements / icon that project.yml references, and the build + embed
 # scripts. GhosttyKit and Macterm/Resources/{ghostty,terminfo,zmx} are
-# setup.sh-downloaded gitignored artifacts, refreshed by deleting them, so
-# their absence is caught by setup.sh rather than by this check.
+# gitignored artifacts of setup.sh, so setup.sh, not this check, finds them
+# missing or stale.
 sources = [
   "Macterm/**/*.swift",
   "CLI/**/*.swift",
@@ -56,7 +56,10 @@ sources = [
   "scripts/build.sh",
   "scripts/setup.sh",
   "scripts/embed-zmx.sh",
+  "scripts/build-server.sh",
   "scripts/_lib.sh",
+  "server/**/*",
+  "protocol/**/*",
 ]
 outputs = { auto = true }
 run = """
@@ -201,6 +204,27 @@ run = """
     ./scripts/strings.sh "${args[@]}"
   else
     run_step "$msg" ./scripts/strings.sh "${args[@]}"
+  fi
+"""
+
+[tasks.protocol]
+description = "Write the Swift side of the protocol from the Zig schema (use --check to verify only)"
+usage = '''
+flag "-v --verbose" help="Stream raw output instead of the spinner"
+flag "--check" help="Fail if a generated file is not current or the schema breaks the add-only rule, and change nothing (CI mode)"
+'''
+run = """
+  source scripts/_lib.sh
+  args=()
+  msg="Writing the protocol files..."
+  if [[ "$usage_check" == "true" ]]; then
+    args+=(--check)
+    msg="Checking the protocol files..."
+  fi
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/protocol.sh "${args[@]}"
+  else
+    run_step "$msg" ./scripts/protocol.sh "${args[@]}"
   fi
 """
 

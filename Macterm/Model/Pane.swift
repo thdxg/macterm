@@ -1061,7 +1061,7 @@ final class Pane: Identifiable {
 
     /// Whether closing this pane must be confirmed first because a foreground
     /// program is running. This is the single signal every busy-close guard
-    /// reads (pane/tab close, project unload/remove, the CLI's `busy` error,
+    /// reads (pane/tab close, project removal, the CLI's `busy` error,
     /// the quit dialog rows).
     ///
     /// The verdict itself is `ForegroundPolicy.needsConfirmClose` — a pure
@@ -1133,7 +1133,7 @@ final class Pane: Identifiable {
     func destroySurface() {
         captureClosingSnapshot()
         // A pane with no surface has nothing left to acknowledge — an unloaded
-        // project's panes stay in the tree, and their bells must not keep the
+        // pinned tab's panes stay in the tree, and their bells must not keep the
         // Dock badged for shells that no longer exist (ghostty's window-close
         // analogue: a final bell-off transition). Before the guard, so a pane
         // torn down before its view ever existed still settles.

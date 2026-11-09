@@ -184,9 +184,22 @@ jobs:
           echo "build=true" >> "$GITHUB_OUTPUT"
           echo "Building tip for $SHA"
 
+  # The session server, built from the commit of this tip, never taken from
+  # a prebuilt (server-build.yml).
+  server:
+    name: Server
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/server-build.yml
+    with:
+      prebuilt: false
+      ref: ${{ needs.gate.outputs.sha }}
+
   build:
     name: Build and publish
-    needs: gate
+    needs: [gate, server]
     if: needs.gate.outputs.build == 'true'
     runs-on: xcode-27
     # The newest commit replaces an older one still building: a tip build is
@@ -281,6 +294,13 @@ jobs:
       # privacy grants of everyone who follows tip on every single build.
       # build.sh bakes MactermUpdateChannel=tip into the bundle, so this DMG
       # defaults to following tip even if someone downloads it by hand.
+      - name: Download the Server
+        if: steps.published.outputs.published != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: server
+          path: build/server
+
       - name: Build Universal Tip Artifact
         if: steps.published.outputs.published != 'true'
         uses: ./.github/actions/build-release

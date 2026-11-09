@@ -92,6 +92,7 @@ final class ControlHandler {
         case "pane.close": return try paneClose(args)
         case "pane.run": return try paneRun(args)
         case "pane.key": return try paneKey(args)
+        case "pane.latency" where Self.answersLatency: return try await paneLatency(args)
         case "pane.zoom": return try paneZoom(args)
         case "pane.resize-split": return try paneResizeSplit(args)
         #if DEBUG
@@ -1040,6 +1041,44 @@ final class ControlHandler {
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
 
+    // Type `x` many times into a pane and time each glyph to the screen
+    // (`TypingLatencyProbe`). Only debug builds and benchmark runs
+    // (`MACTERM_BENCHMARK=1`) answer: the benchmark job runs a Release build.
+    // The line is cleared with ctrl+u after each key.
+    #if DEBUG
+    private static let answersLatency = true
+    #else
+    private static var answersLatency: Bool { BenchmarkControl.isEnabled }
+    #endif
+
+    /// One `pane.latency` run at a time: two runs would mix their keys.
+    private var latencyRunning = false
+
+    private func paneLatency(_ args: ControlArgs) async throws -> ControlData {
+        let count = args.count ?? 200
+        guard (1 ... 1000).contains(count) else {
+            throw ControlError(code: .badRequest, message: "count must be from 1 to 1000")
+        }
+        guard !latencyRunning else {
+            throw ControlError(code: .busy, message: "a latency run is in progress")
+        }
+        guard let key = HotkeyRegistry.parseShortcut("x"), let clear = HotkeyRegistry.parseShortcut("ctrl+u") else {
+            throw ControlError(code: .internalError, message: "the latency keys do not parse")
+        }
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        if target.pane.isReadOnly { throw Self.paneReadOnly }
+        guard let view = target.pane.nsView, view.window != nil else {
+            throw ControlError(code: .noSurface, message: "the pane's terminal is not on screen")
+        }
+        latencyRunning = true
+        defer { latencyRunning = false }
+        // As in paneKey: a keypress is what zmx switches leader on.
+        appState.noteSessionLeader(target.pane)
+        let result = await TypingLatencyProbe.measure(view: view, key: key, clear: clear, count: count)
+        return ControlData(latency: ControlLatencyResult(samples: result.samples, misses: result.misses))
+    }
+
     /// Toggle zoom on the target pane (#166) — the same `TerminalTab.toggleZoom`
     /// the Cmd+Shift+Enter keybind drives. Purely a layout-state change, so it
     /// needs no live surface; the pane just has to exist.
@@ -1675,9 +1714,7 @@ final class ControlHandler {
             path: project.path,
             active: project.id == appState.activeProjectID,
             // "Loaded" = a workspace exists (tabs/panes addressable over
-            // this protocol) — NOT `AppState.isProjectLoaded`, which asks
-            // whether live terminal *surfaces* exist and is false for a
-            // restored-but-never-shown project.
+            // this protocol), whether or not its panes have started shells.
             loaded: appState.workspaces[project.id] != nil,
             tabCount: appState.workspaces[project.id]?.tabs.count
         )

@@ -1,0 +1,1513 @@
+const std = @import("std");
+pub const terminal = @import("terminal.zig");
+pub const isUserInput = terminal.isUserInput;
+pub const serializeTerminalState = terminal.serializeTerminalState;
+pub const serializeScreenState = terminal.serializeScreenState;
+pub const serializeTerminal = terminal.serializeTerminal;
+pub const serializeTerminalRange = terminal.serializeTerminalRange;
+const ipc = @import("ipc.zig");
+const socket = @import("socket.zig");
+const cross = @import("cross");
+const label = @import("label.zig");
+const lib_posix = @import("posix.zig");
+const testing = std.testing;
+
+pub const SessionEntry = struct {
+    name: []const u8,
+    pid: ?i32,
+    clients_len: ?usize,
+    is_error: bool,
+    error_name: ?[]const u8,
+    cmd: ?[]const u8 = null,
+    cwd: ?[]const u8 = null,
+    labels: ?[]const u8 = null,
+    created_at: u64,
+
+    pub fn deinit(self: SessionEntry, alloc: std.mem.Allocator) void {
+        alloc.free(self.name);
+        if (self.cmd) |cmd| alloc.free(cmd);
+        if (self.cwd) |cwd| alloc.free(cwd);
+        if (self.labels) |l| alloc.free(l);
+    }
+
+    pub fn lessThan(_: void, a: SessionEntry, b: SessionEntry) bool {
+        return std.mem.order(u8, a.name, b.name) == .lt;
+    }
+};
+
+pub fn get_session_entries(
+    alloc: std.mem.Allocator,
+    io: std.Io,
+    socket_dir: []const u8,
+) !std.ArrayList(SessionEntry) {
+    var dir = try std.Io.Dir.openDirAbsolute(io, socket_dir, .{ .iterate = true });
+    defer dir.close(io);
+    var iter = dir.iterate();
+
+    var sessions = try std.ArrayList(SessionEntry).initCapacity(alloc, 30);
+
+    while (try iter.next(io)) |entry| {
+        const exists = socket.sessionExists(io, dir, entry.name) catch continue;
+        if (exists) {
+            const name = try alloc.dupe(u8, entry.name);
+            errdefer alloc.free(name);
+
+            const socket_path = socket.getSocketPath(alloc, socket_dir, entry.name) catch |err| switch (err) {
+                error.NameTooLong => continue,
+                error.OutOfMemory => return err,
+            };
+            defer alloc.free(socket_path);
+
+            const result = ipc.probeSession(alloc, socket_path) catch |err| {
+                try sessions.append(alloc, .{
+                    .name = name,
+                    .pid = null,
+                    .clients_len = null,
+                    .is_error = true,
+                    .error_name = @errorName(err),
+                    .created_at = 0,
+                    .labels = "",
+                });
+                // Only clean up when the daemon is definitively gone. A busy
+                // daemon can miss the probe timeout; deleting its socket
+                // orphans it permanently.
+                if (err == error.ConnectionRefused) {
+                    socket.cleanupStaleSocket(io, dir, entry.name);
+                }
+                continue;
+            };
+            defer result.deinit();
+
+            // Extract cmd and cwd from the fixed-size arrays. Lengths come
+            // off the wire (u16 range), so clamp to the actual array size.
+            const cmd_len = @min(result.info.cmd_len, ipc.MAX_CMD_LEN);
+            const cwd_len = @min(result.info.cwd_len, ipc.MAX_CWD_LEN);
+            const cmd: ?[]const u8 = if (cmd_len > 0)
+                alloc.dupe(u8, result.info.cmd[0..cmd_len]) catch null
+            else
+                null;
+
+            const cwd: ?[]const u8 = if (cwd_len > 0)
+                alloc.dupe(u8, result.info.cwd[0..cwd_len]) catch null
+            else
+                null;
+
+            const labels = if (result.labels) |lbl|
+                alloc.dupe(u8, lbl) catch null
+            else
+                null;
+
+            try sessions.append(alloc, .{
+                .name = name,
+                .pid = result.info.pid,
+                .clients_len = result.info.clients_len,
+                .is_error = false,
+                .error_name = null,
+                .cmd = cmd,
+                .cwd = cwd,
+                .labels = labels,
+                .created_at = result.info.created_at,
+            });
+        }
+    }
+
+    return sessions;
+}
+
+pub const Cwd = struct {
+    /// A filesystem path, percent-decoded, with no scheme or host.
+    path: []const u8,
+    /// True when the OSC 7 host is this machine, so `path` names a directory we
+    /// can actually chdir into. OSC 7 crosses SSH boundaries, so a session that
+    /// ssh'd elsewhere reports a path that does not exist locally.
+    is_local: bool,
+};
+
+/// parseOsc7Cwd turns an OSC 7 value into a path that can be opened.
+///
+/// The value looks like `file://<host><path>` with the path percent-encoded, so
+/// it cannot be handed to `openDirAbsolute` as-is: the escaping is never
+/// decoded and any directory whose name needed it fails to open.
+///
+/// A plain absolute path is accepted and passed through, since a caller may
+/// hand us one directly before the session has reported an OSC 7.
+///
+/// `buf` holds the decoded path, so the result stays valid after the source
+/// value changes. Returns null when the value is not a path we can use.
+pub fn parseOsc7Cwd(buf: []u8, value: []const u8, hostname: []const u8) ?Cwd {
+    if (value.len == 0) return null;
+
+    if (std.fs.path.isAbsolute(value)) {
+        if (value.len > buf.len) return null;
+        @memcpy(buf[0..value.len], value);
+        return .{ .path = buf[0..value.len], .is_local = true };
+    }
+
+    const uri = std.Uri.parse(value) catch return null;
+    // kitty emits kitty-shell-cwd:// from its own shell integration, and
+    // accepts it alongside file:// on the way back in.
+    if (!std.mem.eql(u8, uri.scheme, "file") and
+        !std.mem.eql(u8, uri.scheme, "kitty-shell-cwd")) return null;
+
+    const decoded = uri.path.toRaw(buf) catch return null;
+    if (!std.fs.path.isAbsolute(decoded)) return null;
+    // toRaw returns the input slice when there was nothing to decode, and that
+    // slice is owned by the caller of this fn, so copy it into buf either way.
+    const path = if (decoded.ptr == buf.ptr) decoded else blk: {
+        if (decoded.len > buf.len) return null;
+        std.mem.copyForwards(u8, buf[0..decoded.len], decoded);
+        break :blk buf[0..decoded.len];
+    };
+
+    return .{ .path = path, .is_local = isLocalHost(uri.host, hostname) };
+}
+
+fn isLocalHost(host: ?std.Uri.Component, hostname: []const u8) bool {
+    // file:///path omits the host, which conventionally means the local machine.
+    const component = host orelse return true;
+    var host_buf: [std.posix.HOST_NAME_MAX]u8 = undefined;
+    const value = component.toRaw(&host_buf) catch return false;
+    if (value.len == 0) return true;
+    if (std.ascii.eqlIgnoreCase(value, "localhost")) return true;
+    if (std.ascii.eqlIgnoreCase(value, hostname)) return true;
+    // gethostname often reports a short name while OSC 7 carries the FQDN
+    // (or the reverse), so fall back to comparing the first label.
+    const value_label = value[0 .. std.mem.indexOfScalar(u8, value, '.') orelse value.len];
+    const host_label = hostname[0 .. std.mem.indexOfScalar(u8, hostname, '.') orelse hostname.len];
+    return host_label.len > 0 and std.ascii.eqlIgnoreCase(value_label, host_label);
+}
+
+/// toOsc7Cwd renders a plain path as the OSC 7 form, `file://<host><path>`.
+///
+/// The daemon stores its cwd in this form so `zmx list` shows the host, which
+/// is how you can tell at a glance that a session is inside SSH. Callers that
+/// only have a local path (`zmx attach`) go through this so the
+/// stored value has one shape regardless of where it came from.
+///
+/// Returns null when the result would not fit in `buf`.
+pub fn toOsc7Cwd(buf: []u8, path: []const u8, hostname: []const u8) ?[]const u8 {
+    var w: std.Io.Writer = .fixed(buf);
+    w.print("file://{s}", .{hostname}) catch return null;
+    // Percent-encode so a path with a space or a `%` in it round-trips back
+    // through parseOsc7Cwd unchanged.
+    std.Uri.Component.percentEncode(&w, path, isPathChar) catch return null;
+    return w.buffered();
+}
+
+/// Characters that need no escaping in a URI path. RFC 3986 pchar, minus the
+/// sub-delims that a shell would find surprising to see left raw in `zmx list`.
+fn isPathChar(c: u8) bool {
+    return switch (c) {
+        'A'...'Z', 'a'...'z', '0'...'9' => true,
+        '-', '.', '_', '~', '/', ':', '@' => true,
+        else => false,
+    };
+}
+
+/// getCwd get the current working directory in a std.Uri format.
+/// Caller is responsible for releasing memory.
+pub fn getCwd(gpa: std.mem.Allocator, io: std.Io) ![]u8 {
+    const cur_path = try std.process.currentPathAlloc(io, gpa);
+    defer gpa.free(cur_path);
+
+    var buf: [std.posix.HOST_NAME_MAX]u8 = undefined;
+    const hostname = try std.posix.gethostname(&buf);
+
+    return std.fmt.allocPrint(gpa, "file://{s}{s}", .{ hostname, cur_path });
+}
+
+pub fn shellNeedsQuoting(arg: []const u8) bool {
+    if (arg.len == 0) return true;
+    for (arg) |ch| {
+        switch (ch) {
+            ' ', '\t', '"', '\'', '\\', '$', '`', '!', '(', ')', '{', '}', '[', ']' => return true,
+            '|', '&', ';', '<', '>', '?', '*', '~', '#', '\n' => return true,
+            else => {},
+        }
+    }
+    return false;
+}
+
+pub fn shellQuote(alloc: std.mem.Allocator, arg: []const u8) ![]u8 {
+    // Always use single quotes (like Python's shlex.quote). Inside single
+    // quotes nothing is special except ' itself, which we handle with the
+    // '\'' trick (end quote, escaped literal quote, reopen quote).
+    var len: usize = 2;
+    for (arg) |ch| {
+        len += if (ch == '\'') 4 else 1;
+    }
+    const buf = try alloc.alloc(u8, len);
+    var i: usize = 0;
+    buf[i] = '\'';
+    i += 1;
+    for (arg) |ch| {
+        if (ch == '\'') {
+            @memcpy(buf[i..][0..4], "'\\''");
+            i += 4;
+        } else {
+            buf[i] = ch;
+            i += 1;
+        }
+    }
+    buf[i] = '\'';
+    return buf;
+}
+
+const DA1_QUERY = "\x1b[c";
+const DA1_QUERY_EXPLICIT = "\x1b[0c";
+const DA2_QUERY = "\x1b[>c";
+const DA2_QUERY_EXPLICIT = "\x1b[>0c";
+const DA1_RESPONSE = "\x1b[?62;22c";
+const DA2_RESPONSE = "\x1b[>1;10;0c";
+
+pub fn respondToDeviceAttributes(alloc: std.mem.Allocator, buf: *std.ArrayList(u8), data: []const u8) void {
+    // Scan for DA queries in PTY output and respond on behalf of the terminal.
+    // This handles the case where no client is attached (e.g. after a detach)
+    // and the shell (e.g. fish) sends a DA query that would otherwise go unanswered.
+    //
+    // Responses are queued into the daemon's pty_write_buf (not written
+    // directly) so they don't interleave with any already-buffered input —
+    // e.g. a large `zmx send` payload still draining after the client
+    // disconnected.
+    //
+    // DA1 query: ESC [ c  or  ESC [ 0 c
+    // DA2 query: ESC [ > c  or  ESC [ > 0 c
+    // DA1 response (from terminal): ESC [ ? ... c  (has '?' after '[')
+    //
+    // We must NOT match DA responses (which contain '?') as queries.
+    var i: usize = 0;
+    while (i < data.len) {
+        if (data[i] == '\x1b' and i + 1 < data.len and data[i + 1] == '[') {
+            // Skip DA responses which have '?' after CSI
+            if (i + 2 < data.len and data[i + 2] == '?') {
+                i += 3;
+                continue;
+            }
+            if (matchSeq(data[i..], DA2_QUERY) or matchSeq(data[i..], DA2_QUERY_EXPLICIT)) {
+                buf.appendSlice(alloc, DA2_RESPONSE) catch {};
+            } else if (matchSeq(data[i..], DA1_QUERY) or matchSeq(data[i..], DA1_QUERY_EXPLICIT)) {
+                buf.appendSlice(alloc, DA1_RESPONSE) catch {};
+            }
+        }
+        i += 1;
+    }
+}
+
+fn matchSeq(data: []const u8, seq: []const u8) bool {
+    if (data.len < seq.len) return false;
+    return std.mem.eql(u8, data[0..seq.len], seq);
+}
+
+/// OSC 133;A (prompt start) marker.
+const OSC_133_A = "\x1b]133;A";
+
+/// Rewrite OSC 133;A sequences to include `redraw=0`, which tells the outer
+/// terminal not to clear prompt lines on resize. This is necessary because
+/// zmx sits between the shell and the outer terminal: from the outer terminal's
+/// perspective, the foreground process (zmx client) cannot redraw prompts.
+/// Without this, the outer terminal clears the prompt on resize expecting the
+/// shell to redraw it, but the shell's redraw goes through zmx's IPC path with
+/// cursor coordinates relative to the inner PTY, causing a cursor desync that
+/// makes the prompt invisible.
+/// See: https://github.com/neurosnap/zmx/issues/111
+pub fn rewritePromptRedraw(alloc: std.mem.Allocator, data: []const u8) ?[]const u8 {
+    // Fast-path: most PTY output has no escape sequences at all. A scalar
+    // byte scan for ESC is cheaper than the full string indexOf below.
+    if (std.mem.indexOfScalar(u8, data, '\x1b') == null) return null;
+    if (std.mem.indexOf(u8, data, OSC_133_A) == null) return null;
+
+    var result = std.ArrayList(u8).initCapacity(alloc, data.len + 200) catch return null;
+    errdefer result.deinit(alloc);
+    result.appendSlice(alloc, data) catch return null;
+
+    // Work backwards so index shifts don't invalidate later positions.
+    var search_from: usize = result.items.len;
+    while (search_from > 0) {
+        const haystack = result.items[0..search_from];
+        const pos = std.mem.lastIndexOf(u8, haystack, OSC_133_A) orelse break;
+        search_from = pos;
+
+        const after = pos + OSC_133_A.len;
+        if (after >= result.items.len) continue;
+
+        // Find the string terminator (BEL \x07 or ST \x1b\\).
+        var term_pos: ?usize = null;
+        var j = after;
+        while (j < result.items.len) : (j += 1) {
+            if (result.items[j] == '\x07') {
+                term_pos = j;
+                break;
+            }
+            if (result.items[j] == '\x1b' and j + 1 < result.items.len and result.items[j + 1] == '\\') {
+                term_pos = j;
+                break;
+            }
+        }
+        const end = term_pos orelse continue;
+
+        // Check the parameter region between OSC_133_A and the terminator.
+        const params = result.items[after..end];
+
+        // If redraw=0 already present, skip.
+        if (std.mem.indexOf(u8, params, "redraw=0") != null) continue;
+
+        // If redraw= exists with a different value, replace it.
+        if (std.mem.indexOf(u8, params, "redraw=")) |rdw_offset| {
+            const abs_rdw = after + rdw_offset;
+            const value_start = abs_rdw + "redraw=".len;
+            var value_end = value_start;
+            while (value_end < end and result.items[value_end] != ';') : (value_end += 1) {}
+            result.replaceRange(alloc, value_start, value_end - value_start, "0") catch return null;
+            continue;
+        }
+
+        // No redraw= present. Insert ;redraw=0 before the terminator.
+        result.replaceRange(alloc, end, 0, ";redraw=0") catch return null;
+    }
+
+    // If nothing changed, free and return null.
+    if (std.mem.eql(u8, result.items, data)) {
+        result.deinit(alloc);
+        return null;
+    }
+
+    return result.toOwnedSlice(alloc) catch null;
+}
+
+test "rewritePromptRedraw: no OSC 133;A returns null" {
+    const result = rewritePromptRedraw(std.testing.allocator, "hello world");
+    try std.testing.expect(result == null);
+}
+
+test "rewritePromptRedraw: injects redraw=0 with BEL terminator" {
+    const input = "\x1b]133;A\x07";
+    const result = rewritePromptRedraw(std.testing.allocator, input).?;
+    defer std.testing.allocator.free(result);
+    try std.testing.expectEqualStrings("\x1b]133;A;redraw=0\x07", result);
+}
+
+test "rewritePromptRedraw: injects redraw=0 with ST terminator" {
+    const input = "\x1b]133;A\x1b\\";
+    const result = rewritePromptRedraw(std.testing.allocator, input).?;
+    defer std.testing.allocator.free(result);
+    try std.testing.expectEqualStrings("\x1b]133;A;redraw=0\x1b\\", result);
+}
+
+test "rewritePromptRedraw: replaces existing redraw=1" {
+    const input = "\x1b]133;A;redraw=1\x07";
+    const result = rewritePromptRedraw(std.testing.allocator, input).?;
+    defer std.testing.allocator.free(result);
+    try std.testing.expectEqualStrings("\x1b]133;A;redraw=0\x07", result);
+}
+
+test "rewritePromptRedraw: replaces existing redraw=last" {
+    const input = "\x1b]133;A;redraw=last\x07";
+    const result = rewritePromptRedraw(std.testing.allocator, input).?;
+    defer std.testing.allocator.free(result);
+    try std.testing.expectEqualStrings("\x1b]133;A;redraw=0\x07", result);
+}
+
+test "rewritePromptRedraw: preserves redraw=0 (no-op)" {
+    const result = rewritePromptRedraw(std.testing.allocator, "\x1b]133;A;redraw=0\x07");
+    try std.testing.expect(result == null);
+}
+
+test "rewritePromptRedraw: preserves other parameters" {
+    const input = "\x1b]133;A;aid=14;cl=line\x07";
+    const result = rewritePromptRedraw(std.testing.allocator, input).?;
+    defer std.testing.allocator.free(result);
+    try std.testing.expectEqualStrings("\x1b]133;A;aid=14;cl=line;redraw=0\x07", result);
+}
+
+test "rewritePromptRedraw: handles multiple markers" {
+    const input = "before\x1b]133;A\x07middle\x1b]133;A;redraw=1\x07after";
+    const result = rewritePromptRedraw(std.testing.allocator, input).?;
+    defer std.testing.allocator.free(result);
+    try std.testing.expectEqualStrings("before\x1b]133;A;redraw=0\x07middle\x1b]133;A;redraw=0\x07after", result);
+}
+
+test "rewritePromptRedraw: does not touch OSC 133;B or 133;C" {
+    const input = "\x1b]133;B\x07\x1b]133;C\x07";
+    const result = rewritePromptRedraw(std.testing.allocator, input);
+    try std.testing.expect(result == null);
+}
+
+test "rewritePromptRedraw: embedded in larger output" {
+    const input = "some output\r\n\x1b]133;A\x07prompt$ \x1b]133;B\x07";
+    const result = rewritePromptRedraw(std.testing.allocator, input).?;
+    defer std.testing.allocator.free(result);
+    try std.testing.expectEqualStrings("some output\r\n\x1b]133;A;redraw=0\x07prompt$ \x1b]133;B\x07", result);
+}
+
+/// Strip ANSI escape sequences from data, returning only printable characters
+/// and essential whitespace (CR, LF, tab, backspace).
+/// The returned slice is owned by the caller and must be freed.
+pub fn stripAnsi(alloc: std.mem.Allocator, data: []const u8) ![]const u8 {
+    var result = std.ArrayList(u8).initCapacity(alloc, data.len) catch unreachable;
+    defer result.deinit(alloc);
+
+    var i: usize = 0;
+    while (i < data.len) {
+        const c = data[i];
+        if (c == 0x1b) {
+            i += 1;
+            if (i >= data.len) break;
+            const next = data[i];
+            if (next == '[') { // CSI
+                i += 1;
+                while (i < data.len) : (i += 1) {
+                    const b = data[i];
+                    if (b >= 0x40 and b <= 0x7e) {
+                        i += 1;
+                        break;
+                    }
+                }
+            } else if (next == ']') { // OSC
+                i += 1;
+                while (i < data.len) : (i += 1) {
+                    const b = data[i];
+                    if (b == 0x07) {
+                        i += 1;
+                        break;
+                    }
+                    if (b == 0x1b and i + 1 < data.len and data[i + 1] == '\\') {
+                        i += 2;
+                        break;
+                    }
+                }
+            } else if (next == 'P' or next == 'X' or next == '^' or next == '_') { // DCS, SOS, PM, APC
+                i += 1;
+                while (i < data.len) : (i += 1) {
+                    if (data[i] == 0x07) {
+                        i += 1;
+                        break;
+                    }
+                    if (data[i] == 0x1b and i + 1 < data.len and data[i + 1] == '\\') {
+                        i += 2;
+                        break;
+                    }
+                }
+            } else {
+                // 2-byte escape sequence (e.g. ESC c)
+                i += 1;
+            }
+        } else {
+            switch (c) {
+                '\r', '\n', '\t', 0x08 => try result.append(alloc, c),
+                0x7f => {},
+                else => if (c >= 0x20) try result.append(alloc, c),
+            }
+            i += 1;
+        }
+    }
+    return result.toOwnedSlice(alloc);
+}
+
+/// Dcts Ctrl+\ across raw, Kitty CSI u, and xterm modifyOtherKeys encodings.
+/// Filters Macterm's leadership-claim sequence out of a client's stdin.
+///
+/// zmx only ever hands leadership to a client that sends real user input
+/// (`isUserInput`), which is the right rule for a human at a keyboard but
+/// leaves a GUI frontend showing one session in two panes no way to say "size
+/// the pty from this one" without typing into the user's program. The claim is
+/// an APC string — no keyboard produces one, and terminals discard unknown APC
+/// — so it is inert if it ever reaches a program that predates this.
+///
+/// Deliberately NOT shaped like `isCtrlBackslash`, which returns a bool and
+/// lets its caller drop the whole read. A detach key is a keystroke and
+/// arrives alone; a claim is written programmatically and can land in the same
+/// 4096-byte read as whatever the user is typing, so an all-or-nothing match
+/// would swallow their keystrokes. This excises occurrences and forwards the
+/// rest.
+///
+/// It also carries a partial sequence across reads: a pty write can be split
+/// anywhere, so a claim can arrive as two halves. The carry is bounded by the
+/// sequence length, so a stream of ESCs cannot grow it.
+pub const ClaimFilter = struct {
+    pub const sequence = "\x1b_zmx;claim\x1b\\";
+    /// Matches the client's stdin read buffer; `feed` asserts on more.
+    pub const max_input = 4096;
+    /// Shortest trailing partial sequence worth holding back for the next
+    /// read. Anything shorter is forwarded immediately, because a partial of
+    /// 1-2 bytes is a bare ESC or ESC `_` — Escape is a key people press
+    /// constantly in a TUI, and delaying it until their NEXT keystroke would
+    /// be a visible input lag. Three bytes (ESC `_` `z`) is already a sequence
+    /// no keyboard produces. The cost is a claim split within its first two
+    /// bytes being dropped rather than rejoined; that needs the split to land
+    /// exactly there, and the user's next keystroke re-establishes leadership
+    /// anyway.
+    pub const min_carry = 3;
+
+    carry: [sequence.len - 1]u8 = undefined,
+    carry_len: usize = 0,
+    work: [max_input + sequence.len - 1]u8 = undefined,
+
+    pub const Result = struct {
+        /// How many complete claim sequences were consumed.
+        claims: usize,
+        /// The bytes to forward to the daemon as Input. Borrowed from the
+        /// filter and valid until the next `feed`.
+        forward: []const u8,
+    };
+
+    pub fn feed(self: *ClaimFilter, input: []const u8) Result {
+        std.debug.assert(input.len <= max_input);
+
+        // Carried partial prefix first, so a split sequence rejoins.
+        @memcpy(self.work[0..self.carry_len], self.carry[0..self.carry_len]);
+        @memcpy(self.work[self.carry_len..][0..input.len], input);
+        const buf = self.work[0 .. self.carry_len + input.len];
+        self.carry_len = 0;
+
+        var claims: usize = 0;
+        var out: usize = 0;
+        var i: usize = 0;
+        while (i < buf.len) {
+            if (buf.len - i >= sequence.len and
+                std.mem.eql(u8, buf[i..][0..sequence.len], sequence))
+            {
+                claims += 1;
+                i += sequence.len;
+                continue;
+            }
+            // A proper prefix of the sequence running to the end of the buffer
+            // may be the front half of a claim split across reads: hold it.
+            if (buf.len - i >= min_carry and buf.len - i < sequence.len and
+                std.mem.eql(u8, buf[i..], sequence[0 .. buf.len - i]))
+            {
+                self.carry_len = buf.len - i;
+                @memcpy(self.carry[0..self.carry_len], buf[i..]);
+                break;
+            }
+            buf[out] = buf[i];
+            out += 1;
+            i += 1;
+        }
+        return .{ .claims = claims, .forward = buf[0..out] };
+    }
+};
+
+pub fn isCtrlBackslash(buf: []const u8) bool {
+    if (buf.len == 0) return false;
+    return buf[0] == 0x1C or isKeyPressed(buf, 0x5c, 0b100) or isModifyOtherKey(buf, 0x5c, 0b100);
+}
+
+/// Scans the buffer for an xterm modifyOtherKeys-encoded keypress.
+/// Format: CSI 27 ; <modifier> ; <keycode> ~
+/// Reference: invisible-island.net/xterm/ctlseqs/ctlseqs.html (modifyOtherKeys).
+fn isModifyOtherKey(buf: []const u8, expected_key: u32, expected_mods: u32) bool {
+    var i: usize = 0;
+    while (i + 1 < buf.len) : (i += 1) {
+        if (buf[i] == 0x1b and buf[i + 1] == '[') {
+            if (modifyOtherMatches(buf[i + 2 ..], expected_key, expected_mods)) return true;
+        }
+    }
+    return false;
+}
+
+/// Parses the body of an xterm modifyOtherKeys CSI sequence (after the leading
+/// `\x1b[`). Mirrors keypressWithMod's tolerance for lock modifiers.
+fn modifyOtherMatches(buf: []const u8, expected_key: u32, expected_mods: u32) bool {
+    var pos: usize = 0;
+
+    // 1. Sentinel: literal "27" identifies xterm modifyOtherKeys.
+    const sentinel = parseDecimal(buf, &pos) orelse return false;
+    if (sentinel != 27) return false;
+
+    // 2. Expect ';' before modifier.
+    if (pos >= buf.len or buf[pos] != ';') return false;
+    pos += 1;
+
+    // 3. Parse modifier (xterm encodes as 1 + bitfield, same as kitty).
+    const mod_encoded = parseDecimal(buf, &pos) orelse return false;
+    if (mod_encoded < 1) return false;
+    const mod_raw = mod_encoded - 1;
+    // Tolerate ambient lock modifiers (caps_lock=64, num_lock=128).
+    const intentional_mods = mod_raw & 0b00111111;
+    if (expected_mods > 0 and expected_mods != intentional_mods) return false;
+
+    // 4. Expect ';' before keycode.
+    if (pos >= buf.len or buf[pos] != ';') return false;
+    pos += 1;
+
+    // 5. Parse keycode.
+    const key_code = parseDecimal(buf, &pos) orelse return false;
+    if (key_code != expected_key) return false;
+
+    // 6. Expect '~' terminator.
+    return pos < buf.len and buf[pos] == '~';
+}
+
+/// Returns true when the user has opted out of the ctrl+\ detach shortcut
+/// via ZMX_NO_DETACH_KEY, e.g. to free up ctrl+\ for an inner program
+/// like vim, which uses ctrl+\ ctrl+n to escape its own terminal mode.
+pub fn isDetachKeyDisabled() bool {
+    return lib_posix.getenv("ZMX_NO_DETACH_KEY") != null;
+}
+
+/// Detects vt100 or kitty keyboard protocol escape sequence for up arrow.
+pub fn isUpArrow(buf: []const u8) bool {
+    return std.mem.eql(u8, buf, "\x1b[A") or std.mem.eql(u8, buf, "\x1b[1;1:1A");
+}
+
+fn isKeyPressed(buf: []const u8, expected_key: u32, expected_mods: u32) bool {
+    // Scan for any CSI u sequence encoding in the buffer.
+    var i: usize = 0;
+    while (i + 2 < buf.len) : (i += 1) {
+        if (buf[i] == 0x1b and buf[i + 1] == '[') {
+            if (keypressWithMod(buf[i + 2 ..], expected_key, expected_mods)) return true;
+        }
+    }
+    return false;
+}
+
+/// Parses the general CSI u form:
+///   CSI key-code[:alternates] ; modifiers[:event-type] [; text-codepoints] u
+///
+/// Event type is press (1 or absent) or repeat (2). Rejects release (3).
+/// Tolerates additional modifiers (caps_lock, num_lock)
+/// and alternate key sub-fields from the kitty protocol's progressive
+/// enhancement flags.
+fn keypressWithMod(buf: []const u8, expected_key: u32, expected_mods: u32) bool {
+    const parsed = parseKittyCsiU(buf) orelse return false;
+    if (parsed.key_code != expected_key) return false;
+
+    // Only accept intentional modifiers. Lock modifiers
+    // (caps_lock=0b1000000, num_lock=0b10000000) are tolerated because
+    // they are ambient state, not deliberate key combinations.
+    const intentional_mods = parsed.modifiers & 0b00111111;
+    if (expected_mods > 0 and expected_mods != intentional_mods) return false;
+
+    // 3 = release -- reject. Accept press (1) and repeat (2).
+    return parsed.event_type != 3;
+}
+
+pub const KittyCsiU = struct {
+    key_code: u32,
+    modifiers: u32,
+    event_type: u32,
+    consumed: usize,
+};
+
+pub fn parseKittyCsiU(buf: []const u8) ?KittyCsiU {
+    var pos: usize = 0;
+
+    // 1. Parse key code.
+    const key_code = parseDecimal(buf, &pos) orelse return null;
+
+    // 2. Skip any ':alternate-key' sub-fields (shifted key, base layout key).
+    while (pos < buf.len and buf[pos] == ':') {
+        pos += 1; // consume ':'
+        _ = parseDecimal(buf, &pos); // consume digits (may be empty for ::base)
+    }
+
+    // 3. Expect ';' separator before modifiers.
+    if (pos >= buf.len or buf[pos] != ';') return null;
+    pos += 1;
+
+    // 4. Parse modifier value. Kitty encodes as 1 + bitfield.
+    const mod_encoded = parseDecimal(buf, &pos) orelse return null;
+    if (mod_encoded < 1) return null;
+    const mod_raw = mod_encoded - 1;
+
+    var event_type: u32 = 1;
+    // 5. Parse optional event type after ':'.
+    if (pos < buf.len and buf[pos] == ':') {
+        pos += 1;
+        event_type = parseDecimal(buf, &pos) orelse return null;
+    }
+
+    // 6. Skip optional ';text-codepoints' section.
+    if (pos < buf.len and buf[pos] == ';') {
+        pos += 1;
+        // Consume remaining digits and colons until 'u'.
+        while (pos < buf.len and (std.ascii.isDigit(buf[pos]) or buf[pos] == ':')) {
+            pos += 1;
+        }
+    }
+
+    // 7. Expect terminal 'u'.
+    if (pos >= buf.len or buf[pos] != 'u') return null;
+    pos += 1;
+
+    return .{
+        .key_code = key_code,
+        .modifiers = mod_raw,
+        .event_type = event_type,
+        .consumed = pos,
+    };
+}
+
+/// Parse a decimal integer from buf starting at pos, advancing pos past the
+/// consumed digits. Returns null if no digits are present.
+fn parseDecimal(buf: []const u8, pos: *usize) ?u32 {
+    const start = pos.*;
+    var value: u32 = 0;
+    while (pos.* < buf.len and std.ascii.isDigit(buf[pos.*])) {
+        value = value *% 10 +% (buf[pos.*] - '0');
+        pos.* += 1;
+    }
+    if (pos.* == start) return null;
+    return value;
+}
+
+pub const HistoryFormat = enum(u8) {
+    plain = 0,
+    vt = 1,
+    html = 2,
+};
+
+/// Formats a session entry for list output (only the name when `short` is
+/// true), adding a prefix to indicate the current session, if there is one.
+pub fn writeSessionLine(
+    writer: *std.Io.Writer,
+    session: SessionEntry,
+    short: bool,
+    current_session: ?[]const u8,
+) !void {
+    const current_arrow = "→";
+    const prefix = if (current_session) |current|
+        if (std.mem.eql(u8, current, session.name)) current_arrow ++ " " else "  "
+    else
+        "";
+
+    if (short) {
+        if (session.is_error) return;
+        try writer.print("{s}\n", .{session.name});
+        return;
+    }
+
+    if (session.is_error) {
+        // "cleaning up" is only truthful when the probe was definitively
+        // refused (socket deleted this pass). On Timeout/Unexpected the
+        // daemon may just be busy, so don't lie about what we did.
+        const status = if (std.mem.eql(u8, session.error_name.?, "ConnectionRefused"))
+            "cleaning up"
+        else
+            "unreachable";
+        try writer.print("{s}name={s}\terr={s}\tstatus={s}\n", .{
+            prefix,
+            session.name,
+            session.error_name.?,
+            status,
+        });
+        return;
+    }
+
+    try writer.print("{s}name={s}\tpid={d}\tclients={d}\tcreated={d}", .{
+        prefix,
+        session.name,
+        session.pid.?,
+        session.clients_len.?,
+        session.created_at,
+    });
+    if (session.cwd) |cwd| {
+        try writer.print("\tcwd={s}", .{cwd});
+    }
+    if (session.cmd) |cmd| {
+        try writer.print("\tcmd={s}", .{cmd});
+    }
+    if (session.labels) |labels| {
+        var kvs = label.LabelIterator.init(labels);
+        while (kvs.next()) |kv| {
+            try writer.print("\t{s}={s}", .{ kv.key, kv.value });
+        }
+    }
+    try writer.print("\n", .{});
+}
+
+test "writeSessionLine formats output for current session and short output" {
+    const Case = struct {
+        session: SessionEntry,
+        short: bool,
+        current_session: ?[]const u8,
+        expected: []const u8,
+    };
+
+    const session = SessionEntry{
+        .name = "dev",
+        .pid = 123,
+        .clients_len = 2,
+        .is_error = false,
+        .error_name = null,
+        .cmd = null,
+        .cwd = null,
+        .created_at = 0,
+    };
+
+    const cases = [_]Case{
+        .{
+            .session = session,
+            .short = false,
+            .current_session = "dev",
+            .expected = "→ name=dev\tpid=123\tclients=2\tcreated=0\n",
+        },
+        .{
+            .session = session,
+            .short = false,
+            .current_session = "other",
+            .expected = "  name=dev\tpid=123\tclients=2\tcreated=0\n",
+        },
+        .{
+            .session = session,
+            .short = false,
+            .current_session = null,
+            .expected = "name=dev\tpid=123\tclients=2\tcreated=0\n",
+        },
+        .{
+            .session = session,
+            .short = true,
+            .current_session = "dev",
+            .expected = "dev\n",
+        },
+        .{
+            .session = session,
+            .short = true,
+            .current_session = "other",
+            .expected = "dev\n",
+        },
+        .{
+            .session = session,
+            .short = true,
+            .current_session = null,
+            .expected = "dev\n",
+        },
+    };
+
+    for (cases) |case| {
+        var builder: std.Io.Writer.Allocating = .init(testing.allocator);
+        defer builder.deinit();
+
+        try writeSessionLine(&builder.writer, case.session, case.short, case.current_session);
+        try testing.expectEqualStrings(case.expected, builder.writer.buffered());
+    }
+}
+
+test "shellNeedsQuoting" {
+    try testing.expect(shellNeedsQuoting(""));
+    try testing.expect(shellNeedsQuoting("hello world"));
+    try testing.expect(shellNeedsQuoting("hello!"));
+    try testing.expect(shellNeedsQuoting("$PATH"));
+    try testing.expect(shellNeedsQuoting("it's"));
+    try testing.expect(shellNeedsQuoting("a|b"));
+    try testing.expect(shellNeedsQuoting("a;b"));
+    try testing.expect(!shellNeedsQuoting("hello"));
+    try testing.expect(!shellNeedsQuoting("bash"));
+    try testing.expect(!shellNeedsQuoting("-c"));
+    try testing.expect(!shellNeedsQuoting("/usr/bin/env"));
+}
+
+test "shellQuote" {
+    const alloc = testing.allocator;
+
+    const empty = try shellQuote(alloc, "");
+    defer alloc.free(empty);
+    try testing.expectEqualStrings("''", empty);
+
+    const space = try shellQuote(alloc, "hello world");
+    defer alloc.free(space);
+    try testing.expectEqualStrings("'hello world'", space);
+
+    const bang = try shellQuote(alloc, "hello!");
+    defer alloc.free(bang);
+    try testing.expectEqualStrings("'hello!'", bang);
+
+    const dollar = try shellQuote(alloc, "$PATH");
+    defer alloc.free(dollar);
+    try testing.expectEqualStrings("'$PATH'", dollar);
+
+    const sq = try shellQuote(alloc, "it's");
+    defer alloc.free(sq);
+    try testing.expectEqualStrings("'it'\\''s'", sq);
+
+    const dq = try shellQuote(alloc, "say \"hi\"");
+    defer alloc.free(dq);
+    try testing.expectEqualStrings("'say \"hi\"'", dq);
+
+    const both = try shellQuote(alloc, "it's \"cool\"");
+    defer alloc.free(both);
+    try testing.expectEqualStrings("'it'\\''s \"cool\"'", both);
+
+    // just a single quote
+    const lone_sq = try shellQuote(alloc, "'");
+    defer alloc.free(lone_sq);
+    try testing.expectEqualStrings("''\\'''", lone_sq);
+
+    // multiple consecutive single quotes
+    const triple_sq = try shellQuote(alloc, "'''");
+    defer alloc.free(triple_sq);
+    try testing.expectEqualStrings("''\\'''\\'''\\'''", triple_sq);
+
+    // backtick command substitution
+    const backtick = try shellQuote(alloc, "`whoami`");
+    defer alloc.free(backtick);
+    try testing.expectEqualStrings("'`whoami`'", backtick);
+
+    // dollar command substitution
+    const dollar_cmd = try shellQuote(alloc, "$(whoami)");
+    defer alloc.free(dollar_cmd);
+    try testing.expectEqualStrings("'$(whoami)'", dollar_cmd);
+
+    // glob
+    const glob = try shellQuote(alloc, "*.txt");
+    defer alloc.free(glob);
+    try testing.expectEqualStrings("'*.txt'", glob);
+
+    // tilde
+    const tilde = try shellQuote(alloc, "~/file");
+    defer alloc.free(tilde);
+    try testing.expectEqualStrings("'~/file'", tilde);
+
+    // trailing backslash
+    const trailing_bs = try shellQuote(alloc, "path\\");
+    defer alloc.free(trailing_bs);
+    try testing.expectEqualStrings("'path\\'", trailing_bs);
+
+    // semicolon (command injection)
+    const semi = try shellQuote(alloc, "; rm -rf /");
+    defer alloc.free(semi);
+    try testing.expectEqualStrings("'; rm -rf /'", semi);
+
+    // embedded newline
+    const newline = try shellQuote(alloc, "line1\nline2");
+    defer alloc.free(newline);
+    try testing.expectEqualStrings("'line1\nline2'", newline);
+
+    // parentheses (subshell)
+    const parens = try shellQuote(alloc, "(echo hi)");
+    defer alloc.free(parens);
+    try testing.expectEqualStrings("'(echo hi)'", parens);
+
+    // heredoc marker
+    const heredoc = try shellQuote(alloc, "<<EOF");
+    defer alloc.free(heredoc);
+    try testing.expectEqualStrings("'<<EOF'", heredoc);
+
+    // no quoting needed -- plain word should still be quoted
+    // (shellQuote is only called when shellNeedsQuoting returns true,
+    // but verify it produces valid output anyway)
+    const plain = try shellQuote(alloc, "hello");
+    defer alloc.free(plain);
+    try testing.expectEqualStrings("'hello'", plain);
+}
+
+test "isCtrlBackslash" {
+    const expect = testing.expect;
+
+    // Basic: ctrl only (modifier 5 = 1 + 4)
+    try expect(isCtrlBackslash("\x1b[92;5u"));
+
+    // Explicit press event type (:1)
+    try expect(isCtrlBackslash("\x1b[92;5:1u"));
+
+    // Repeat event (:2) -- user holding Ctrl+\
+    try expect(isCtrlBackslash("\x1b[92;5:2u"));
+
+    // Release event (:3) -- must NOT trigger detach
+    try expect(!isCtrlBackslash("\x1b[92;5:3u"));
+
+    // Lock modifiers: caps_lock (bit 6) changes modifier value
+    // ctrl + caps_lock = 1 + (4 + 64) = 69
+    try expect(isCtrlBackslash("\x1b[92;69u"));
+    try expect(isCtrlBackslash("\x1b[92;69:1u"));
+    try expect(!isCtrlBackslash("\x1b[92;69:3u"));
+
+    // ctrl + num_lock = 1 + (4 + 128) = 133
+    try expect(isCtrlBackslash("\x1b[92;133u"));
+
+    // ctrl + caps_lock + num_lock = 1 + (4 + 64 + 128) = 197
+    try expect(isCtrlBackslash("\x1b[92;197u"));
+
+    // Combined intentional modifiers -- must NOT match (ctrl+\ is the
+    // detach key, not ctrl+shift+\ or ctrl+alt+\)
+    // ctrl + shift = 1 + (4 + 1) = 6
+    try expect(!isCtrlBackslash("\x1b[92;6u"));
+
+    // ctrl + alt = 1 + (4 + 2) = 7
+    try expect(!isCtrlBackslash("\x1b[92;7u"));
+
+    // ctrl + super = 1 + (4 + 8) = 13
+    try expect(!isCtrlBackslash("\x1b[92;13u"));
+
+    // ctrl + shift + caps_lock = 1 + (1 + 4 + 64) = 70 -- shift is intentional
+    try expect(!isCtrlBackslash("\x1b[92;70u"));
+
+    // ctrl + shift + num_lock = 1 + (1 + 4 + 128) = 134 -- shift is intentional
+    try expect(!isCtrlBackslash("\x1b[92;134u"));
+
+    // Modifier without ctrl bit -- must NOT match
+    // shift only = 1 + 1 = 2
+    try expect(!isCtrlBackslash("\x1b[92;1u"));
+    try expect(!isCtrlBackslash("\x1b[92;2u"));
+
+    // Alternate key sub-fields (report_alternates flag)
+    // shifted key | (124): \x1b[92:124;5u
+    try expect(isCtrlBackslash("\x1b[92:124;5u"));
+
+    // base layout key only (non-US keyboard): \x1b[92::92;5u
+    try expect(isCtrlBackslash("\x1b[92::92;5u"));
+
+    // both shifted and base layout: \x1b[92:124:92;5u
+    try expect(isCtrlBackslash("\x1b[92:124:92;5u"));
+
+    // Alternate keys + lock modifiers + event type
+    try expect(isCtrlBackslash("\x1b[92:124;69:1u"));
+    try expect(!isCtrlBackslash("\x1b[92:124;69:3u"));
+
+    // Text codepoints section (flag 0b10000) -- tolerated and skipped
+    // Even though ctrl+\ text is typically empty, terminals may vary
+    try expect(isCtrlBackslash("\x1b[92;5;28u"));
+    try expect(isCtrlBackslash("\x1b[92;5;28:92u"));
+
+    // Wrong key code -- must NOT match
+    try expect(!isCtrlBackslash("\x1b[91;5u"));
+    try expect(!isCtrlBackslash("\x1b[93;5u"));
+    try expect(!isCtrlBackslash("\x1b[9;5u"));
+    try expect(!isCtrlBackslash("\x1b[920;5u"));
+
+    // Sequence embedded in larger buffer (e.g., preceded by other input)
+    try expect(isCtrlBackslash("abc\x1b[92;5u"));
+    try expect(isCtrlBackslash("\x1b[A\x1b[92;5u"));
+
+    // Garbage / malformed inputs
+    try expect(!isCtrlBackslash("garbage"));
+    try expect(!isCtrlBackslash(""));
+    try expect(!isCtrlBackslash("\x1b["));
+    try expect(!isCtrlBackslash("\x1b[92"));
+    try expect(!isCtrlBackslash("\x1b[92;"));
+    try expect(!isCtrlBackslash("\x1b[92;u"));
+    try expect(!isCtrlBackslash("\x1b[;5u"));
+
+    // Other CSI u sequences that happen to contain '92' elsewhere
+    try expect(!isCtrlBackslash("\x1b[65;92u"));
+}
+
+test "isCtrlBackslash xterm modifyOtherKeys" {
+    const expect = std.testing.expect;
+
+    // Basic: ctrl only (modifier 5 = 1 + 4), key 92 = '\'
+    // Format: CSI 27 ; <mod> ; <key> ~
+    try expect(isCtrlBackslash("\x1b[27;5;92~"));
+
+    // Lock modifiers tolerated
+    // ctrl + caps_lock = 1 + (4 + 64) = 69
+    try expect(isCtrlBackslash("\x1b[27;69;92~"));
+    // ctrl + num_lock = 1 + (4 + 128) = 133
+    try expect(isCtrlBackslash("\x1b[27;133;92~"));
+    // ctrl + caps_lock + num_lock = 1 + (4 + 64 + 128) = 197
+    try expect(isCtrlBackslash("\x1b[27;197;92~"));
+
+    // Combined intentional modifiers must NOT match
+    // ctrl + shift = 1 + (4 + 1) = 6
+    try expect(!isCtrlBackslash("\x1b[27;6;92~"));
+    // ctrl + alt = 1 + (4 + 2) = 7
+    try expect(!isCtrlBackslash("\x1b[27;7;92~"));
+    // ctrl + super = 1 + (4 + 8) = 13
+    try expect(!isCtrlBackslash("\x1b[27;13;92~"));
+    // ctrl + shift + caps_lock = 1 + (1 + 4 + 64) = 70 -- shift is intentional
+    try expect(!isCtrlBackslash("\x1b[27;70;92~"));
+    // ctrl + shift + num_lock = 1 + (1 + 4 + 128) = 134 -- shift is intentional
+    try expect(!isCtrlBackslash("\x1b[27;134;92~"));
+
+    // Modifier without ctrl bit -- must NOT match
+    try expect(!isCtrlBackslash("\x1b[27;1;92~"));
+    try expect(!isCtrlBackslash("\x1b[27;2;92~"));
+
+    // Wrong key code -- must NOT match
+    try expect(!isCtrlBackslash("\x1b[27;5;91~"));
+    try expect(!isCtrlBackslash("\x1b[27;5;93~"));
+    try expect(!isCtrlBackslash("\x1b[27;5;65~"));
+
+    // Wrong sentinel -- must NOT match
+    try expect(!isCtrlBackslash("\x1b[28;5;92~"));
+    try expect(!isCtrlBackslash("\x1b[26;5;92~"));
+
+    // Wrong terminator -- must NOT match
+    try expect(!isCtrlBackslash("\x1b[27;5;92u"));
+    try expect(!isCtrlBackslash("\x1b[27;5;92m"));
+
+    // CSI sequences that look similar but are not modifyOtherKeys
+    try expect(!isCtrlBackslash("\x1b[27m")); // SGR reset reverse
+    try expect(!isCtrlBackslash("\x1b[27~")); // xterm F4
+    try expect(!isCtrlBackslash("\x1b[27;5R")); // truncated cursor report
+
+    // Sequence embedded in larger buffer
+    try expect(isCtrlBackslash("abc\x1b[27;5;92~"));
+    try expect(isCtrlBackslash("\x1b[A\x1b[27;5;92~"));
+
+    // Garbage / malformed
+    try expect(!isCtrlBackslash("\x1b[27"));
+    try expect(!isCtrlBackslash("\x1b[27;"));
+    try expect(!isCtrlBackslash("\x1b[27;5"));
+    try expect(!isCtrlBackslash("\x1b[27;5;"));
+    try expect(!isCtrlBackslash("\x1b[27;5;92"));
+}
+
+test "isDetachKeyDisabled" {
+    _ = cross.unsetenv("ZMX_NO_DETACH_KEY");
+    try testing.expect(!isDetachKeyDisabled());
+
+    _ = cross.setenv("ZMX_NO_DETACH_KEY", "1", 1);
+    defer _ = cross.unsetenv("ZMX_NO_DETACH_KEY");
+    try testing.expect(isDetachKeyDisabled());
+}
+
+test "parseOsc7Cwd" {
+    const Case = struct {
+        name: []const u8,
+        value: []const u8,
+        hostname: []const u8,
+        expected: ?Cwd,
+    };
+
+    const cases = [_]Case{
+        .{
+            .name = "local file uri",
+            .value = "file://myhost/private/tmp",
+            .hostname = "myhost",
+            .expected = .{ .path = "/private/tmp", .is_local = true },
+        },
+        .{
+            .name = "percent-encoded path is decoded",
+            .value = "file://myhost/tmp/zmx%20spaced%20dir",
+            .hostname = "myhost",
+            .expected = .{ .path = "/tmp/zmx spaced dir", .is_local = true },
+        },
+        .{
+            .name = "kitty scheme",
+            .value = "kitty-shell-cwd://myhost/private/tmp",
+            .hostname = "myhost",
+            .expected = .{ .path = "/private/tmp", .is_local = true },
+        },
+        .{
+            .name = "remote host keeps the path but is not local",
+            .value = "file://otherhost/home/me",
+            .hostname = "myhost",
+            .expected = .{ .path = "/home/me", .is_local = false },
+        },
+        .{
+            .name = "empty host means local",
+            .value = "file:///private/tmp",
+            .hostname = "myhost",
+            .expected = .{ .path = "/private/tmp", .is_local = true },
+        },
+        .{
+            .name = "localhost means local",
+            .value = "file://localhost/private/tmp",
+            .hostname = "myhost",
+            .expected = .{ .path = "/private/tmp", .is_local = true },
+        },
+        .{
+            .name = "fqdn matches a short hostname",
+            .value = "file://myhost.local/private/tmp",
+            .hostname = "myhost",
+            .expected = .{ .path = "/private/tmp", .is_local = true },
+        },
+        .{
+            .name = "short host matches an fqdn hostname",
+            .value = "file://myhost/private/tmp",
+            .hostname = "myhost.lan",
+            .expected = .{ .path = "/private/tmp", .is_local = true },
+        },
+        .{
+            .name = "host comparison ignores case",
+            .value = "file://MyHost/private/tmp",
+            .hostname = "myhost",
+            .expected = .{ .path = "/private/tmp", .is_local = true },
+        },
+        .{
+            .name = "plain absolute path passes through",
+            .value = "/private/tmp",
+            .hostname = "myhost",
+            .expected = .{ .path = "/private/tmp", .is_local = true },
+        },
+        .{
+            .name = "empty value",
+            .value = "",
+            .hostname = "myhost",
+            .expected = null,
+        },
+        .{
+            .name = "relative path",
+            .value = "some/dir",
+            .hostname = "myhost",
+            .expected = null,
+        },
+        .{
+            .name = "unsupported scheme",
+            .value = "http://myhost/private/tmp",
+            .hostname = "myhost",
+            .expected = null,
+        },
+        .{
+            .name = "uri without a path",
+            .value = "file://myhost",
+            .hostname = "myhost",
+            .expected = null,
+        },
+    };
+
+    for (cases) |c| {
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        const actual = parseOsc7Cwd(&buf, c.value, c.hostname);
+        testing.expectEqualDeep(c.expected, actual) catch |err| {
+            std.debug.print("case: {s}\n", .{c.name});
+            return err;
+        };
+    }
+}
+
+test "parseOsc7Cwd result survives the source value changing" {
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var value: [32]u8 = undefined;
+    const src = "file://myhost/private/tmp";
+    @memcpy(value[0..src.len], src);
+
+    const cwd = parseOsc7Cwd(&buf, value[0..src.len], "myhost") orelse
+        return error.TestUnexpectedNull;
+
+    @memset(&value, 'x');
+    try testing.expectEqualDeep(Cwd{ .path = "/private/tmp", .is_local = true }, cwd);
+}
+
+test "parseOsc7Cwd rejects a path longer than the buffer" {
+    var buf: [8]u8 = undefined;
+    try testing.expectEqual(
+        @as(?Cwd, null),
+        parseOsc7Cwd(&buf, "file://myhost/a/very/long/path", "myhost"),
+    );
+    try testing.expectEqual(
+        @as(?Cwd, null),
+        parseOsc7Cwd(&buf, "/a/very/long/path", "myhost"),
+    );
+}
+
+test "toOsc7Cwd" {
+    const Case = struct {
+        name: []const u8,
+        path: []const u8,
+        expected: ?[]const u8,
+    };
+
+    const cases = [_]Case{
+        .{
+            .name = "plain path",
+            .path = "/private/tmp",
+            .expected = "file://myhost/private/tmp",
+        },
+        .{
+            .name = "space is encoded",
+            .path = "/tmp/zmx spaced dir",
+            .expected = "file://myhost/tmp/zmx%20spaced%20dir",
+        },
+        .{
+            .name = "percent is encoded so it round-trips",
+            .path = "/tmp/100%",
+            .expected = "file://myhost/tmp/100%25",
+        },
+        .{
+            .name = "unreserved characters are left alone",
+            .path = "/tmp/a-b_c.d~e",
+            .expected = "file://myhost/tmp/a-b_c.d~e",
+        },
+    };
+
+    for (cases) |c| {
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        testing.expectEqualDeep(c.expected, toOsc7Cwd(&buf, c.path, "myhost")) catch |err| {
+            std.debug.print("case: {s}\n", .{c.name});
+            return err;
+        };
+    }
+}
+
+test "toOsc7Cwd returns null when the result would not fit" {
+    var buf: [8]u8 = undefined;
+    try testing.expectEqual(
+        @as(?[]const u8, null),
+        toOsc7Cwd(&buf, "/a/very/long/path", "myhost"),
+    );
+}
+
+test "toOsc7Cwd round-trips through parseOsc7Cwd" {
+    const paths = [_][]const u8{
+        "/private/tmp",
+        "/tmp/zmx spaced dir",
+        "/tmp/100%",
+        "/tmp/a-b_c.d~e",
+        "/tmp/quote'and\"dquote",
+    };
+
+    for (paths) |path| {
+        var enc_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const uri = toOsc7Cwd(&enc_buf, path, "myhost") orelse
+            return error.TestUnexpectedNull;
+
+        var dec_buf: [std.fs.max_path_bytes]u8 = undefined;
+        testing.expectEqualDeep(
+            Cwd{ .path = path, .is_local = true },
+            parseOsc7Cwd(&dec_buf, uri, "myhost"),
+        ) catch |err| {
+            std.debug.print("path: {s} uri: {s}\n", .{ path, uri });
+            return err;
+        };
+    }
+}
+
+test "stripAnsi: plain text passes through" {
+    const alloc = testing.allocator;
+    const result = try stripAnsi(alloc, "hello world\n");
+    defer alloc.free(result);
+    try testing.expectEqualStrings("hello world\n", result);
+}
+
+test "stripAnsi: removes SGR color codes" {
+    const alloc = testing.allocator;
+    // \e[31m = red, \e[0m = reset
+    const result = try stripAnsi(alloc, "\x1b[31mred\x1b[0m");
+    defer alloc.free(result);
+    try testing.expectEqualStrings("red", result);
+}
+
+test "stripAnsi: removes cursor movement" {
+    const alloc = testing.allocator;
+    // \e[2J = clear screen, \e[H = home cursor
+    const result = try stripAnsi(alloc, "\x1b[2J\x1b[Hhello");
+    defer alloc.free(result);
+    try testing.expectEqualStrings("hello", result);
+}
+
+test "stripAnsi: preserves newlines and tabs" {
+    const alloc = testing.allocator;
+    const result = try stripAnsi(alloc, "line1\nline2\ttab\r");
+    defer alloc.free(result);
+    try testing.expectEqualStrings("line1\nline2\ttab\r", result);
+}
+
+test "stripAnsi: removes OSC sequences" {
+    const alloc = testing.allocator;
+    // OSC 0;title BEL = set window title
+    const result = try stripAnsi(alloc, "\x1b]0;My Title\x07hello");
+    defer alloc.free(result);
+    try testing.expectEqualStrings("hello", result);
+}
+
+test "stripAnsi: removes DA query and response" {
+    const alloc = testing.allocator;
+    // DA1 query: \e[c, DA1 response: \e[?62;22c
+    const result = try stripAnsi(alloc, "\x1b[c\x1b[?62;22chello");
+    defer alloc.free(result);
+    try testing.expectEqualStrings("hello", result);
+}
+
+test "stripAnsi: complex mixed content" {
+    const alloc = testing.allocator;
+    // Shell prompt with colors + command echo + output
+    const input = "\x1b[0;32m[user@host ~]$\x1b[0m git log\n" ++
+        "abc1234 commit message\n" ++
+        "\x1b[0;32m[user@host ~]$\x1b[0m";
+    const result = try stripAnsi(alloc, input);
+    defer alloc.free(result);
+    try testing.expectEqualStrings("[user@host ~]$ git log\nabc1234 commit message\n[user@host ~]$", result);
+}
+
+test "stripAnsi: empty input" {
+    const alloc = testing.allocator;
+    const result = try stripAnsi(alloc, "");
+    defer alloc.free(result);
+    try testing.expectEqualStrings("", result);
+}
+
+test "stripAnsi: only escape sequences" {
+    const alloc = testing.allocator;
+    const result = try stripAnsi(alloc, "\x1b[31m\x1b[1m\x1b[0m");
+    defer alloc.free(result);
+    try testing.expectEqualStrings("", result);
+}
+
+test "stripAnsi: keeps UTF-8 text" {
+    const alloc = testing.allocator;
+    const result = try stripAnsi(alloc, "\x1b[1mcafé\x1b[0m – 日本 🎉\n");
+    defer alloc.free(result);
+    try testing.expectEqualStrings("café – 日本 🎉\n", result);
+}
+
+test "stripAnsi: UTF-8 bytes do not start escape sequences" {
+    const alloc = testing.allocator;
+    // Ý is C3 9D, and 0x9D on its own is the 8-bit OSC introducer
+    const result = try stripAnsi(alloc, "Ýmir\nline two\n");
+    defer alloc.free(result);
+    try testing.expectEqualStrings("Ýmir\nline two\n", result);
+}
+
+test "ClaimFilter: a lone claim is consumed and forwards nothing" {
+    var f: ClaimFilter = .{};
+    const r = f.feed(ClaimFilter.sequence);
+    try testing.expectEqual(@as(usize, 1), r.claims);
+    try testing.expectEqualStrings("", r.forward);
+}
+
+test "ClaimFilter: plain input passes through untouched" {
+    var f: ClaimFilter = .{};
+    const r = f.feed("ls -la\r");
+    try testing.expectEqual(@as(usize, 0), r.claims);
+    try testing.expectEqualStrings("ls -la\r", r.forward);
+}
+
+test "ClaimFilter: a claim sharing a read with keystrokes keeps them" {
+    // The bug the all-or-nothing isCtrlBackslash shape would have: a claim is
+    // written programmatically and can land in the same read as typing.
+    var f: ClaimFilter = .{};
+    const r = f.feed("abc" ++ ClaimFilter.sequence ++ "def");
+    try testing.expectEqual(@as(usize, 1), r.claims);
+    try testing.expectEqualStrings("abcdef", r.forward);
+}
+
+test "ClaimFilter: several claims in one read are all counted" {
+    var f: ClaimFilter = .{};
+    const r = f.feed(ClaimFilter.sequence ++ "x" ++ ClaimFilter.sequence);
+    try testing.expectEqual(@as(usize, 2), r.claims);
+    try testing.expectEqualStrings("x", r.forward);
+}
+
+test "ClaimFilter: a claim split across two reads is rejoined" {
+    var f: ClaimFilter = .{};
+    const seq = ClaimFilter.sequence;
+    const first = f.feed("hi" ++ seq[0..5]);
+    try testing.expectEqual(@as(usize, 0), first.claims);
+    try testing.expectEqualStrings("hi", first.forward);
+
+    const second = f.feed(seq[5..] ++ "there");
+    try testing.expectEqual(@as(usize, 1), second.claims);
+    try testing.expectEqualStrings("there", second.forward);
+}
+
+test "ClaimFilter: a trailing escape is forwarded immediately, not held" {
+    // Escape is pressed constantly in a TUI; holding it back until the user's
+    // NEXT keystroke would be visible input lag.
+    var f: ClaimFilter = .{};
+    const r = f.feed("\x1b");
+    try testing.expectEqual(@as(usize, 0), r.claims);
+    try testing.expectEqualStrings("\x1b", r.forward);
+    try testing.expectEqual(@as(usize, 0), f.carry_len);
+}
+
+test "ClaimFilter: a held partial that turns out not to be a claim is not lost" {
+    var f: ClaimFilter = .{};
+    const first = f.feed("\x1b_z");
+    try testing.expectEqualStrings("", first.forward);
+    try testing.expectEqual(@as(usize, 3), f.carry_len);
+
+    const second = f.feed("nope");
+    try testing.expectEqual(@as(usize, 0), second.claims);
+    try testing.expectEqualStrings("\x1b_znope", second.forward);
+}
+
+test "ClaimFilter: an escape-heavy stream cannot grow the carry" {
+    var f: ClaimFilter = .{};
+    for (0..64) |_| {
+        const r = f.feed("\x1b\x1b\x1b\x1b");
+        try testing.expectEqual(@as(usize, 0), r.claims);
+        try testing.expect(f.carry_len < ClaimFilter.sequence.len);
+    }
+}

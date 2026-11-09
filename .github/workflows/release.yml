@@ -65,8 +65,18 @@ jobs:
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "Live prerelease flag for $GITHUB_REF_NAME: $PRERELEASE"
 
-  build:
+  # The session server, built from the tagged commit, never taken from a
+  # prebuilt (server-build.yml).
+  server:
     needs: flag
+    permissions:
+      contents: write
+    uses: ./.github/workflows/server-build.yml
+    with:
+      prebuilt: false
+
+  build:
+    needs: [flag, server]
     runs-on: xcode-27
     permissions:
       contents: write
@@ -104,6 +114,12 @@ jobs:
       # request: the pinned Xcode, the GhosttyKit cache, the stable signing
       # certificate (TCC grants survive updates) and the Sparkle key. Only
       # this job compiles — `release` and `bump-cask` never invoke xcodebuild.
+      - name: Download the Server
+        uses: actions/download-artifact@v8
+        with:
+          name: server
+          path: build/server
+
       - name: Build Universal Release Artifact
         uses: ./.github/actions/build-release
         with:

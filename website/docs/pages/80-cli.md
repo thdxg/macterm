@@ -47,7 +47,7 @@ The grammar is `macterm <noun> <verb> [options]`. A noun with no verb means `lis
 | `tab select <tab> [--window W]` | Makes a tab active (`tab:3`, an index, a UUID, or an exact title). |
 | `tab move <tab> <slot>` | Changes the order of a tab. `slot` is the **final** position, counted from 1. |
 | `tab rename <tab> [title] [--reset]` | Renames a tab, or restores the automatic title. |
-| `tab close <tab> [--force]` | Closes a tab and kills its sessions. Returns `busy` when a pane runs a program. If you close a pinned tab, Macterm unloads it. |
+| `tab close <tab> [--force]` | Closes a tab and kills its sessions. Returns `busy` when a pane runs a program. If you close a pinned tab, its row and saved layout stay. |
 | `window list` | Lists the open windows in the order of their creation (`window:1`). |
 | `window new` | Opens another window on the current project. |
 | `window focus <window>` | Brings a window to the front. |
@@ -82,7 +82,7 @@ The grammar is `macterm <noun> <verb> [options]`. A noun with no verb means `lis
 
 ## Starting a background terminal
 
-`tab new --no-focus` starts the shell of a tab and does not change the selected tab. An empty workspace takes its first tab with no focus history. `pane split --no-focus` starts a split and does not move the pane focus or clear the zoom. Neither command switches projects or windows. This is also true when the target project or tab is not visible. In a project that you unloaded, only the tab that started becomes undimmed. A background split also starts the existing panes of that tab, so the source of the split is usable. Other tabs stay stopped and dimmed until you select the project. Without the flag, creation selects the new tab or pane as usual.
+`tab new --no-focus` starts the shell of a tab and does not change the selected tab. An empty workspace takes its first tab with no focus history. `pane split --no-focus` starts a split and does not move the pane focus or clear the zoom. Neither command switches projects or windows. This is also true when the target project or tab is not visible. Without the flag, creation selects the new tab or pane as usual.
 
 ```sh
 macterm tab new --project api --no-focus --run "npm test"

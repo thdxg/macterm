@@ -84,26 +84,16 @@ struct BundledResourcesTests {
         #expect(exists("ghostty/themes/\(theme)"), "default theme \(theme) is not bundled")
     }
 
-    /// The zmx inside the built bundle must be signed as the app itself. Each
-    /// session daemon disclaims the app at spawn and is the *responsible
-    /// process* for every program in its session, and macOS identifies a
-    /// responsible process by its code signature's identifier: with the app's,
-    /// the daemon resolves to Macterm's name, usage descriptions and existing
-    /// Local Network / TCC grants (#419). The release download is only
-    /// linker-signed as `zmx`, and Xcode never re-signs a Mach-O it copies into
-    /// Resources/, so `scripts/embed-zmx.sh` does it — this pins that a build
-    /// phase edit can't silently turn every pane prompt into one for "zmx".
     /// `scripts/setup.sh` writes the release file the zmx installer reads
-    /// (#699) next to the binary it unpacked, and its tag is the stamp of
-    /// that download. A release from before the checksums lists no assets;
-    /// the tag must still be there.
+    /// (#699) next to the server it installed, and its tag is the build key
+    /// of that server (`.server-key`). It lists both Linux builds.
     @Test
-    func zmx_release_file_names_the_pinned_build() throws {
+    func zmx_release_file_names_the_bundled_build() throws {
         guard let resourcesDir = Self.resourcesDir else { return }
         let stamp = resourcesDir
             .deletingLastPathComponent() // Macterm
             .deletingLastPathComponent() // repo root
-            .appendingPathComponent(".zmx-tag")
+            .appendingPathComponent(".server-key")
         guard let tag = try? String(contentsOf: stamp, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
               !tag.isEmpty
         else { return }
@@ -112,12 +102,21 @@ struct BundledResourcesTests {
             "zmx-release.json missing from the built bundle — run `mise run setup`"
         )
         #expect(release.tag == tag)
-        for (asset, sha) in release.assets {
-            #expect(asset.hasPrefix("zmx-") && asset.hasSuffix(".tar.gz"), "unexpected asset \(asset)")
-            #expect(sha.count == 64, "not a SHA-256: \(sha)")
+        for target in [ZmxHostTarget.linuxX86_64, .linuxAarch64] {
+            let sha = release.sha256(for: target)
+            #expect(sha?.count == 64, "no SHA-256 for \(release.assetName(for: target))")
         }
     }
 
+    /// The zmx inside the built bundle must be signed as the app itself. Each
+    /// session daemon disclaims the app at spawn and is the *responsible
+    /// process* for every program in its session, and macOS identifies a
+    /// responsible process by its code signature's identifier: with the app's,
+    /// the daemon resolves to Macterm's name, usage descriptions and existing
+    /// Local Network / TCC grants (#419). Zig's linker signs the build
+    /// only as `zmx`, and Xcode never re-signs a Mach-O it copies into
+    /// Resources/, so `scripts/embed-zmx.sh` does it — this pins that a build
+    /// phase edit can't silently turn every pane prompt into one for "zmx".
     /// Read from the test host's own bundle, which is the built app.
     @Test
     func bundled_zmx_is_signed_as_the_app() throws {
@@ -132,6 +131,56 @@ struct BundledResourcesTests {
             signature.output.contains("Identifier=\(appID)\n"),
             "zmx is not signed as \(appID):\n\(signature.output)"
         )
+    }
+
+    /// The app carries a gzip server build for every host target, named for
+    /// the bundled build key, for an install on a host with no download. The
+    /// macOS one is the bundled zmx itself, so it has the signature that
+    /// `bundled_zmx_is_signed_as_the_app` pins. Each Linux one is an ELF
+    /// binary for the machine that its name says.
+    @Test
+    func server_builds_ship_for_every_host_target() throws {
+        let release = try #require(
+            ZmxRelease.bundled,
+            "zmx-release.json missing from the built bundle — run `mise run setup`"
+        )
+        let zmx = try #require(Bundle.main.url(forResource: "zmx", withExtension: nil, subdirectory: "zmx"))
+        let bundledZmx = try Data(contentsOf: zmx)
+        for target in ZmxHostTarget.allCases {
+            let check: (Data) -> Bool = switch target {
+            case .macOS: { $0 == bundledZmx }
+            case .linuxX86_64: { Self.isELF($0, machine: 62) }
+            case .linuxAarch64: { Self.isELF($0, machine: 183) }
+            }
+            let name = "macterm-\(release.tag)-\(target.rawValue)"
+            let url = try #require(
+                Bundle.main.url(forResource: name, withExtension: "gz", subdirectory: "server"),
+                "server/\(name).gz missing from the built bundle — run `mise run setup`"
+            )
+            let binary = try Self.gunzip(url)
+            #expect(check(binary), "server/\(name).gz is not the build for \(target)")
+        }
+    }
+
+    /// True for an ELF file whose `e_machine` (little endian, offset 18) is
+    /// `machine`: 62 is x86_64, 183 is aarch64.
+    private static func isELF(_ data: Data, machine: UInt16) -> Bool {
+        guard data.count > 20, data.prefix(4) == Data([0x7F, 0x45, 0x4C, 0x46]) else { return false }
+        let index = data.startIndex
+        return UInt16(data[index + 18]) | UInt16(data[index + 19]) << 8 == machine
+    }
+
+    private static func gunzip(_ url: URL) throws -> Data {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
+        process.arguments = ["-dc", url.path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        #expect(process.terminationStatus == 0, "gzip could not read \(url.lastPathComponent)")
+        return data
     }
 
     private static func run(_ tool: String, _ arguments: [String]) throws -> (status: Int32, output: String) {

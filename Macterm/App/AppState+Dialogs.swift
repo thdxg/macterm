@@ -6,8 +6,8 @@ private let logger = Logger(subsystem: appBundleID, category: "AppState+Dialogs"
 /// The one dialog `AppState` can have up, and the one way it is confirmed
 /// or dismissed.
 ///
-/// Every confirmation the model stages — close pane, close tab, unload or
-/// remove a project, bulk-remove a selection, a destructive layout apply —
+/// Every confirmation the model stages — close pane, close tab, remove a
+/// project, bulk-remove a selection, a destructive layout apply —
 /// and every notice it raises (layout errors) used to be its own optional
 /// with its own request/confirm/cancel triplet and its own `.alert` copy per
 /// scene, each hand-gated on `DialogHost`. That is how a confirmation raised
@@ -30,7 +30,6 @@ extension AppState {
         enum Kind: Equatable {
             case closePane(paneID: UUID, projectID: UUID)
             case closeTab(tabID: UUID, projectID: UUID)
-            case unloadProject(UUID)
             case removeProject(UUID)
             case removeSelection
             case applyLayout(projectID: UUID)

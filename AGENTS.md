@@ -34,10 +34,16 @@ Macterm needs macOS 14 or later and Swift 6.0 or later. Liquid glass and some ch
 ### The terminal core
 
 - **"libghostty" here means `ghostty-internal`**. Upstream marks it "not for external use". `libghostty-vt` (the public library) has no surface API, so it is not a fallback. Treat every `ghostty_*` symbol as a symbol that can change without notice. Pin it, probe it and diff it. Do not assume it.
-- `GhosttyKit.xcframework`, `Macterm/Resources/{ghostty,terminfo}` and the bundled `zmx` are artifacts of the `thdxg/ghostty` and `thdxg/zmx` forks. Git ignores them. **Run `mise run setup` in every new checkout, including a git worktree**. Never make a symlink to them from another checkout. The presence check of setup would then never refresh them.
-- Both fork releases are **pinned** (`GHOSTTYKIT_TAG` and `ZMX_TAG` in `scripts/setup.sh`). Setup records them in the stamps `.ghosttykit-tag` and `.zmx-tag`, which git ignores. A change of a pin is its own commit that a reviewer can check.
+- `GhosttyKit.xcframework` and `Macterm/Resources/{ghostty,terminfo}` are artifacts of the `thdxg/ghostty` fork. The bundled `zmx` is the build of `server/` at the same commit. Git ignores them. **Run `mise run setup` in every new checkout, including a git worktree**. Never make a symlink to them from another checkout. The presence check of setup would then never refresh them.
+- The GhosttyKit release is **pinned** (`GHOSTTYKIT_TAG` in `scripts/setup.sh`). Setup records it in the stamp `.ghosttykit-tag`, which git ignores. A change of a pin is its own commit that a reviewer can check.
+- **The server has no pin.** `scripts/build-server.sh` builds it for macOS universal and Linux x86_64 and aarch64 (static musl, stripped). That script holds the Zig version and the flags.
+  - The build key is the git tree hash of `server/`, `protocol/` and that script, from the working tree. `zmx version` reports `1.0.1+thdxg.<key>`.
+  - Setup installs the build for the key and records the key in `.server-key`. It takes, in order: `build/server` (CI puts its own build there); a Zig build when those folders have changes that are not committed; the prebuilt `macterm-<key>-<target>.tar.gz` from the `server-prebuilt` release; a Zig build. Every tarball is checked against its `.sha256`.
+  - `.github/workflows/server-build.yml` builds on `macos-15`, because zig cannot link with Xcode 26.4 or later (zig#31658). It takes the prebuilt when it exists. It uploads a new build on `main` and on pull requests from this repository, and never replaces an asset. It removes assets older than 90 days, except the build of main's key.
+  - The release workflows build from the commit, never from a prebuilt. The Linux checksums in the app are those of the served assets, because the remote installer downloads them.
+  - `build.sh` refuses a bundle whose server is not the build of the tree.
+  - **The app carries a gzip build for every host target** for an install on a host, with no download: `Contents/Resources/server/macterm-<key>-<target>.gz` for `universal-macos`, `x86_64-linux` and `aarch64-linux`. Nothing reads them yet: the installer below still downloads the Linux builds until v2's install on a host replaces it. `setup.sh` makes the Linux files next to `zmx`; `embed-zmx.sh` makes the macOS file from the signed `zmx`, so it has the app's identifier. The app's signature seals all three. `build.sh` refuses a bundle without them or with a macOS file that is not the bundled `zmx`. `build.sh` and `BundledResourcesTests` also check that each Linux file is an ELF binary for its machine.
   - A weekly auto-PR changes the GhosttyKit pin (`.github/workflows/bump-ghosttykit.yml`). It needs the `GH_PAT` secret, so that CI runs on it. It attaches an API review from `scripts/ghosttykit-api-diff.sh`. Read the section "renumbered enum constants" in that report. Swift imports enum constants by name, so a new constant in the middle of an enum compiles with no error.
-  - `.github/workflows/bump-zmx.yml` does the same for zmx. It was to attach the downstream patches that changed, in place of an API review, but the fork's main has no patch files now, so that part does not work. Nothing compiles against zmx, so End-to-end is the real gate of that PR.
 - **The zmx fork is upstream v1.0.1 and no longer syncs.** The `DOWNSTREAM.md` on its main names each change by its old patch number (0003 is the leadership claim, 0004 the disclaim, 0010 the foreground report). zmx 1.0 changed the IPC header, so it cannot talk to a session daemon from before 1.0. We measured the 1.0.1 build against a 0.8.1 daemon: `zmx attach` hangs with a blank screen, `zmx kill` hangs, `zmx set` fails, and `zmx ls` lists the session as `err=Unexpected status=unreachable`. A pane whose session an older build started therefore opens blank. Closing the pane does not end that session: the kill hangs and Macterm stops it after 5 s, and the reaper skips an `err=` line. The old daemon and its programs keep running. A Macterm update does not change the zmx on a remote host, so remote sessions break only after **Install zmx on Host** puts the 1.0.1 build there.
 - **The header is under `#pragma clang assume_nonnull` since `build-2026-11-06`.** A pointer that the header does not mark `GHOSTTY_NULLABLE` imports into Swift non-optional, and a NULL there is undefined behavior, not nil. A fork field that can be NULL must carry the macro in its patch (`command` of `command_finished`, thdxg/ghostty#41). `ghostty_runtime_config_s` has no zero initializer any more: every callback is given in its memberwise init, in `GhosttyApp.makeRuntimeConfig`, which is `nonisolated` on purpose. A closure literal made inside the `@MainActor` init is inferred main-actor-isolated, and libghostty calls the wakeup and the clipboard callbacks from its own threads: the test host died with SIGTRAP in `dispatch_assert_queue` at the first wakeup. The closures name `GhosttyApp.sharedCallbacks`, a nonisolated static, for the same reason. `GhosttyCallbacks.reportedCommand` reads the one field that a build imported non-null through its offset, as a nullable pointer, so that a NULL is nil under either header.
 - A pinned tag is **not immutable**. The fork has uploaded assets again under the same tag. If a build behaves differently from an identical commit, compare the sizes of `GhosttyKit.xcframework/*/Headers/ghostty.h` before you suspect your own change. For the same reason, the DerivedData caches of CI have a key that includes the hash of that header. Do not merge the restore step and the save step in `test.yml`. Do not add a `restore-keys` fallback that does not depend on the framework.
@@ -362,9 +368,9 @@ These rules for the spawn script come from tests against a real host:
 
 **Install zmx on Host…** puts the fork's zmx on the host of a remote project (`ZmxInstallSheet`, `RemoteZmxInstallFlow`, the pure rules in `RemoteZmxInstall.swift`). It is in the row menu of a remote project in Settings → Projects, and in the New Remote Project sheet, before the project exists. The grammar for users is in `website/docs/pages/70-remote-projects.md`.
 
-- **The sheet checks first, and installs only on a click.** One ssh runs `RemoteSpawn.zmxHostCheckScript`: `uname -s`, `uname -m`, the zmx the project would run (`zmxPath`, else the first in PATH) and its `zmx version`. `ZmxHostTarget.detect` maps the host to a release asset (Linux x86_64 or aarch64, or the universal macOS build). `ZmxVersion.parse` reads the fork marker (`1.0.1+thdxg.<tag>`, which `build-zmx.yml` stamps with `-Dversion`). `ZmxInstallVerdict.decide` says what the sheet offers: Install for a host with no zmx, Update for upstream zmx or another fork build, nothing for the pinned build or a host with no build.
+- **The sheet checks first, and installs only on a click.** One ssh runs `RemoteSpawn.zmxHostCheckScript`: `uname -s`, `uname -m`, the zmx the project would run (`zmxPath`, else the first in PATH) and its `zmx version`. `ZmxHostTarget.detect` maps the host to a release asset (Linux x86_64 or aarch64, or the universal macOS build). `ZmxVersion.parse` reads the fork marker (`1.0.1+thdxg.<key>`, which `scripts/build-server.sh` stamps with `-Dversion`). `ZmxInstallVerdict.decide` says what the sheet offers: Install for a host with no zmx, Update for upstream zmx or another build, nothing for the bundled build or a host with no build.
 - **Every connection runs under a pty** (`TTYCommand`: `posix_openpt` and `posix_spawn` with `SETSID`, never `fork`). The background operations of a remote project use `BatchMode`, which turns every prompt into a refusal (#272). An install is a click, so ssh may ask: `SSHPrompt.detect` finds a password, passphrase or host-key question at the tail of the output, the sheet asks in a secure field or as yes/no, and the answer goes to the program's tty and nowhere else. A Touch ID key shows its own dialog. Background SSH off does not block it.
-- **The binary never comes from the host's internet.** `ZmxBinaryProvider` takes the bundled zmx for a macOS host, and for Linux downloads the asset of the pinned release once (`<App Support>/zmx-downloads/<tag>/`), checks its SHA-256 against `zmx-release.json` and unpacks it. `scripts/setup.sh` writes that file into the bundle from the release's `.sha256` assets (`ZmxRelease`, git-ignored with the other artifacts). A release with no `.sha256` lists no assets, and the sheet says the build has no binary for the host.
+- **The binary never comes from the host's internet.** `ZmxBinaryProvider` takes the bundled zmx for a macOS host, and for Linux downloads the build of the bundled key once from the `server-prebuilt` release (`<App Support>/zmx-downloads/<key>/`), checks its SHA-256 against `zmx-release.json` and unpacks it. `scripts/setup.sh` writes that file into the bundle from the `.sha256` files of the build it installed (`ZmxRelease`, git-ignored with the other artifacts). Until it reads the bundled Linux builds (`Contents/Resources/server`), a key whose prebuilt is older than 90 days has no download.
 - **Two connections do the install**: `scp` lands the binary in the home as `.zmx.macterm`, then one ssh moves it into `~/.local/bin/zmx` in one `mv`, so a running `zmx attach` never sees a half-written file. `~/.local/bin` is in the fallback PATH of the pane script. Running sessions keep their old daemon until the user creates them again. When the zmx the check found is not the installed one (another zmx first in PATH, or `zmxPath` named an old one), Done sets the project's `zmxPath` to the installed path (`AppState.useInstalledZmx`); from the New Remote Project sheet it fills the path field.
 - Not yet: an action on the `zmx not found` diagnostic in a pane, and a CLI verb (ssh prompts have no way to reach a CLI).
 
@@ -393,7 +399,7 @@ Pinned tabs belong to no project. The sidebar shows them above the projects. The
 - Pin and Unpin are `moveTab`s. They never kill anything. `syncPinnedRecordsWithWorkspace` pins a tab that was born in the pinned workspace.
 - **Closing a pinned tab is an unload. It is never a removal**. The sessions end. The record stays as a dimmed row. When Macterm starts again, it starts the tab again at once. Unpin is the path for removal.
   - The same unload happens when the own sessions of a tab die (`paneProcessExited`).
-  - `unloadProject` uses the same dimmed row through `AppState.unloadedProjectIDs` (only in memory, cleared in the `didSet` of `activeProjectID`).
+  - The code calls this state "unloaded" (`unloadPinnedTab`). The GUI never does: the dimmed row's tooltip says "Not running".
 - The persistence has two layers.
   - The live state is in the `pinned` section of `workspaces_v3.json`.
   - The declaration is in `~/.config/macterm/pinned.yaml`. It is next to `widgets.yaml`. The location comes from `ProjectFileStore.configDirectoryURL`, and the custom store of a test keeps it inside its own directory.
@@ -668,12 +674,39 @@ Rules:
   - Creation skips the selection at the mutation of the model. It never selects and then restores. The history of tabs and panes and the selections of windows stay untouched. A split with no focus keeps the zoom. An empty workspace adopts its first tab with no history, because there is no selection to keep.
   - `AppState.createTab` and `splitPane` incubate only children that no window renders (this includes panes that zoom hides). Visible splits then start at their real size.
   - Every warm goes through `warmPane`: project selection, the restore of pinned tabs and the creation by the CLI. The `incubatePane` that you can inject supplies the surface. One exit closure reads `pane.projectID` at the time of the exit, so that moving a tab cannot strand it.
-  - A creation in the background keeps the marker of a project that is unloaded. `isTabUnloaded` dims only the tabs that still have no surface views. It does not dim the tab that just started.
-  - If you split a tab that you unloaded explicitly, Macterm starts its existing panes too. A row that is not dimmed therefore never hides a source that stopped. Other tabs stay stopped.
+  - A background split starts only the new pane. The other panes of a project that no window showed yet start when the project is selected.
   - The view slot is not observed, so the warm stays synchronous with the structural redraw. A window that is ordered out still mounts new children (E2E pins this). Children that zoom hides do need incubation.
-  - Remote tabs get `project.zmxPath` before the warm. A split stamps the whole target tab before any panes that are unloaded revive. The new sibling inherits the path of the source.
+  - Remote tabs get `project.zmxPath` before the warm. A split stamps the whole target tab, so the new sibling inherits the path of the source.
   - The start is asynchronous. It is not a promise that the shell prompt is ready when the CLI returns.
 - `pane run` types through the paste path (`sendText`). `--no-submit` withholds the newline and keeps the evidence of a submission armed. `pane key <chord>` uses the key-encoding path (`sendKey`) and **bypasses `keyDown`**, so the interceptions of `keyDown` do not apply. A bare printable key must carry `.text`, or it encodes to nothing. `pane resize` exists only under `#if DEBUG`.
+- `pane.latency` is a socket command with no CLI subcommand (`TypingLatencyProbe`). It types `x` into a pane, times each glyph to the first frame that shows it, and clears the line with ctrl+u. Only a Debug build or an app with `MACTERM_BENCHMARK=1` answers it; any other build answers `unknown_command`. `benchmark.py --latency-keys` sends it straight to the socket.
+
+### The v2 protocol (`Macterm/Protocol/`)
+
+The frames and messages between the app, the server and the session processes (design/003). Nothing in the app calls it yet.
+
+- **The Zig messages are the one source** (`server/src/protocol/messages.zig`). The server binary's hidden `__schema` command writes the Swift types (`Macterm/Protocol/MactermProtocol.generated.swift`), the metadata (`server/schema/protocol.json`) and frames that Zig encoded (`server/schema/frames.json`). `mise run protocol` writes all three. Never edit them by hand.
+- `MessagePack.swift` and `ProtocolFrame.swift` follow the Zig codec byte for byte. The cap on array memory differs: Swift counts its stride. `ProtocolFixtureTests` decodes each Zig frame and encodes it again to the same bytes.
+- **CI checks the schema** (`scripts/protocol.sh --check` in the Server workflow; `mise run protocol --check` locally):
+  - The generated files are current.
+  - Against the metadata on main: no message, method, type, field or enum case is removed; no type, default or `since` changes; each addition has the current level; a new enum case needs an `unknown` case in the enum.
+  - No method result and no event holds a `secret`.
+- The base is main, not the last release, until v2 has a release. A new field in an older type names its level in `field_since`.
+- Field names and enum tags are snake_case ASCII (`checkName`), so the Swift String compare is the Zig byte compare.
+- `scripts/protocol.sh` needs Zig 0.17 on PATH or in `$ZIG`.
+
+### The app's client of the local server (`Macterm/Server/`)
+
+`LocalServer` and `ServerConnection` connect the app to `macterm server` (design/001 A, design/002). Nothing in the app calls them yet: v1's panes still run their own zmx.
+
+- **The app starts the server.** `LocalServer.connect` connects to `<runtime dir>/.server`. When nothing answers, it runs the bundled `zmx server` with `MACTERM_RUNTIME_DIR` set, so that the app and the server use one directory. `runtimeDirectory(environment:)` finds it as `resolveDir` in `server/src/runtime.zig` does.
+- **A newer app replaces an older server** with `server.exit`, then starts its own. The sessions keep running.
+  - A lower level is older. A higher level is never replaced.
+  - At the same level, another build is replaced only when it runs from this app's own `zmx` path, or from a file that an update removed. `proc_pidpath` of the socket's peer follows a bundle that moved, and gives no path after a delete (measured). A real Sparkle update is not measured yet.
+  - A build from another app (Debug next to Release) stays. The order of two builds of one level is not known.
+  - One `connect` replaces at most once, so two apps never replace each other's server in a loop.
+- `ServerConnection` reads the socket on a thread of its own. A request waits for its response by id. `events` gives one element for each event batch. When the connection ends, each request that waits fails with `ServerClientError.disconnected`. Only the reader thread closes the fd, under the lock that each write holds.
+- `LocalServerTests` runs the bundled server in a runtime directory under `/tmp` (a socket path has at most 103 bytes).
 
 ### Ghostty config pipeline
 
@@ -914,6 +947,8 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
     - The built-in screens are not extensions, and they have no card. There is no switch for on and off. To remove an extension, uninstall it.
   - `PasswordsSettings`.
   - `IntelligenceSettings` (Settings → Intelligence, macOS 26 and later): project memory, its summary, and the status of Apple's on-device model.
+- `Macterm/Server/`: the app's client of the local server. `LocalServer` (start, reuse, replace) and `ServerConnection` (handshake, requests, events).
+- `Macterm/Protocol/`: the v2 protocol. `MessagePack`, `ProtocolFrame`, `ProtocolControl`, and the generated `MactermProtocol`.
 - `Macterm/Control/`: `ControlProtocol` (shared with the CLI), `ControlSocketServer`, `ControlHandler`, and `AgentSkills/` (the text of `macterm skills`, shared with the CLI).
 - `Macterm/Intents/`: the surface of App Intents. `MactermIntentHost` and `IntentTargets` (`IntentHost.swift`), `IntentPermission`, `MactermIntentError`, `Entities`, `ProjectIntents`, `TabIntents`, `PaneIntents`, `CommandIntents` and `MactermShortcuts` (`AppShortcutsProvider`).
 - `Macterm/Palette/`: `PaletteEngine` with `CommandSource`, `ProjectSource` and `DirectorySource`. `PaletteIcon` is the glyph of a row or a pill: an SF Symbol or the icon file of an extension.
@@ -969,7 +1004,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
 - `Macterm/Search/`: `SearchText` (prepared, folded text), `SearchScoring` (the scoring of fzf and the positions of highlights), and `SearchIndex` with `SearchSession` and `Search` (the engine, see Search).
 - `IconRenderer/`: `macterm-icon-renderer`, the adaptive icon's helper (`main.swift`), and `PrivateInterfaces/` (the hand-written IconRendering interface, the CoreUI header, and the two link stubs).
 - `CLI/`: the `macterm` binary. `MactermCommand` (the ArgumentParser tree), `ControlClient`, `Output`, `SSHCommand`, `TutorCommand`, `SkillsCommand`, `WidgetCommand`, and `PaletteCommand` (`palette list`, and the hidden runner `palette exec`).
-- `scripts/`: `setup.sh`, `build.sh`, `_lib.sh` (version mapping, update channel), `publish-appcast.sh` and `benchmark.py` with `_harness.py` (`MactermHarness`, shared with e2e). It also has `e2e.sh` with `e2e/` (the pytest suite), `ghosttykit-api-diff.sh`, `ghostty-shim.sh` and `record-demos/` (the demo clips of the website).
+- `scripts/`: `setup.sh`, `build-server.sh` (the server builds and their key), `build.sh`, `_lib.sh` (version mapping, update channel), `publish-appcast.sh` and `benchmark.py` with `_harness.py` (`MactermHarness`, shared with e2e). It also has `e2e.sh` with `e2e/` (the pytest suite), `ghosttykit-api-diff.sh`, `ghostty-shim.sh` and `record-demos/` (the demo clips of the website).
 - `website/` has the docs site (`docs/pages/*.md`) and the Caddyfile that serves the update feed.
 
 ## Tests
@@ -1011,18 +1046,33 @@ Every other macOS job runs on `xcode-27` (macOS 27). `Test / Smoke` starts the R
 - Before macOS 26, the app does not try.
 - No crash report from the app, zmx or the icon helper appears during the run.
 
-`Release Build`, `Smoke (macos-26)` and `Smoke (macos-15)` are required checks on main, next to `Format`, `Lint`, `Unit` and `End-to-end`. **The Smoke checks are two jobs, not a matrix.** A matrix job that its `if:` skips reports its unexpanded name (`Smoke (${{ matrix.runner }})`). A required check with the expanded name then never reports, and a pull request that changes no Swift can never merge.
+`Release Build`, `Smoke (macos-26)` and `Smoke (macos-15)` are required checks on main, next to `Format`, `Lint`, `Unit` and `End-to-end`. **The Smoke checks are two jobs, not a matrix.** A matrix job that its `if:` skips reports its unexpanded name (`Smoke (${{ matrix.runner }})`). A required check with the expanded name then never reports, and a pull request that changes no Swift can never merge. The server checks of `server.yml` (`Test (macOS)`, `Test (Linux x86_64)` and `Test (Linux aarch64)`) are required on main only, in their own ruleset, because `v1` has no `server.yml`. They are a matrix, so they skip at step level: the workflow starts on every pull request, and each step after `paths-filter` skips when no server file changed.
 
 The script stops only the process that it started, and it kills its own zmx sessions. On a developer Mac it still reads and writes the real defaults domain of the build, because cfprefsd ignores `HOME`. The CLI takes `--socket` after the subcommand (`macterm status --socket <path>`).
 
 ### Benchmarks
 
-`mise run bench` and `.github/workflows/benchmark.yml` measure the delta of CPU time, RSS and wakeups across `focused`, `workload-focused` and `workload-unfocused`. Darwin notifications drive them (`BenchmarkControl`, `MACTERM_BENCHMARK=1`, which also skips the notification prompt, Sparkle and the first-run seed).
+`mise run bench` and `.github/workflows/benchmark.yml` measure the delta of CPU time, memory and wakeups across `focused`, `workload-focused` and `workload-unfocused`. Darwin notifications drive them (`BenchmarkControl`, `MACTERM_BENCHMARK=1`, which also skips the notification prompt, Sparkle and the first-run seed).
 
+- Memory is the sum of `phys_footprint` over the process tree: the app, the zmx clients and session daemons of its bundle, and their shells (`tree_footprint`). Do not use `ps` RSS for memory. CPU time is the app's own, because a sum over the tree loses the short-lived children of a workload.
+- `results.json` records the runner image (`runner`, from `ImageOS` and `ImageVersion`). PR runs compare only against main runs of the same image OS and macOS version (`same_image`), because a change of image moves every number. A run with no record matches nothing.
+- Each state waits until the 1-minute load average is below half the CPU count (`wait_for_load` in `_harness.py`, at most 120 s). The state records the load. The report marks a state whose gate timed out.
 - PR runs compare against a pooled median of the last 10 runs on main.
 - A cell gets a flag only beyond ±25% and a noise floor.
 - The label `benchmark:regression` or `benchmark:improvement` needs at least 2 corroborating cells, and one of them under a workload state (`should_label`).
 - The writes of labels and comments are in `benchmark-report.yml`. The token of a PR from a fork is read-only.
+
+**Session-layer latency** (`scripts/session_bench.py`) measures what the session layer adds to typing and to a reattach. It runs no app: a pty driver plays the terminal. The macOS job runs it as its own step after the window states, with the zmx of the built app (`session-macos.json`). A failure of that step does not fail the job. The job `Session Layer (Linux)` runs it with the pinned Linux zmx, against sshd on localhost with 25 ms of `netem` delay each way (`session-results-linux`). Each job writes a table into its summary. The report gives p50, p95 and p99:
+
+- **Echo**: write one key and time its echo, 500 keys. `bare` is `/bin/cat` on a pty in line mode, so only the kernel echoes (the floor). `zmx` is `zmx attach <s> /bin/cat` (a local pane). On Linux, `ssh` is `ssh -tt localhost /bin/cat` (the floor for a remote pane) and `ssh-zmx` is a remote pane of v1.
+- **New remote pane** (Linux): from the start of `ssh … zmx attach` to the first echo after the session prints its ready marker, 5 panes. v1 makes a new ssh login for each remote pane.
+- **Reattach**: fill a session with 10,000 lines of 199 characters on a 200-column terminal, detach, then time a new `zmx attach` until the echo of a marker line. The marker goes in after the client takes the terminal, and its echo comes after the replay. The report gives the size of the replay.
+- A key goes in only after the client turns echo off on its pty and the session prints a ready marker. Before that, the kernel or the remote pty echoes the key, and the time is not the session layer's. An ssh client turns echo off before the remote side runs zmx.
+- The JSON records `ssh -V`: OpenSSH 9.5 and later delays keystrokes (`ObscureKeystrokeTiming`).
+- The report gives p95 and p99 only for 20 samples or more.
+- Not measured here: the GUI part of typing latency (`keyDown`, the render, the compositor), and memory for each idle session.
+- Every session that a run makes is killed after the run, in a throwaway `ZMX_DIR`. A session with no client drops terminal replies.
+- No baseline comparison and no label yet. The numbers on main are v1's reference for v2.
 
 ### Demo recordings
 
@@ -1140,6 +1190,7 @@ The GUI text is in three String Catalogs: `Macterm/Localizable.xcstrings` (the a
 
 ### UI principles
 
+- **The GUI never shows the concept of unloading.** Macterm starts the shells of a project when a window selects it, so the user never loads or unloads a project. There is no action that stops a whole project and keeps its layout: no Unload command, menu item or Settings badge. Remove ends the sessions of a project for good. The CLI keeps the `loaded` field of `project list` (`not loaded` means that no workspace exists yet), because scripts read it.
 - **Use native SwiftUI and AppKit components only**. Accept a native limitation. Do not mimic the behavior.
 - All colors come from `MactermTheme`. Fixed system colors are allowed only for identity labels (`ProjectColor`, `AgentIcon.brandColor`).
 - Put APIs that exist only on Tahoe behind `#available(macOS 26.0, *)`. For controls, also use `WindowAppearance.glassSupported`.
@@ -1180,7 +1231,7 @@ The GUI text is in three String Catalogs: `Macterm/Localizable.xcstrings` (the a
   - `AppState` adopts `QuickTerminalService.shared.splitState` one time (`adoptQuickTerminal`, which you can inject at init for tests). It takes a snapshot of it in every `saveWorkspaces`. It hands the tab back in `restoreSelection` before the sweep for orphans. It counts the sessions of the tab as claims for the reaper. The panes connect only when the panel is shown for the first time, so until then they have zero clients.
   - `QuickTerminalSplitState` reports its own splits and closes through `onStructureChange`, because it owns no `AppState`. Macterm refuses a restore after the panel was shown in this run.
   - Results: a quit kills nothing and confirms nothing while zmx is bundled. The confirmation returns, with the quick terminal included, only when zmx is not available. A close of a pane in the panel is still the one permanent kill.
-- Settings → Projects duplicates the alerts for layout, unload and remove. Keep them gated on `AppState.DialogHost`, so that a confirmation that the palette raises does not also open Settings.
+- Settings → Projects duplicates the alerts for layout and remove. Keep them gated on `AppState.DialogHost`, so that a confirmation that the palette raises does not also open Settings.
 
 ### Adding a new feature
 

@@ -229,11 +229,15 @@ struct CommandPalettePanel: View {
                             // strip above rows an earlier listing left.
                             if let failure {
                                 PaletteFailureNotice(failure: failure) { scope?.retry() }
-                                    .frame(maxWidth: .infinity, minHeight: sections.isEmpty ? viewportHeight : 0)
+                                    .frame(maxWidth: .infinity, minHeight: sections.isEmpty ? noticeHeight : 0)
                             }
                             if sections.isEmpty, failure == nil, let loading {
                                 PaletteLoadingNotice(loading: loading)
-                                    .frame(maxWidth: .infinity, minHeight: viewportHeight)
+                                    .frame(maxWidth: .infinity, minHeight: noticeHeight)
+                            }
+                            if sections.isEmpty, failure == nil, loading == nil, !PaletteQuery(raw: query).isEmpty {
+                                PaletteNoMatchesNotice()
+                                    .frame(maxWidth: .infinity, minHeight: noticeHeight)
                             }
                             ForEach(Array(sections.enumerated()), id: \.offset) { sectionIndex, section in
                                 if let header = section.header {
@@ -273,7 +277,7 @@ struct CommandPalettePanel: View {
                         }
                         // Match the rows' 6pt horizontal inset so the gap above
                         // the first row and below the last equals the side spacing.
-                        .padding(.vertical, 6)
+                        .padding(.vertical, Self.listPadding)
                     }
                 }
                 .frame(maxHeight: 340)
@@ -511,6 +515,15 @@ struct CommandPalettePanel: View {
 
     /// The id of the zero-height view at the top of the results.
     private static let listTop = "list-top"
+    /// The list's padding above the first row and below the last.
+    private static let listPadding: CGFloat = 6
+
+    /// The height of a notice that fills a list with no rows: the viewport
+    /// less the list's padding. A notice of the full viewport height made the
+    /// list 12 pt taller than its view, so it scrolled and showed a scroll bar.
+    private var noticeHeight: CGFloat {
+        max(0, viewportHeight - 2 * Self.listPadding)
+    }
 
     /// Leading/trailing breathing room kept between the selected row and the
     /// viewport edge when keyboard navigation scrolls it into view.
@@ -758,6 +771,16 @@ private struct PaletteLoadingNotice: View {
                 .lineLimit(1)
         }
         .padding(20)
+    }
+}
+
+/// The results when a query matches no row: one muted line, centered.
+private struct PaletteNoMatchesNotice: View {
+    var body: some View {
+        Text("No matches.")
+            .font(.system(size: 13))
+            .foregroundStyle(MactermTheme.fgMuted)
+            .padding(20)
     }
 }
 
