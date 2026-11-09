@@ -76,7 +76,7 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # build-2026-10-21-f4d117c: + downstream patch 0018 (thdxg/ghostty#38): a
 # page motion of copy mode eases the viewport under smooth-scroll, as a
 # region scroll of Helix does. No C API change.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-06-4ba748b}"
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-09-f159ca9}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.
