@@ -67,3 +67,18 @@
       - any-glob-to-any-file:
           - ".github/workflows/release.yml"
           - "Macterm/Info.plist"
+
+"area:server":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "server/**"
+          - "scripts/build-server.sh"
+          - ".github/workflows/server*.yml"
+
+"area:protocol":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "server/src/protocol/**"
+          - "server/schema/**"
+          - "Macterm/Protocol/**"
+          - "scripts/protocol.sh"

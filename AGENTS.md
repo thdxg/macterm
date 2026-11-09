@@ -1079,17 +1079,20 @@ The script stops only the process that it started, and it kills its own zmx sess
 - The label `benchmark:regression` or `benchmark:improvement` needs at least 2 corroborating cells, and one of them under a workload state (`should_label`).
 - The writes of labels and comments are in `benchmark-report.yml`. The token of a PR from a fork is read-only.
 
-**Session-layer latency** (`scripts/session_bench.py`) measures what the session layer adds to typing and to a reattach. It runs no app: a pty driver plays the terminal. The macOS job runs it as its own step after the window states, with the zmx of the built app (`session-macos.json`). A failure of that step does not fail the job. The job `Session Layer (Linux)` runs it with the pinned Linux zmx, against sshd on localhost with 25 ms of `netem` delay each way (`session-results-linux`). Each job writes a table into its summary. The report gives p50, p95 and p99:
+**The session layer** (`scripts/session_bench.py`) measures what the session layer adds to typing, to a reattach, to memory and to idle wakeups, for v1's and v2's local panes side by side. It runs no app: a pty driver plays the terminal. The macOS job runs it as its own step after the window states, with the zmx of the built app (`session-macos.json`), and adds its report to the PR comment. A failure of that step does not fail the job. The job `Session Layer (Linux)` runs it with the Linux build of the commit's server, against sshd on localhost with 25 ms of `netem` delay each way (`session-results-linux`). Each job writes a table into its summary. The report gives p50, p95 and p99, and a table of each v1/v2 pair with the ratio:
 
-- **Echo**: write one key and time its echo, 500 keys. `bare` is `/bin/cat` on a pty in line mode, so only the kernel echoes (the floor). `zmx` is `zmx attach <s> /bin/cat` (a local pane). On Linux, `ssh` is `ssh -tt localhost /bin/cat` (the floor for a remote pane) and `ssh-zmx` is a remote pane of v1.
+- **Local panes**: one binary has both. `v1` is `zmx attach <s> <command>` (a v1 daemon for each pane), `v2` is `zmx connect <s> -- <command>` (a v2 session made through the server). The run sets `MACTERM_RUNTIME_DIR` to its throwaway folder, so v2 never uses the user's server.
+- **Each pair runs in one run, alternated**: the echo keys go in rounds to v1 and v2 in turn, the reattaches alternate, and the idle panes of both are measured in the same window. A pair is never compared across runs or runners.
+- **Echo**: write one key and time its echo, 500 keys. `bare` is `/bin/cat` on a pty in line mode, so only the kernel echoes (the floor). `v1` and `v2` are `/bin/cat` in a local pane. On Linux, `ssh` is `ssh -tt localhost /bin/cat` (the floor for a remote pane) and `ssh-zmx` is a remote pane of v1.
 - **New remote pane** (Linux): from the start of `ssh … zmx attach` to the first echo after the session prints its ready marker, 5 panes. v1 makes a new ssh login for each remote pane.
-- **Reattach**: fill a session with 10,000 lines of 199 characters on a 200-column terminal, detach, then time a new `zmx attach` until the echo of a marker line. The marker goes in after the client takes the terminal, and its echo comes after the replay. The report gives the size of the replay.
+- **Reattach**: fill a session with 10,000 lines of 199 characters on a 200-column terminal, detach, then time a new client until the echo of a marker line. The marker goes in after the client takes the terminal, and its echo comes after the replay. The report gives the size of the replay.
+- **Idle** (macOS): 1 and then 9 panes of `/bin/cat` in each layer. It reads `phys_footprint` and the interrupt wakeups (`proc_pid_rusage`, with no sudo; the kernel counts each package idle wakeup also as an interrupt wakeup) of the session side (v1's daemons; v2's server and sessions) and of the clients, over 60 s. The programs in the panes are not counted. The run ends the sessions of the other arms first, so v2's server holds only the idle sessions. v2's server carries the argv of the client that started it, so the run finds it by the peer pid of its socket.
 - A key goes in only after the client turns echo off on its pty and the session prints a ready marker. Before that, the kernel or the remote pty echoes the key, and the time is not the session layer's. An ssh client turns echo off before the remote side runs zmx.
 - The JSON records `ssh -V`: OpenSSH 9.5 and later delays keystrokes (`ObscureKeystrokeTiming`).
 - The report gives p95 and p99 only for 20 samples or more.
-- Not measured here: the GUI part of typing latency (`keyDown`, the render, the compositor), and memory for each idle session.
-- Every session that a run makes is killed after the run, in a throwaway `ZMX_DIR`. A session with no client drops terminal replies.
-- No baseline comparison and no label yet. The numbers on main are v1's reference for v2.
+- Not measured here: the GUI part of typing latency (`keyDown`, the render, the compositor), and the app's own memory. In m2 the app runs a client on a pty for both layers, so the window states measure the same app for both.
+- Every session that a run makes is ended after the run, in a throwaway `ZMX_DIR` and runtime folder. A session with no client drops terminal replies.
+- No baseline comparison and no label yet.
 
 ### Demo recordings
 
