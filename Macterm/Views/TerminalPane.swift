@@ -402,17 +402,13 @@ private struct TerminalSurface: NSViewRepresentable {
         // tab and the badge can never disagree about what counts as seen.
         view.onBell = { [weak pane] in pane?.ringBell() }
         view.onProgressStarted = { [weak pane] in
-            guard Preferences.shared.showTabStatusIndicator else { return }
             pane?.refreshForegroundProcess()
             pane?.markCommandRunning()
         }
         view.onProgressFinished = { [weak pane] failed in
             // Only a live run can end. The REMOVE a program sends after its
             // ERROR finds the pane already `.done` and leaves the red dot up.
-            guard let pane,
-                  Preferences.shared.showTabStatusIndicator,
-                  pane.executionState == .running
-            else { return }
+            guard let pane, pane.executionState == .running else { return }
             pane.refreshForegroundProcess()
             pane.markProgressFinished(failed: failed)
             onCommandFinished()
@@ -451,7 +447,7 @@ private struct TerminalSurface: NSViewRepresentable {
                 // next idle poll, so the bubble is up before the user types.
                 PasswordPromptMonitor.shared.viewDidOutput(view)
             }
-            guard let pane, Preferences.shared.showTabStatusIndicator else { return }
+            guard let pane else { return }
             // The single activity source. Output heartbeats fire from the pty
             // IO path regardless of occlusion, so they also reach background
             // tabs, and they carry the row total so the tracker can tell
@@ -501,10 +497,8 @@ private struct TerminalSurface: NSViewRepresentable {
                     pane: pane, view: view, exitCode: exitCode, durationNs: durationNs, reportedCommand: command
                 )
             }
-            if Preferences.shared.showTabStatusIndicator {
-                pane.markCommandFinished()
-                onCommandFinished()
-            }
+            pane.markCommandFinished()
+            onCommandFinished()
             guard !(NSApp.isActive && view?.isFocused == true) else { return }
             let durationSec = Double(durationNs) / 1_000_000_000
             let duration = Self.formatDuration(durationSec)

@@ -95,7 +95,7 @@ extension AppState {
     func desktopWidgetNeedsConfirmRemove(id: UUID) -> Bool {
         guard let pane = desktopWidget(id: id)?.pane else { return false }
         // Widget panes are outside the poll, so their sample is read fresh.
-        pane.refreshForegroundProcess(trackExecution: false)
+        pane.refreshForegroundProcess()
         return pane.needsConfirmClose
     }
 
