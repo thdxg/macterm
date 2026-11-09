@@ -152,6 +152,25 @@ def test_busy_tab_close_refused_then_forced(app, fresh_tab, live_pane):
     assert fresh_tab["id"] not in {t["id"] for t in app.cli_json("tab", "list")["tabs"]}
 
 
+def test_pane_list_reports_running_then_done(app, fresh_tab, live_pane):
+    """`pane list` reports a command as running, then done, whatever the
+    status indicator setting is (#705). Agents wait on these states. The
+    pane's tab was shown, then another tab took its place: looking at the
+    active tab acknowledges `done` at once and sets the pane back to idle."""
+    app.cli_json("tab", "new")
+
+    def state():
+        return next(p["state"] for p in app.panes(tab=fresh_tab["id"]) if p["id"] == live_pane["id"])
+
+    # The marker comes after a pause: the output heartbeat fires at once on
+    # the echo of the command and drops output for 500 ms after it. The next
+    # heartbeat re-reads the foreground while `sh -c` holds it.
+    nonce = uuid.uuid4().hex[:12]
+    app.pane_run(f'/bin/sh -c "sleep 1; printf started-%s {nonce}; echo; sleep 6"', pane=live_pane["id"])
+    wait_for(lambda: state() == "running", timeout=30, message="pane list to report running")
+    wait_for(lambda: state() == "done", timeout=60, message="pane list to report done")
+
+
 def _app_log(app):
     try:
         with open(app.log_stream_path) as f:

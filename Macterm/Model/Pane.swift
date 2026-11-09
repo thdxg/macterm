@@ -284,10 +284,8 @@ final class Pane: Identifiable {
     }
 
     /// Note an execution boundary reported outside the execution tracker —
-    /// the unconditional OSC 133;D hook in `TerminalSurface`, which fires
-    /// even with the status indicator off (when no `executionState` edge
-    /// exists at all). Posts a poll event so a slowed or paused poll wakes
-    /// to fire the probe now.
+    /// the OSC 133;D hook in `TerminalSurface`. Posts a poll event so a
+    /// slowed or paused poll wakes to fire the probe now.
     func noteRemoteCommandBoundary() {
         guard isRemote, !remoteForegroundIsPushed else { return }
         remoteProbeRequest.request()
@@ -406,12 +404,10 @@ final class Pane: Identifiable {
     /// only when it changed (so a steady poll doesn't churn `@Observable` and
     /// re-render the sidebar every tick). Driven by `AppState`'s poll.
     ///
-    /// `trackExecution` gates the expensive shell/raw-mode syscalls
-    /// (`foregroundProcessIsShell` / `terminalInputIsRaw`) that only feed the
-    /// status indicator. Callers on the hot poll pass a precomputed value so
-    /// the pref is read once; the default reads `Preferences` for ad-hoc
-    /// callers (OSC title, output/progress callbacks) so they stay gated too.
-    func refreshForegroundProcess(trackExecution: Bool? = nil) {
+    /// It also feeds the execution tracker, whatever the status indicator
+    /// setting is: `pane list` reports the state, and the setting only
+    /// chooses what the tab row draws.
+    func refreshForegroundProcess() {
         // Remote panes (#104): the local process table only knows the ssh
         // client — reading it would stomp the probe-derived name, expire
         // remote OSC titles, and feed the execution tracker a perpetual
@@ -419,7 +415,6 @@ final class Pane: Identifiable {
         // titles from `receiveRemoteReportedTitle`, execution state from
         // OSC 133 markers and activity heartbeats.
         guard !isRemote else { return }
-        let track = trackExecution ?? Preferences.shared.showTabStatusIndicator
         // Resolved ONCE and reused below, including inside the argv0 closure —
         // re-resolving there could disagree with this frame's pid on a wrapped
         // pane and would double the resolver work when the fallback fires.
@@ -435,9 +430,8 @@ final class Pane: Identifiable {
             // expires on the very next 250ms poll, snapping back to the process
             // name.
             foregroundPID: resolvedPID,
-            foregroundIsShell: track ? ProcessInspector.foregroundProcessIsShell(forPane: self) : false,
-            terminalInputIsRaw: track ? ProcessInspector.terminalInputIsRaw(forPane: self) : false,
-            applyExecutionState: track,
+            foregroundIsShell: ProcessInspector.foregroundProcessIsShell(forPane: self),
+            terminalInputIsRaw: ProcessInspector.terminalInputIsRaw(forPane: self),
             argv0: { resolvedPID.flatMap(ProcessInspector.invokedNameBasename(pid:)) }
         )
     }
@@ -456,9 +450,7 @@ final class Pane: Identifiable {
     /// so a non-shell foreground there can only be such a hook. A shell name
     /// (and `nil`) is always allowed through, so returning to the prompt
     /// restores the shell name at once. Shell-ness is decided by basename
-    /// (`/etc/shells` + login shell + `$SHELL` — a set lookup, no syscall)
-    /// rather than the caller's `foregroundIsShell`, which is only computed
-    /// when the status-indicator pref turns the expensive path on.
+    /// (`/etc/shells` + login shell + `$SHELL` — a set lookup, no syscall).
     ///
     /// This gates the name and icon only. `programTitle` expiry stays keyed on
     /// the foreground pid, so a title can never be misattributed. A long-lived
@@ -472,15 +464,12 @@ final class Pane: Identifiable {
 
     /// Testable core of `refreshForegroundProcess`: publish a changed process
     /// name, and expire `programTitle` when the pid that set it no longer
-    /// holds the foreground. When `applyExecutionState` is false (the status
-    /// indicator is off), the expensive execution-state path is skipped — only
-    /// the process name / title provenance update runs.
+    /// holds the foreground, then feed the execution tracker.
     func applyForegroundRefresh(
         name: String?,
         foregroundPID: pid_t?,
         foregroundIsShell: Bool = false,
         terminalInputIsRaw: Bool = false,
-        applyExecutionState: Bool = true,
         argv0: () -> String? = { nil }
     ) {
         // A prompt hook must not rename the tab. Title expiry below is NOT
@@ -509,7 +498,6 @@ final class Pane: Identifiable {
             programTitle = nil
             programTitlePID = nil
         }
-        guard applyExecutionState else { return }
         applyForegroundExecutionState(
             name: name,
             foregroundPID: foregroundPID,
@@ -528,15 +516,14 @@ final class Pane: Identifiable {
         cancelActivityQuietPollIfNeeded()
     }
 
-    /// The shell returned to a prompt (OSC 133;D) — recorded even when the
-    /// status indicator is off, because the naming path uses it to reject
-    /// prompt-hook processes.
     /// Whether the shell sits at its prompt (OSC 133;D since the last real
     /// submission). A foreground seen then is a prompt hook, not a command —
     /// the rule the tracker's own start gate and the naming path apply; the
     /// widget recipe capture reads it for the same reason.
     var isShellAtPrompt: Bool { executionTracker.isShellAtPrompt }
 
+    /// The shell returned to a prompt (OSC 133;D). The naming path uses it to
+    /// reject prompt-hook processes.
     func notePromptReturned() {
         executionTracker.notePromptReturned()
         // On a remote pane, OSC 133;D is the host's shell saying it owns the
