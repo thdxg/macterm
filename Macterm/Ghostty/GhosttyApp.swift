@@ -167,9 +167,61 @@ final class GhosttyApp {
     private func systemAppearanceMayHaveChanged() {
         let scheme = Self.readSystemScheme()
         guard scheme != systemScheme else { return }
+        let oldSplitScheme = splitScheme
         systemScheme = scheme
         logger.info("system appearance changed: \(scheme == .dark ? "dark" : "light", privacy: .public)")
+        appearanceDidChange(splitSchemeChanged: splitScheme != oldSplitScheme)
+    }
 
+    // MARK: - Window theme (`window-theme`, `set_window_theme`)
+
+    /// The session override from the `set_window_theme` action. In memory
+    /// only, so it survives a config reload and ends at quit, as in
+    /// Ghostty.app.
+    private(set) var windowThemeOverride: WindowTheme.Override?
+
+    /// The user's `window-theme`, off the loaded config.
+    var windowTheme: WindowTheme {
+        WindowTheme.resolve(configValue: read(WindowTheme.key))
+    }
+
+    /// The scheme that `window-theme` and the override set, or nil when the
+    /// chrome follows the terminal background (`auto`). See `WindowTheme`.
+    var windowScheme: ThemeResolver.Scheme? {
+        WindowTheme.scheme(configured: windowTheme, override: windowThemeOverride, system: systemScheme)
+    }
+
+    /// The side of a `theme = light:X,dark:Y` split, for the surfaces and the
+    /// chrome. Ghostty.app picks it from the app's appearance, so a fixed
+    /// window theme picks its own side. `auto` picks the system side:
+    /// libghostty turns `auto` into `system` for a real split, and a theme
+    /// that is not a split has no side to pick.
+    var splitScheme: ThemeResolver.Scheme {
+        windowScheme ?? systemScheme
+    }
+
+    /// Apply `set_window_theme`. A nil override (`config`) goes back to the
+    /// key.
+    func setWindowThemeOverride(_ override: WindowTheme.Override?) {
+        guard override != windowThemeOverride else { return }
+        let oldSplitScheme = splitScheme
+        windowThemeOverride = override
+        logger.info("window theme override: \(String(describing: override), privacy: .public)")
+        appearanceDidChange(splitSchemeChanged: splitScheme != oldSplitScheme)
+    }
+
+    /// Re-derive the chrome after the system scheme, the override or the key
+    /// changed.
+    private func appearanceDidChange(splitSchemeChanged: Bool) {
+        if splitSchemeChanged {
+            resyncSplitScheme()
+        }
+        configVersion += 1
+        NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
+    }
+
+    /// Push a new split side to every surface.
+    private func resyncSplitScheme() {
         // A window held by preferredColorScheme never delivers
         // viewDidChangeEffectiveAppearance — push the scheme to surfaces
         // directly; each push re-emits CONFIG_CHANGE with the new side.
@@ -179,9 +231,6 @@ final class GhosttyApp {
         // Stale until those re-emits land (and no surface may be alive to
         // emit) — fall back to the theme file meanwhile.
         resolvedColors = nil
-
-        configVersion += 1
-        NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
     }
 
     /// Inputs for `ThemeResolver.systemScheme` (the tested decision logic).
@@ -231,6 +280,7 @@ final class GhosttyApp {
         guard let app else { return ReloadResult(diagnostics: []) }
         let (newConfig, result) = loadConfig()
         guard let newConfig else { return result }
+        let oldSplitScheme = splitScheme
         ghostty_app_update_config(app, newConfig)
         // Also update each existing surface so changes take effect immediately
         for view in GhosttyTerminalNSView.allLiveViews() {
@@ -240,6 +290,10 @@ final class GhosttyApp {
         }
         if let old = config { ghostty_config_free(old) }
         config = newConfig
+        // A changed `window-theme` can move the split side.
+        if splitScheme != oldSplitScheme {
+            resyncSplitScheme()
+        }
         configVersion += 1
         applyAppIcon()
         NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
@@ -670,7 +724,7 @@ final class GhosttyApp {
             configText += "\n" + userText
         }
         guard let themeValue = ThemeResolver.themeValue(inConfigText: configText),
-              let side = ThemeResolver.resolve(themeValue: themeValue, scheme: systemScheme)
+              let side = ThemeResolver.resolve(themeValue: themeValue, scheme: splitScheme)
         else { return nil }
 
         // A theme value is either a bare name (resolved against the bundled
