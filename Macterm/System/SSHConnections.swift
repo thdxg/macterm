@@ -19,10 +19,16 @@ private let logger = Logger(subsystem: appBundleID, category: "SSHConnections")
 ///   `ControlPersist=yes` on the command line wins over the user's config:
 ///   after the login, ssh moves the master into the background, and the ssh
 ///   that Macterm started exits. The next launch finds the master on the
-///   same path and logs in to no host again. The path follows the user, host,
-///   port and jump that `ssh -G` resolves, so a changed config never uses an
-///   old master. `ServerAlive*` ends the master when the host stops
-///   answering, after a network change or a long sleep.
+///   same path and logs in to no host again. `ServerAlive*` ends the master
+///   when the host stops answering, after a network change or a long sleep.
+/// - Each connect reads `ssh -G` again. The own path is a hash of the user,
+///   host, port and jump that it resolves, so a changed config logs in
+///   again, also while Macterm runs. `connections.json` in the control
+///   directory records the path of each master that Macterm started. When
+///   the config no longer gives that path (at the next connect, and at
+///   launch for each record, `endStaleConnections`), Macterm ends the old
+///   master. The hosts of an ssh config cannot be listed (`Host *.lan`), so
+///   the record is the list.
 /// - A command over the master (`run`) never logs in by itself: `BatchMode`
 ///   refuses a prompt, and `ProxyCommand=/usr/bin/false` stops the direct
 ///   connection that ssh tries when the master does not answer. It fails
@@ -51,6 +57,8 @@ final class SSHConnections {
         var environment: [String: String] = [:]
         /// The executable that a peer of `ssh.askpass` must be. nil: any.
         var askpassExecutable: String?
+
+        var recordFile: URL { controlDirectory.appendingPathComponent("connections.json") }
 
         static var live: Configuration {
             Configuration(
@@ -98,7 +106,9 @@ final class SSHConnections {
     static let shared = SSHConnections(configuration: .live)
 
     private let configuration: Configuration
-    private var routes: [String: Route] = [:]
+    /// The own path of each master that Macterm started, by destination.
+    /// Kept in `connections.json`, because a master outlives the app.
+    private var owned: [String: String]
     /// The ssh of each login that has not finished. After the login, the
     /// master is in the background and is no child of Macterm.
     private var loggingIn: [String: Process] = [:]
@@ -118,23 +128,18 @@ final class SSHConnections {
 
     init(configuration: Configuration) {
         self.configuration = configuration
+        owned = Self.readRecord(at: configuration.recordFile)
     }
 
     /// The route to `destination`, after the login if there is none yet.
     /// Calls for one host at the same time share one login.
     func connect(_ destination: String) async throws -> Route {
         guard Self.isValidDestination(destination) else { throw Failure.invalidDestination(destination) }
-        if let route = routes[destination] {
-            if await controlAnswers(destination, at: route.controlPath) { return route }
-            routes[destination] = nil
-        }
         if let task = connecting[destination] { return try await task.value }
         let task = Task { try await self.open(destination) }
         connecting[destination] = task
         defer { connecting[destination] = nil }
-        let route = try await task.value
-        routes[destination] = route
-        return route
+        return try await task.value
     }
 
     /// Run `command` on the host over its connection. It never logs in by
@@ -158,14 +163,33 @@ final class SSHConnections {
     /// stays.
     func disconnect(_ destination: String) async {
         loggingIn[destination]?.terminate()
-        let route = routes[destination]
-        forget(destination)
-        var path = route.flatMap { $0.isUsersOwn ? nil : $0.controlPath }
-        if path == nil, let config = try? await resolvedConfig(destination) {
-            path = SSHControlPath.own(forConfig: config, in: configuration.controlDirectory)
+        loggingIn[destination] = nil
+        var paths = Set([owned[destination]].compactMap(\.self))
+        if let config = try? await resolvedConfig(destination) {
+            paths.insert(SSHControlPath.own(forConfig: config, in: configuration.controlDirectory))
         }
-        if let path, await controlAnswers(destination, at: path) {
-            _ = await runSSH(["-O", "exit", "-S", path, "--", destination], timeout: .seconds(5))
+        for path in paths {
+            await endConnection(destination, at: path)
+        }
+        record(destination, nil)
+    }
+
+    /// At launch: end each recorded master whose path the config no longer
+    /// gives, or whose destination `ssh -G` cannot read. Drop the record of
+    /// a master that is gone.
+    func endStaleConnections() async {
+        for (destination, path) in owned {
+            let config = try? await resolvedConfig(destination)
+            let current = config.map { SSHControlPath.own(forConfig: $0, in: configuration.controlDirectory) }
+            if current == path {
+                // A connect in flight can start a master on this same path.
+                if await !controlAnswers(destination, at: path), connecting[destination] == nil, owned[destination] == path {
+                    record(destination, nil)
+                }
+                continue
+            }
+            await endConnection(destination, at: path)
+            if owned[destination] == path { record(destination, nil) }
         }
     }
 
@@ -233,12 +257,27 @@ final class SSHConnections {
     // MARK: - Connect
 
     private func open(_ destination: String) async throws -> Route {
-        let config = try await resolvedConfig(destination)
+        let config: String
+        do {
+            config = try await resolvedConfig(destination)
+        } catch {
+            if let old = owned[destination] {
+                await endConnection(destination, at: old)
+                record(destination, nil)
+            }
+            throw error
+        }
+        let own = SSHControlPath.own(forConfig: config, in: configuration.controlDirectory)
+        if let old = owned[destination], old != own {
+            logger.info("ssh: host=\(destination, privacy: .public) has a changed config, its old master ends")
+            await endConnection(destination, at: old)
+            record(destination, nil)
+        }
         if let path = SSHControlPath.userPath(fromConfig: config), await controlAnswers(destination, at: path) {
-            logger.info("ssh: host=\(destination, privacy: .public) uses the user's master")
+            logger.debug("ssh: host=\(destination, privacy: .public) uses the user's master")
             return Route(controlPath: path, isUsersOwn: true)
         }
-        return try await startConnection(destination, path: SSHControlPath.own(forConfig: config, in: configuration.controlDirectory))
+        return try await startConnection(destination, path: own)
     }
 
     /// The output of `ssh -G`. A config that ssh cannot read fails here, as
@@ -252,7 +291,42 @@ final class SSHConnections {
     }
 
     private func controlAnswers(_ destination: String, at path: String) async -> Bool {
-        await runSSH(["-O", "check", "-S", path, "--", destination], timeout: .seconds(5))?.status == 0
+        await runControl("check", destination, at: path)?.status == 0
+    }
+
+    /// End the master on `path`. A user's master is never on one of
+    /// Macterm's own paths.
+    private func endConnection(_ destination: String, at path: String) async {
+        guard await controlAnswers(destination, at: path) else { return }
+        _ = await runControl("exit", destination, at: path)
+    }
+
+    /// `ssh -O`. It reads no config (`-F /dev/null`): it talks only to the
+    /// socket, and a config that ssh cannot read must not keep an old master.
+    private func runControl(_ operation: String, _ destination: String, at path: String) async -> ProcessRunner.Outcome? {
+        guard let executable = configuration.ssh.first else { return nil }
+        return await ProcessRunner.run(
+            executable,
+            Array(configuration.ssh.dropFirst()) + ["-F", "/dev/null", "-O", operation, "-S", path, "--", destination],
+            environment: ProcessInfo.processInfo.environment,
+            timeout: .seconds(5)
+        )
+    }
+
+    private func record(_ destination: String, _ path: String?) {
+        guard owned[destination] != path else { return }
+        owned[destination] = path
+        do {
+            try JSONEncoder().encode(owned).write(to: configuration.recordFile, options: .atomic)
+        } catch {
+            let file = configuration.recordFile.path
+            logger.error("ssh: cannot write \(file, privacy: .public): \(EnglishErrorText.describe(error), privacy: .public)")
+        }
+    }
+
+    private static func readRecord(at url: URL) -> [String: String] {
+        guard let data = try? Data(contentsOf: url) else { return [:] }
+        return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
     }
 
     private func runSSH(_ arguments: [String], timeout: Duration) async -> ProcessRunner.Outcome? {
@@ -274,9 +348,10 @@ final class SSHConnections {
         try FileManager.default.createDirectory(
             at: configuration.controlDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]
         )
-        // The master of an earlier run of Macterm.
+        // The master of this run or of an earlier one.
         if await controlAnswers(destination, at: path) {
-            logger.info("ssh: host=\(destination, privacy: .public) uses the master of an earlier run")
+            logger.debug("ssh: host=\(destination, privacy: .public) uses its master")
+            record(destination, path)
             return Route(controlPath: path, isUsersOwn: false)
         }
         // A master that died left its socket. ssh refuses to listen on a
@@ -358,15 +433,11 @@ final class SSHConnections {
         }
         stderr.discard()
         if loggingIn[destination] === process { loggingIn[destination] = nil }
+        record(destination, path)
         let count = logins[destination, default: 0] + 1
         logins[destination] = count
         logger.info("ssh login: host=\(destination, privacy: .public) logins=\(count, privacy: .public)")
         return Route(controlPath: path, isUsersOwn: false)
-    }
-
-    private func forget(_ destination: String) {
-        routes[destination] = nil
-        loggingIn[destination] = nil
     }
 
     /// `[user@]host` and nothing that ssh could read as an option or that a

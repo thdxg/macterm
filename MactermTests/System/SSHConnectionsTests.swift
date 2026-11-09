@@ -393,6 +393,69 @@ struct SSHConnectionsTests {
         #expect(new.controlPath != old.controlPath)
         #expect(second.logins["box"] == 1)
         #expect(sshd.acceptedLogins() == 2)
+        // The old master is Macterm's, so it ends.
+        #expect(!FileManager.default.fileExists(atPath: old.controlPath))
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_config_change_while_macterm_runs_logs_in_again_and_ends_the_old_connection() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let connections = SSHConnections(configuration: sshd.configuration)
+        let old = try await connections.connect("box")
+
+        try sshd.addToConfig("HostName localhost")
+        let new = try await connections.connect("box")
+        #expect(new.controlPath != old.controlPath)
+        #expect(connections.logins["box"] == 2)
+        #expect(!FileManager.default.fileExists(atPath: old.controlPath))
+        #expect(try await connections.run("box", "echo new").stdout == "new\n")
+        #expect(sshd.acceptedLogins() == 2)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_launch_ends_a_connection_that_the_config_no_longer_gives() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let first = SSHConnections(configuration: sshd.configuration)
+        let old = try await first.connect("box")
+        first.endLogins()
+
+        try sshd.addToConfig("HostName localhost")
+        let second = SSHConnections(configuration: sshd.configuration)
+        await second.endStaleConnections()
+        #expect(!FileManager.default.fileExists(atPath: old.controlPath))
+        #expect(second.logins["box"] == nil)
+        #expect(sshd.acceptedLogins() == 1)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_launch_keeps_a_connection_that_the_config_still_gives() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let first = SSHConnections(configuration: sshd.configuration)
+        let route = try await first.connect("box")
+        first.endLogins()
+
+        let second = SSHConnections(configuration: sshd.configuration)
+        await second.endStaleConnections()
+        #expect(FileManager.default.fileExists(atPath: route.controlPath))
+        #expect(try await second.run("box", "echo kept").stdout == "kept\n")
+        #expect(sshd.acceptedLogins() == 1)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_config_that_ssh_cannot_read_ends_the_connection() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let first = SSHConnections(configuration: sshd.configuration)
+        let route = try await first.connect("box")
+        first.endLogins()
+
+        try sshd.addToConfig("Port not-a-number")
+        let second = SSHConnections(configuration: sshd.configuration)
+        await second.endStaleConnections()
+        #expect(!FileManager.default.fileExists(atPath: route.controlPath))
     }
 
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
