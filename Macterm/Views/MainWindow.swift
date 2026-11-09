@@ -1334,6 +1334,7 @@ private struct WindowStyler: NSViewRepresentable {
             guard let window = view.window else { return }
             window.titleVisibility = hide ? .hidden : .visible
             WindowAppearance.syncTitleBarHidden(window: window)
+            WindowAppearance.syncTitleAppearance(window: window)
             context.coordinator.syncInitialSidebarVisibility(window: window)
         }
     }

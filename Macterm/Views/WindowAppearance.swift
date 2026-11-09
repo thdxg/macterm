@@ -469,7 +469,7 @@ enum WindowAppearance {
         // window is). Without this the titlebar paints its own material
         // and you get a visible seam at y=titlebarHeight.
         syncTitlebar(window: window, isTransparent: effectiveTransparent)
-        syncTitleAppearance(window: window, background: bg)
+        syncTitleAppearance(window: window)
 
         syncToolbar(window: window)
 
@@ -1209,28 +1209,39 @@ enum WindowAppearance {
     }
 
     /// The appearance of the window title (the project name and the path).
-    /// The title is drawn over the terminal, not over the chrome, so it takes
-    /// the scheme of the terminal background, not `window-theme`. Ghostty.app
-    /// does the same: with its default transparent titlebar, the terminal
-    /// window takes the appearance of the background's luminosity
+    /// Where the titlebar shows the terminal, the title takes the scheme of
+    /// the terminal background, not `window-theme`. Ghostty.app does the
+    /// same: with its default transparent titlebar, the terminal window takes
+    /// the appearance of the background's luminosity
     /// (`TransparentTitlebarTerminalWindow.syncAppearance`). Here only the
     /// title follows it, because the sidebar and the toolbar buttons are
     /// chrome. Without this, `window-theme = light` drew black text on a
     /// dark terminal.
-    static func titleAppearanceName(background: NSColor) -> NSAppearance.Name {
-        background.prefersDarkForeground ? .aqua : .darkAqua
+    ///
+    /// Where AppKit paints its own titlebar background
+    /// (`NSTitlebarBackgroundView` shown, as in fullscreen),
+    /// the title is on chrome, so it keeps the window's appearance (nil). An
+    /// opaque window out of fullscreen has no such view: measured, its
+    /// titlebar shows the window background, which is the terminal's.
+    static func titleAppearanceName(background: NSColor, titlebarBackgroundShown: Bool) -> NSAppearance.Name? {
+        guard !titlebarBackgroundShown else { return nil }
+        return background.prefersDarkForeground ? .aqua : .darkAqua
     }
 
     /// Sets the appearance of AppKit's title view. The view keeps it when the
-    /// title text changes, and every `sync` sets it again after AppKit
-    /// rebuilds the titlebar (fullscreen, becomeMain). `background` is the
-    /// window's own tint, so an adaptive background moves the title too.
-    private static func syncTitleAppearance(window: NSWindow, background: NSColor) {
-        guard let titleView = titlebarContainer(in: window)?.firstDescendant(withClassName: "NSToolbarTitleView")
+    /// title text changes. `sync` sets it again after AppKit rebuilds the
+    /// titlebar (fullscreen, becomeMain), and `WindowStyler` after the title
+    /// bar is shown again. The background is the window's own tint, so an
+    /// adaptive background moves the title too. Call it after `syncTitlebar`,
+    /// which shows or hides the titlebar background.
+    static func syncTitleAppearance(window: NSWindow) {
+        guard let container = titlebarContainer(in: window),
+              let titleView = container.firstDescendant(withClassName: "NSToolbarTitleView")
         else { return }
-        let name = titleAppearanceName(background: background)
+        let backgroundShown = container.firstDescendant(withClassName: "NSTitlebarBackgroundView").map { !$0.isHidden } ?? false
+        let name = titleAppearanceName(background: MactermTheme.nsBg(for: window), titlebarBackgroundShown: backgroundShown)
         if titleView.appearance?.name != name {
-            titleView.appearance = NSAppearance(named: name)
+            titleView.appearance = name.flatMap { NSAppearance(named: $0) }
         }
     }
 
