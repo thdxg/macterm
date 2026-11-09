@@ -13,6 +13,8 @@ struct IntelligenceSettings: View {
         Form {
             Section {
                 Toggle("Enable Project Insights", isOn: $preferences.projectMemory)
+                Text("Shows where you left off in each project, its Git branches and the commands to run next.")
+                    .settingsCaption()
                 Group {
                     Toggle(isOn: $preferences.projectMemorySummary) {
                         Text("Summarize with Apple Intelligence").dimsWhenDisabled()
@@ -25,11 +27,6 @@ struct IntelligenceSettings: View {
                 }
                 .disabled(!preferences.projectMemory)
                 .padding(.leading, 16)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Keeps a log of the commands that finish in each project, with their results.")
-                    Text("Secrets are removed first, and the log stays on this Mac.")
-                }
-                .settingsCaption()
                 HStack {
                     Text("Recorded commands")
                     Spacer()

@@ -4371,22 +4371,6 @@
         }
       }
     },
-    "Keeps a log of the commands that finish in each project, with their results." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "각 프로젝트에서 끝난 명령과 그 결과를 기록합니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "记录每个项目中已结束的命令及其结果。"
-          }
-        }
-      }
-    },
     "Key" : {
       "localizations" : {
         "ko" : {
@@ -8833,22 +8817,6 @@
         }
       }
     },
-    "Secrets are removed first, and the log stays on this Mac." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "비밀 정보는 먼저 제거되고, 기록은 이 Mac에만 남습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "机密信息会先被移除，记录只保留在这台 Mac 上。"
-          }
-        }
-      }
-    },
     "Secure keyboard input is active" : {
       "localizations" : {
         "ko" : {
@@ -9503,6 +9471,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "命令运行时显示旋转指示器。命令结束时显示圆点。"
+          }
+        }
+      }
+    },
+    "Shows where you left off in each project, its Git branches and the commands to run next." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "각 프로젝트에서 마지막으로 하던 작업, Git 브랜치, 다음에 실행할 명령을 보여 줍니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示每个项目中你上次进行到哪里、它的 Git 分支和接下来要运行的命令。"
           }
         }
       }
