@@ -111,6 +111,7 @@ final class SSHLoginPrompts {
         var host: String
         var line: String
     }
+
     private var noticeSheet: NoticeSheet?
     /// Logins whose notice brought the app to the front once.
     private var activatedNotices: Set<pid_t> = []
