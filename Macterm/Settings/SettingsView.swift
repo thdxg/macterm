@@ -1772,13 +1772,15 @@ private struct KeymapSettings: View {
     /// differently than a Text and a Button), and because the spacer pins
     /// everything after it to the trailing edge, one extra child or one wider
     /// trailing view shifts that row's columns out of line with the others.
-    /// Don't add a control to a row without giving it a box here. A glyph
-    /// that comes and goes goes before the spacer, next to the title.
+    /// Don't add a control to a row without giving it a box here. Put a glyph
+    /// that comes and goes before the spacer, next to the title.
     private static let columnGap: CGFloat = 8
     private static let keybindColumn: CGFloat = 140
-    /// The width of the menu's 15 pt image, so the menu ends at the row's
-    /// trailing inset. A wider box centers the image and leaves empty space
-    /// at the right of every row.
+    /// Narrower than the menu button (21 pt, with 4 pt of its own space at
+    /// the right of the image). SwiftUI does not compress the button: it
+    /// centers it on the box, so the image ends 1 pt inside the row's
+    /// trailing inset (measured). A box of 24 pt left about 5 pt of space
+    /// there, and a button sized to 16 pt moves the image 3 pt to the left.
     private static let menuColumn: CGFloat = 16
     /// How far the rows of a category sit in from its header row.
     private static let groupIndent: CGFloat = 16
