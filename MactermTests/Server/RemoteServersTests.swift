@@ -312,7 +312,7 @@ struct RemoteServersTests {
 
         func stop() async {
             try? await stopServer()
-            connections.disconnectAll()
+            await connections.disconnect("box")
             sshd.stop()
             try? FileManager.default.removeItem(at: home.deletingLastPathComponent())
         }

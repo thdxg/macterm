@@ -26,11 +26,15 @@ struct SSHConnectionsTests {
     }
 
     @Test
-    func the_own_path_is_short_and_the_same_for_one_destination() {
+    func the_own_path_is_short_and_follows_where_the_config_sends_the_host() {
         let directory = URL(fileURLWithPath: "/tmp/cm")
-        let path = SSHControlPath.own(for: "bob@example.com", in: directory)
-        #expect(path == SSHControlPath.own(for: "bob@example.com", in: directory))
-        #expect(path != SSHControlPath.own(for: "alice@example.com", in: directory))
+        let config = "user bob\nhostname example.com\nport 22\ncontrolpersist no\n"
+        let path = SSHControlPath.own(forConfig: config, in: directory)
+        // Keys that do not change the endpoint do not change the path.
+        #expect(path == SSHControlPath.own(forConfig: config + "serveraliveinterval 60\n", in: directory))
+        #expect(path != SSHControlPath.own(forConfig: "user alice\nhostname example.com\nport 22\n", in: directory))
+        #expect(path != SSHControlPath.own(forConfig: "user bob\nhostname example.com\nport 2222\n", in: directory))
+        #expect(path != SSHControlPath.own(forConfig: config + "proxyjump bastion\n", in: directory))
         #expect(path.hasPrefix("/tmp/cm/"))
         #expect((path as NSString).lastPathComponent.count == 16)
         #expect(SSHControlPath.fitsSocket(path))
@@ -214,6 +218,7 @@ struct SSHConnectionsTests {
         try """
         #!/bin/sh
         case " $* " in
+          *" -G "*) echo 'hostname box'; exit 0 ;;
           *" -M "*) echo 'To authenticate, visit: https://example.test/x' >&2; exec sleep 30 ;;
           *) exit 255 ;;
         esac
@@ -231,7 +236,7 @@ struct SSHConnectionsTests {
             try await Task.sleep(for: .milliseconds(100))
         }
         #expect(reports == ["To authenticate, visit: https://example.test/x"])
-        connections.disconnect("box")
+        await connections.disconnect("box")
         await #expect(throws: SSHConnections.Failure.self) { try await login.value }
         #expect(reports == ["To authenticate, visit: https://example.test/x", nil])
     }
@@ -262,7 +267,6 @@ struct SSHConnectionsTests {
         let sshd = try LocalSSHD()
         defer { sshd.stop() }
         let connections = SSHConnections(configuration: sshd.configuration)
-        defer { connections.disconnectAll() }
 
         let first = try await connections.run("box", "echo one")
         let second = try await connections.run("box", "echo two")
@@ -281,7 +285,6 @@ struct SSHConnectionsTests {
         // As "Macterm Debug" in Application Support.
         configuration.controlDirectory = sshd.directory.appendingPathComponent("M D", isDirectory: true)
         let connections = SSHConnections(configuration: configuration)
-        defer { connections.disconnectAll() }
 
         let route = try await connections.connect("box")
         #expect(route.controlPath.contains("M D/"))
@@ -302,7 +305,6 @@ struct SSHConnectionsTests {
         configuration.askpass = askpass.path
 
         let connections = SSHConnections(configuration: configuration)
-        defer { connections.disconnectAll() }
         defer {
             // The fake askpass outlives its master.
             if let text = try? String(contentsOf: pidFile, encoding: .utf8),
@@ -337,12 +339,51 @@ struct SSHConnectionsTests {
         defer { user.terminate() }
 
         let connections = SSHConnections(configuration: sshd.configuration)
-        defer { connections.disconnectAll() }
         let route = try await connections.connect("box")
         #expect(route == .init(controlPath: userPath, isUsersOwn: true))
         #expect(try await connections.run("box", "echo reused").stdout == "reused\n")
         #expect(connections.logins["box"] == nil)
         #expect(sshd.acceptedLogins() == 1)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_config_change_ends_only_the_own_connection_and_never_the_users() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let connections = SSHConnections(configuration: sshd.configuration)
+        let own = try await connections.connect("box")
+
+        let userPath = sshd.directory.appendingPathComponent("user-cm").path
+        try sshd.addToConfig("ControlPath \(userPath)")
+        let user = try sshd.startUsersOwnControl(controlPath: userPath)
+        defer { user.terminate() }
+        try sshd.addToConfig("HostName localhost")
+
+        #expect(try await connections.connect("box") == .init(controlPath: userPath, isUsersOwn: true))
+        #expect(!FileManager.default.fileExists(atPath: own.controlPath))
+        await connections.endStaleConnections()
+        await connections.disconnect("box")
+        #expect(user.isRunning)
+        #expect(FileManager.default.fileExists(atPath: userPath))
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_connection_that_two_destinations_share_ends_only_with_the_last() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let connections = SSHConnections(configuration: sshd.configuration)
+        // The same user, host and port: one path.
+        let other = "\(NSUserName())@box"
+        let route = try await connections.connect("box")
+        #expect(try await connections.connect(other) == route)
+
+        await connections.disconnect("box")
+        #expect(FileManager.default.fileExists(atPath: route.controlPath))
+        #expect(try await connections.run(other, "echo shared").stdout == "shared\n")
+        #expect(sshd.acceptedLogins() == 1)
+
+        await connections.disconnect(other)
+        #expect(!FileManager.default.fileExists(atPath: route.controlPath))
     }
 
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
@@ -357,10 +398,134 @@ struct SSHConnectionsTests {
         configuration.askpass = askpass.path
 
         let connections = SSHConnections(configuration: configuration)
-        defer { connections.disconnectAll() }
         #expect(try await connections.run("box", "echo in").stdout == "in\n")
         let prompts = try String(contentsOf: log, encoding: .utf8)
         #expect(prompts.contains("passphrase"))
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_quit_and_a_new_launch_log_in_once() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let first = SSHConnections(configuration: sshd.configuration)
+        #expect(try await first.run("box", "echo one").stdout == "one\n")
+        first.endLogins()
+
+        // The next launch finds the master on the same path.
+        let second = SSHConnections(configuration: sshd.configuration)
+        #expect(try await second.run("box", "echo two").stdout == "two\n")
+        #expect(second.logins["box"] == nil)
+        #expect(sshd.acceptedLogins() == 1)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_changed_config_does_not_use_the_connection_of_an_earlier_run() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let first = SSHConnections(configuration: sshd.configuration)
+        let old = try await first.connect("box")
+        first.endLogins()
+
+        // ssh takes the first value: the host now has another name.
+        try sshd.addToConfig("HostName localhost")
+        let second = SSHConnections(configuration: sshd.configuration)
+        let new = try await second.connect("box")
+        #expect(new.controlPath != old.controlPath)
+        #expect(second.logins["box"] == 1)
+        #expect(sshd.acceptedLogins() == 2)
+        // The old master is Macterm's, so it ends.
+        #expect(!FileManager.default.fileExists(atPath: old.controlPath))
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_config_change_while_macterm_runs_logs_in_again_and_ends_the_old_connection() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let connections = SSHConnections(configuration: sshd.configuration)
+        let old = try await connections.connect("box")
+
+        try sshd.addToConfig("HostName localhost")
+        let new = try await connections.connect("box")
+        #expect(new.controlPath != old.controlPath)
+        #expect(connections.logins["box"] == 2)
+        #expect(!FileManager.default.fileExists(atPath: old.controlPath))
+        #expect(try await connections.run("box", "echo new").stdout == "new\n")
+        #expect(sshd.acceptedLogins() == 2)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_launch_ends_a_connection_that_the_config_no_longer_gives() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let first = SSHConnections(configuration: sshd.configuration)
+        let old = try await first.connect("box")
+        first.endLogins()
+
+        try sshd.addToConfig("HostName localhost")
+        let second = SSHConnections(configuration: sshd.configuration)
+        await second.endStaleConnections()
+        #expect(!FileManager.default.fileExists(atPath: old.controlPath))
+        #expect(second.logins["box"] == nil)
+        #expect(sshd.acceptedLogins() == 1)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_launch_keeps_a_connection_that_the_config_still_gives() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let first = SSHConnections(configuration: sshd.configuration)
+        let route = try await first.connect("box")
+        first.endLogins()
+
+        let second = SSHConnections(configuration: sshd.configuration)
+        await second.endStaleConnections()
+        #expect(FileManager.default.fileExists(atPath: route.controlPath))
+        #expect(try await second.run("box", "echo kept").stdout == "kept\n")
+        #expect(sshd.acceptedLogins() == 1)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_config_that_ssh_cannot_read_ends_the_connection() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let first = SSHConnections(configuration: sshd.configuration)
+        let route = try await first.connect("box")
+        first.endLogins()
+
+        try sshd.addToConfig("Port not-a-number")
+        let second = SSHConnections(configuration: sshd.configuration)
+        await second.endStaleConnections()
+        #expect(!FileManager.default.fileExists(atPath: route.controlPath))
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_dropped_link_ends_the_connection_and_the_next_command_logs_in() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let connections = SSHConnections(configuration: sshd.configuration)
+        let route = try await connections.connect("box")
+
+        sshd.dropConnections()
+        let deadline = ContinuousClock.now + .seconds(10)
+        while FileManager.default.fileExists(atPath: route.controlPath), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(!FileManager.default.fileExists(atPath: route.controlPath))
+        #expect(try await connections.run("box", "echo back").stdout == "back\n")
+        #expect(connections.logins["box"] == 2)
+        #expect(sshd.acceptedLogins() == 2)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func disconnect_ends_the_connection() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let connections = SSHConnections(configuration: sshd.configuration)
+        let route = try await connections.connect("box")
+        await connections.disconnect("box")
+        #expect(!FileManager.default.fileExists(atPath: route.controlPath))
+        _ = try await connections.connect("box")
+        #expect(connections.logins["box"] == 2)
     }
 
     @Test
@@ -394,7 +559,6 @@ struct SSHConnectionsTests {
         configuration.askpass = askpass.path
 
         let connections = SSHConnections(configuration: configuration)
-        defer { connections.disconnectAll() }
         let login = Task { try await connections.connect("box") }
         var pid: pid_t?
         for _ in 0 ..< 100 where pid == nil {

@@ -99,7 +99,18 @@ struct LocalSSHD {
         return log.components(separatedBy: "\n").count { $0.contains("Accepted publickey") }
     }
 
+    /// End every connection that the sshd serves, as a link that drops.
+    /// A master of `SSHConnections` outlives its test otherwise.
+    func dropConnections() {
+        let pkill = Process()
+        pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        pkill.arguments = ["-TERM", "-P", String(process.processIdentifier)]
+        try? pkill.run()
+        pkill.waitUntilExit()
+    }
+
     func stop() {
+        dropConnections()
         process.terminate()
         process.waitUntilExit()
         try? FileManager.default.removeItem(at: directory)

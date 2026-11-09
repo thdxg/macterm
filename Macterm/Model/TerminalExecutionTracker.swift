@@ -138,8 +138,7 @@ struct TerminalExecutionTracker {
     var isShellAtPrompt: Bool { shellIsAtPrompt }
 
     /// Record that the shell returned to a prompt, WITHOUT touching run state.
-    /// The status-indicator pref gates `markCommandFinished`, but the naming
-    /// path needs the prompt fact regardless of whether the spinner is shown.
+    /// The naming path reads the prompt fact on its own.
     mutating func notePromptReturned() {
         shellIsAtPrompt = true
     }
