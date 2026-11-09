@@ -68,8 +68,10 @@ pub const Options = struct {
 
 /// A session name names a file in the runtime directory, so it may not hold
 /// a slash or start with a dot (the directory's own files start with one).
+/// It may not start with `-` either.
 pub fn validName(name: []const u8) bool {
-    if (name.len == 0 or name[0] == '.') return false;
+    // Not `-` first: the name is an argument of `session`, not an option.
+    if (name.len == 0 or name[0] == '.' or name[0] == '-') return false;
     for (name) |c| switch (c) {
         'a'...'z', 'A'...'Z', '0'...'9', '-', '_', '.' => {},
         else => return false,
@@ -140,10 +142,7 @@ pub fn start(gpa: std.mem.Allocator, io: std.Io, dir: []const u8, opts: Options)
 
 /// The `__session` entry on macOS, after the disclaiming re-exec.
 pub fn resumeAfterReexec(dir: []const u8, opts: Options, listen_fd: i32) noreturn {
-    // The re-exec cleared CLOEXEC so that the socket lived on. Set it again,
-    // or the shell and every program in the pane would hold it, and could
-    // accept the next client in place of the session.
-    _ = lib_posix.fcntl(listen_fd, lib_posix.F.SETFD, std.c.FD_CLOEXEC) catch {};
+    // `daemonize.takeReexecState` already set CLOEXEC on `listen_fd` again.
     const cmd = daemonize.createCmdZ(opts.shell, opts.command) catch std.process.exit(1);
     const pty = daemonize.spawnPty(opts.name, cmd, opts.size, runtime.session_env) catch |err| {
         std.log.err("session {s}: pty failed: {s}", .{ opts.name, @errorName(err) });
@@ -153,7 +152,7 @@ pub fn resumeAfterReexec(dir: []const u8, opts: Options, listen_fd: i32) noretur
     serveAndExit(dir, opts, listen_fd, pty);
 }
 
-fn lockDir(dir: []const u8) !i32 {
+pub fn lockDir(dir: []const u8) !i32 {
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = try std.fmt.bufPrintSentinel(&buf, "{s}/.lock", .{dir}, 0);
     const fd = std.c.open(path.ptr, .{ .ACCMODE = .RDWR, .CREAT = true, .CLOEXEC = true, .NOFOLLOW = true }, @as(std.c.mode_t, 0o600));
@@ -165,14 +164,14 @@ fn lockDir(dir: []const u8) !i32 {
     return fd;
 }
 
-fn bindSocket(path: []const u8) !i32 {
+pub fn bindSocket(path: []const u8) !i32 {
     // The socket file is 0600 from the moment it exists.
     const old_mask = std.c.umask(0o177);
     defer _ = std.c.umask(old_mask);
     return socket.createSocket(path);
 }
 
-fn unlinkSocket(dir: []const u8, name: []const u8) void {
+pub fn unlinkSocket(dir: []const u8, name: []const u8) void {
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = std.fmt.bufPrintSentinel(&buf, "{s}/{s}", .{ dir, name }, 0) catch return;
     _ = std.c.unlink(path.ptr);
@@ -202,7 +201,7 @@ fn serveAndExit(dir: []const u8, opts: Options, listen_fd: i32, pty: daemonize.P
 }
 
 /// `<dir>/log/<name>.log`. A failure leaves the session with no log.
-fn openLog(io: std.Io, dir: []const u8, name: []const u8) void {
+pub fn openLog(io: std.Io, dir: []const u8, name: []const u8) void {
     log.log_system.deinit();
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const log_dir = std.fmt.bufPrintSentinel(&buf, "{s}/log", .{dir}, 0) catch return;
@@ -340,6 +339,8 @@ const Session = struct {
     etc_shells: ?[]const u8 = null,
     etc_shells_loaded: bool = false,
     etc_shells_buf: [4096]u8 = undefined,
+    /// A client sent `end`.
+    ending: bool = false,
 
     const pty_in_max = 256 * 1024;
 
@@ -386,7 +387,7 @@ const Session = struct {
         defer fds.deinit(s.gpa);
         std.log.info("session {s} started pid={d} shell={d} pty={s}", .{ s.name, std.c.getpid(), s.shell_pid, s.pty_name });
 
-        while (!s.taken) {
+        while (!s.taken and !s.ending) {
             s.updateFocus();
             fds.clearRetainingCapacity();
             try fds.append(s.gpa, .{ .fd = s.listen_fd, .events = lib_posix.POLL.IN, .revents = 0 });
@@ -700,6 +701,11 @@ const Session = struct {
             if (s.leader == c) s.resize(size);
         } else if (std.mem.eql(u8, msg.t, m.Claim.name)) {
             if (c.attached and s.leader != c) s.setLeader(c);
+        } else if (std.mem.eql(u8, msg.t, m.End.name)) {
+            std.log.info("session {s}: end", .{s.name});
+            s.ending = true;
+        } else if (std.mem.eql(u8, msg.t, m.Refresh.name)) {
+            s.refresh(c);
         } else if (std.mem.eql(u8, msg.t, m.Take.name)) {
             if (s.exited() != null) {
                 std.log.info("session {s}: exit status taken", .{s.name});
@@ -729,7 +735,7 @@ const Session = struct {
         const leads = s.leader == c;
         // The snapshot is laid out for the size the leader renders at.
         if (leads) resizeTerm(s.gpa, &s.watch.term, size) catch {};
-        if (s.has_output) s.sendSnapshot(c, true);
+        if (s.has_output) _ = s.sendSnapshot(c, true);
         if (leads) {
             s.resize(size);
             // A repaint for incremental renderers: TIOCSWINSZ with the same
@@ -769,8 +775,9 @@ const Session = struct {
         };
     }
 
-    fn sendSnapshot(s: *Session, c: *Client, scrollback: bool) void {
-        const raw = (if (scrollback) util.serializeTerminalState(s.gpa, &s.watch.term) else util.serializeScreenState(s.gpa, &s.watch.term)) orelse return;
+    /// False when the terminal state could not be read: nothing was sent.
+    fn sendSnapshot(s: *Session, c: *Client, scrollback: bool) bool {
+        const raw = (if (scrollback) util.serializeTerminalState(s.gpa, &s.watch.term) else util.serializeScreenState(s.gpa, &s.watch.term)) orelse return false;
         defer s.gpa.free(raw);
         const data = util.rewritePromptRedraw(s.gpa, raw) orelse raw;
         defer if (data.ptr != raw.ptr) s.gpa.free(data);
@@ -778,11 +785,29 @@ const Session = struct {
         var rest = data;
         while (rest.len > 0 and !c.dead) {
             const n = @min(rest.len, snapshot_chunk);
-            c.out.append(s.gpa, m.pane_channel, .bytes, rest[0..n], false) catch return s.dropClient(c);
+            c.out.append(s.gpa, m.pane_channel, .bytes, rest[0..n], false) catch {
+                s.dropClient(c);
+                return true;
+            };
             rest = rest[n..];
         }
         s.sendPane(c, m.SnapshotEnd, .{});
         s.checkHardCap(c);
+        return true;
+    }
+
+    /// A client asks for the screen again (`m.Refresh`). A client that is
+    /// behind gets its snapshot when it catches up.
+    fn refresh(s: *Session, c: *Client) void {
+        if (!c.attached or c.behind) return;
+        c.out.drop();
+        // Events went with the dropped output.
+        defer s.sendCurrent(c);
+        if (s.has_output and s.sendSnapshot(c, false)) return;
+        // With no output, or no memory for the snapshot: an empty one, so
+        // that a relay that waits for one stops waiting.
+        s.sendPane(c, m.SnapshotStart, .{ .scrollback = false });
+        s.sendPane(c, m.SnapshotEnd, .{});
     }
 
     fn writeClient(s: *Session, c: *Client) void {
@@ -801,7 +826,7 @@ const Session = struct {
             std.log.info("session {s}: client fd={d} caught up, snapshot sent", .{ s.name, c.fd });
             // A drop can take a `lead` that waited: say it again.
             s.sendPane(c, m.Lead, .{ .leader = s.leader == c });
-            s.sendSnapshot(c, false);
+            _ = s.sendSnapshot(c, false);
             // Events went with the dropped output.
             s.sendCurrent(c);
             if (c.rang) s.sendPane(c, m.Bell, .{});
@@ -899,9 +924,8 @@ const Session = struct {
         // next change sends again.
         var comm_buf: [std.fs.max_path_bytes]u8 = undefined;
         var args_buf: [foreground.args_max]u8 = undefined;
-        const scratch = s.gpa.alloc(u8, foreground.scratchLen()) catch return;
-        defer s.gpa.free(scratch);
-        const process = foreground.readProcess(pgrp, &comm_buf, &args_buf, scratch) orelse {
+        var scratch: [8192]u8 = undefined;
+        const process = foreground.readProcess(s.gpa, pgrp, &comm_buf, &args_buf, &scratch) orelse {
             std.log.info("session {s}: foreground pgid={d} has no readable leader", .{ s.name, pgrp });
             return;
         };
@@ -1026,6 +1050,7 @@ test "a session name is one plain file name" {
     try testing.expect(validName("a.b_c"));
     try testing.expect(!validName(""));
     try testing.expect(!validName(".hidden"));
+    try testing.expect(!validName("--cwd"));
     try testing.expect(!validName("a/b"));
     try testing.expect(!validName("a b"));
 }

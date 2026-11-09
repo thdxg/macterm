@@ -72,6 +72,28 @@ c.wait_output("mark-42")
 PY
 }
 
+@test "session: no program in the session holds the listen socket" {
+  # As in session.bats: lsof finds the socket in the session process and not
+  # in the program.
+  "$ZMX" session s1 -- /bin/sh -c 'echo "pids-$$-$PPID-listed"; exec sleep 30'
+  run python3 - <<'PY'
+import re
+from v2client import Client
+c = Client("s1")
+c.attach(80, 24)
+pids = re.compile(rb"pids-(\d+)-(\d+)-listed")
+c.wait(lambda: pids.search(c.output), 10, "the pids")
+print(*(int(n) for n in pids.search(c.output).groups()))
+PY
+  [ "$status" -eq 0 ]
+  local program="${output% *}" session="${output##* }"
+  run lsof -p "$session"
+  [[ "$output" == *"$MACTERM_RUNTIME_DIR/s1"* ]] || false
+  run lsof -p "$program"
+  [ -n "$output" ]
+  [[ "$output" != *"$MACTERM_RUNTIME_DIR/s1"* ]]
+}
+
 @test "session: the leader's resize reaches the pty" {
   "$ZMX" session s1 -- /bin/sh
   python3 - <<'PY'

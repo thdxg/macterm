@@ -168,6 +168,7 @@ pub const Reexec = struct {
     /// The already-bound listen socket. It is CLOEXEC, so `reexecDisclaimed`
     /// clears that flag: recreating it in the new image would race the
     /// client, which connects the moment the fork returns to it.
+    /// `takeReexecState` sets the flag again in the new image.
     server_sock_fd: i32,
     /// The hidden subcommand that the new image runs.
     subcommand: []const u8 = reexec_command,
@@ -231,6 +232,9 @@ fn reexecDisclaimed(spec: Reexec, size: ipc.Resize) !void {
     const gpa = std.heap.c_allocator;
 
     _ = try lib_posix.fcntl(spec.server_sock_fd, lib_posix.F.SETFD, 0);
+    // A failed re-exec continues in this image and spawns the shell here.
+    // If the flag cannot be set again, stop: the shell must not get the socket.
+    errdefer _ = lib_posix.fcntl(spec.server_sock_fd, lib_posix.F.SETFD, std.c.FD_CLOEXEC) catch std.process.exit(1);
 
     var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
     var exe_len: u32 = exe_buf.len;
@@ -288,10 +292,16 @@ pub fn unsetReexecEnv() void {
 /// Reads the state `reexecDisclaimed` left in the environment. Null when
 /// this process was not re-exec'd. The variables stay in the environment
 /// until `exec` removes them (see `reexec_env`).
+///
+/// It also sets CLOEXEC on the listen socket again, which the re-exec
+/// cleared. Without it, the shell and every program in the session hold the
+/// socket and can accept a client in place of the session.
 pub fn takeReexecState(gpa: std.mem.Allocator) !?ReexecState {
     const fd_str = lib_posix.getenv(reexec_env.socket_fd) orelse return null;
+    const server_sock_fd = try std.fmt.parseInt(i32, fd_str, 10);
+    _ = try lib_posix.fcntl(server_sock_fd, lib_posix.F.SETFD, std.c.FD_CLOEXEC);
     const state: ReexecState = .{
-        .server_sock_fd = try std.fmt.parseInt(i32, fd_str, 10),
+        .server_sock_fd = server_sock_fd,
         .size = .{
             .rows = try parseReexecInt(u16, reexec_env.rows),
             .cols = try parseReexecInt(u16, reexec_env.cols),

@@ -54,9 +54,102 @@
       ],
       "args": "ChannelClose.Args",
       "result": "ChannelClose.Result"
+    },
+    {
+      "name": "channel.pause",
+      "type": "ChannelPause",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "ChannelPause.Args",
+      "result": "ChannelPause.Result"
+    },
+    {
+      "name": "channel.resume",
+      "type": "ChannelResume",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "ChannelResume.Args",
+      "result": "ChannelResume.Result"
+    },
+    {
+      "name": "ping",
+      "type": "Ping",
+      "since": 1,
+      "senders": [
+        "local",
+        "session",
+        "remote"
+      ],
+      "args": "Ping.Args",
+      "result": "Ping.Result"
+    },
+    {
+      "name": "session.create",
+      "type": "SessionCreate",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "SessionCreate.Args",
+      "result": "SessionCreate.Result"
+    },
+    {
+      "name": "session.list",
+      "type": "SessionList",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "SessionList.Args",
+      "result": "SessionList.Result"
+    },
+    {
+      "name": "session.info",
+      "type": "SessionInfo",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "SessionInfo.Args",
+      "result": "SessionInfo.Result"
+    },
+    {
+      "name": "session.kill",
+      "type": "SessionKill",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "SessionKill.Args",
+      "result": "SessionKill.Result"
+    },
+    {
+      "name": "server.exit",
+      "type": "ServerExit",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "ServerExit.Args",
+      "result": "ServerExit.Result"
     }
   ],
-  "events": [],
+  "events": [
+    {
+      "name": "session.exit",
+      "type": "SessionExit",
+      "since": 1,
+      "senders": [
+        "local",
+        "session",
+        "remote"
+      ]
+    }
+  ],
   "pane_messages": [
     {
       "name": "state",
@@ -125,6 +218,22 @@
     {
       "name": "take",
       "type": "Take",
+      "since": 1,
+      "senders": [
+        "local"
+      ]
+    },
+    {
+      "name": "end",
+      "type": "End",
+      "since": 1,
+      "senders": [
+        "local"
+      ]
+    },
+    {
+      "name": "refresh",
+      "type": "Refresh",
       "since": 1,
       "senders": [
         "local"
@@ -448,6 +557,293 @@
       "cases": []
     },
     {
+      "name": "ChannelPause.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "channel",
+          "type": "u32",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ChannelPause.Result",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "ChannelResume.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "channel",
+          "type": "u32",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ChannelResume.Result",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "Ping.Args",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "Ping.Result",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "SessionCreate.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "cwd",
+          "type": "bin",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "command",
+          "type": "[bin]",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "cols",
+          "type": "u16",
+          "optional": false,
+          "default": "80",
+          "since": 1
+        },
+        {
+          "name": "rows",
+          "type": "u16",
+          "optional": false,
+          "default": "24",
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "SessionCreate.Result",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "session",
+          "type": "Session",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Session",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "state",
+          "type": "SessionState",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "build",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "level",
+          "type": "u32",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "pid",
+          "type": "i64",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "shell_pid",
+          "type": "i64",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "pty",
+          "type": "bin",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "cols",
+          "type": "u16",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "rows",
+          "type": "u16",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "code",
+          "type": "u8",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "signal",
+          "type": "u8",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "SessionState",
+      "kind": "enum",
+      "fields": [],
+      "cases": [
+        "running",
+        "exited",
+        "refused",
+        "unknown"
+      ]
+    },
+    {
+      "name": "SessionList.Args",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "SessionList.Result",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "sessions",
+          "type": "[Session]",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "SessionInfo.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "SessionInfo.Result",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "session",
+          "type": "Session",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "SessionKill.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "SessionKill.Result",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "ServerExit.Args",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "ServerExit.Result",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "SessionExit",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "code",
+          "type": "u8",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "signal",
+          "type": "u8",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
       "name": "State",
       "kind": "struct",
       "fields": [
@@ -609,6 +1005,18 @@
     },
     {
       "name": "Take",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "End",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "Refresh",
       "kind": "struct",
       "fields": [],
       "cases": []

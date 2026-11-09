@@ -89,6 +89,26 @@ load test_helper
   [[ "$output" == *"pid="* ]]
 }
 
+@test "session: no program in the session holds the listen socket" {
+  # The listen socket must be CLOEXEC, also after the macOS daemon re-execs
+  # itself, or a program in the pane can accept a client in place of the
+  # session. lsof names the socket by its path. The daemon that holds it is
+  # the control: it shows that lsof can see the path.
+  # `[ ]` and `|| false`: under bash 3.2 a false `[[ ]]` that is not the last
+  # line does not fail the test.
+  start_session test-fds sh -c 'echo "pids-$$-$PPID-listed"; exec sleep 30'
+  wait_for_output test-fds listed
+
+  run "$ZMX" history test-fds
+  [[ "$output" =~ pids-([0-9]+)-([0-9]+)-listed ]] || false
+  local program="${BASH_REMATCH[1]}" daemon="${BASH_REMATCH[2]}"
+  run lsof -p "$daemon"
+  [[ "$output" == *"$ZMX_DIR/test-fds"* ]] || false
+  run lsof -p "$program"
+  [ -n "$output" ]
+  [[ "$output" != *"$ZMX_DIR/test-fds"* ]]
+}
+
 @test "list --short: shows only session names" {
   start_session test-short-a
   start_session test-short-b

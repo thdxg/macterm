@@ -171,14 +171,162 @@ pub const ChannelClose = struct {
     pub const Result = struct {};
 };
 
+/// Stops a channel's pane output, for a pane that no one sees. The session's
+/// messages on the channel (its exit, its state) still come (design/003 §6).
+pub const ChannelPause = struct {
+    pub const name = "channel.pause";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { channel: u32 };
+    pub const Result = struct {};
+};
+
+/// Starts a paused channel's output again. A snapshot of the screen comes
+/// first on the channel.
+pub const ChannelResume = struct {
+    pub const name = "channel.resume";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { channel: u32 };
+    pub const Result = struct {};
+};
+
+/// Tells a client that the link is up. Any frame does the same; this one gets
+/// an answer when nothing else moves (design/005, "Reconnect").
+pub const Ping = struct {
+    pub const name = "ping";
+    pub const since = 1;
+    pub const senders = everyone;
+
+    pub const Args = struct {};
+    pub const Result = struct {};
+};
+
+/// What the server knows of one session (design/001). The session process
+/// holds all of it, so a new server reads it again from each session.
+pub const Session = struct {
+    /// The session's name: the file name of its socket. The client that
+    /// asked for the session made it.
+    id: []const u8,
+    state: SessionState,
+    /// The session's build and level, from its `hello`.
+    build: []const u8,
+    level: u32,
+    /// The session process. Null when `state` is `refused`.
+    pid: ?i64 = null,
+    /// The shell (or the command) of the session.
+    shell_pid: ?i64 = null,
+    /// The path of the pty's slave side.
+    pty: ?msgpack.Bin = null,
+    cols: ?u16 = null,
+    rows: ?u16 = null,
+    /// The exit code, when `state` is `exited` and the shell exited.
+    code: ?u8 = null,
+    /// The signal number, when `state` is `exited` and a signal ended the
+    /// shell.
+    signal: ?u8 = null,
+};
+
+pub const SessionState = enum {
+    running,
+    /// The shell ended. The session keeps the status until a client sends
+    /// `session.kill`.
+    exited,
+    /// The session and the server have no level in common. The server
+    /// cannot read its state or end it.
+    refused,
+    /// A state that a later build added.
+    unknown,
+};
+
+/// Starts a session process (design/001). The server answers when the
+/// session's socket accepts connections and the session sent its state.
+pub const SessionCreate = struct {
+    pub const name = "session.create";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct {
+        /// Made by the client, so that a request sent again finds the session
+        /// that the first one started, and starts no second one. Only
+        /// letters, digits, `-`, `_` and `.`; not `.` first.
+        id: []const u8,
+        /// The session's folder, an absolute path. Null is the home folder.
+        cwd: ?msgpack.Bin = null,
+        /// The command in place of a login shell.
+        command: ?[]const msgpack.Bin = null,
+        cols: u16 = 80,
+        rows: u16 = 24,
+    };
+    pub const Result = struct { session: Session };
+};
+
+pub const SessionList = struct {
+    pub const name = "session.list";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct {};
+    pub const Result = struct { sessions: []const Session };
+};
+
+pub const SessionInfo = struct {
+    pub const name = "session.info";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { id: []const u8 };
+    pub const Result = struct { session: Session };
+};
+
+/// Ends a session. A running session ends its shell (SIGHUP to the shell's
+/// process group, then SIGKILL). An exited session gives its status to no
+/// one more and ends. The server answers when the session process is gone.
+pub const SessionKill = struct {
+    pub const name = "session.kill";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { id: []const u8 };
+    pub const Result = struct {};
+};
+
+/// The server exits and leaves every session running, so that a newer app
+/// can start its own server (design/002).
+pub const ServerExit = struct {
+    pub const name = "server.exit";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct {};
+    pub const Result = struct {};
+};
+
 /// Every request method. A new method goes here.
-pub const methods = .{ ChannelOpen, ChannelClose };
+pub const methods = .{ ChannelOpen, ChannelClose, ChannelPause, ChannelResume, Ping, SessionCreate, SessionList, SessionInfo, SessionKill, ServerExit };
+
+// ── Events ──────────────────────────────────────────────────────────────────
+
+/// A session stopped running: its shell exited, or the session process is
+/// gone. Sent once for each session. A session process that ended with no
+/// exit message gives no code and no signal.
+pub const SessionExit = struct {
+    pub const name = "session.exit";
+    pub const since = 1;
+    pub const senders = everyone;
+
+    id: []const u8,
+    code: ?u8 = null,
+    signal: ?u8 = null,
+};
 
 /// Every event type. A new event goes here. Each one declares `name`,
 /// `since` and `senders`, as a method does, and its fields are the event's
 /// `a`. No event may hold a `Secret` (design/006 §1); `schema.check` refuses
 /// one.
-pub const events = .{};
+pub const events = .{SessionExit};
 
 /// True if a connection with this trust may send message `M`. A message from
 /// a sender outside the list gets an error reply and a log line; the link
@@ -330,6 +478,26 @@ pub const Take = struct {
     pub const senders = from_client;
 };
 
+/// The client ends the session: the session sends SIGHUP to the shell's
+/// process group, SIGKILL 0.5 s later if it still runs, and then ends. It
+/// sends no `exit`.
+pub const End = struct {
+    pub const name = "end";
+    pub const since = 1;
+    pub const senders = from_client;
+};
+
+/// The client asks for a snapshot of the screen, after it dropped output or
+/// did not show it (a server's relay, design/003 §6). The session drops the
+/// output that waits for that client and sends the snapshot, with no
+/// scrollback. A client that does not show the pane gets nothing.
+pub const Refresh = struct {
+    pub const name = "refresh";
+    pub const since = 1;
+    pub const senders = from_client;
+};
+
+
 // The session's events (design/003 §5, design/004 §6). The session reads
 // them from its own terminal and pty, so they are right for a client that
 // does not show the pane. Every greeted client gets them; a client that
@@ -473,8 +641,8 @@ pub const Status = struct {
 
 /// Every message on a pane channel. A new one goes here.
 pub const pane_messages = .{
-    State,   Attach, Resize, Claim,    Lead,     SnapshotStart, SnapshotEnd, Exit, Take,
-    Title,   Cwd,    Foreground, Mark, Progress, Bell,          Activity,    Status,
+    State, Attach, Resize,     Claim, Lead,     SnapshotStart, SnapshotEnd, Exit,   Take, End, Refresh,
+    Title, Cwd,    Foreground, Mark,  Progress, Bell,          Activity,    Status,
 };
 
 pub fn encodePane(w: *std.Io.Writer, comptime M: type, value: M) std.Io.Writer.Error!void {
