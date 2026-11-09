@@ -68,7 +68,7 @@ struct IntelligenceSettings: View {
     /// available, in one caption.
     private var projectInsightsCaption: String {
         let description = String(
-            localized: "Shows where you left off in each project, its Git branches and the commands to run next."
+            localized: "Shows where you left off in each project, its Git branches, and the commands to run next."
         )
         guard !modelIsAvailable else { return description }
         return String(
