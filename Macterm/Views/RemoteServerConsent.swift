@@ -12,8 +12,8 @@ enum RemoteServerConsent {
         alert.informativeText = String(
             localized: """
             With the server, your sessions on this host keep running when you quit Macterm or the \
-            connection stops. Macterm puts it in ~/.local/share/macterm (\(size)). It runs while you \
-            have sessions on this host. Without it, your shells end when the connection stops.
+            connection stops. Macterm puts the server (\(size)) in ~/.local/share/macterm. The server \
+            runs while you have sessions on this host. Without it, your shells end when the connection stops.
             """,
             comment: "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is."
         )
