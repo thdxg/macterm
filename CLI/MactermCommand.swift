@@ -25,8 +25,17 @@ struct MactermCommand: ParsableCommand {
             TutorCommand.self,
             SSHCommand.self,
             SkillsCommand.self,
-        ]
+            AskpassCommand.self,
+        ] + debugSubcommands
     )
+
+    private static var debugSubcommands: [ParsableCommand.Type] {
+        #if DEBUG
+        [HostCommand.self]
+        #else
+        []
+        #endif
+    }
 }
 
 /// Options every subcommand shares.
@@ -39,8 +48,8 @@ struct ConnectionOptions: ParsableArguments {
 }
 
 /// Send a request, apply the safe-fail contract, render the result.
-func runControlCommand(command: String, args: ControlArgs? = nil, options: ConnectionOptions) throws {
-    let client = ControlClient(socketOverride: options.socket)
+func runControlCommand(command: String, args: ControlArgs? = nil, options: ConnectionOptions, readTimeout: Int = 10) throws {
+    let client = ControlClient(socketOverride: options.socket, readTimeout: readTimeout)
     let response: ControlResponse
     do {
         response = try client.send(command: command, args: args)

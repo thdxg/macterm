@@ -24,7 +24,9 @@ final class ControlHandler {
 
     /// Data-level entry point for `ControlSocketServer`: decode, dispatch,
     /// encode. Never throws — every failure becomes an error response.
-    func handle(_ raw: Data) async -> Data {
+    /// `peerPID`: the process that sent the request, from the socket
+    /// (`ControlSocketServer.peerPID`). Only `ssh.askpass` reads it.
+    func handle(_ raw: Data, peerPID: pid_t? = nil) async -> Data {
         let request: ControlRequest
         do {
             request = try ControlProtocol.decodeRequest(raw)
@@ -34,11 +36,11 @@ final class ControlHandler {
                 error: ControlError(code: .badRequest, message: "undecodable request: \(EnglishErrorText.describe(error))")
             ))
         }
-        let response = await handle(request)
+        let response = await handle(request, peerPID: peerPID)
         return ControlProtocol.encode(response)
     }
 
-    func handle(_ request: ControlRequest) async -> ControlResponse {
+    func handle(_ request: ControlRequest, peerPID: pid_t? = nil) async -> ControlResponse {
         logger.debug("control request: \(request.command, privacy: .public)")
         // Version gate BEFORE dispatch: a client that needs a newer protocol
         // hard-errors instead of having a field it relies on silently dropped
@@ -52,7 +54,7 @@ final class ControlHandler {
             ))
         }
         do {
-            let data = try await dispatch(request)
+            let data = try await dispatch(request, peerPID: peerPID)
             return .success(id: request.id, data: data)
         } catch let error as ControlError {
             return .failure(id: request.id, error: error)
@@ -64,7 +66,7 @@ final class ControlHandler {
         }
     }
 
-    private func dispatch(_ request: ControlRequest) async throws -> ControlData {
+    private func dispatch(_ request: ControlRequest, peerPID: pid_t?) async throws -> ControlData {
         let args = request.args ?? ControlArgs()
         switch request.command {
         case "status": return status()
@@ -104,7 +106,10 @@ final class ControlHandler {
         case "pane.explain": return try paneExplain(args)
         case "project.memory": return try projectMemory(args)
         case "tab.merge": return try tabMerge(args)
+        case "host.connect": return try await hostConnect(args)
+        case "host.disconnect": return try hostDisconnect(args)
         #endif
+        case "ssh.askpass": return try await sshAskpass(args, peerPID: peerPID)
         case "grid": return try grid(args)
         case "session.list": return try await sessionList()
         case "session.info": return try await sessionInfo(args)
@@ -1787,4 +1792,62 @@ final class ControlHandler {
         }
         return table
     }
+}
+
+// MARK: - ssh logins
+
+extension ControlHandler {
+    /// `macterm askpass`: ask the user what an ssh master's login asks. The
+    /// answer goes only to a process whose parent is a master of Macterm
+    /// (design/006 §4). Any other process of the user could otherwise pose
+    /// as askpass and get a saved password.
+    func sshAskpass(_ args: ControlArgs, peerPID: pid_t?) async throws -> ControlData {
+        guard let peerPID, let owner = SSHConnections.shared.askpassOwner(forPeer: peerPID) else {
+            logger.warning("askpass refused: pid \(peerPID ?? 0, privacy: .public) is not a child of an ssh of Macterm")
+            throw ControlError(code: .denied, message: "this askpass was not started by an ssh of Macterm")
+        }
+        let prompt = args.prompt ?? ""
+        let request = SSHLoginPrompts.Request(
+            host: owner.host,
+            prompt: prompt,
+            kind: .of(prompt: prompt, confirm: args.confirm == true),
+            sshPID: owner.pid,
+            askerPID: ProcessInspector.parentPID(of: peerPID)
+        )
+        let answer = await SSHConnections.shared.asking(connectionPID: owner.pid) {
+            await SSHLoginPrompts.shared.ask(request)
+        }
+        guard case let .text(text) = answer else {
+            // One Cancel ends the login. Otherwise ssh asks again: the next
+            // password try, then the next method.
+            SSHConnections.shared.cancelLogin(connectionPID: owner.pid)
+            throw ControlError(code: .cancelled, message: "the login was cancelled")
+        }
+        return ControlData(askpass: ControlAskpassReply(answer: text))
+    }
+
+    #if DEBUG
+    /// `host connect`: open the host's one ssh connection, as a remote
+    /// project will (0057). The user agent drives the login sheet with it.
+    func hostConnect(_ args: ControlArgs) async throws -> ControlData {
+        guard let host = args.host else { throw ControlError(code: .badRequest, message: "host connect needs a host") }
+        do {
+            let route = try await SSHConnections.shared.connect(host)
+            return ControlData(host: ControlHostState(
+                host: host,
+                controlPath: route.controlPath,
+                usersOwn: route.isUsersOwn,
+                logins: SSHConnections.shared.logins[host, default: 0]
+            ))
+        } catch let failure as SSHConnections.Failure {
+            throw ControlError(code: .internalError, message: failure.description)
+        }
+    }
+
+    func hostDisconnect(_ args: ControlArgs) throws -> ControlData {
+        guard let host = args.host else { throw ControlError(code: .badRequest, message: "host disconnect needs a host") }
+        SSHConnections.shared.disconnect(host)
+        return ControlData()
+    }
+    #endif
 }

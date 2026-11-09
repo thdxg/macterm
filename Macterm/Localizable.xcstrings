@@ -2584,6 +2584,55 @@
         }
       }
     },
+    "Connect" : {
+      "comment" : "The button that accepts an ssh question, such as a new host key.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接"
+          }
+        }
+      }
+    },
+    "Connect to %@?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 연결하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要连接到 %@ 吗？"
+          }
+        }
+      }
+    },
+    "Connecting to %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 연결하는 중"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在连接到 %@"
+          }
+        }
+      }
+    },
     "Connects a disconnected pane to its session again when you wake the Mac or return to the app." : {
       "localizations" : {
         "ko" : {
@@ -4723,6 +4772,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地文件夹…"
+          }
+        }
+      }
+    },
+    "Log In" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录"
+          }
+        }
+      }
+    },
+    "Log In to %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 로그인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录到 %@"
           }
         }
       }
@@ -10088,6 +10169,22 @@
         }
       }
     },
+    "The answer is incorrect." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "답이 올바르지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回答不正确。"
+          }
+        }
+      }
+    },
     "The background matches the color of each full-screen program." : {
       "localizations" : {
         "ko" : {
@@ -10344,6 +10441,22 @@
         }
       }
     },
+    "The key of this host is not known. Make sure that it is the key that you expect." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 호스트의 키를 알 수 없습니다. 예상한 키인지 확인하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此主机的密钥未知。请确认它是你预期的密钥。"
+          }
+        }
+      }
+    },
     "The keys that move the cursor and select text in copy mode. A change applies the next time the mode starts." : {
       "localizations" : {
         "ko" : {
@@ -10518,6 +10631,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "该窗格正在运行命令。请先完成或停止它。"
+          }
+        }
+      }
+    },
+    "The passphrase is incorrect." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "패스프레이즈가 올바르지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码短语不正确。"
+          }
+        }
+      }
+    },
+    "The password is incorrect." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호가 올바르지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码不正确。"
           }
         }
       }
@@ -11203,6 +11348,38 @@
         }
       }
     },
+    "Type the passphrase for the key %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키 %@의 암호문을 입력하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入密钥 %@ 的密码短语。"
+          }
+        }
+      }
+    },
+    "Type the password for %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 암호를 입력하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入 %@ 的密码。"
+          }
+        }
+      }
+    },
     "Type the password. When it works, Macterm offers to update the saved password." : {
       "localizations" : {
         "ko" : {
@@ -11505,6 +11682,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更新"
+          }
+        }
+      }
+    },
+    "Use Saved Password" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 암호 사용"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用已存储的密码"
           }
         }
       }

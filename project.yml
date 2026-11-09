@@ -220,6 +220,10 @@ targets:
           mkdir -p "$SHIM_DIR"
           cp "$SRCROOT/scripts/ghostty-shim.sh" "$SHIM_DIR/ghostty"
           chmod +x "$SHIM_DIR/ghostty"
+          # The SSH_ASKPASS of a host's ssh master (SSHConnections,
+          # scripts/askpass-shim.sh).
+          cp "$SRCROOT/scripts/askpass-shim.sh" "$SHIM_DIR/macterm-askpass"
+          chmod +x "$SHIM_DIR/macterm-askpass"
           # The adaptive icon's renderer (AdaptiveIconRenderer). Contents/Helpers,
           # not Resources/bin: it is no command for a pane's PATH.
           HELPERS_DIR="$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Helpers"
