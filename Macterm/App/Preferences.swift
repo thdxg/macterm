@@ -1144,7 +1144,8 @@ final class Preferences {
             defaults.set(true, forKey: Keys.migrationRetiredAutoNameTabs)
         }
         // Project Insights needs Apple Intelligence as a whole now, so the
-        // toggle of its summary is gone, and its key is dead.
+        // toggle of its summary is gone. The key `macterm.memory.summary` is
+        // retired.
         if !defaults.bool(forKey: Keys.migrationRetiredMemorySummary) {
             defaults.removeObject(forKey: "macterm.memory.summary")
             defaults.set(true, forKey: Keys.migrationRetiredMemorySummary)

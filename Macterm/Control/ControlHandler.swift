@@ -1182,7 +1182,10 @@ final class ControlHandler {
             memory.modelReader = { .available }
             memory.refreshModelAvailability()
             Preferences.shared.projectMemory = true
-        case "off": Preferences.shared.projectMemory = false
+        case "off":
+            memory.modelReader = { OnDeviceModel.availability }
+            memory.refreshModelAvailability()
+            Preferences.shared.projectMemory = false
         case "forget": memory.forget(project.id)
         default: throw ControlError(code: .badRequest, message: "memory must be on, off or forget")
         }

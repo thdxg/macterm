@@ -630,11 +630,25 @@ struct MactermIntentsTests {
         Preferences.shared.projectMemory = false
         await #expect(throws: MactermIntentError.self) { try await intent.perform() }
 
-        // Project Insights needs Apple Intelligence, also with its switch on.
+        // Project Insights needs Apple Intelligence, also with its switch on,
+        // and the refusal says why.
         Preferences.shared.projectMemory = true
+        func refusal() async -> String? {
+            do {
+                _ = try await intent.perform()
+                return nil
+            } catch let MactermIntentError.unavailable(message) {
+                return message
+            } catch {
+                return nil
+            }
+        }
         ProjectMemory.shared.modelReader = { .notReady }
         ProjectMemory.shared.refreshModelAvailability()
-        await #expect(throws: MactermIntentError.self) { try await intent.perform() }
+        #expect(await refusal() == String(localized: "Project Insights needs Apple Intelligence. Turn it on in System Settings."))
+        ProjectMemory.shared.modelReader = { .unsupported }
+        ProjectMemory.shared.refreshModelAvailability()
+        #expect(await refusal() == String(localized: "Project Insights needs a Mac with Apple Intelligence."))
 
         ProjectMemory.shared.modelReader = { .available }
         ProjectMemory.shared.refreshModelAvailability()
