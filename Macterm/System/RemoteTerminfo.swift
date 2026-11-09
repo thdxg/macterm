@@ -82,8 +82,8 @@ enum RemoteTerminfo {
     /// can't wedge the task — and `sh -c`-wrapped like every remote command so
     /// any login shell delivers it intact.
     ///
-    /// The script is the one `SSHWrapper.installScript` sends, after the PATH
-    /// preamble: `tic -x -o ~/.terminfo -` compiles from stdin into the
+    /// The script is `SSHWrapper.installCommand` in its verbose form, after
+    /// the PATH preamble: `tic -x -o ~/.terminfo -` compiles from stdin into the
     /// user's own `~/.terminfo`, needing no privileges, and `infocmp` checks
     /// that the entry resolves. `-o` keeps a `tic` that runs as root out of
     /// the system database. Stderr stays, because `run` logs it on a
@@ -91,7 +91,7 @@ enum RemoteTerminfo {
     static func installArgv(remote: ProjectPath) -> [String]? {
         guard case let .remote(user, host, _) = remote else { return nil }
         let script = RemoteSpawn.assertSingleQuoteFree(
-            RemoteSpawn.remoteEnvPreamble + "tic -x -o ~/.terminfo - && infocmp -x \(entryName) >/dev/null",
+            RemoteSpawn.remoteEnvPreamble + SSHWrapper.installCommand(verbose: true),
             onViolation: .failNonZero
         )
         return [

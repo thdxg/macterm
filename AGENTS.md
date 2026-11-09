@@ -354,7 +354,7 @@ These rules for the spawn script come from tests against a real host:
 - On a failure (no zmx, `cd` fails), print a `macterm:` diagnostic and drop to `${SHELL:-/bin/sh}`. A bare exit fires `closeSurface`, and the pane vanishes with no clue.
 - **The host settles TERM, and the script never touches a TERM that resolves**. This includes a TERM that the user pinned to a simpler value with `SetEnv`. The script replaces only a TERM that does not resolve. It uses `xterm-ghostty` if the host has it. If not, it uses `xterm-256color`.
   - The script exports `COLORTERM=truecolor`, `TERM_PROGRAM=ghostty` and the `TERM_PROGRAM_VERSION` of libghostty itself. TERM is the only variable that ssh carries through a channel that a server cannot refuse. Programs depend on these variables. Claude Code sends OSC 9;4 progress (the status dot of an agent) only to Ghostty 1.2.0 or later.
-- `RemoteTerminfo` installs our bundled `xterm-ghostty` entry (`infocmp -x | ssh … tic -x -o ~/.terminfo -`, as the `+ssh` of ghostty does). It runs off the critical path. It depends on the own ghostty flag `ssh-terminfo` of the user (off by default upstream). It never caches to disk. It logs stderr only on a failure.
+- `RemoteTerminfo` installs our bundled `xterm-ghostty` entry (`infocmp -x | ssh … tic -x -o ~/.terminfo -`, then `infocmp` checks the entry, as the `+ssh` of ghostty does). It runs off the critical path. It depends on the own ghostty flag `ssh-terminfo` of the user (off by default upstream). It never caches to disk. It logs stderr only on a failure.
 
 **Dropped connections heal by themselves (#281).**
 

@@ -102,6 +102,14 @@ enum SSHWrapper {
         return "\(user)@\(host)"
     }
 
+    /// The install command that `installScript` and
+    /// `RemoteTerminfo.installArgv` send, before each wraps it.
+    static func installCommand(verbose: Bool) -> String {
+        verbose
+            ? "tic -x -o ~/.terminfo - && infocmp -x \(entryName) >/dev/null"
+            : "tic -x -o ~/.terminfo - 2>/dev/null && infocmp -x \(entryName) >/dev/null 2>&1"
+    }
+
     /// The remote install command, as ghostty's `+ssh` sends it
     /// (ghostty-org/ghostty#15061, #15112): compile from stdin into
     /// `~/.terminfo`, then check that `infocmp` finds the entry. `-o` names
@@ -115,9 +123,7 @@ enum SSHWrapper {
     /// shell, and a login shell that is not POSIX (nushell, tcsh) cannot
     /// parse it. This is the wire rule of `RemoteSpawn.remoteShell`.
     static func installScript(verbose: Bool) -> String {
-        let script = verbose
-            ? "tic -x -o ~/.terminfo - && infocmp -x \(entryName) >/dev/null"
-            : "tic -x -o ~/.terminfo - 2>/dev/null && infocmp -x \(entryName) >/dev/null 2>&1"
+        let script = installCommand(verbose: verbose)
         assert(!script.contains("'"), "install script must stay single-quote-free")
         return "sh -c '\(script)'"
     }
