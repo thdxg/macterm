@@ -20,6 +20,10 @@ private let logger = Logger(subsystem: appBundleID, category: "SSHConnections")
 ///   connection that ssh tries when the master does not answer. It fails
 ///   closed.
 ///
+/// - A login that writes text and asks nothing for `SSHLoginNotice.delay`
+///   (a host that waits for a log-in in the browser) reports ssh's last
+///   line to `onLoginNotice`, until the login ends or a question comes.
+///
 /// Each new login writes a log line with the count for its host in this run
 /// (`ssh login: host=… logins=…`), so that the logins of a day can be
 /// counted from the log (design/005, the roaming-link question).
@@ -97,6 +101,11 @@ final class SSHConnections {
     /// Called when a master exits, with its pid, so that a prompt of its
     /// askpass that is still up goes away.
     var onConnectionExit: ((pid_t) -> Void)?
+    /// Called with ssh's last line while a login waits with no question,
+    /// and with nil when that ends (`SSHLoginNotice`).
+    var onLoginNotice: ((_ host: String, _ pid: pid_t, _ line: String?) -> Void)?
+    /// Questions that are open for each master.
+    private var asking: [pid_t: Int] = [:]
 
     init(configuration: Configuration) {
         self.configuration = configuration
@@ -156,6 +165,17 @@ final class SSHConnections {
         guard let process = owned.values.first(where: { $0.processIdentifier == pid }), process.isRunning else { return }
         cancelled.insert(pid)
         process.terminate()
+    }
+
+    /// Run `body`, a question of the login of the connection `pid`. While
+    /// it runs, the login shows no notice.
+    func asking<T>(connectionPID pid: pid_t, _ body: () async -> T) async -> T {
+        asking[pid, default: 0] += 1
+        defer {
+            asking[pid, default: 1] -= 1
+            if asking[pid] == 0 { asking[pid] = nil }
+        }
+        return await body()
     }
 
     /// At quit: end every master of Macterm.
@@ -283,7 +303,19 @@ final class SSHConnections {
         cancelled.remove(process.processIdentifier)
 
         // ssh listens on the control socket only after the login.
+        let pid = process.processIdentifier
+        var notice = SSHLoginNotice()
+        var shown: String?
+        defer {
+            asking[pid] = nil
+            if shown != nil { onLoginNotice?(destination, pid, nil) }
+        }
         while !FileManager.default.fileExists(atPath: path) {
+            let line = notice.update(text: stderr.text, asking: asking[pid] != nil, now: .now)
+            if line != shown {
+                shown = line
+                onLoginNotice?(destination, pid, line)
+            }
             guard process.isRunning else {
                 if process.isRunning { process.terminate() }
                 await stderr.finish(within: ProcessRunner.drainTimeout)
@@ -325,6 +357,43 @@ final class SSHConnections {
         return destination.unicodeScalars.allSatisfy { scalar in
             !CharacterSet.whitespacesAndNewlines.contains(scalar) && !CharacterSet.controlCharacters.contains(scalar)
         }
+    }
+}
+
+/// When a login that asks nothing shows ssh's text. Pure.
+///
+/// One rule for every host, with no match on a vendor's text: the last line
+/// that ssh wrote since the last question, once it has stayed the same for
+/// `delay`. ssh's own warnings ("Warning: Permanently added …") are notices
+/// for a terminal, not a reason to wait, so they do not count.
+struct SSHLoginNotice {
+    static let delay: Duration = .seconds(2)
+
+    /// The bytes of ssh's text up to the last question.
+    private var mark = 0
+    private var line: String?
+    private var since: ContinuousClock.Instant?
+
+    /// The line to show now, or nil.
+    mutating func update(text: String, asking: Bool, now: ContinuousClock.Instant) -> String? {
+        let bytes = Array(text.utf8)
+        if asking {
+            mark = bytes.count
+            line = nil
+            since = nil
+            return nil
+        }
+        let new = String(decoding: bytes.dropFirst(mark), as: UTF8.self)
+        let candidate = SSHLoginPrompts.displayText(new)
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .last { !$0.isEmpty && !$0.hasPrefix("Warning: ") }
+        if candidate != line {
+            line = candidate
+            since = now
+        }
+        guard let line, let since, now - since >= Self.delay else { return nil }
+        return line
     }
 }
 

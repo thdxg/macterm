@@ -110,19 +110,107 @@ struct SSHConnectionsTests {
     }
 
     @Test
-    func a_refusal_names_only_what_the_prompt_names() {
-        #expect(SSHLoginPrompts.refusal("Enter passphrase for key 'k': ") == "The passphrase is incorrect.")
-        #expect(SSHLoginPrompts.refusal("(bob@box) Password:") == "The password is incorrect.")
-        #expect(SSHLoginPrompts.refusal("Verification code: ") == "The answer is incorrect.")
+    func macterm_knows_a_question_only_by_the_exact_openssh_text() {
+        typealias Question = SSHLoginPrompts.Question
+        #expect(Question.of("bob@box's password: ", kind: .secret) == .password(account: "bob@box"))
+        #expect(Question.of("(bob@box) Password: ", kind: .secret) == .password(account: "bob@box"))
+        #expect(Question.of("Enter passphrase for key '/tmp/id_ed25519': ", kind: .secret) == .passphrase(key: "/tmp/id_ed25519"))
+        let home = NSHomeDirectory()
+        #expect(Question.of("Enter passphrase for key '\(home)/.ssh/id': ", kind: .secret) == .passphrase(key: "~/.ssh/id"))
+        // Any other text is unknown, also when it has a known word.
+        #expect(Question.of("Verification code: ", kind: .secret) == .unknown(line: "Verification code:"))
+        #expect(Question.of("New password: ", kind: .secret) == .unknown(line: "New password:"))
+        #expect(Question.of("Password for bob: ", kind: .secret) == .unknown(line: "Password for bob:"))
+        #expect(Question.of("Allow use of key?", kind: .confirm) == .unknown(line: "Allow use of key?"))
     }
 
     @Test
-    func another_yes_no_question_drops_only_the_question_line() {
-        let prompt = "Warning: the ECDSA host key for 'box' differs from the key for the IP address.\n"
+    func an_unknown_question_shows_only_its_prompt_line() {
+        let prompt = "Duo two-factor login for bob\n\nEnter a passcode or select one of the following options:\n\n"
+            + "Passcode or option (1-3): \u{1B}"
+        #expect(SSHLoginPrompts.Question.of(prompt, kind: .secret).text == "Passcode or option (1-3):")
+        let yesNo = "Warning: the ECDSA host key for 'box' differs from the key for the IP address.\n"
             + "Are you sure you want to continue connecting (yes/no)?"
-        #expect(SSHLoginPrompts.withoutQuestion(prompt)
-            == "Warning: the ECDSA host key for 'box' differs from the key for the IP address.")
-        #expect(SSHLoginPrompts.withoutQuestion("one line (yes/no)?") == "one line (yes/no)?")
+        #expect(SSHLoginPrompts.Question.of(yesNo, kind: .yesNo).text == "Are you sure you want to continue connecting (yes/no)?")
+    }
+
+    @Test
+    func a_refusal_names_only_what_macterm_knows() {
+        #expect(SSHLoginPrompts.Question.passphrase(key: "k").refusal == "The passphrase is incorrect.")
+        #expect(SSHLoginPrompts.Question.password(account: "bob@box").refusal == "The password is incorrect.")
+        #expect(SSHLoginPrompts.Question.unknown(line: "Verification code:").refusal == "The answer is incorrect.")
+    }
+
+    // MARK: - Notice
+
+    @Test
+    func a_login_that_asks_nothing_shows_its_last_line_after_the_delay() {
+        var notice = SSHLoginNotice()
+        let start = ContinuousClock.now
+        let text = "\nTo authenticate, visit:\n\n\thttps://login.example.test/a/1\n\n"
+        #expect(notice.update(text: text, asking: false, now: start) == nil)
+        #expect(notice.update(text: text, asking: false, now: start + .milliseconds(1900)) == nil)
+        #expect(notice.update(text: text, asking: false, now: start + SSHLoginNotice.delay) == "https://login.example.test/a/1")
+        // A new line waits the delay again.
+        let more = text + "Still waiting\n"
+        #expect(notice.update(text: more, asking: false, now: start + .seconds(3)) == nil)
+        #expect(notice.update(text: more, asking: false, now: start + .seconds(5)) == "Still waiting")
+    }
+
+    @Test
+    func text_before_a_question_and_ssh_warnings_show_no_notice() {
+        var notice = SSHLoginNotice()
+        let start = ContinuousClock.now
+        let banner = "Authorized use only.\n"
+        _ = notice.update(text: banner, asking: false, now: start)
+        #expect(notice.update(text: banner, asking: true, now: start + .seconds(1)) == nil)
+        // After the question, the banner is old text.
+        #expect(notice.update(text: banner, asking: false, now: start + .seconds(9)) == nil)
+        let warned = banner + "Warning: Permanently added 'box' (ED25519) to the list of known hosts.\n"
+        _ = notice.update(text: warned, asking: false, now: start + .seconds(10))
+        #expect(notice.update(text: warned, asking: false, now: start + .seconds(20)) == nil)
+    }
+
+    @Test
+    func a_notice_links_only_an_https_url() {
+        #expect(SSHLoginPrompts.link(in: "To authenticate, visit: https://login.example.test/a/1.")?.absoluteString
+            == "https://login.example.test/a/1")
+        #expect(SSHLoginPrompts.link(in: "Go to http://example.test/x") == nil)
+        #expect(SSHLoginPrompts.link(in: "Waiting for the host") == nil)
+        #expect(SSHLoginPrompts.link(in: "see https:// now") == nil)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func a_login_that_waits_on_a_link_reports_it_until_it_ends() async throws {
+        let directory = URL(fileURLWithPath: "/tmp").appendingPathComponent("mt-notice-\(UInt32.random(in: 0 ... .max))")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // A stand-in ssh: no config, no master, and a login that writes a
+        // link and waits, as a host that waits for a log-in in the browser.
+        let ssh = directory.appendingPathComponent("ssh")
+        try """
+        #!/bin/sh
+        case " $* " in
+          *" -M "*) echo 'To authenticate, visit: https://example.test/x' >&2; exec sleep 30 ;;
+          *) exit 255 ;;
+        esac
+
+        """.write(to: ssh, atomically: true, encoding: .utf8)
+        chmod(ssh.path, 0o700)
+        let connections = SSHConnections(configuration: .init(ssh: [ssh.path], controlDirectory: directory.appendingPathComponent("cm")))
+        var reports: [String?] = []
+        connections.onLoginNotice = { host, _, line in
+            #expect(host == "box")
+            reports.append(line)
+        }
+        let login = Task { try await connections.connect("box") }
+        while reports.isEmpty {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(reports == ["To authenticate, visit: https://example.test/x"])
+        connections.disconnect("box")
+        await #expect(throws: SSHConnections.Failure.self) { try await login.value }
+        #expect(reports == ["To authenticate, visit: https://example.test/x", nil])
     }
 
     @Test

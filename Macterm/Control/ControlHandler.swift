@@ -1809,13 +1809,16 @@ extension ControlHandler {
             throw ControlError(code: .denied, message: "this askpass was not started by an ssh of Macterm")
         }
         let prompt = args.prompt ?? ""
-        let answer = await SSHLoginPrompts.shared.ask(.init(
+        let request = SSHLoginPrompts.Request(
             host: owner.host,
             prompt: prompt,
             kind: .of(prompt: prompt, confirm: args.confirm == true),
             sshPID: owner.pid,
             askerPID: ProcessInspector.parentPID(of: peerPID)
-        ))
+        )
+        let answer = await SSHConnections.shared.asking(connectionPID: owner.pid) {
+            await SSHLoginPrompts.shared.ask(request)
+        }
         guard case let .text(text) = answer else {
             // One Cancel ends the login. Otherwise ssh asks again: the next
             // password try, then the next method.

@@ -11428,6 +11428,38 @@
         }
       }
     },
+    "Type the passphrase for the key %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키 %@의 암호문을 입력하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入密钥 %@ 的密码短语。"
+          }
+        }
+      }
+    },
+    "Type the password for %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 암호를 입력하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入 %@ 的密码。"
+          }
+        }
+      }
+    },
     "Type the password. When it works, Macterm offers to update the saved password." : {
       "localizations" : {
         "ko" : {

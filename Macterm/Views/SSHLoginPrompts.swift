@@ -6,7 +6,13 @@ private let logger = Logger(subsystem: appBundleID, category: "SSHLoginPrompts")
 /// The questions that the login of a host's ssh master asks, shown as sheets
 /// (design/005 step 2): a secure field for a password or a passphrase, or
 /// Connect and Cancel for a host key and a confirmation. One sheet at a time;
-/// the next waits.
+/// the next waits. The text is Macterm's for a question that it knows
+/// (`Question`), and ssh's prompt line for any other.
+///
+/// A login that writes text and asks nothing (a host that waits for a log-in
+/// in the browser) gets a notice sheet with ssh's last line and Cancel
+/// (`SSHConnections.onLoginNotice`). It has Open Link when that line holds
+/// an https link. The notice closes when the login ends.
 ///
 /// A saved password for the login (filed under `ssh <destination>` and the
 /// prompt line, as in v1) fills the answer only after a click on Use Saved
@@ -72,7 +78,8 @@ final class SSHLoginPrompts {
     private var answeredSecret: [Asker: String] = [:]
 
     func ask(_ request: Request) async -> Answer {
-        await withCheckedContinuation { continuation in
+        closeNotice()
+        return await withCheckedContinuation { continuation in
             queue.append(Pending(request, continuation))
             presentNext()
         }
@@ -80,6 +87,7 @@ final class SSHLoginPrompts {
 
     /// The master `pid` exited: its askpass is gone, so its questions are too.
     func cancel(sshPID pid: pid_t) {
+        if notice?.sshPID == pid { closeNotice() }
         answeredSecret = answeredSecret.filter { $0.key.sshPID != pid }
         for pending in queue where pending.request.sshPID == pid {
             pending.continuation.resume(returning: .cancelled)
@@ -91,6 +99,86 @@ final class SSHLoginPrompts {
         } else if NSApp.modalWindow != nil {
             NSApp.abortModal()
         }
+    }
+
+    // MARK: - Notice
+
+    private struct Notice {
+        var sshPID: pid_t
+        var alert: NSAlert
+        var window: NSWindow
+        /// The Open Link button's target, kept while the sheet is up.
+        var opener: LinkOpener?
+    }
+
+    private var notice: Notice?
+
+    /// Show `line` for the login of the master `pid`, or close its notice
+    /// when `line` is nil. A question has the window first.
+    func showNotice(host: String, sshPID pid: pid_t, line: String?) {
+        if notice != nil { closeNotice() }
+        guard let line, !line.isEmpty, current == nil, queue.isEmpty else { return }
+        // No terminal window: no notice. A modal alert would hold the wait
+        // for the login that closes it.
+        guard let window = terminalWindow() else { return }
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Log In to \(host)")
+        alert.informativeText = line
+        var opener: LinkOpener?
+        if let url = Self.link(in: line) {
+            let button = alert.addButton(withTitle: String(localized: "Open Link"))
+            // Its own action: the sheet stays up until the login ends.
+            let target = LinkOpener(url: url)
+            button.target = target
+            button.action = #selector(LinkOpener.open(_:))
+            opener = target
+        }
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        notice = Notice(sshPID: pid, alert: alert, window: window, opener: opener)
+        NSApp.activate()
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self, notice?.alert === alert else { return }
+            notice = nil
+            guard response != .abort else { return }
+            logger.info("ssh notice for host=\(host, privacy: .public): cancelled")
+            SSHConnections.shared.cancelLogin(connectionPID: pid)
+            presentNext()
+        }
+    }
+
+    private func closeNotice() {
+        guard let notice else { return }
+        self.notice = nil
+        notice.window.endSheet(notice.alert.window, returnCode: .abort)
+    }
+
+    private final class LinkOpener: NSObject {
+        let url: URL
+
+        init(url: URL) {
+            self.url = url
+        }
+
+        @objc
+        func open(_: Any?) {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// The first https link in `line`, without the punctuation after it.
+    nonisolated static func link(in line: String) -> URL? {
+        for word in line.split(whereSeparator: \.isWhitespace) where word.lowercased().hasPrefix("https://") {
+            let trimmed = word.trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?)]}>'\""))
+            if let url = URL(string: trimmed), url.scheme?.lowercased() == "https", url.host?.isEmpty == false { return url }
+        }
+        return nil
+    }
+
+    /// A terminal window: the key window can be the quick terminal, a
+    /// desktop widget or a popover, which a sheet does not suit.
+    private func terminalWindow() -> NSWindow? {
+        let candidates = [NSApp.keyWindow, NSApp.mainWindow].compactMap(\.self) + NSApp.windows.filter(\.isVisible)
+        return candidates.first(where: { AppDelegate.isTerminalWindowCandidate($0) })
     }
 
     // MARK: - Sheets
@@ -114,28 +202,21 @@ final class SSHLoginPrompts {
         case .yesNo,
              .confirm: String(localized: "Connect to \(request.host)?")
         }
-        let prompt = Self.displayText(request.prompt)
+        let question = Question.of(request.prompt, kind: request.kind)
         var fingerprint: NSTextField?
-        switch request.kind {
-        case .secret where Self.isRetry(request, answered: answeredSecret):
-            alert.informativeText = Self.refusal(prompt) + "\n" + prompt
-        case .yesNo:
-            if let key = Self.hostKey(in: request.prompt) {
-                alert.informativeText = String(
-                    localized: "The key of this host is not known. Make sure that it is the key that you expect."
-                )
-                let label = NSTextField(labelWithString: "\(key.host)\n\(key.type) \(key.fingerprint)")
-                label.font = TerminalFont.shared.nsFont(size: NSFont.smallSystemFontSize)
-                label.isSelectable = true
-                label.lineBreakMode = .byClipping
-                label.sizeToFit()
-                fingerprint = label
-            } else {
-                alert.informativeText = Self.withoutQuestion(prompt)
-            }
-        default:
-            alert.informativeText = prompt
+        var text = question.text
+        if case let .hostKey(key) = question {
+            let label = NSTextField(labelWithString: "\(key.host)\n\(key.type) \(key.fingerprint)")
+            label.font = TerminalFont.shared.nsFont(size: NSFont.smallSystemFontSize)
+            label.isSelectable = true
+            label.lineBreakMode = .byClipping
+            label.sizeToFit()
+            fingerprint = label
         }
+        if Self.isRetry(request, answered: answeredSecret) {
+            text = question.refusal + "\n" + text
+        }
+        alert.informativeText = text
         alert.accessoryView = fingerprint
         alert.addButton(withTitle: request.kind == .secret
             ? String(localized: "Log In")
@@ -150,11 +231,7 @@ final class SSHLoginPrompts {
             if savedID != nil { alert.addButton(withTitle: String(localized: "Use Saved Password")) }
         }
 
-        // A terminal window: the key window can be the quick terminal, a
-        // desktop widget or a popover, which a sheet does not suit.
-        let candidates = [NSApp.keyWindow, NSApp.mainWindow].compactMap(\.self) + NSApp.windows.filter(\.isVisible)
-        guard let window = candidates.first(where: { AppDelegate.isTerminalWindowCandidate($0) })
-        else {
+        guard let window = terminalWindow() else {
             NSApp.activate()
             finish(pending, response: alert.runModal(), field: field, savedID: savedID)
             return
@@ -229,12 +306,87 @@ final class SSHLoginPrompts {
         request.kind == .secret && answered[request.asker] == request.prompt
     }
 
-    /// What a refused answer was, named only when the prompt says it.
-    static func refusal(_ prompt: String) -> String {
-        let lowered = prompt.lowercased()
-        if lowered.contains("passphrase") { return String(localized: "The passphrase is incorrect.") }
-        if lowered.contains("password") { return String(localized: "The password is incorrect.") }
-        return String(localized: "The answer is incorrect.")
+    /// What a question of the login is. Macterm knows a question only by the
+    /// exact text that OpenSSH writes for it, and shows its own text for it.
+    /// Any other text (a code of an authenticator app, a text that the host's
+    /// administrator wrote) is unknown: the sheet shows only ssh's prompt
+    /// line, never its other output.
+    enum Question: Equatable {
+        /// `bob@box's password: `, or `(bob@box) Password: ` of a
+        /// keyboard-interactive login.
+        case password(account: String)
+        /// `Enter passphrase for key '<file>': `.
+        case passphrase(key: String)
+        case hostKey(HostKey)
+        case unknown(line: String)
+
+        static func of(_ prompt: String, kind: Kind) -> Question {
+            let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            switch kind {
+            case .secret:
+                if let account = password(in: text) { return .password(account: account) }
+                if let key = passphraseKey(in: text) { return .passphrase(key: key) }
+            case .yesNo:
+                if let key = SSHLoginPrompts.hostKey(in: prompt) { return .hostKey(key) }
+            case .confirm:
+                break
+            }
+            return .unknown(line: SSHLoginPrompts.promptLine(prompt))
+        }
+
+        /// The sheet's text.
+        var text: String {
+            switch self {
+            case let .password(account): String(localized: "Type the password for \(account).")
+            case let .passphrase(key): String(localized: "Type the passphrase for the key \(key).")
+            case .hostKey: String(localized: "The key of this host is not known. Make sure that it is the key that you expect.")
+            case let .unknown(line): line
+            }
+        }
+
+        /// The line in front of the text when ssh asks the same again.
+        var refusal: String {
+            switch self {
+            case .password: String(localized: "The password is incorrect.")
+            case .passphrase: String(localized: "The passphrase is incorrect.")
+            case .hostKey,
+                 .unknown: String(localized: "The answer is incorrect.")
+            }
+        }
+
+        private static func password(in text: String) -> String? {
+            if text.hasSuffix("'s password:") {
+                let account = String(text.dropLast("'s password:".count))
+                return isAccount(account) ? account : nil
+            }
+            if text.hasPrefix("("), text.hasSuffix(") Password:") {
+                let account = String(text.dropFirst().dropLast(") Password:".count))
+                return isAccount(account) ? account : nil
+            }
+            return nil
+        }
+
+        /// `user@host`, one word.
+        private static func isAccount(_ text: String) -> Bool {
+            let parts = text.split(separator: "@", omittingEmptySubsequences: false)
+            return parts.count >= 2 && parts.allSatisfy { !$0.isEmpty }
+                && !text.contains(where: { $0.isWhitespace || $0 == "'" || $0 == "(" || $0 == ")" })
+        }
+
+        private static func passphraseKey(in text: String) -> String? {
+            let opening = "Enter passphrase for key '"
+            let closing = "':"
+            guard text.hasPrefix(opening), text.hasSuffix(closing), text.count > opening.count + closing.count else { return nil }
+            let path = String(text.dropFirst(opening.count).dropLast(closing.count))
+            guard !path.contains("\n") else { return nil }
+            return (path as NSString).abbreviatingWithTildeInPath
+        }
+    }
+
+    /// The last line of ssh's prompt that has text, cleaned: what the sheet
+    /// shows for a question that Macterm does not know.
+    nonisolated static func promptLine(_ prompt: String) -> String {
+        displayText(prompt).split(whereSeparator: \.isNewline).last.map(String.init) ?? ""
     }
 
     /// The host, key type and fingerprint of ssh's question about a new host
@@ -243,7 +395,7 @@ final class SSHLoginPrompts {
     /// "ED25519 key fingerprint is: SHA256:…"), or nil when either line
     /// is missing. With `ProxyJump` the key can be the jump host's, so the
     /// sheet shows the host that ssh names.
-    static func hostKey(in prompt: String) -> HostKey? {
+    nonisolated static func hostKey(in prompt: String) -> HostKey? {
         let opening = "The authenticity of host '"
         var host: String?
         var key: (type: String, fingerprint: String)?
@@ -274,16 +426,8 @@ final class SSHLoginPrompts {
         var fingerprint: String
     }
 
-    /// ssh's text without its last line when that line asks "(yes/no…)?":
-    /// the buttons ask it.
-    static func withoutQuestion(_ text: String) -> String {
-        var lines = text.components(separatedBy: "\n")
-        if lines.count > 1, lines.last?.lowercased().contains("(yes/no") == true { lines.removeLast() }
-        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     /// ssh's prompt with its control characters removed, and capped.
-    static func displayText(_ prompt: String) -> String {
+    nonisolated static func displayText(_ prompt: String) -> String {
         let scalars = prompt.unicodeScalars.filter { $0 == "\n" || !CharacterSet.controlCharacters.contains($0) }
         return String(String.UnicodeScalarView(scalars).prefix(2048)).trimmingCharacters(in: .whitespacesAndNewlines)
     }

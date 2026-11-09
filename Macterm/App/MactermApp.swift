@@ -831,6 +831,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controlServer.attach { raw, peer in await handler.handle(raw, peerPID: peer) }
         // A master that exits takes its login questions with it.
         SSHConnections.shared.onConnectionExit = { SSHLoginPrompts.shared.cancel(sshPID: $0) }
+        SSHConnections.shared.onLoginNotice = { SSHLoginPrompts.shared.showNotice(host: $0, sshPID: $1, line: $2) }
         finderServices.attach(appState: appState, projectStore: projectStore)
         // A global chord fired before this point can only toggle the quick
         // terminal; every other action needs the workspace this hands over.
