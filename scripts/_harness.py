@@ -97,9 +97,9 @@ def runner_info():
 
 _LIBPROC = ctypes.CDLL("/usr/lib/libproc.dylib") if sys.platform == "darwin" else None
 # proc_pid_rusage flavor RUSAGE_INFO_V2: a 16-byte uuid, then uint64 fields.
-# ri_pkg_idle_wkups is at 32, ri_interrupt_wkups at 40, ri_phys_footprint at 72.
+# ri_interrupt_wkups is at 40, ri_phys_footprint at 72.
 _RUSAGE_INFO_V2 = 2
-_WAKEUPS_OFFSET = 32
+_INTERRUPT_WAKEUPS_OFFSET = 40
 _PHYS_FOOTPRINT_OFFSET = 72
 
 
@@ -119,14 +119,12 @@ def phys_footprint(pid):
 
 
 def wakeups(pid):
-    """The process's wakeups since it started (package idle plus interrupt,
-    the two columns that powermetrics adds), or None if the process is gone.
-    The kernel counts them, so this needs no sudo, also on a virtual runner."""
+    """The process's wakeups since it started, or None if the process is
+    gone. The kernel counts a package idle wakeup also as an interrupt
+    wakeup, so this is the interrupt count alone. It needs no sudo, also on
+    a virtual runner."""
     raw = _rusage(pid)
-    if raw is None:
-        return None
-    pkg_idle, interrupt = struct.unpack_from("QQ", raw, _WAKEUPS_OFFSET)
-    return pkg_idle + interrupt
+    return None if raw is None else struct.unpack_from("Q", raw, _INTERRUPT_WAKEUPS_OFFSET)[0]
 
 
 def wait_for_load(max_load, timeout):

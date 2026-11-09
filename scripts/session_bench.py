@@ -27,7 +27,7 @@ Reattach: fill a session with --reattach-lines lines of 200 columns, detach,
 then time a new client until the echo of a marker line that is sent after the
 client takes the terminal. The echo comes after the replay.
 Idle (macOS): open --idle-panes panes of /bin/cat in each layer, then read the
-phys_footprint and the wakeups of the session side (v1: the daemons; v2: the
+phys_footprint and the interrupt wakeups of the session side (v1: the daemons; v2: the
 server and the sessions) and of the clients. The programs in the panes are
 not counted: they are the same in both layers.
 
@@ -461,23 +461,23 @@ class Bench:
     def idle_sample(self, groups):
         """The median footprint of each group over three reads, then its
         wakeups over --idle-seconds."""
+        def read(measure, pids):
+            values = [measure(pid) for pid in pids]
+            if None in values:
+                raise BenchError("a session process ended during the idle measurement")
+            return sum(values)
+
         footprints = {group: [] for group in groups}
         for _ in range(3):
             for group, pids in groups.items():
-                footprints[group].append(sum(phys_footprint(pid) or 0 for pid in pids))
+                footprints[group].append(read(phys_footprint, pids))
             time.sleep(1)
 
-        def count(pids):
-            counts = [wakeups(pid) for pid in pids]
-            if None in counts:
-                raise BenchError("a session process ended during the idle measurement")
-            return sum(counts)
-
-        before = {group: count(pids) for group, pids in groups.items()}
+        before = {group: read(wakeups, pids) for group, pids in groups.items()}
         start = time.monotonic()
         time.sleep(self.args.idle_seconds)
         elapsed = time.monotonic() - start
-        after = {group: count(pids) for group, pids in groups.items()}
+        after = {group: read(wakeups, pids) for group, pids in groups.items()}
 
         result = {}
         for (layer, side), pids in groups.items():
@@ -516,35 +516,47 @@ class Bench:
                 program.close()
         return result
 
-    def cleanup(self):
-        # A session with no client keeps running and drops terminal replies,
-        # so every session that this run made is ended, local and remote.
-        if self.local_sessions:
+    def end_local_sessions(self):
+        """End every local session that this run made so far."""
+        if not self.local_sessions:
+            return
+        try:
             subprocess.run(
                 [self.args.zmx, "kill", *self.local_sessions, "--force"],
                 env=self.env, capture_output=True, timeout=30, check=False,
             )
-            # `zmx kill` ends v1's sessions. v2's sessions and the server
-            # carry a session name of this run in their argv: end them.
-            listing = subprocess.run(
-                ["ps", "-axo", "pid=,command="], capture_output=True, text=True, check=False
-            ).stdout
-            ours = set(self.local_sessions)
-            for line in listing.splitlines():
-                pid, _, command = line.strip().partition(" ")
-                if command.startswith(self.args.zmx + " ") and ours & set(command.split()):
-                    try:
-                        os.kill(int(pid), signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
-        if self.remote_sessions:
-            subprocess.run(
-                ["ssh", "-o", "BatchMode=yes", self.args.ssh_host,
-                 self.remote_zmx("kill", *self.remote_sessions, "--force")],
-                capture_output=True, timeout=60, check=False,
-            )
-        shutil.rmtree(self.zmx_dir, ignore_errors=True)
+        except subprocess.TimeoutExpired:
+            pass
+        # `zmx kill` ends v1's sessions. v2's sessions and the server carry a
+        # session name of this run in their argv: end them, and any v1 daemon
+        # that `zmx kill` did not end.
+        listing = subprocess.run(
+            ["ps", "-axo", "pid=,command="], capture_output=True, text=True, check=False
+        ).stdout
+        ours = set(self.local_sessions)
+        for line in listing.splitlines():
+            pid, _, command = line.strip().partition(" ")
+            if command.startswith(self.args.zmx + " ") and ours & set(command.split()):
+                try:
+                    os.kill(int(pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+        self.local_sessions = []
 
+    def cleanup(self):
+        # A session with no client keeps running and drops terminal replies,
+        # so every session that this run made is ended, local and remote.
+        self.end_local_sessions()
+        if self.remote_sessions:
+            try:
+                subprocess.run(
+                    ["ssh", "-o", "BatchMode=yes", self.args.ssh_host,
+                     self.remote_zmx("kill", *self.remote_sessions, "--force")],
+                    capture_output=True, timeout=60, check=False,
+                )
+            except subprocess.TimeoutExpired:
+                pass
+        shutil.rmtree(self.zmx_dir, ignore_errors=True)
 
 def ssh_version():
     result = subprocess.run(["ssh", "-V"], capture_output=True, text=True, check=False)
@@ -575,6 +587,8 @@ def cmd_run(args):
             arms[f"reattach-{layer}"] = result
         # phys_footprint and the wakeup counts are read through libproc.
         if sys.platform == "darwin":
+            # v2's server would also hold the sessions of the arms above.
+            bench.end_local_sessions()
             arms["idle"] = bench.idle_pair()
     except BenchError as exc:
         sys.exit(f"error: {exc}")
@@ -632,8 +646,8 @@ def pair_rows(arms):
         def total(layer, key):
             return layers[layer][f"session_{key}"] + layers[layer][f"client_{key}"]
         rows += [
-            (f"Memory, {size} idle panes (MB)", total("v1", "mb"), total("v2", "mb"), "{:.1f}"),
-            (f"Wakeups/s, {size} idle panes", total("v1", "wakeups_per_s"),
+            (f"Memory, idle panes: {size} (MB)", total("v1", "mb"), total("v2", "mb"), "{:.1f}"),
+            (f"Wakeups/s, idle panes: {size}", total("v1", "wakeups_per_s"),
              total("v2", "wakeups_per_s"), "{:.1f}"),
         ]
     return rows
