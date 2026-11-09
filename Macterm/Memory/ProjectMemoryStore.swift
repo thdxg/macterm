@@ -59,7 +59,7 @@ final class ProjectMemoryStore {
     /// The commands recorded in the projects read so far. After
     /// `prepareAll` it is every recorded command, and it follows each
     /// append and forget with no disk read. A file that does not decode
-    /// counts as none (`loadFailed`).
+    /// is not counted (`loadFailed`), but `forgetAll` still deletes it.
     var recordedCommandCount: Int {
         entries.values.reduce(0) { $0 + $1.count }
     }

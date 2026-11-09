@@ -82,8 +82,8 @@ struct IntelligenceSettings: View {
         )
     }
 
-    /// The count of every command that Forget All deletes, also while
-    /// Project Insights is off: older records stay on disk.
+    /// The count of the recorded commands that Macterm can read, also
+    /// while Project Insights is off: older records stay on disk.
     private var recordedCommands: String {
         let count = ProjectMemory.shared.store.recordedCommandCount
         guard count > 0 else {

@@ -139,4 +139,18 @@ struct ProjectMemoryStoreTests {
         reread.prepareAll()
         #expect(reread.recordedCommandCount == 0)
     }
+
+    @Test
+    func the_count_skips_files_that_do_not_decode_and_other_files() throws {
+        let directory = makeDirectory()
+        let writer = ProjectMemoryStore(directory: directory)
+        writer.append(entry("make"), to: UUID())
+        writer.flush()
+        try Data("not json".utf8).write(to: writer.fileURL(for: UUID()))
+        try Data("notes".utf8).write(to: directory.appendingPathComponent("notes.txt"))
+
+        let reader = ProjectMemoryStore(directory: directory)
+        reader.prepareAll()
+        #expect(reader.recordedCommandCount == 1)
+    }
 }
