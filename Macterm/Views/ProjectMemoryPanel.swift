@@ -152,7 +152,21 @@ struct ProjectMemoryPanel: View {
         }
     }
 
+    /// The Summary section, only with something under its heading: the
+    /// model's paragraph or button, the no-commands line or the failure card.
+    @ViewBuilder
     private func leftOff(_ summary: ProjectMemorySummary) -> some View {
+        // With no command, the line explains the empty Recent list, unless
+        // the summary already fills the space from the Git state. A stored
+        // summary is not drawn while the model cannot run.
+        let showsNoCommands = summary.lastActivity == nil
+            && (!summaryEnabled || summarizer.state(for: project.id).text.isEmpty)
+        if summaryEnabled || showsNoCommands || summary.unresolvedFailure != nil {
+            leftOffSection(summary, showsNoCommands: showsNoCommands)
+        }
+    }
+
+    private func leftOffSection(_ summary: ProjectMemorySummary, showsNoCommands: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             // The header row carries the reload button, so the body is the
             // paragraph alone.
@@ -164,9 +178,7 @@ struct ProjectMemoryPanel: View {
             }
             VStack(alignment: .leading, spacing: 10) {
                 summaryParagraph
-                // With no command, the line explains the empty Recent list,
-                // unless the summary already fills the space from the Git state.
-                if summary.lastActivity == nil, summarizer.state(for: project.id).text.isEmpty {
+                if showsNoCommands {
                     Text("No commands recorded yet. Run something in this project.")
                         .font(.callout)
                         .foregroundStyle(MactermTheme.fgMuted)
