@@ -231,7 +231,7 @@ struct SSHConnectionsTests {
             try await Task.sleep(for: .milliseconds(100))
         }
         #expect(reports == ["To authenticate, visit: https://example.test/x"])
-        connections.disconnect("box")
+        await connections.disconnect("box")
         await #expect(throws: SSHConnections.Failure.self) { try await login.value }
         #expect(reports == ["To authenticate, visit: https://example.test/x", nil])
     }
@@ -262,7 +262,6 @@ struct SSHConnectionsTests {
         let sshd = try LocalSSHD()
         defer { sshd.stop() }
         let connections = SSHConnections(configuration: sshd.configuration)
-        defer { connections.disconnectAll() }
 
         let first = try await connections.run("box", "echo one")
         let second = try await connections.run("box", "echo two")
@@ -281,7 +280,6 @@ struct SSHConnectionsTests {
         // As "Macterm Debug" in Application Support.
         configuration.controlDirectory = sshd.directory.appendingPathComponent("M D", isDirectory: true)
         let connections = SSHConnections(configuration: configuration)
-        defer { connections.disconnectAll() }
 
         let route = try await connections.connect("box")
         #expect(route.controlPath.contains("M D/"))
@@ -302,7 +300,6 @@ struct SSHConnectionsTests {
         configuration.askpass = askpass.path
 
         let connections = SSHConnections(configuration: configuration)
-        defer { connections.disconnectAll() }
         defer {
             // The fake askpass outlives its master.
             if let text = try? String(contentsOf: pidFile, encoding: .utf8),
@@ -337,7 +334,6 @@ struct SSHConnectionsTests {
         defer { user.terminate() }
 
         let connections = SSHConnections(configuration: sshd.configuration)
-        defer { connections.disconnectAll() }
         let route = try await connections.connect("box")
         #expect(route == .init(controlPath: userPath, isUsersOwn: true))
         #expect(try await connections.run("box", "echo reused").stdout == "reused\n")
@@ -357,10 +353,58 @@ struct SSHConnectionsTests {
         configuration.askpass = askpass.path
 
         let connections = SSHConnections(configuration: configuration)
-        defer { connections.disconnectAll() }
         #expect(try await connections.run("box", "echo in").stdout == "in\n")
         let prompts = try String(contentsOf: log, encoding: .utf8)
         #expect(prompts.contains("passphrase"))
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_quit_and_a_new_launch_log_in_once() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let first = SSHConnections(configuration: sshd.configuration)
+        #expect(try await first.run("box", "echo one").stdout == "one\n")
+        first.endLogins()
+
+        // The next launch finds the master on the same path.
+        let second = SSHConnections(configuration: sshd.configuration)
+        #expect(try await second.run("box", "echo two").stdout == "two\n")
+        #expect(second.logins["box"] == nil)
+        #expect(sshd.acceptedLogins() == 1)
+        // The askpass of a master is in its own environment, never in the
+        // app's, so a pane's ssh does not get it.
+        #expect(ProcessInfo.processInfo.environment["SSH_ASKPASS"] == nil)
+        #expect(ProcessInfo.processInfo.environment[SSHConnections.askpassSocketVariable] == nil)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func a_dropped_link_ends_the_connection_and_the_next_command_logs_in() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let connections = SSHConnections(configuration: sshd.configuration)
+        let route = try await connections.connect("box")
+
+        sshd.dropConnections()
+        let deadline = ContinuousClock.now + .seconds(10)
+        while FileManager.default.fileExists(atPath: route.controlPath), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(!FileManager.default.fileExists(atPath: route.controlPath))
+        #expect(try await connections.run("box", "echo back").stdout == "back\n")
+        #expect(connections.logins["box"] == 2)
+        #expect(sshd.acceptedLogins() == 2)
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(1)))
+    func disconnect_ends_the_connection() async throws {
+        let sshd = try LocalSSHD()
+        defer { sshd.stop() }
+        let connections = SSHConnections(configuration: sshd.configuration)
+        let route = try await connections.connect("box")
+        await connections.disconnect("box")
+        #expect(!FileManager.default.fileExists(atPath: route.controlPath))
+        _ = try await connections.connect("box")
+        #expect(connections.logins["box"] == 2)
     }
 
     @Test
@@ -394,7 +438,6 @@ struct SSHConnectionsTests {
         configuration.askpass = askpass.path
 
         let connections = SSHConnections(configuration: configuration)
-        defer { connections.disconnectAll() }
         let login = Task { try await connections.connect("box") }
         var pid: pid_t?
         for _ in 0 ..< 100 where pid == nil {
@@ -521,7 +564,18 @@ private struct LocalSSHD {
         return log.components(separatedBy: "\n").count { $0.contains("Accepted publickey") }
     }
 
+    /// End every connection that the sshd serves, as a link that drops.
+    /// A master of `SSHConnections` outlives its test otherwise.
+    func dropConnections() {
+        let pkill = Process()
+        pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        pkill.arguments = ["-TERM", "-P", String(process.processIdentifier)]
+        try? pkill.run()
+        pkill.waitUntilExit()
+    }
+
     func stop() {
+        dropConnections()
         process.terminate()
         process.waitUntilExit()
         try? FileManager.default.removeItem(at: directory)

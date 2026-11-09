@@ -14,7 +14,13 @@ private let logger = Logger(subsystem: appBundleID, category: "SSHConnections")
 ///   `<App Support>/cm/`. Its prompts go to `macterm askpass`
 ///   (`SSH_ASKPASS_REQUIRE=force`), which asks the GUI (`SSHLoginPrompts`).
 ///   The GUI answers only the bundled askpass, started under one of these
-///   masters (`askpassOwner(forPeer:)`, design/006 §4).
+///   masters while it logs in (`askpassOwner(forPeer:)`, design/006 §4).
+/// - Macterm's master stays after quit, until the link drops.
+///   `ControlPersist=yes` on the command line wins over the user's config:
+///   after the login, ssh moves the master into the background, and the ssh
+///   that Macterm started exits. The next launch finds the master on the
+///   same path and logs in to no host again. `ServerAlive*` ends the master
+///   when the host stops answering, after a network change or a long sleep.
 /// - A command over the master (`run`) never logs in by itself: `BatchMode`
 ///   refuses a prompt, and `ProxyCommand=/usr/bin/false` stops the direct
 ///   connection that ssh tries when the master does not answer. It fails
@@ -91,8 +97,9 @@ final class SSHConnections {
 
     private let configuration: Configuration
     private var routes: [String: Route] = [:]
-    /// Macterm's own master for each host.
-    private var owned: [String: Process] = [:]
+    /// The ssh of each login that has not finished. After the login, the
+    /// master is in the background and is no child of Macterm.
+    private var loggingIn: [String: Process] = [:]
     private var connecting: [String: Task<Route, Error>] = [:]
     /// Masters whose login the user cancelled.
     private var cancelled: Set<pid_t> = []
@@ -116,13 +123,8 @@ final class SSHConnections {
     func connect(_ destination: String) async throws -> Route {
         guard Self.isValidDestination(destination) else { throw Failure.invalidDestination(destination) }
         if let route = routes[destination] {
-            let alive = if route.isUsersOwn {
-                await controlAnswers(destination, at: route.controlPath)
-            } else {
-                owned[destination]?.isRunning == true
-            }
-            if alive { return route }
-            forget(destination)
+            if await controlAnswers(destination, at: route.controlPath) { return route }
+            routes[destination] = nil
         }
         if let task = connecting[destination] { return try await task.value }
         let task = Task { try await self.open(destination) }
@@ -150,10 +152,15 @@ final class SSHConnections {
         return outcome
     }
 
-    /// End Macterm's master for `destination`. A user's master stays.
-    func disconnect(_ destination: String) {
-        owned[destination]?.terminate()
+    /// End Macterm's master for `destination`, or its login. A user's master
+    /// stays.
+    func disconnect(_ destination: String) async {
+        loggingIn[destination]?.terminate()
         forget(destination)
+        let path = SSHControlPath.own(for: destination, in: configuration.controlDirectory)
+        if await controlAnswers(destination, at: path) {
+            _ = await runSSH(["-O", "exit", "-S", path, "--", destination], timeout: .seconds(5))
+        }
     }
 
     /// The user cancelled a question of the login of the connection `pid`. End the
@@ -162,7 +169,7 @@ final class SSHConnections {
     /// it can ask once more; the app refuses that askpass (no master), and
     /// the ssh then exits on the closed connection.
     func cancelLogin(connectionPID pid: pid_t) {
-        guard let process = owned.values.first(where: { $0.processIdentifier == pid }), process.isRunning else { return }
+        guard let process = loggingIn.values.first(where: { $0.processIdentifier == pid }), process.isRunning else { return }
         cancelled.insert(pid)
         process.terminate()
     }
@@ -178,21 +185,21 @@ final class SSHConnections {
         return await body()
     }
 
-    /// At quit: end every master of Macterm.
-    func disconnectAll() {
-        for process in owned.values {
+    /// At quit: end each login that has not finished. A master that has
+    /// logged in stays for the next launch.
+    func endLogins() {
+        for process in loggingIn.values {
             process.terminate()
         }
-        owned.removeAll()
-        routes.removeAll()
+        loggingIn.removeAll()
     }
 
     /// The host and the master pid for an askpass `pid`, or nil when no
     /// master of Macterm started that process.
     ///
     /// - The peer must run `askpassExecutable`. A pid alone can be reused.
-    /// - A master of Macterm must be its parent, or an ancestor up to
-    ///   `askpassAncestry` steps above it. ssh runs its askpass with a direct
+    /// - A master of Macterm that logs in must be its parent, or an ancestor
+    ///   up to `askpassAncestry` steps above it. ssh runs its askpass with a direct
     ///   `exec` (`readpass.c`), so for the login of the host itself the
     ///   parent is the master. A `ProxyJump` host's login comes from an ssh
     ///   that the master started through `sh -c`, two steps lower.
@@ -201,7 +208,7 @@ final class SSHConnections {
         var ancestor = pid
         for _ in 0 ..< Self.askpassAncestry {
             guard let parent = ProcessInspector.parentPID(of: ancestor), parent > 1 else { return nil }
-            for (host, process) in owned where process.isRunning && process.processIdentifier == parent {
+            for (host, process) in loggingIn where process.isRunning && process.processIdentifier == parent {
                 return (host, parent)
             }
             ancestor = parent
@@ -257,13 +264,13 @@ final class SSHConnections {
         try FileManager.default.createDirectory(
             at: configuration.controlDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]
         )
-        // A master of an earlier run that the app did not end (a crash, a
-        // force quit) still listens there. End it, so that it does not stay
-        // with no socket. Then remove what is left: ssh refuses to listen on
-        // a path that exists.
+        // The master of an earlier run of Macterm.
         if await controlAnswers(destination, at: path) {
-            _ = await runSSH(["-O", "exit", "-S", path, "--", destination], timeout: .seconds(5))
+            logger.info("ssh: host=\(destination, privacy: .public) uses the master of an earlier run")
+            return Route(controlPath: path, isUsersOwn: false)
         }
+        // A master that died left its socket. ssh refuses to listen on a
+        // path that exists.
         unlink(path)
 
         guard let executable = configuration.ssh.first else { throw Failure.cannotStart("no ssh") }
@@ -274,7 +281,9 @@ final class SSHConnections {
             // spaces, and "Macterm Debug" has one.
             "-M", "-N",
             "-S", path,
-            "-o", "ControlPersist=no",
+            "-o", "ControlPersist=yes",
+            "-o", "ServerAliveInterval=15",
+            "-o", "ServerAliveCountMax=3",
             "-o", "ConnectTimeout=10",
             "--", destination,
         ])
@@ -298,7 +307,7 @@ final class SSHConnections {
             stderr.stop()
             throw Failure.cannotStart(EnglishErrorText.describe(error))
         }
-        owned[destination] = process
+        loggingIn[destination] = process
         // A pid that an earlier, cancelled master had.
         cancelled.remove(process.processIdentifier)
 
@@ -317,9 +326,11 @@ final class SSHConnections {
                 onLoginNotice?(destination, pid, line)
             }
             guard process.isRunning else {
-                if process.isRunning { process.terminate() }
+                // The ssh exits when it moves the master into the background,
+                // after the master listens.
+                if FileManager.default.fileExists(atPath: path) { break }
                 await stderr.finish(within: ProcessRunner.drainTimeout)
-                if owned[destination] === process { owned[destination] = nil }
+                if loggingIn[destination] === process { loggingIn[destination] = nil }
                 if cancelled.remove(process.processIdentifier) != nil {
                     logger.info("ssh: host=\(destination, privacy: .public) login cancelled")
                     throw Failure.cancelled
@@ -335,6 +346,7 @@ final class SSHConnections {
             }
         }
         stderr.discard()
+        if loggingIn[destination] === process { loggingIn[destination] = nil }
         let count = logins[destination, default: 0] + 1
         logins[destination] = count
         logger.info("ssh login: host=\(destination, privacy: .public) logins=\(count, privacy: .public)")
@@ -343,14 +355,14 @@ final class SSHConnections {
 
     private func connectionExited(_ destination: String, process: Process, pid: pid_t) {
         onConnectionExit?(pid)
-        guard owned[destination] === process else { return }
-        logger.info("ssh: host=\(destination, privacy: .public) master exited")
+        guard loggingIn[destination] === process else { return }
+        logger.info("ssh: host=\(destination, privacy: .public) login ended")
         forget(destination)
     }
 
     private func forget(_ destination: String) {
         routes[destination] = nil
-        owned[destination] = nil
+        loggingIn[destination] = nil
     }
 
     /// `[user@]host` and nothing that ssh could read as an option or that a

@@ -107,7 +107,7 @@ final class ControlHandler {
         case "project.memory": return try projectMemory(args)
         case "tab.merge": return try tabMerge(args)
         case "host.connect": return try await hostConnect(args)
-        case "host.disconnect": return try hostDisconnect(args)
+        case "host.disconnect": return try await hostDisconnect(args)
         #endif
         case "ssh.askpass": return try await sshAskpass(args, peerPID: peerPID)
         case "grid": return try grid(args)
@@ -1844,9 +1844,9 @@ extension ControlHandler {
         }
     }
 
-    func hostDisconnect(_ args: ControlArgs) throws -> ControlData {
+    func hostDisconnect(_ args: ControlArgs) async throws -> ControlData {
         guard let host = args.host else { throw ControlError(code: .badRequest, message: "host disconnect needs a host") }
-        SSHConnections.shared.disconnect(host)
+        await SSHConnections.shared.disconnect(host)
         return ControlData()
     }
     #endif

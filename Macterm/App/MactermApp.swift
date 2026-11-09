@@ -881,7 +881,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_: Notification) {
         controlServer.stop()
-        SSHConnections.shared.disconnectAll()
+        // A master that logged in stays for the next launch.
+        SSHConnections.shared.endLogins()
         onTerminate?()
         // A command recorded in the last half second is still waiting for
         // its debounced write.
