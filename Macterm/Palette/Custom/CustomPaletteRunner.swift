@@ -74,12 +74,16 @@ enum CustomPaletteRunner {
                         child.terminateGroup()
                         throw error
                     }
-                    child.terminateGroup()
+                    child.timeOut()
                     throw TimedOut()
                 }
                 defer { group.cancelAll() }
                 return try await group.next() ?? 0
             }
+            // The SIGTERM of the timeout can end the command before the
+            // timeout task throws, and then its exit status (143) comes
+            // first. The timeout still wins.
+            if child.didTimeOut { throw TimedOut() }
             return await CustomPaletteCommandResult(stdout: output.value, stderr: errors.value, status: status)
         }
     }
@@ -95,6 +99,12 @@ private final class SpawnedCommand: @unchecked Sendable {
     let stderr: Int32
     private let lock = NSLock()
     private var exited = false
+    private var timedOut = false
+
+    /// True once `timeOut` ran, whatever the exit status says.
+    var didTimeOut: Bool {
+        lock.withLock { timedOut }
+    }
 
     init(argv: [String], environment: [String: String], currentDirectory: String?) throws {
         var outPipe: [Int32] = [0, 0]
@@ -196,6 +206,13 @@ private final class SpawnedCommand: @unchecked Sendable {
                 continuation.resume(returning: signal == 0 ? (status >> 8) & 0xFF : 128 + signal)
             }
         }
+    }
+
+    /// Records the timeout, then ends the group. The record comes first, so
+    /// a runner that sees the exit status of the SIGTERM also sees it.
+    func timeOut() {
+        lock.withLock { timedOut = true }
+        terminateGroup()
     }
 
     /// SIGTERM to the whole group, SIGKILL a second later to whatever is
