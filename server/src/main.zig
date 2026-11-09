@@ -567,8 +567,8 @@ fn help(io: std.Io) !void {
     try w.interface.flush();
 }
 
-/// `__schema swift | metadata | fixtures` writes that file of the protocol
-/// schema to stdout. `__schema check [old-metadata.json]` checks this build's
+/// `__schema swift | metadata | fixtures | foreground` writes that file of
+/// the protocol schema to stdout. `__schema check [old-metadata.json]` checks this build's
 /// schema against an older one and exits 1 on a problem (design/003 §3).
 /// Hidden: `scripts/protocol.sh` runs it.
 fn schemaCommand(gpa: std.mem.Allocator, io: std.Io, what: ?[]const u8, path: ?[]const u8) !void {
@@ -579,13 +579,15 @@ fn schemaCommand(gpa: std.mem.Allocator, io: std.Io, what: ?[]const u8, path: ?[
     var buf: [4096]u8 = undefined;
     var out = std.Io.File.stdout().writer(io, &buf);
     const w = &out.interface;
-    const kind = what orelse printError(io, "__schema needs swift, metadata, fixtures or check", .{});
+    const kind = what orelse printError(io, "__schema needs swift, metadata, fixtures, foreground or check", .{});
     if (std.mem.eql(u8, kind, "swift")) {
         try schema.writeSwift(w, schema.metadata);
     } else if (std.mem.eql(u8, kind, "metadata")) {
         try schema.writeMetadata(w, schema.metadata);
     } else if (std.mem.eql(u8, kind, "fixtures")) {
         try schema.writeFixtures(arena, w);
+    } else if (std.mem.eql(u8, kind, "foreground")) {
+        try v2attach.writeForegroundFixtures(w);
     } else if (std.mem.eql(u8, kind, "check")) {
         const old: ?schema.Metadata = if (path) |p| blk: {
             const text = std.Io.Dir.cwd().readFileAlloc(io, p, arena, .limited(16 * 1024 * 1024)) catch |err|

@@ -1,0 +1,180 @@
+#!/usr/bin/env bats
+# The events of a v2 session (src/events.zig, src/session.zig): title, cwd,
+# foreground, marks, progress, bell, the heartbeat and the run status, from a
+# shell that a test types into. test/v2client.py is the client; `zmx
+# connect` runs on a pty (test/ptyrun.py).
+
+load test_helper
+
+setup_file() {
+  export PYTHONPATH="$BATS_TEST_DIRNAME"
+}
+
+# As in session_v2.bats.
+setup() {
+  ZMX="${ZMX:-$REPO_DIR/zig-out/bin/zmx}"
+  if [[ ! -x "$ZMX" ]]; then
+    (cd "$REPO_DIR" && zig build)
+  fi
+  export ZMX
+  RT="$(mktemp -d "${TMPDIR:-/tmp}/rt.XXXXXX")"
+  export MACTERM_RUNTIME_DIR="$RT/run"
+}
+
+teardown() {
+  local sock pid
+  for sock in "$MACTERM_RUNTIME_DIR"/*; do
+    [[ -S "$sock" ]] || continue
+    pid=$(python3 "$BATS_TEST_DIRNAME/v2client.py" pid "$(basename "$sock")" 2>/dev/null) || continue
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+  rm -rf "$RT"
+}
+
+@test "events: title, cwd, bell, progress and the heartbeat" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+import time
+from v2client import Client
+c = Client("s1")
+c.attach()
+c.wait_msg("state")
+c.type("printf '\\033]2;my title\\007\\033]7;file://h/tmp/a%%20b\\007\\007\\033]9;4;1;42\\007'; printf 'done-%s\\n' 1\r")
+c.wait_output("done-1")
+assert c.wait_msg("title")["title"] == b"my title"
+assert c.wait_msg("cwd")["url"] == b"file://h/tmp/a%20b"
+c.wait_msg("bell")
+assert c.wait_msg("progress") == {"state": "set", "percent": 42}
+# The heartbeat: a new one after a quiet window.
+beats = len(c.messages("activity"))
+time.sleep(0.6)
+c.type("printf 'beat-%s\\n' 2\r")
+c.wait_output("beat-2")
+c.wait_msg("activity", count=beats + 1)
+# A progress report that sets work starts a run.
+assert c.wait_msg("status")["state"] == "running"
+
+# In one write, an event goes after the output before its sequence and
+# before the output after it.
+c.type("printf '%s-1\\n\\033]2;between\\007%s-2\\n' aa bb\r")
+c.wait_output("bb-2")
+c.wait(lambda: any(m["a"]["title"] == b"between" for m in c.messages("title")), what="the title")
+def frame_at(pred):
+    return next(i for i, (ch, kind, v) in enumerate(c.frames) if ch == 1 and pred(kind, v))
+title_at = frame_at(lambda kind, v: kind == 0 and v["t"] == "title" and v["a"]["title"] == b"between")
+before_at = frame_at(lambda kind, v: kind == 1 and b"aa-1" in v)
+after_at = frame_at(lambda kind, v: kind == 1 and b"bb-2" in v)
+assert before_at < title_at < after_at, (before_at, title_at, after_at)
+PY
+}
+
+@test "events: marks carry the command and the exit code, and the status follows them" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+from v2client import Client
+c = Client("s1")
+c.attach()
+c.wait_msg("state")
+c.type("printf '\\033]133;A\\007$ \\033]133;B\\007'; printf '\\033]133;C;cmdline_url=make%%20test\\007'; sleep 0.2; printf '%s-%s\\n\\033]133;D;3\\007' tail 9\r")
+end = c.wait_msg("mark", count=4)
+kinds = [m["a"]["kind"] for m in c.messages("mark")]
+assert kinds[:4] == ["prompt", "input", "output", "end"], kinds
+assert c.messages("mark")[2]["a"]["command"] == b"make test"
+assert end == {"kind": "end", "command": b"make test", "exit_code": 3}, end
+# The command's last output comes before its end mark, also in one write.
+end_at = next(i for i, (ch, kind, v) in enumerate(c.frames) if kind == 0 and ch == 1 and v["t"] == "mark" and v["a"]["kind"] == "end")
+assert b"tail-9" in b"".join(v for ch, kind, v in c.frames[:end_at] if kind == 1)
+assert c.wait_msg("status", count=1)["state"] == "running"
+# A nonzero exit code is not a failed run.
+assert c.wait_msg("status", count=2) == {"state": "done", "failed": False}
+PY
+}
+
+@test "events: a title flood coalesces, and the newest title arrives" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+import time
+from v2client import Client
+c = Client("s1")
+c.attach()
+c.wait_msg("state")
+start = time.time()
+c.type("awk 'BEGIN { for (i = 0; i < 5000; i++) printf \"\\033]0;t%d\\007\", i }'; printf 'flood-%s\\n' done\r")
+c.wait_output("flood-done")
+elapsed_ms = (time.time() - start) * 1000
+c.wait(lambda: any(m["a"]["title"] == b"t4999" for m in c.messages("title")), what="the newest title")
+titles = [m["a"]["title"] for m in c.messages("title")]
+# At most one title at once and one at the end of each 16 ms window.
+assert len(titles) <= 2 * (elapsed_ms / 16 + 2), (len(titles), elapsed_ms)
+assert len(titles) < 1000, len(titles)
+assert titles[-1] == b"t4999", titles[-3:]
+PY
+}
+
+@test "events: the foreground follows the program that holds the pty" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+from v2client import Client
+c = Client("s1")
+c.attach()
+first = c.wait_msg("foreground")
+assert first["idle"] is True, first
+c.type("sleep 30\r")
+def last():
+    return c.messages("foreground")[-1]["a"]
+# The group can change before the child `exec`s sleep: wait for its name.
+c.wait(lambda: b"sleep" in last()["comm"], what="the sleep foreground")
+assert last()["idle"] is False and last()["args"] == b"sleep 30", last()
+c.type(b"\x03")
+c.wait(lambda: last()["idle"] is True, what="the idle foreground")
+PY
+}
+
+@test "events: a client that connects later gets the current state" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+from v2client import Client
+a = Client("s1")
+a.attach()
+a.wait_msg("state")
+a.type("printf '\\033]2;kept\\007\\033]7;file:///srv\\007\\033]9;4;3\\007'; printf 'set-%s\\n' 1\r")
+a.wait_output("set-1")
+a.wait_msg("status")
+
+b = Client("s1")
+b.wait_msg("state")
+assert b.wait_msg("title")["title"] == b"kept"
+assert b.wait_msg("cwd")["url"] == b"file:///srv"
+assert b.wait_msg("progress")["state"] == "indeterminate"
+assert b.wait_msg("status")["state"] == "running"
+assert b.wait_msg("foreground")["idle"] is True
+PY
+}
+
+@test "events: connect writes the foreground as v1's APC only when asked" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+import os, time
+from ptyrun import Pty
+os.environ["ZMX_FOREGROUND_EVENTS"] = "1"
+p = Pty([os.environ["ZMX"], "connect", "s1"])
+p.wait_output("\x1b_zmx;foreground;1;")
+p.type("sleep 30\r")
+p.wait_output(";sleep 30\x1b\\")
+p.type(b"\x03")
+deadline = time.time() + 10
+while p.output.count(b"\x1b_zmx;foreground;1;") < 2:
+    assert time.time() < deadline, p.output[-300:]
+    p._read()
+p.type(b"\x1c")
+assert p.wait_exit() == 0
+
+del os.environ["ZMX_FOREGROUND_EVENTS"]
+q = Pty([os.environ["ZMX"], "connect", "s1"])
+q.type("printf 'plain-%s\\n' 1\r")
+q.wait_output("plain-1")
+assert b"\x1b_zmx;foreground" not in q.output, q.output[-300:]
+q.type(b"\x1c")
+assert q.wait_exit() == 0
+PY
+}

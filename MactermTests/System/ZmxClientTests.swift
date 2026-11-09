@@ -440,6 +440,44 @@ struct ZmxForegroundEventsTests {
         #expect(ZmxForegroundEvents.reportPrefix == "zmx;foreground;")
     }
 
+    /// The APCs that the v2 attach client writes for the session's
+    /// `foreground` message (`server/schema/foreground.json`, written by
+    /// `writeForegroundFixtures` in `server/src/attach.zig`). libghostty
+    /// gives the app the APC without `ESC _` and `ESC \`.
+    @Test
+    func theV2AttachClientsAPCsParse() throws {
+        struct Fixture: Decodable {
+            let name: String
+            let apc: String
+        }
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // System
+            .deletingLastPathComponent() // MactermTests
+            .deletingLastPathComponent() // repo root
+            .appendingPathComponent("server/schema/foreground.json")
+        let fixtures = try JSONDecoder().decode([Fixture].self, from: Data(contentsOf: url))
+        var parsed: [String: RemoteForeground] = [:]
+        for fixture in fixtures {
+            var bytes: [UInt8] = []
+            var index = fixture.apc.startIndex
+            while index < fixture.apc.endIndex {
+                let next = fixture.apc.index(index, offsetBy: 2)
+                try bytes.append(#require(UInt8(fixture.apc[index ..< next], radix: 16)))
+                index = next
+            }
+            #expect(bytes.starts(with: [0x1B, 0x5F]), "\(fixture.name)")
+            #expect(bytes.suffix(2) == [0x1B, 0x5C], "\(fixture.name)")
+            let payload = try #require(String(bytes: bytes.dropFirst(2).dropLast(2), encoding: .utf8))
+            parsed[fixture.name] = ZmxForegroundEvents.parse(payload)
+        }
+        #expect(parsed == [
+            "program": RemoteForeground(comm: "/usr/bin/hx", isIdle: false, isShell: false, command: "hx a;b.md"),
+            "idle shell": RemoteForeground(comm: "-zsh", isIdle: true, isShell: true, command: nil),
+            "no /etc/shells": RemoteForeground(comm: "claude", isIdle: false, isShell: nil, command: "claude --resume"),
+            "control bytes": RemoteForeground(comm: "ev il", isIdle: false, isShell: false, command: "printf ' \\'"),
+        ])
+    }
+
     @Test
     func aReportParsesIntoTheSameShapeAsAProbeLine() {
         let report = ZmxForegroundEvents.parse("zmx;foreground;0;0;/usr/bin/hx;hx --vsplit README.md")
