@@ -12,14 +12,14 @@ struct IntelligenceSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Enable Project Insights", isOn: projectInsights)
-                    .disabled(!modelIsAvailable)
-                if !modelIsAvailable {
-                    Text(modelStatus)
+                Group {
+                    Toggle(isOn: projectInsights) {
+                        Text("Enable Project Insights").dimsWhenDisabled()
+                    }
+                    Text(projectInsightsCaption)
                         .settingsCaption()
                 }
-                Text("Shows where you left off in each project, its Git branches and the commands to run next.")
-                    .settingsCaption()
+                .disabled(!modelIsAvailable)
                 HStack {
                     Text("Recorded commands")
                     Spacer()
@@ -60,6 +60,20 @@ struct IntelligenceSettings: View {
         Binding(
             get: { modelIsAvailable && preferences.projectMemory },
             set: { preferences.projectMemory = $0 }
+        )
+    }
+
+    /// The description, and after it the reason when the model is not
+    /// available, in one caption.
+    private var projectInsightsCaption: String {
+        let description = String(
+            localized: "Shows where you left off in each project, its Git branches and the commands to run next."
+        )
+        guard !modelIsAvailable else { return description }
+        return String(
+            localized: "settings.intelligence.projectInsights.unavailableCaption",
+            defaultValue: "\(description) \(modelStatus).",
+            comment: "The description of Project Insights, then the reason that it is not available."
         )
     }
 

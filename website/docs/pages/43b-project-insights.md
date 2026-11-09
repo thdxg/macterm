@@ -17,7 +17,7 @@ Macterm stores the records on your Mac only. It does not record the output of yo
 - macOS 26 or later.
 - A Mac that can run Apple Intelligence, with Apple Intelligence turned on in **System Settings**.
 
-Without Apple Intelligence, the **Enable Project Insights** switch is disabled, and the text below it tells you why. Macterm records nothing, and the command, the button and the panel are not there. When you turn on Apple Intelligence again, Project Insights comes back as you set it.
+Without Apple Intelligence, the **Enable Project Insights** switch is dimmed, and its description ends with the reason. Macterm records nothing, and the command, the button and the panel are not there. When you turn on Apple Intelligence again, Project Insights comes back as you set it.
 
 ## Turn on Project Insights
 

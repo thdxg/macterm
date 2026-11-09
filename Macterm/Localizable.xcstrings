@@ -12146,6 +12146,30 @@
         }
       }
     },
+    "settings.intelligence.projectInsights.unavailableCaption" : {
+      "comment" : "The description of Project Insights, then the reason that it is not available.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@%2$@。"
+          }
+        }
+      }
+    },
     "shortcutsAccess.allow" : {
       "comment" : "A value of the macos-shortcuts setting: always allow Shortcuts",
       "extractionState" : "extracted_with_value",
