@@ -827,22 +827,6 @@
         }
       }
     },
-    "A short paragraph at the top of the panel says where you left off." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "패널 맨 위의 짧은 문단이 마지막으로 하던 작업을 알려 줍니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "面板顶部的一小段文字会说明你上次进行到哪里。"
-          }
-        }
-      }
-    },
     "A shortcut wants to run an action in %@. It can create projects and tabs. It can also type into your terminals." : {
       "localizations" : {
         "ko" : {
@@ -1404,22 +1388,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Apple 智能不可用。请在系统设置中打开它。"
-          }
-        }
-      }
-    },
-    "Apple's on-device model writes it. Nothing leaves this Mac." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple의 기기 내 모델이 작성합니다. 아무것도 이 Mac 밖으로 나가지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "由 Apple 的设备端模型撰写。任何内容都不会离开这台 Mac。"
           }
         }
       }
@@ -7526,6 +7494,38 @@
         }
       }
     },
+    "Project Insights needs Apple Intelligence. Turn it on in System Settings." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 인사이트에는 Apple Intelligence가 필요합니다. 시스템 설정에서 켜십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目洞察需要 Apple 智能。请在系统设置中打开。"
+          }
+        }
+      }
+    },
+    "Project Insights needs a Mac with Apple Intelligence." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 인사이트에는 Apple Intelligence를 지원하는 Mac이 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目洞察需要支持 Apple 智能的 Mac。"
+          }
+        }
+      }
+    },
     "Project Insights needs macOS 26 or later." : {
       "localizations" : {
         "ko" : {
@@ -9891,22 +9891,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新生成摘要"
-          }
-        }
-      }
-    },
-    "Summarize with Apple Intelligence" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Intelligence로 요약"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用 Apple 智能生成摘要"
           }
         }
       }
@@ -12384,6 +12368,30 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "rows: %@ 指定了路径，但输出不是 JSON"
+          }
+        }
+      }
+    },
+    "settings.intelligence.projectInsights.unavailableCaption" : {
+      "comment" : "The description of Project Insights, then the reason that it is not available.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@%2$@。"
           }
         }
       }

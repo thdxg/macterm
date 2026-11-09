@@ -61,12 +61,11 @@ final class ProjectMemorySummarizer {
 
     init() {}
 
-    /// Whether the panel shows a summary: memory is on, the switch is on,
-    /// and the model can run on this Mac.
+    /// Whether the panel shows a summary: memory is on and the model can
+    /// run. The model is asked again here, because the DEBUG
+    /// `project memory` verb turns memory on without it.
     static var isEnabled: Bool {
-        ProjectMemory.isEnabled
-            && Preferences.shared.projectMemorySummary
-            && OnDeviceModel.availability == .available
+        ProjectMemory.isEnabled && OnDeviceModel.availability == .available
     }
 
     func state(for projectID: UUID) -> State {

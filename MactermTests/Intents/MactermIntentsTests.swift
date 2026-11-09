@@ -605,7 +605,7 @@ struct MactermIntentsTests {
     // MARK: - Where Did I Leave Off reads project memory
 
     @Test
-    func where_did_i_leave_off_answers_from_the_log_and_refuses_while_memory_is_off() async throws {
+    func where_did_i_leave_off_answers_from_the_log_and_refuses_while_memory_or_the_model_is_off() async throws {
         let (appState, projectStore) = makeHost()
         defer { teardown() }
         let project = seedProject(appState, projectStore)
@@ -615,15 +615,43 @@ struct MactermIntentsTests {
         MactermIntentHost.shared.projectMemory = { memory }
         defer { MactermIntentHost.shared.projectMemory = { .shared } }
         let wasOn = Preferences.shared.projectMemory
-        defer { Preferences.shared.projectMemory = wasOn }
+        let wasReader = ProjectMemory.shared.modelReader
+        defer {
+            Preferences.shared.projectMemory = wasOn
+            ProjectMemory.shared.modelReader = wasReader
+            ProjectMemory.shared.refreshModelAvailability()
+        }
 
         let intent = GetMactermProjectMemoryIntent()
         intent.project = MactermProjectEntity(project)
 
+        ProjectMemory.shared.modelReader = { .available }
+        ProjectMemory.shared.refreshModelAvailability()
         Preferences.shared.projectMemory = false
         await #expect(throws: MactermIntentError.self) { try await intent.perform() }
 
+        // Project Insights needs Apple Intelligence, also with its switch on,
+        // and the refusal says why.
         Preferences.shared.projectMemory = true
+        func refusal() async -> String? {
+            do {
+                _ = try await intent.perform()
+                return nil
+            } catch let MactermIntentError.unavailable(message) {
+                return message
+            } catch {
+                return nil
+            }
+        }
+        ProjectMemory.shared.modelReader = { .notReady }
+        ProjectMemory.shared.refreshModelAvailability()
+        #expect(await refusal() == String(localized: "Project Insights needs Apple Intelligence. Turn it on in System Settings."))
+        ProjectMemory.shared.modelReader = { .unsupported }
+        ProjectMemory.shared.refreshModelAvailability()
+        #expect(await refusal() == String(localized: "Project Insights needs a Mac with Apple Intelligence."))
+
+        ProjectMemory.shared.modelReader = { .available }
+        ProjectMemory.shared.refreshModelAvailability()
         store.append(MemoryEntry(command: "make test", directory: "/tmp", exitCode: 2, finishedAt: Date(), duration: 1), to: project.id)
         let result = try await intent.perform()
         #expect(String(describing: result.value).contains("The last command, make test, failed with exit code 2"))

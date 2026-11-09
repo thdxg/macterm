@@ -75,18 +75,29 @@ struct SidebarPeekInteractionTests {
 
     @Test
     func resize_release_collapses_only_after_the_pointer_passes_the_sidebar() {
+        // The panel ends at inset + width (190); the exit edge is 8 past it.
         #expect(!SidebarPeekInteraction.shouldCollapseAfterResize(
             lastHoverX: nil,
             sidebarWidth: 180
         ))
         #expect(!SidebarPeekInteraction.shouldCollapseAfterResize(
-            lastHoverX: 188,
+            lastHoverX: 198,
             sidebarWidth: 180
         ))
         #expect(SidebarPeekInteraction.shouldCollapseAfterResize(
-            lastHoverX: 189,
+            lastHoverX: 199,
             sidebarWidth: 180
         ))
+    }
+
+    @Test
+    func each_peek_style_exits_the_same_distance_past_its_visible_edge() {
+        let padding = SidebarOverlayMetrics.hoverExitPadding
+        // The resize style's column starts at the window edge.
+        #expect(SidebarPeekInteraction.exitEdge(style: .resizeTerminal, sidebarWidth: 180) == 180 + padding)
+        // The overlay panel starts one side-panel inset in.
+        #expect(SidebarPeekInteraction.exitEdge(style: .overlayTerminal, sidebarWidth: 180)
+            == GlassPanelMetrics.sidePanelInset + 180 + padding)
     }
 
     private func retains(

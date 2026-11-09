@@ -1182,8 +1182,16 @@ final class ControlHandler {
         let memory = ProjectMemory.shared
         switch args.memory {
         case nil: break
-        case "on": Preferences.shared.projectMemory = true
-        case "off": Preferences.shared.projectMemory = false
+        case "on":
+            // CI's runners have no Apple Intelligence: the verb records
+            // without it. The summary still asks the real model.
+            memory.modelReader = { .available }
+            memory.refreshModelAvailability()
+            Preferences.shared.projectMemory = true
+        case "off":
+            memory.modelReader = { OnDeviceModel.availability }
+            memory.refreshModelAvailability()
+            Preferences.shared.projectMemory = false
         case "forget": memory.forget(project.id)
         default: throw ControlError(code: .badRequest, message: "memory must be on, off or forget")
         }
@@ -1197,7 +1205,7 @@ final class ControlHandler {
         case nil: break
         case "write":
             guard ProjectMemorySummarizer.isEnabled else {
-                throw ControlError(code: .badRequest, message: "the summary is off, or Apple Intelligence is not available")
+                throw ControlError(code: .badRequest, message: "Apple Intelligence is not available")
             }
             let projectID = project.id
             Task { await memory.writeSummary(projectID, force: true) }

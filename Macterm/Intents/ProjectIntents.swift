@@ -151,6 +151,14 @@ struct GetMactermProjectMemoryIntent: AppIntent {
         guard ProjectMemory.isSupported else {
             throw MactermIntentError.unavailable(String(localized: "Project Insights needs macOS 26 or later."))
         }
+        switch ProjectMemory.shared.modelAvailability {
+        case .available: break
+        case .notReady:
+            throw MactermIntentError
+                .unavailable(String(localized: "Project Insights needs Apple Intelligence. Turn it on in System Settings."))
+        case .unsupported:
+            throw MactermIntentError.unavailable(String(localized: "Project Insights needs a Mac with Apple Intelligence."))
+        }
         guard ProjectMemory.isEnabled else {
             throw MactermIntentError.unavailable(String(localized: "Project Insights is off. Turn it on in Settings → Intelligence."))
         }

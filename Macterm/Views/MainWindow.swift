@@ -25,10 +25,6 @@ struct MainWindow: View {
     @State
     private var attachedWindow: NSWindow?
     @State
-    private var windowCornerRadius: CGFloat?
-    @State
-    private var windowTopSafeAreaInset: CGFloat = 0
-    @State
     private var initialNativeSidebarVisible: Bool?
     @State
     private var initialSidebarVisibilityBeingApplied: Bool?
@@ -114,7 +110,6 @@ struct MainWindow: View {
             : SidebarOverlayMetrics.hoverActivationWidth
     }
 
-    private var peekExitPadding: CGFloat { SidebarOverlayMetrics.hoverExitPadding }
     private var isNativeSidebarInteractive: Bool {
         windowState.sidebarVisible || activePeekStyle == .resizeTerminal
     }
@@ -244,8 +239,6 @@ struct MainWindow: View {
                 SidebarOverlayPanel(
                     width: sidebarWidth,
                     chromeHidden: chromeHidden,
-                    windowCornerRadius: windowCornerRadius,
-                    windowTopSafeAreaInset: windowTopSafeAreaInset,
                     presentation: sidebarPresentation,
                     isInteractive: isOverlayPeeking,
                     onResize: { recordOverlaySidebarWidth($0) },
@@ -257,8 +250,6 @@ struct MainWindow: View {
         .toolbar(chromeHidden ? .hidden : .visible, for: .windowToolbar)
         .background(WindowStyler(
             hideTitle: chromeHidden,
-            windowCornerRadius: $windowCornerRadius,
-            windowTopSafeAreaInset: $windowTopSafeAreaInset,
             initialSidebarVisible: $initialNativeSidebarVisible,
             onWindowAttached: { window in
                 // Register HERE, not in `onAppear`. SwiftUI instantiates a
@@ -621,7 +612,9 @@ struct MainWindow: View {
             if !isPeeking, shouldBegin {
                 beginPeek()
             } else if isPeeking {
-                if point.x <= sidebarWidth + peekExitPadding {
+                if let style = activePeekStyle,
+                   point.x <= SidebarPeekInteraction.exitEdge(style: style, sidebarWidth: sidebarWidth)
+                {
                     if !suppressPeekUntilExit { cancelDeferredUnpeek() }
                 } else {
                     endPeek()
@@ -1271,10 +1264,6 @@ private struct WindowStyler: NSViewRepresentable {
     /// text is an `NSWindow` property, so it's applied here.
     var hideTitle: Bool = false
     @Binding
-    var windowCornerRadius: CGFloat?
-    @Binding
-    var windowTopSafeAreaInset: CGFloat
-    @Binding
     var initialSidebarVisible: Bool?
     /// Called once this view's `NSWindow` exists, and again when it goes away.
     /// The window is how a `MainWindow` identifies itself to the app: the
@@ -1291,11 +1280,7 @@ private struct WindowStyler: NSViewRepresentable {
     var onWindowFrameChanged: (NSWindow) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(
-            windowCornerRadius: $windowCornerRadius,
-            windowTopSafeAreaInset: $windowTopSafeAreaInset,
-            initialSidebarVisible: $initialSidebarVisible
-        )
+        Coordinator(initialSidebarVisible: $initialSidebarVisible)
     }
 
     func makeNSView(context: Context) -> NSView {
@@ -1324,8 +1309,6 @@ private struct WindowStyler: NSViewRepresentable {
         // here on the frame is ours to persist, not SwiftUI's autosave.
         WindowAppearance.disownFrameAutosave(window: window)
         WindowAppearance.sync(window: window)
-        coordinator.syncWindowCornerRadius(window: window)
-        coordinator.syncWindowTopSafeAreaInset(window: window)
         coordinator.syncInitialSidebarVisibility(window: window)
         coordinator.observe(window: window)
         coordinator.onWindowBecameKey = onWindowBecameKey
@@ -1351,8 +1334,6 @@ private struct WindowStyler: NSViewRepresentable {
             guard let window = view.window else { return }
             window.titleVisibility = hide ? .hidden : .visible
             WindowAppearance.syncTitleBarHidden(window: window)
-            context.coordinator.syncWindowCornerRadius(window: window)
-            context.coordinator.syncWindowTopSafeAreaInset(window: window)
             context.coordinator.syncInitialSidebarVisibility(window: window)
         }
     }
@@ -1360,36 +1341,12 @@ private struct WindowStyler: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSWindowDelegate {
         nonisolated(unsafe) private var observer: Any?
-        private var contentLayoutObservation: NSKeyValueObservation?
         nonisolated(unsafe) weak var swiftuiDelegate: (any NSWindowDelegate)?
-        private var windowCornerRadius: Binding<CGFloat?>
-        private var windowTopSafeAreaInset: Binding<CGFloat>
         private var initialSidebarVisible: Binding<Bool?>
         private var didSyncInitialSidebarVisibility = false
 
-        init(
-            windowCornerRadius: Binding<CGFloat?>,
-            windowTopSafeAreaInset: Binding<CGFloat>,
-            initialSidebarVisible: Binding<Bool?>
-        ) {
-            self.windowCornerRadius = windowCornerRadius
-            self.windowTopSafeAreaInset = windowTopSafeAreaInset
+        init(initialSidebarVisible: Binding<Bool?>) {
             self.initialSidebarVisible = initialSidebarVisible
-        }
-
-        @MainActor
-        func syncWindowCornerRadius(window: NSWindow) {
-            windowCornerRadius.wrappedValue = WindowAppearance.windowCornerRadius(window)
-        }
-
-        @MainActor
-        func syncWindowTopSafeAreaInset(window: NSWindow) {
-            guard let contentView = window.contentView else { return }
-            let contentFrame = contentView.convert(contentView.bounds, to: nil)
-            windowTopSafeAreaInset.wrappedValue = SidebarOverlayMetrics.topObscuredInset(
-                contentFrameInWindow: contentFrame,
-                contentLayoutRect: window.contentLayoutRect
-            )
         }
 
         @MainActor
@@ -1403,10 +1360,6 @@ private struct WindowStyler: NSViewRepresentable {
 
         @MainActor
         func observe(window: NSWindow) {
-            contentLayoutObservation = window.observe(\.contentLayoutRect, options: [.initial, .new]) {
-                [weak self] window, _ in
-                MainActor.assumeIsolated { self?.syncWindowTopSafeAreaInset(window: window) }
-            }
             // Re-apply on config change. AppKit also rebuilds the titlebar
             // subviews on becomeMain / fullscreen transitions, so we resync
             // there too via the delegate hooks below. A system light/dark
@@ -1446,8 +1399,6 @@ private struct WindowStyler: NSViewRepresentable {
             guard let window = notification.object as? NSWindow else { return }
             onWindowBecameKey(window)
             WindowAppearance.sync(window: window)
-            syncWindowCornerRadius(window: window)
-            syncWindowTopSafeAreaInset(window: window)
             syncInitialSidebarVisibility(window: window)
             swiftuiDelegate?.windowDidBecomeMain?(notification)
         }
@@ -1455,16 +1406,12 @@ private struct WindowStyler: NSViewRepresentable {
         func windowDidEnterFullScreen(_ notification: Notification) {
             guard let window = notification.object as? NSWindow else { return }
             WindowAppearance.sync(window: window)
-            syncWindowCornerRadius(window: window)
-            syncWindowTopSafeAreaInset(window: window)
             swiftuiDelegate?.windowDidEnterFullScreen?(notification)
         }
 
         func windowDidExitFullScreen(_ notification: Notification) {
             guard let window = notification.object as? NSWindow else { return }
             WindowAppearance.sync(window: window)
-            syncWindowCornerRadius(window: window)
-            syncWindowTopSafeAreaInset(window: window)
             swiftuiDelegate?.windowDidExitFullScreen?(notification)
         }
 
