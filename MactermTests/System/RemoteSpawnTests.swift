@@ -48,6 +48,37 @@ struct RemoteSpawnTests {
         let create = create()
         #expect(create.contains("cannot cd to"))
         #expect(create.contains(">&2; cd; }"))
+        // The folder is one quoted word in the line, never inside another
+        // pair of quotes, where its text would be live.
+        #expect(create.contains("echo \"macterm: cannot cd to\" ~/\"dev/api\" >&2"))
+    }
+
+    @Test
+    func a_hostile_folder_stays_text_in_the_host_command() throws {
+        // A folder can come from the host (OSC 7). It must never run.
+        let command = RemoteSpawn.plainShellCommand(directory: "/nonexistent;echo INJECTED")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", command]
+        process.environment = ["SHELL": "/usr/bin/true", "TERM": "dumb", "PATH": "/usr/bin:/bin"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        try process.run()
+        process.waitUntilExit()
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        #expect(output.contains("cannot cd to /nonexistent;echo INJECTED"))
+        #expect(!output.contains("\nINJECTED"))
+    }
+
+    @Test
+    func a_folder_that_the_host_reported_must_be_a_plain_path() {
+        #expect(RemoteSpawn.isSafeHostFolder("/srv/app src"))
+        #expect(RemoteSpawn.isSafeHostFolder("~/dev"))
+        #expect(!RemoteSpawn.isSafeHostFolder("relative"))
+        #expect(!RemoteSpawn.isSafeHostFolder("/srv\\x"))
+        #expect(!RemoteSpawn.isSafeHostFolder("/srv/it's"))
+        #expect(!RemoteSpawn.isSafeHostFolder("/srv\nrm -rf ~"))
     }
 
     @Test

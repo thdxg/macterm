@@ -223,13 +223,25 @@ enum RemoteSpawn {
         var connect = "\"$b\" connect \(posixDoubleQuote(sessionName))"
         if let directory {
             let quoted = quoteRemoteDirectory(directory)
-            steps.append("cd \(quoted) || { echo \"macterm: cannot cd to \(quoted)\" >&2; cd; }")
+            steps.append("cd \(quoted) || { echo \"macterm: cannot cd to\" \(quoted) >&2; cd; }")
             connect += " --"
         }
         steps.append(connect)
         steps.append("s=$?; [ \"$s\" -ne 255 ] || s=254; exit \"$s\"")
         let script = assertSingleQuoteFree(steps.joined(separator: "; "))
         return "\(remoteShell) \(shellQuote(script))"
+    }
+
+    /// True for a folder that may go into a host command: a path (absolute,
+    /// or from `~`) with no control character, no backslash and no single
+    /// quote. A folder that the host reported (OSC 7) is the host's text: a
+    /// backslash leaves `"…"` under fish, and a control character is never a
+    /// folder the user typed.
+    static func isSafeHostFolder(_ folder: String) -> Bool {
+        guard folder.hasPrefix("/") || folder.hasPrefix("~") else { return false }
+        return !folder.unicodeScalars.contains {
+            CharacterSet.controlCharacters.contains($0) || $0 == "\\" || $0 == "'"
+        }
     }
 
     /// What a remote pane runs on a host with no server (the user declined
@@ -239,7 +251,7 @@ enum RemoteSpawn {
         let quoted = quoteRemoteDirectory(directory)
         let script = assertSingleQuoteFree(
             remoteTermPreamble + remoteColorPreamble + remoteTerminalProgramPreamble
-                + "cd \(quoted) || echo \"macterm: cannot cd to \(quoted)\" >&2; "
+                + "cd \(quoted) || echo \"macterm: cannot cd to\" \(quoted) >&2; "
                 + "if [ -n \"$SHELL\" ]; then exec \"$SHELL\" -l; else exec /bin/sh; fi"
         )
         return "\(remoteShell) \(shellQuote(script))"

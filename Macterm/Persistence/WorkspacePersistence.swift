@@ -525,7 +525,9 @@ enum WorkspaceSerializer {
                 sessionID: p.sessionID,
                 sessionName: p.sessionName,
                 workingDirectory: liveCwd,
-                hostSessionDirectory: p.isRemote ? p.hostSessionDirectory.map { p.nsView?.currentPwd ?? $0 } : nil
+                hostSessionDirectory: p.isRemote ? p.hostSessionDirectory.map { known in
+                    p.nsView?.currentPwd.flatMap { RemoteSpawn.isSafeHostFolder($0) ? $0 : nil } ?? known
+                } : nil
             ))
         case let .split(b):
             return .split(SplitBranchSnapshot(

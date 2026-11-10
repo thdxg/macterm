@@ -296,7 +296,9 @@ final class RemoteHosts {
             // The shell exited while no pane showed it.
             await Self.kill(session, over: link)
         }
+        // A folder that the host reported must be safe for a command line.
         let known = panes.lazy.compactMap(\.hostSessionDirectory).first
+            .map { RemoteSpawn.isSafeHostFolder($0) ? $0 : target.directory }
         let justCreated = created[session].map { Date().timeIntervalSince($0) < configuration.creationGrace } ?? false
         if found?.isRunning == true { created[session] = nil }
         let step = Self.step(
@@ -401,12 +403,16 @@ final class RemoteHosts {
     }
 
     private func finish(_ destination: String, token: UUID, _ result: Result<Host, PrepareFailure>) {
+        let sessions = waiting.removeValue(forKey: destination) ?? []
         guard case let .preparing(current, _) = hosts[destination], current == token else {
             // Another step replaced this prepare (an install from Settings).
+            // Its waiting panes ask again and find that step's state.
             if case let .success(.ready(_, link)) = result { link.close() }
+            for session in sessions {
+                configuration.post(Self.wakeName(for: session))
+            }
             return
         }
-        let sessions = waiting.removeValue(forKey: destination) ?? []
         switch result {
         case let .success(host):
             hosts[destination] = host
