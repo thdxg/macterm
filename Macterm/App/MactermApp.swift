@@ -832,6 +832,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A master that exits takes its login questions with it.
         SSHConnections.shared.onConnectionExit = { SSHLoginPrompts.shared.cancel(sshPID: $0) }
         SSHConnections.shared.onLoginNotice = { SSHLoginPrompts.shared.showNotice(host: $0, sshPID: $1, line: $2) }
+        // The unit-test host must not end a master of the developer's Debug app.
+        if ZmxClient.liveBypass != .unitTestHost {
+            Task { await SSHConnections.shared.endStaleConnections() }
+        }
         finderServices.attach(appState: appState, projectStore: projectStore)
         // A global chord fired before this point can only toggle the quick
         // terminal; every other action needs the workspace this hands over.
@@ -881,7 +885,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_: Notification) {
         controlServer.stop()
-        SSHConnections.shared.disconnectAll()
+        // A master that logged in stays for the next launch.
+        SSHConnections.shared.endLogins()
         onTerminate?()
         // A command recorded in the last half second is still waiting for
         // its debounced write.
