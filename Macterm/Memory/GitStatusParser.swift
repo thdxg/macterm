@@ -233,37 +233,57 @@ enum GitStatusParser {
 
     // MARK: - Diff
 
-    /// The most text of the diff that is kept, in characters. The digest
-    /// has room for a small part of it; the rest is left out whole.
-    static let diffCharacterLimit = 32000
+    /// The most bytes of `git diff` that a read takes (`ProjectGit.diffArguments`
+    /// and the remote script cut the output there). A file that the cut
+    /// splits is left out.
+    static let diffByteLimit = 65536
 
-    /// Lockfiles: generated, long, and say nothing about the work.
-    static let lockfileNames: Set<String> = [
+    /// The most text of the diff that is kept, in characters: about twice
+    /// what the digest has room for. The rest is left out whole.
+    static let diffCharacterLimit = 8000
+
+    /// The longest line of a diff that is kept. A longer line is generated
+    /// text, minified code or encoded data, which says little about the
+    /// work and can hide a secret: its file is left out. The redaction also
+    /// costs time with the square of a word's length: one word of 32,000
+    /// characters took 217 s.
+    static let diffLineLimit = 500
+
+    /// The file names whose diff is never read (`fnmatch` on the name, with
+    /// no case): lockfiles, which are generated and long, and the files
+    /// that hold secrets by convention. `ProjectGit.diffArguments` gives
+    /// them to git as exclude pathspecs, so git does not send them, and
+    /// `parseDiff` leaves them out again.
+    static let leftOutNames = [
         "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "bun.lockb",
         "Cargo.lock", "Gemfile.lock", "Podfile.lock", "Package.resolved", "composer.lock", "poetry.lock",
         "Pipfile.lock", "uv.lock", "pdm.lock", "go.sum", "mix.lock", "flake.lock", "pubspec.lock", "deno.lock",
-        "gradle.lockfile", "packages.lock.json", "mise.lock",
+        "*.lockfile", "packages.lock.json", "mise.lock",
+        ".env*", "*.env", "*secret*", "*credential*", "*.pem", "*.key", "*.p12", "*.pfx", "*.jks", "*.keystore",
+        "*.gpg", "*.asc", "id_rsa*", "id_ed25519*", "id_ecdsa*", ".netrc", ".npmrc", ".pypirc",
     ]
 
-    /// Whether the diff of `path` stays out of the digest: a lockfile, or an
-    /// `.env` file, which holds secrets by convention.
+    /// Whether the diff of `path` stays out of the digest (`leftOutNames`).
     static func isLeftOutOfDiff(_ path: String) -> Bool {
         let name = (path as NSString).lastPathComponent
-        return lockfileNames.contains(name) || name.hasPrefix(".env")
+        return leftOutNames.contains { fnmatch($0, name, FNM_CASEFOLD) == 0 }
     }
 
     /// The one line of a deleted file, in place of its hunks.
     static let deletedFileLine = "(the file is deleted)"
 
     /// `git diff HEAD` with `a/` and `b/` prefixes, one entry for each file
-    /// with hunks; a deleted file has `deletedFileLine` alone. Every line goes through `MemoryRedaction`. A binary file,
-    /// a file that `isLeftOutOfDiff`, a file with a private key block or a
-    /// line past `diffLineLimit`, and a file that would pass
-    /// `diffCharacterLimit` are left out whole.
+    /// with hunks; a deleted file has `deletedFileLine` alone. Every line
+    /// goes through `MemoryRedaction`. A binary file, a file that
+    /// `isLeftOutOfDiff`, a file with a private key or a line past
+    /// `diffLineLimit`, a file that would pass `diffCharacterLimit`, and the
+    /// last file of a read that `diffByteLimit` cut are left out whole.
     static func parseDiff(_ text: String) -> [GitStatus.FileDiff] {
+        var sections = diffSections(text)
+        if text.utf8.count >= diffByteLimit { sections = sections.dropLast() }
         var files: [GitStatus.FileDiff] = []
         var kept = 0
-        for section in diffSections(text) {
+        for section in sections {
             guard let file = fileDiff(section) else { continue }
             // The size before redaction: the redaction of a file that is
             // left out would cost time for nothing.
@@ -275,17 +295,16 @@ enum GitStatusParser {
         return files
     }
 
-    /// The longest line of a diff that is kept. A longer line is generated
-    /// text, minified code or encoded data, which says little about the
-    /// work and can hide a secret; its file is left out. The redaction also
-    /// costs time with the square of a word's length: one word of 32,000
-    /// characters took 217 s.
-    static let diffLineLimit = 500
-
-    /// The lines of each file, split at its `diff --git` line.
+    /// The lines of each file, split at its `diff --git` line. The split is
+    /// at each `\n` scalar: a `\r\n` is one Swift `Character`, so a split
+    /// on the `Character` `\n` joined the last line of a CRLF file with the
+    /// `diff --git` line of the next file.
     private static func diffSections(_ text: String) -> [[Substring]] {
         var sections: [[Substring]] = []
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+        let lines = text.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false)
+        for scalars in lines {
+            var line = Substring(scalars)
+            if line.unicodeScalars.last == "\r" { line = Substring(line.unicodeScalars.dropLast()) }
             if line.hasPrefix("diff --git ") {
                 sections.append([line])
             } else if !sections.isEmpty {
@@ -318,7 +337,8 @@ enum GitStatusParser {
         // and a long one would push every other file out of the budget.
         if newPath == nil { return (path, [Substring(deletedFileLine)]) }
         // A private key is a secret as a whole: no rule masks its lines.
-        guard !hunks.contains(where: { $0.count > diffLineLimit || $0.contains("PRIVATE KEY-----") }) else { return nil }
+        // `PRIVATE KEY` is in the PEM, OpenSSH and PGP forms.
+        guard !hunks.contains(where: { $0.count > diffLineLimit || $0.contains("PRIVATE KEY") }) else { return nil }
         return (path, hunks)
     }
 

@@ -469,8 +469,8 @@ struct RemoteSpawnTests {
         #expect(script.contains("; } 2>/dev/null; printf"))
         // The diff only when a tracked file changed, as locally.
         #expect(script.hasSuffix(
-            "if printf \"%s\\n\" \"$s\" | grep -q \"^[12u] \"; then git -c core.fsmonitor=false -c core.quotePath=false "
-                + "--no-pager " + ProjectGit.diffArguments.joined(separator: " ") + " 2>/dev/null; fi; exit 0"
+            "if printf \"%s\\n\" \"$s\" | grep -q \"^[12u] \"; then "
+                + ProjectGit.diffCommand(git: "git -c core.fsmonitor=false -c core.quotePath=false --no-pager") + "; fi; exit 0"
         ))
         #expect(script.components(separatedBy: "printf \"\\036\"").count == 6)
         // A git on the host's PATH only; profiles are never sourced.

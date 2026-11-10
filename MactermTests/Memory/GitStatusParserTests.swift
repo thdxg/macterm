@@ -206,6 +206,17 @@ struct GitStatusParserTests {
         +-----BEGIN OPENSSH PRIVATE KEY-----
         +b3BlbnNzaC1rZXktdjEAAAAA
         +-----END OPENSSH PRIVATE KEY-----
+        diff --git a/deploy/app.env b/deploy/app.env
+        --- a/deploy/app.env
+        +++ b/deploy/app.env
+        @@ -1 +1 @@
+        +STRIPE=sk_live_plain
+        diff --git a/release.asc.txt b/release.asc.txt
+        --- a/release.asc.txt
+        +++ b/release.asc.txt
+        @@ -0,0 +1,2 @@
+        +-----BEGIN PGP PRIVATE KEY BLOCK-----
+        +lQOYBF0000000000
         diff --git a/logo.png b/logo.png
         index 1111111..2222222 100644
         Binary files a/logo.png and b/logo.png differ
@@ -239,5 +250,22 @@ struct GitStatusParserTests {
         let manyLines = Array(repeating: "y", count: GitStatusParser.diffCharacterLimit / 3)
         let diff = file("minified.js", ["a", longLine]) + file("big.txt", manyLines) + file("small.txt", ["small"])
         #expect(GitStatusParser.parseDiff(diff).map(\.path) == ["small.txt"])
+    }
+
+    @Test
+    func a_crlf_file_does_not_join_the_next_file() {
+        let diff = "diff --git a/run.bat b/run.bat\r\n--- a/run.bat\r\n+++ b/run.bat\r\n@@ -1 +1 @@\r\n+echo hi\r\n"
+            + "diff --git a/.env b/.env\n--- a/.env\n+++ b/.env\n@@ -1 +1 @@\n+STRIPE_KEY=sk_live_plain\n"
+        let files = GitStatusParser.parseDiff(diff)
+        #expect(files == [GitStatus.FileDiff(path: "run.bat", lines: ["@@ -1 +1 @@", "+echo hi"])])
+    }
+
+    @Test
+    func a_read_that_the_byte_limit_cut_leaves_out_its_last_file() {
+        let file = { (path: String) in "diff --git a/\(path) b/\(path)\n--- a/\(path)\n+++ b/\(path)\n@@ -1 +1 @@\n+x\n" }
+        // A long file before them, left out for its own reasons, makes the read reach the limit.
+        let long = "diff --git a/yarn.lock b/yarn.lock\n" + String(repeating: "+x\n", count: GitStatusParser.diffByteLimit / 3)
+        #expect(GitStatusParser.parseDiff(long + file("a.txt") + file("b.txt")).map(\.path) == ["a.txt"])
+        #expect(GitStatusParser.parseDiff(file("a.txt") + file("b.txt")).map(\.path) == ["a.txt", "b.txt"])
     }
 }

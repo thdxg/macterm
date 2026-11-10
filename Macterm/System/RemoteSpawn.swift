@@ -442,7 +442,7 @@ enum RemoteSpawn {
                 + "\(git) worktree list --porcelain 2>/dev/null; \(separator); "
                 + "{ \(ProjectGit.branchLogScript(git: git)); } 2>/dev/null; \(separator); "
                 + "if printf \"%s\\n\" \"$s\" | grep -q \"^[12u] \"; then "
-                + "\(git) \(ProjectGit.diffArguments.joined(separator: " ")) 2>/dev/null; fi; exit 0",
+                + "\(ProjectGit.diffCommand(git: git)); fi; exit 0",
             onViolation: .failNonZero
         )
         return [

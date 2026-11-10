@@ -41,9 +41,15 @@ struct ProjectGitTests {
     @Test
     func the_diff_reads_the_work_tree_and_the_index_and_runs_no_program_of_the_repository() {
         #expect(ProjectGit.diffArguments.prefix(2) == ["diff", "HEAD"])
-        for option in ["--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/"] {
+        for option in ["--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/", ":(top)"] {
             #expect(ProjectGit.diffArguments.contains(option))
         }
+        // git does not send the files that the parser leaves out.
+        #expect(ProjectGit.diffArguments.contains(":(exclude,glob,icase)**/.env*"))
+        let command = ProjectGit.diffCommand(git: "git")
+        #expect(command.contains(" -- \":(top)\" \":(exclude,glob,icase)**/package-lock.json\""))
+        #expect(command.hasSuffix(" 2>/dev/null | head -c \(GitStatusParser.diffByteLimit)"))
+        #expect(!command.contains("'"))
     }
 
     @Test

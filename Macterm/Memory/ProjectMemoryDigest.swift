@@ -120,10 +120,11 @@ struct ProjectMemoryDigest: Equatable {
             + changedPaths + [diffHash(git?.diff)]).joined(separator: "|")
     }
 
-    /// A hash of the whole diff, so that an edit to a file that is already
-    /// in the list makes a new key. The whole diff, not the part that fits:
-    /// the part depends on the length of the command lines, which changes
-    /// as time passes. Empty without a diff.
+    /// A hash of the diff that `GitStatusParser.parseDiff` kept, so that an
+    /// edit to a file that is already in the list makes a new key. All of
+    /// it, not the part that fits the digest: that part depends on the
+    /// length of the command lines, which changes as time passes. Empty
+    /// without a diff.
     static func diffHash(_ diff: [GitStatus.FileDiff]?) -> String {
         guard let diff, !diff.isEmpty else { return "" }
         let text = diff.map { ([$0.path] + $0.lines).joined(separator: "\n") }.joined(separator: "\n\u{0}")
@@ -171,9 +172,14 @@ struct ProjectMemoryDigest: Equatable {
         return (lines + commands).joined(separator: "\n")
     }
 
-    /// The tokens that `OutputExplanation.excerpt` counts for `lines`.
+    /// The tokens that `OutputExplanation.excerpt` counts for `lines`. An
+    /// element can hold more than one line (a command with a heredoc), and
+    /// the excerpt counts each line.
     static func tokens(_ lines: [String]) -> Int {
-        lines.reduce(0) { $0 + OutputExplanation.estimatedTokens($1) + 1 }
+        lines.reduce(0) { total, element in
+            element.split(separator: "\n", omittingEmptySubsequences: false)
+                .reduce(total) { $0 + OutputExplanation.estimatedTokens($1) + 1 }
+        }
     }
 
     /// The diff, a whole file at a time, in the order of git, within

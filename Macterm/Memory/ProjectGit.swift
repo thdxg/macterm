@@ -53,7 +53,7 @@ enum ProjectGit {
         let worktreesOutput = await run(git, ["worktree", "list", "--porcelain"], in: path)
         let branchLogOutput = await runBranchLog(git, in: path)
         let diffOutput = GitStatusParser.parseStatus(statusOutput).hasTrackedChanges
-            ? await run(git, diffArguments, in: path)
+            ? await runDiff(git, in: path)
             : nil
         return GitStatusParser.status(
             statusOutput: statusOutput,
@@ -66,13 +66,26 @@ enum ProjectGit {
     }
 
     /// The sixth read: the staged and unstaged changes of the tracked files
-    /// against HEAD, with one line of context. No color, no external diff
-    /// and no textconv (both run programs that the repository's config
-    /// names), and fixed `a/` and `b/` prefixes whatever `diff.noprefix`
-    /// says. A repository with no commit has no HEAD, and the read fails.
+    /// against HEAD, with one line of context, in the whole repository
+    /// (`:(top)`), without the files of `GitStatusParser.leftOutNames`. No
+    /// color, no external diff and no textconv (both run programs that the
+    /// repository's config names), and fixed `a/` and `b/` prefixes whatever
+    /// `diff.noprefix` says. A repository with no commit has no HEAD, and
+    /// the read is empty. The output is cut at `GitStatusParser.diffByteLimit`
+    /// (`diffCommand`), so a large diff costs no time and no memory.
     static let diffArguments = [
-        "diff", "HEAD", "--no-color", "--no-ext-diff", "--no-textconv", "-U1", "--src-prefix=a/", "--dst-prefix=b/",
-    ]
+        "diff", "HEAD", "--no-color", "--no-ext-diff", "--no-textconv", "-U1", "--src-prefix=a/", "--dst-prefix=b/", "--",
+        ":(top)",
+    ] + GitStatusParser.leftOutNames.map { ":(exclude,glob,icase)**/\($0)" }
+
+    /// `diffArguments` after `git`, cut at `GitStatusParser.diffByteLimit`,
+    /// as POSIX sh. A pathspec has no quote, `$`, backslash or backtick, so
+    /// each goes in double quotes. git stops at the cut, because `head`
+    /// closes the pipe.
+    static func diffCommand(git: String) -> String {
+        let arguments = diffArguments.map { $0.hasPrefix(":") ? "\"\($0)\"" : $0 }.joined(separator: " ")
+        return "\(git) \(arguments) 2>/dev/null | head -c \(GitStatusParser.diffByteLimit)"
+    }
 
     /// The refs that can be the main branch: the default branch of each
     /// remote (`origin/HEAD`, which the read resolves to the branch it
@@ -214,6 +227,12 @@ enum ProjectGit {
     private static func runBranchLog(_ git: String, in path: String) async -> String? {
         let command = (["\"$1\" -C \"$2\""] + gitOptions).joined(separator: " ")
         return await runChecked("/bin/sh", ["-c", branchLogScript(git: command), "sh", git, path])
+    }
+
+    /// `diffCommand` under `/bin/sh`, with the git and the path as arguments.
+    private static func runDiff(_ git: String, in path: String) async -> String? {
+        let command = (["\"$1\" -C \"$2\""] + gitOptions).joined(separator: " ")
+        return await runChecked("/bin/sh", ["-c", diffCommand(git: command), "sh", git, path])
     }
 
     private static func runChecked(_ executable: String, _ args: [String]) async -> String? {

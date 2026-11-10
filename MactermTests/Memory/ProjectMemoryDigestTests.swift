@@ -271,7 +271,7 @@ struct ProjectMemoryDigestTests {
 
     @Test
     func a_secret_in_a_diff_hunk_never_reaches_the_digest() throws {
-        let git = changed(fileDiff("config.yml", "api_key: sk-proj-abcdefghijklmnopqrstuvwxyz")
+        let git = changed(fileDiff("config.yml", "api_key: abcdefghijklmnopqrstuvwxyz")
             + fileDiff("deploy.sh", "export DEPLOY_TOKEN=plain-text-token")
             + fileDiff(".env", "SECRET_THING=from-env-file"))
         let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: [], git: git, now: now))
@@ -286,7 +286,8 @@ struct ProjectMemoryDigestTests {
     @Test
     func the_diff_gets_only_the_budget_that_is_left_and_cuts_whole_files() throws {
         // Each file is about 250 tokens; the commands take most of the budget.
-        let body = String(repeating: "a", count: 600)
+        let bodyLine = String(repeating: "a", count: 100)
+        let body = Array(repeating: bodyLine, count: 6).joined(separator: "\n+")
         let git = changed((1 ... 6).map { fileDiff("f\($0).txt", body) }.joined())
         let entries = (1 ... 12).map { entry("make target-\($0) " + String(repeating: "b", count: 100), exit: 0, minutesAgo: Double($0)) }
         let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: entries, git: git, now: now))
@@ -298,7 +299,7 @@ struct ProjectMemoryDigestTests {
         // Each file that is shown is whole.
         let shown = lines.count(where: { $0.hasPrefix("File `") })
         #expect(shown > 0 && shown < 6)
-        #expect(lines.count(where: { $0 == "+" + body }) == shown)
+        #expect(lines.count(where: { $0 == "+" + bodyLine }) == shown * 6)
         #expect(digest.text.contains("[\(6 - shown) more changed files in the diff not shown]"))
         // The diff comes before the commands.
         let diffIndex = try #require(lines.firstIndex(of: "Diff of the uncommitted changes:"))
@@ -323,5 +324,18 @@ struct ProjectMemoryDigestTests {
         var unread = first
         unread.diff = nil
         #expect(key(unread) != key(first))
+    }
+
+    @Test
+    func a_command_with_more_than_one_line_counts_each_line_and_the_diff_stays_whole() throws {
+        let bodyLine = String(repeating: "a", count: 100)
+        let body = Array(repeating: bodyLine, count: 6).joined(separator: "\n+")
+        let git = changed((1 ... 6).map { fileDiff("f\($0).txt", body) }.joined())
+        let heredoc = "cat <<EOF\n" + Array(repeating: "x", count: 200).joined(separator: "\n") + "\nEOF"
+        let digest = try #require(ProjectMemoryDigest(
+            projectName: "x", entries: [entry(heredoc, exit: 0, minutesAgo: 1)], git: git, now: now
+        ))
+        #expect(!digest.text.contains("lines not shown"))
+        #expect(ProjectMemoryDigest.tokens(["a\nb"]) == ProjectMemoryDigest.tokens(["a", "b"]))
     }
 }
