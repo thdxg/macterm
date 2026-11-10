@@ -47,9 +47,9 @@ A command that you click runs in a new split next to the focused pane. Macterm t
 
 ## Summary
 
-A paragraph at the top of the **Summary** section says what you were doing, whether it worked, and what probably comes next. Apple's on-device model writes it from the recorded commands and the Git state. Nothing leaves your Mac.
+A paragraph at the top of the **Summary** section says what you were working on. Apple's on-device model writes it from the Git state first (the commits of the current branch, or the latest commits on a main branch, and the changed files), and from the recorded commands second. Nothing leaves your Mac.
 
-Macterm writes the summary ten minutes after the last command in a project, panel or no panel, so that a panel you open after a break shows it at once. It does not write it while you work: a command that finishes only starts the ten minutes again. A change in the Git state that the summary has not seen, such as a commit from another terminal, starts the ten minutes too. A project with no command yet gets a summary of its Git state alone: the branch in use, its changes and the branches with recent commits. Macterm keeps the summary with the records, so it is there after you start Macterm again. To write it now, click the reload button in the header of the **Summary** section. While the model writes, the panel shows **Summarizing…** until the first words arrive, and the facts below it do not wait.
+Macterm writes the summary ten minutes after the last command in a project, panel or no panel, so that a panel you open after a break shows it at once. It does not write it while you work: a command that finishes only starts the ten minutes again. A change in the Git state that the summary has not seen, such as a commit from another terminal, starts the ten minutes too. A project with no command yet gets a summary of its Git state alone: the branch in use, its commits and its changes. Macterm keeps the summary with the records, so it is there after you start Macterm again. To write it now, click the reload button in the header of the **Summary** section. While the model writes, the panel shows **Summarizing…** until the first words arrive, and the facts below it do not wait.
 
 ## Ask Siri or Shortcuts
 
