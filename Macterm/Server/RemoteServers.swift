@@ -99,7 +99,7 @@ final class RemoteServers {
         var description: String {
             switch self {
             case .notBundled: "this build of Macterm has no server for hosts"
-            case .declined: "the install of the server was cancelled"
+            case .declined: "the install of the server was declined"
             case .noWritableHome: "the home folder on the host is not writable"
             case let .unsupported(system, machine): "Macterm has no server for \(system) \(machine)"
             case let .noBuild(target): "this build of Macterm has no server for \(target)"
