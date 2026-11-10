@@ -1,6 +1,6 @@
 name: Bump GhosttyKit
 
-# GhosttyKit is pinned to one thdxg/ghostty release (GHOSTTYKIT_TAG in
+# GhosttyKit is pinned to one macterm/ghostty release (GHOSTTYKIT_TAG in
 # scripts/setup.sh) so a Macterm build can't silently pick up whatever
 # libghostty landed that morning. A pin needs a way back off it, or it rots:
 # this opens the PR, weekly, and CI is the gate.
@@ -32,37 +32,24 @@ jobs:
       contents: write
       pull-requests: write
     env:
-      # A PR opened by the default GITHUB_TOKEN does NOT trigger workflows, which
-      # would defeat the entire point — the bump would arrive untested. So the
-      # `gh pr create` below has to run as a user (or app) token: every CI
-      # workflow triggers on `pull_request`, and only that event has to escape
-      # the suppression. The branch push can stay on the checkout's GITHUB_TOKEN,
-      # since nothing triggers on a push to a non-main branch.
-      #
-      # GH_PAT exists for this workflow ALONE — nothing else here needs a PAT.
-      # `thdxg/ghostty` is public, so setup.sh's release downloads work under
-      # GITHUB_TOKEN in every other workflow (release.yml's build job included);
-      # the only other PAT in the repo is HOMEBREW_TAP_PAT, for writing the tap.
-      GH_TOKEN: ${{ secrets.GH_PAT }}
+      # Reads (the fork's releases, the open PRs of this repo) and the branch
+      # push run on GITHUB_TOKEN. Only `gh pr create` needs another token: a PR
+      # that GITHUB_TOKEN opens triggers no workflows, which would defeat the
+      # point, because CI on the bump PR is the only test of the new pin. That
+      # step gets a token of the macterm-ci GitHub App below.
+      GH_TOKEN: ${{ github.token }}
     steps:
-      # An absent secret interpolates to empty, and gh's own complaint about that
-      # is "To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN
-      # environment variable" — which reads as a workflow bug, not a missing
-      # secret. The first scheduled run (30802571959) died that way in 8s. Name
-      # the real cause before spending a step on it.
-      - name: Check the bump token
-        run: |
-          if [[ -z "$GH_TOKEN" ]]; then
-            {
-              echo "error: the GH_PAT repo secret is unset or empty."
-              echo "  This workflow needs a token that is NOT GITHUB_TOKEN, because a PR"
-              echo "  opened by GITHUB_TOKEN triggers no workflows — and CI on the bump PR"
-              echo "  is the only thing that tests the new pin."
-              echo "  Fix: add a fine-grained PAT scoped to this repo, with Contents"
-              echo "  read+write and Pull requests read+write, as the GH_PAT secret."
-            } >&2
-            exit 1
-          fi
+      # A token of the org's macterm-ci app, for this repository only, with
+      # pull request write. It expires after an hour. MACTERM_APP_CLIENT_ID is
+      # an org variable and MACTERM_APP_PRIVATE_KEY an org secret.
+      - name: App Token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MACTERM_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MACTERM_APP_PRIVATE_KEY }}
+          repositories: macterm
+          permission-pull-requests: write
 
       - uses: actions/checkout@v7
 
@@ -74,9 +61,9 @@ jobs:
             echo "error: could not parse GHOSTTYKIT_TAG out of scripts/setup.sh" >&2
             exit 1
           fi
-          LATEST=$(gh release list --repo thdxg/ghostty --limit 1 --json tagName -q '.[0].tagName')
+          LATEST=$(gh release list --repo macterm/ghostty --limit 1 --json tagName -q '.[0].tagName')
           if [[ -z "$LATEST" ]]; then
-            echo "error: could not resolve the latest thdxg/ghostty release" >&2
+            echo "error: could not resolve the latest macterm/ghostty release" >&2
             exit 1
           fi
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
@@ -119,7 +106,7 @@ jobs:
           hdr() {  # hdr <tag> <dest-dir>
             mkdir -p "$2"
             gh release download "$1" --pattern 'GhosttyKit.xcframework.tar.gz' \
-              --repo thdxg/ghostty --dir "$2"
+              --repo macterm/ghostty --dir "$2"
             tar xzf "$2/GhosttyKit.xcframework.tar.gz" -C "$2"
           }
           hdr "$CURRENT" old
@@ -154,6 +141,8 @@ jobs:
           LATEST: ${{ steps.check.outputs.latest }}
           BRANCH: ${{ steps.check.outputs.branch }}
           API_OK: ${{ steps.api.outputs.ok }}
+          # The app token, for `gh pr create` (see the job's env).
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -176,7 +165,7 @@ jobs:
 
           git add scripts/setup.sh
           git commit -m "chore(deps): bump GhosttyKit to ${LATEST}" \
-                     -m "Moves the pinned thdxg/ghostty release from ${CURRENT} to ${LATEST}. Opened by .github/workflows/bump-ghosttykit.yml."
+                     -m "Moves the pinned macterm/ghostty release from ${CURRENT} to ${LATEST}. Opened by .github/workflows/bump-ghosttykit.yml."
           # --force, because anything that fails AFTER this push leaves the branch
           # on the remote and wedges every later run: the next one rebuilds the
           # same one-line change as a new commit (new timestamp, new SHA) on the
@@ -191,11 +180,11 @@ jobs:
           # YAML block scalar is indentation-fragile, and markdown turns a stray
           # indent into a code block.
           {
-            echo "Moves the pinned \`thdxg/ghostty\` release (\`GHOSTTYKIT_TAG\` in \`scripts/setup.sh\`) from \`${CURRENT}\` to \`${LATEST}\`."
+            echo "Moves the pinned \`macterm/ghostty\` release (\`GHOSTTYKIT_TAG\` in \`scripts/setup.sh\`) from \`${CURRENT}\` to \`${LATEST}\`."
             echo
             echo "**CI on this PR is the gate.** Editing \`scripts/setup.sh\` changes the GhosttyKit cache key, so this run downloads the new pin from scratch and exercises it through Unit, End-to-end, and Smoke — rather than a release being the first thing to try it."
             echo
-            echo "Compare upstream: [\`${CURRENT}...${LATEST}\`](https://github.com/thdxg/ghostty/compare/${CURRENT}...${LATEST})"
+            echo "Compare upstream: [\`${CURRENT}...${LATEST}\`](https://github.com/macterm/ghostty/compare/${CURRENT}...${LATEST})"
             echo
             echo "---"
             echo
@@ -206,10 +195,10 @@ jobs:
             fi
           } > pr-body.md
 
-          # gh reports a PAT that can't open PRs as a bare "Resource not accessible
-          # by personal access token", naming neither the token nor the permission.
-          # Say both, and say that the push succeeding proves nothing about it —
-          # that push used the checkout's GITHUB_TOKEN, not GH_PAT.
+          # gh reports a token that can't open PRs as a bare "Resource not
+          # accessible by integration", naming neither the token nor the
+          # permission. Say both, and say that the push succeeding proves nothing
+          # about it: that push used the checkout's GITHUB_TOKEN.
           if ! gh pr create \
             --base main --head "$BRANCH" \
             --title "chore(deps): bump GhosttyKit to ${LATEST}" \
@@ -218,9 +207,9 @@ jobs:
           then
             {
               echo "error: the bump commit is pushed to $BRANCH, but opening its PR failed."
-              echo "  If the message above is 'Resource not accessible by personal access"
-              echo "  token', GH_PAT is missing Pull requests: read+write on this repo."
-              echo "  Grant it and re-run — the branch is reused, not duplicated."
+              echo "  If the message above is 'Resource not accessible by integration', the"
+              echo "  macterm-ci app is not installed on this repo, or it lacks Pull requests:"
+              echo "  read and write. Fix it and re-run. The branch is reused, not duplicated."
             } >&2
             exit 1
           fi

@@ -127,14 +127,14 @@ def test_a_repeated_w_moves_word_by_word(app, live_pane):
     assert _state(app, pane_id)["selection"].strip() == one
 
     # The second `w` moves on to the next word. It stopped on the blank
-    # before fork thdxg/ghostty#30.
+    # before fork macterm/ghostty#30.
     _key(app, pane_id, "w")
     assert _state(app, pane_id)["selection"] == f"{two} "
 
     # The third `w` selects the last word of the row and nothing after
     # it: the next word is on the next row, so the head stops on the last
     # character, as the cursor of Helix stops before a newline (fork
-    # thdxg/ghostty#33).
+    # macterm/ghostty#33).
     _key(app, pane_id, "w")
     assert _state(app, pane_id)["selection"] == three
 

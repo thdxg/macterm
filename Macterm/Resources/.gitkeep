@@ -1,7 +1,7 @@
 This directory is populated locally — its contents are not committed.
 
 `mise run setup` (scripts/setup.sh) downloads the ghostty resources from the
-thdxg/ghostty release and extracts them here, mirroring a real Ghostty.app
+macterm/ghostty release and extracts them here, mirroring a real Ghostty.app
 layout:
 
     Macterm/Resources/

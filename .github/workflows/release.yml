@@ -231,7 +231,7 @@ jobs:
       - name: Compute DMG sha256
         id: hash
         run: |
-          URL="https://github.com/thdxg/macterm/releases/download/v${VERSION}/Macterm-${VERSION}.dmg"
+          URL="https://github.com/macterm/macterm/releases/download/v${VERSION}/Macterm-${VERSION}.dmg"
           curl -fsSL "$URL" -o macterm.dmg
           echo "sha256=$(shasum -a 256 macterm.dmg | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 

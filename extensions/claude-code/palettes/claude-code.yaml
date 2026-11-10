@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/palette.schema.json
 # Commands are POSIX sh, run in the active project's directory with the
 # values picked above as environment variables. ⌥↩ (or ⌥-click) opens a row
 # in a split instead of a new tab.

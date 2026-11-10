@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/extension.schema.json
 name: Git
 description: "Switch, log and diff the branches of the project, and open its worktrees"
 icon: icon.png
