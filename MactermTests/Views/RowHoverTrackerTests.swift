@@ -2,13 +2,14 @@ import AppKit
 @testable import Macterm
 import Testing
 
-/// The tracker's report and its tracking area must start from the same
-/// answer. AppKit sends an exit only for an area that it thinks the pointer
-/// is in, so a report of "inside" over an area that thinks "outside" never
-/// gets its exit, and the control stays revealed (the Keymaps clear badge
-/// after a recording).
+/// The self-heal of `RowHoverTracker` reports the pointer as inside only
+/// over the tracker's own area. A view that does not clip to its bounds has
+/// a visible rect as large as its window, and a check against that rect
+/// alone revealed the control of every row (the Keymaps clear badges after a
+/// recording).
 @MainActor
 struct RowHoverTrackerTests {
+    @MainActor
     private final class Harness {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
@@ -22,46 +23,46 @@ struct RowHoverTrackerTests {
 
         init() {
             window.contentView?.addSubview(tracker)
-            tracker.pointerLocation = { [unowned self] _ in pointer }
-            tracker.onHoverChanged = { [unowned self] in reports.append($0) }
-        }
-
-        var areaAssumesInside: Bool {
-            tracker.trackingAreas.first?.options.contains(.assumeInside) ?? false
+            tracker.pointerLocation = { [weak self] _ in self?.pointer }
+            tracker.onHoverChanged = { [weak self] in self?.reports.append($0) }
         }
     }
 
     @Test
-    func pointer_inside_reports_hover_and_the_area_waits_for_the_exit() {
+    func pointer_on_the_tracker_reports_hover() {
         let harness = Harness()
         harness.pointer = NSPoint(x: 50, y: 20)
-        harness.tracker.syncWithPointer()
+        harness.tracker.reportPointer()
         #expect(harness.reports == [true])
-        #expect(harness.tracker.trackingAreas.count == 1)
-        #expect(harness.areaAssumesInside)
     }
 
     @Test
-    func pointer_that_left_while_the_row_moved_clears_the_hover() {
+    func pointer_elsewhere_in_the_window_reports_no_hover() {
         let harness = Harness()
         harness.pointer = NSPoint(x: 50, y: 20)
-        harness.tracker.syncWithPointer()
-        // The row moves away under a pointer that does not move.
-        harness.tracker.frame.origin.y = 200
-        harness.tracker.syncWithPointer()
+        harness.tracker.reportPointer()
+        harness.pointer = NSPoint(x: 300, y: 250)
+        harness.tracker.reportPointer()
         #expect(harness.reports == [true, false])
-        #expect(harness.tracker.trackingAreas.count == 1)
-        #expect(!harness.areaAssumesInside)
+    }
+
+    @Test
+    func row_that_moved_away_from_the_pointer_reports_no_hover() {
+        let harness = Harness()
+        harness.pointer = NSPoint(x: 50, y: 20)
+        harness.tracker.reportPointer()
+        harness.tracker.frame.origin.y = 200
+        harness.tracker.reportPointer()
+        #expect(harness.reports == [true, false])
     }
 
     @Test
     func inactive_app_reports_no_hover() {
         let harness = Harness()
         harness.pointer = NSPoint(x: 50, y: 20)
-        harness.tracker.syncWithPointer()
+        harness.tracker.reportPointer()
         harness.pointer = nil
-        harness.tracker.syncWithPointer()
+        harness.tracker.reportPointer()
         #expect(harness.reports == [true, false])
-        #expect(!harness.areaAssumesInside)
     }
 }
