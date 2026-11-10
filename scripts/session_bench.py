@@ -53,6 +53,8 @@ the 1-minute load average to drop below --max-load and records the load.
 Subcommands:
   run     measure every arm, write a results JSON
   report  render one or more results JSONs as markdown
+  limits  write the gate's limits from the spread of --min-runs runs
+  check   exit 1 when v2 is worse than v1 beyond the limits (the CI gate)
 """
 
 import argparse
@@ -956,6 +958,132 @@ def pair_rows(arms, prefix=""):
     return rows
 
 
+# ── The gate ─────────────────────────────────────────────────────────────
+
+LIMITS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session_bench_limits.json")
+LIMIT_RUNS = 20
+
+
+def gate_values(arms):
+    """The measurements that the gate compares, by name: (v1, v2, kind).
+    A `ratio` compares v2 / v1. A `difference` compares v2 - v1, for a value
+    that v1 can have at 0 (idle wakeups, which are per pane)."""
+    values = {}
+    for prefix, where in (("", "Local"), ("remote-", "Remote")):
+        v1, v2 = arms.get(prefix + "v1"), arms.get(prefix + "v2")
+        if v1 and v2:
+            for p in ("p50", "p95"):
+                values[f"{where} echo {p}"] = (v1[f"{p}_ms"], v2[f"{p}_ms"], "ratio")
+    v1, v2 = arms.get("remote-open-v1"), arms.get("remote-open-v2")
+    if v1 and v2:
+        values["New remote pane p50"] = (v1["p50_ms"], v2["p50_ms"], "ratio")
+    v1, v2 = arms.get("reattach-v1"), arms.get("reattach-v2")
+    if v1 and v2:
+        values["Reattach p50"] = (v1["p50_ms"], v2["p50_ms"], "ratio")
+    for size, layers in (arms.get("idle") or {}).get("panes", {}).items():
+        def total(layer, key):
+            return layers[layer][f"session_{key}"] + layers[layer][f"client_{key}"]
+        values[f"Memory, idle panes: {size}"] = (total("v1", "mb"), total("v2", "mb"), "ratio")
+        values[f"Wakeups/s per pane, idle panes: {size}"] = (
+            total("v1", "wakeups_per_s") / int(size), total("v2", "wakeups_per_s") / int(size),
+            "difference",
+        )
+    return values
+
+
+def gate_statistic(v1, v2, kind):
+    if kind == "difference":
+        return v2 - v1
+    return v2 / v1 if v1 > 0 else float("inf")
+
+
+def load_results(paths):
+    results = []
+    for path in paths:
+        with open(path) as f:
+            results.append(json.load(f))
+    return results
+
+
+def cmd_limits(args):
+    """Each limit is no change (a ratio of 1, a difference of 0) plus the
+    noise: the largest distance of one run's statistic from the median of
+    all runs. The runs are of one commit, or of commits that do not change
+    the session layer."""
+    by_system = {}
+    for result in load_results(args.results):
+        by_system.setdefault(result["runner"]["system"], []).append(result)
+    limits = {"runs": {}, "systems": {}}
+    for system, results in sorted(by_system.items()):
+        if len(results) < args.min_runs:
+            sys.exit(f"error: {len(results)} runs of {system}; the limits need {args.min_runs}")
+        names = set.intersection(*(set(gate_values(r["arms"])) for r in results))
+        entries = {}
+        for name in sorted(names):
+            kind = gate_values(results[0]["arms"])[name][2]
+            stats = [gate_statistic(*gate_values(r["arms"])[name]) for r in results]
+            median = statistics.median(stats)
+            noise = max(abs(s - median) for s in stats)
+            entries[name] = {
+                "kind": kind,
+                "median": round(median, 3),
+                "noise": round(noise, 3),
+                "limit": round((1 if kind == "ratio" else 0) + noise, 3),
+            }
+        limits["systems"][system] = entries
+        limits["runs"][system] = {
+            "count": len(results),
+            "commits": sorted({r["commit"] for r in results}),
+            "images": sorted({str(r["runner"].get("image_version")) for r in results}),
+        }
+    with open(args.out, "w") as f:
+        json.dump(limits, f, indent=2)
+        f.write("\n")
+    print(f"wrote {args.out}")
+
+
+def cmd_check(args):
+    """Fail when v2 is worse than v1 beyond the noise of the limits."""
+    with open(args.limits) as f:
+        limits = json.load(f)["systems"]
+    failed = False
+    lines = ["## Session layer gate", ""]
+    for path, result in zip(args.results, load_results(args.results)):
+        system = result["runner"]["system"]
+        lines += [f"### {system} ({os.path.basename(path)})", ""]
+        entries = limits.get(system)
+        if not entries:
+            lines += [f"No limits for {system}. Fail.", ""]
+            failed = True
+            continue
+        values = gate_values(result["arms"])
+        lines += [
+            "| Measurement | v1 | v2 | v2 / v1 or v2 − v1 | Limit | Result |",
+            "|---|---:|---:|---:|---:|---|",
+        ]
+        for name, entry in entries.items():
+            if name not in values:
+                lines.append(f"| {name} | — | — | — | {entry['limit']:.3f} | Fail: not measured |")
+                failed = True
+                continue
+            v1, v2, kind = values[name]
+            stat = gate_statistic(v1, v2, kind)
+            ok = stat <= entry["limit"]
+            failed |= not ok
+            lines.append(
+                f"| {name} | {v1:.3f} | {v2:.3f} | {stat:.3f} | {entry['limit']:.3f} "
+                f"| {'Pass' if ok else 'Fail'} |"
+            )
+        lines.append("")
+    lines.append(
+        "_A limit is no change (a ratio of 1, a difference of 0) plus the largest "
+        f"spread of the statistic in the runs of {os.path.basename(args.limits)}._"
+    )
+    print("\n".join(lines))
+    if failed:
+        sys.exit(1)
+
+
 def cmd_report(args):
     lines = ["## Session layer", ""]
     for path in args.results:
@@ -1093,6 +1221,18 @@ def main():
     report = sub.add_parser("report", help="render results as markdown")
     report.add_argument("results", nargs="+", help="results JSONs from `run`")
     report.set_defaults(func=cmd_report)
+
+    limits = sub.add_parser("limits", help="write the gate's limits from the spread of many runs")
+    limits.add_argument("results", nargs="+", help="results JSONs from `run`")
+    limits.add_argument("--out", default=LIMITS_PATH, help="path for the limits JSON")
+    limits.add_argument("--min-runs", type=int, default=LIMIT_RUNS,
+                        help="runs that each system needs")
+    limits.set_defaults(func=cmd_limits)
+
+    check = sub.add_parser("check", help="exit 1 when v2 is worse than v1 beyond the limits")
+    check.add_argument("results", nargs="+", help="results JSONs from `run`")
+    check.add_argument("--limits", default=LIMITS_PATH, help="the limits JSON")
+    check.set_defaults(func=cmd_check)
 
     args = parser.parse_args()
     args.func(args)

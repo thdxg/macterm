@@ -1,19 +1,14 @@
 name: Session Benchmark
 
-# The v1/v2 session layer benchmark (scripts/session_bench.py). AGENTS.md
-# ("Session layer benchmark") says what it measures and when it runs. It is
-# not a required check.
+# The v1/v2 session layer benchmark and its gate (scripts/session_bench.py).
+# AGENTS.md ("Session layer benchmark") says what it measures and when it
+# fails. The workflow starts on every pull request, so that its checks report
+# also where they are required. The measuring jobs skip when the pull request
+# changes no file of the session layer.
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "server/**"
-      - "protocol/**"
-      - "scripts/session_bench.py"
-      - "scripts/build-server.sh"
-      - ".github/workflows/session-bench.yml"
-      - ".github/workflows/server-build.yml"
   workflow_dispatch:
 
 concurrency:
@@ -21,9 +16,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The files that the pull request changes, from the merge commit, as in
+  # server.yml. A run by hand always measures.
+  changes:
+    name: Find Session Layer Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      bench: ${{ steps.changes.outputs.bench }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Find Session Layer Changes
+        id: changes
+        shell: bash
+        run: |
+          bench=true
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            files="$(git diff --no-renames --name-only HEAD^1 HEAD)"
+            if ! grep -qE '^(server/|protocol/|scripts/session_bench(\.py|_limits\.json)$|scripts/build-server\.sh$|\.github/workflows/(session-bench|server-build)\.yml$)' <<<"$files"; then
+              bench=false
+            fi
+          fi
+          echo "bench=$bench" | tee -a "$GITHUB_OUTPUT"
+
   # The session server of this commit (server-build.yml).
   server:
     name: Server
+    needs: changes
+    if: needs.changes.outputs.bench == 'true'
     permissions:
       contents: write
     uses: ./.github/workflows/server-build.yml
@@ -67,6 +93,10 @@ jobs:
         with:
           name: session-results-macos
           path: session-macos.json
+
+      # Fails when v2 is worse than v1 beyond the limits.
+      - name: Compare v2 with v1
+        run: python3 scripts/session_bench.py check session-macos.json >> "$GITHUB_STEP_SUMMARY"
 
   # The latency arms plus the ssh arms, against sshd on localhost with 25 ms
   # of delay each way (50 ms round trip) and 100 Mbit/s. Linux, because sshd
@@ -126,3 +156,7 @@ jobs:
         with:
           name: session-results-linux
           path: session-linux.json
+
+      # Fails when v2 is worse than v1 beyond the limits.
+      - name: Compare v2 with v1
+        run: python3 scripts/session_bench.py check session-linux.json >> "$GITHUB_STEP_SUMMARY"
