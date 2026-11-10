@@ -149,7 +149,7 @@ final class SSHLoginPrompts {
                 // The same login: change the text in place, so that a
                 // line that changes does not open the sheet again.
                 if wanted.line != sheet.line {
-                    sheet.alert.informativeText = wanted.line
+                    sheet.alert.informativeText = Self.noticeText(wanted.line)
                     if let url = Self.link(in: wanted.line) { sheet.opener?.url = url }
                     noticeSheet?.line = wanted.line
                 }
@@ -163,7 +163,7 @@ final class SSHLoginPrompts {
         let pid = wanted.sshPID
         let alert = NSAlert()
         alert.messageText = String(localized: "Connecting to \(wanted.host)")
-        alert.informativeText = wanted.line
+        alert.informativeText = Self.noticeText(wanted.line)
         var opener: LinkOpener?
         if let url = Self.link(in: wanted.line) {
             let button = alert.addButton(withTitle: String(localized: "Open Link"))
@@ -207,6 +207,16 @@ final class SSHLoginPrompts {
         }
     }
 
+    /// A notice's text: the link starts its own line, so that the text does
+    /// not wrap after `https://`.
+    nonisolated static func noticeText(_ line: String) -> String {
+        let words = line.split(separator: " ", omittingEmptySubsequences: false)
+        guard let index = words.firstIndex(where: { $0.range(of: "https://", options: .caseInsensitive) != nil }),
+              index > 0
+        else { return line }
+        return words[..<index].joined(separator: " ") + "\n" + words[index...].joined(separator: " ")
+    }
+
     /// The first https link in `line`, without the punctuation around it.
     nonisolated static func link(in line: String) -> URL? {
         for word in line.split(whereSeparator: \.isWhitespace) {
@@ -248,32 +258,39 @@ final class SSHLoginPrompts {
              .confirm: String(localized: "Connect to \(request.host)?")
         }
         let question = Question.of(request.prompt, kind: request.kind)
-        var fingerprint: NSTextField?
         var text = question.text
-        if case let .hostKey(key) = question {
+        if Self.isRetry(request, answered: answeredSecret) {
+            text = question.refusal + "\n" + text
+        }
+        alert.informativeText = text
+        alert.addButton(withTitle: request.kind == .secret
+            ? String(localized: "Log In")
+            : String(localized: "Connect", comment: "The button that accepts an ssh question, such as a new host key."))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        if request.kind == .secret, savedID != nil { alert.addButton(withTitle: String(localized: "Use Saved Password")) }
+        let columns = Self.columns(of: alert)
+        var field: NSSecureTextField?
+        if request.kind == .secret {
+            let secure = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: columns.buttons.width, height: 24))
+            alert.accessoryView = secure
+            alert.window.initialFirstResponder = secure
+            field = secure
+        } else if case let .hostKey(key) = question {
             let label = NSTextField(labelWithString: "\(key.host)\n\(key.type) \(key.fingerprint)")
             label.font = TerminalFont.shared.nsFont(size: NSFont.smallSystemFontSize)
             label.isSelectable = true
             label.lineBreakMode = .byClipping
             label.sizeToFit()
-            fingerprint = label
-        }
-        if Self.isRetry(request, answered: answeredSecret) {
-            text = question.refusal + "\n" + text
-        }
-        alert.informativeText = text
-        alert.accessoryView = fingerprint
-        alert.addButton(withTitle: request.kind == .secret
-            ? String(localized: "Log In")
-            : String(localized: "Connect", comment: "The button that accepts an ssh question, such as a new host key."))
-        alert.addButton(withTitle: String(localized: "Cancel"))
-        var field: NSSecureTextField?
-        if request.kind == .secret {
-            let secure = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-            alert.accessoryView = secure
-            alert.window.initialFirstResponder = secure
-            field = secure
-            if savedID != nil { alert.addButton(withTitle: String(localized: "Use Saved Password")) }
+            // A fingerprint is never wrapped: a long one makes the sheet wider.
+            label.setFrameOrigin(NSPoint(x: columns.textInset, y: 0))
+            let box = NSView(frame: NSRect(
+                x: 0,
+                y: 0,
+                width: max(columns.buttons.width, columns.textInset + label.frame.width),
+                height: label.frame.height
+            ))
+            box.addSubview(label)
+            alert.accessoryView = box
         }
 
         guard let window = Self.terminalWindow() else {
@@ -286,6 +303,22 @@ final class SSHLoginPrompts {
         alert.beginSheetModal(for: window) { [weak self] response in
             self?.finish(pending, response: response, field: field, savedID: savedID)
         }
+    }
+
+    /// The columns of an alert. NSAlert puts an accessory at the left edge
+    /// of its buttons, and its text a few points in from that edge
+    /// (measured on macOS 27: buttons from 16 pt, text from 20 pt). A field
+    /// as wide as the buttons, and a label moved in by `textInset`, line up
+    /// with both. Call it after the buttons are added.
+    private static func columns(of alert: NSAlert) -> (buttons: NSRect, textInset: CGFloat) {
+        alert.layout()
+        let buttons = alert.buttons.map { $0.convert($0.bounds, to: nil) }.reduce(NSRect.null) { $0.union($1) }
+        func text(in view: NSView) -> NSTextField? {
+            if let field = view as? NSTextField, field.stringValue == alert.informativeText { return field }
+            return view.subviews.lazy.compactMap(text(in:)).first
+        }
+        let textMinX = alert.window.contentView.flatMap(text(in:)).map { $0.convert($0.bounds, to: nil).minX }
+        return (buttons, max(0, (textMinX ?? buttons.minX) - buttons.minX))
     }
 
     private func finish(_ pending: Pending, response: NSApplication.ModalResponse, field: NSSecureTextField?, savedID: PasswordEntryID?) {

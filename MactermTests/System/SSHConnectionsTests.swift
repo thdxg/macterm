@@ -225,6 +225,15 @@ struct SSHConnectionsTests {
         #expect(SSHLoginPrompts.link(in: "(https://example.test/z)")?.absoluteString == "https://example.test/z")
     }
 
+    @Test
+    func a_notice_puts_its_link_on_a_line_of_its_own() {
+        #expect(SSHLoginPrompts.noticeText("To authenticate, visit: https://example.test/x")
+            == "To authenticate, visit:\nhttps://example.test/x")
+        #expect(SSHLoginPrompts.noticeText("Open <https://example.test/y> now.") == "Open\n<https://example.test/y> now.")
+        #expect(SSHLoginPrompts.noticeText("https://example.test/z") == "https://example.test/z")
+        #expect(SSHLoginPrompts.noticeText("Waiting for the host") == "Waiting for the host")
+    }
+
     @Test(.timeLimit(.minutes(1)))
     func a_login_that_waits_on_a_link_reports_it_until_it_ends() async throws {
         let directory = URL(fileURLWithPath: "/tmp").appendingPathComponent("mt-notice-\(UInt32.random(in: 0 ... .max))")
