@@ -185,7 +185,7 @@ struct MactermConfigTests {
     }
 
     @Test
-    func stretch_with_speed_is_the_forks_mode_of_smooth_cursor() {
+    func cursor_morph_is_the_forks_mode_of_smooth_cursor() {
         let both = MactermConfig.overridesBody(
             windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
             animations: .init(smoothCursor: true, cursorMorph: true)
@@ -200,7 +200,7 @@ struct MactermConfigTests {
     }
 
     @Test
-    func stretch_with_speed_without_smooth_cursor_writes_nothing() {
+    func cursor_morph_without_smooth_cursor_writes_nothing() {
         let body = MactermConfig.overridesBody(
             windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
             animations: .init(smoothCursor: false, cursorMorph: true, trail: true)
