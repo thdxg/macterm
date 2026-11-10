@@ -4,8 +4,7 @@ shell → renderer cell state, read back out with `pane dump`.
 Commands typed into panes must parse in ANY login shell — CI runners use zsh,
 dev machines may run fish or nushell — so everything is `/bin/sh -c "…"` with
 a single-quote-free, backslash-free script: the one form POSIX shells and
-nushell tokenize identically (the same trick as the benchmark's workload
-command and RemoteSpawn's wire format).
+nushell tokenize identically (the same trick as RemoteSpawn's wire format).
 """
 
 import time

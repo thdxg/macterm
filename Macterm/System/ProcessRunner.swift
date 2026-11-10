@@ -24,15 +24,20 @@ enum ProcessRunner {
     /// and every byte the child wrote is collected by then. The wait for
     /// EOF after the exit is bounded by `drainTimeout`, because a child of
     /// the process (a daemon git starts, a child of ssh) could keep a pipe
-    /// open after the process exited.
+    /// open after the process exited. `input` is its stdin; nil is
+    /// `/dev/null`.
     static func run(
-        _ executable: String, _ arguments: [String], environment: [String: String], timeout: Duration
+        _ executable: String,
+        _ arguments: [String],
+        environment: [String: String],
+        input: FileHandle? = nil,
+        timeout: Duration
     ) async -> Outcome? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         process.environment = environment
-        process.standardInput = FileHandle.nullDevice
+        process.standardInput = input ?? FileHandle.nullDevice
         let stdout = CollectedPipe()
         let stderr = CollectedPipe()
         process.standardOutput = stdout.pipe

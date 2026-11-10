@@ -7,9 +7,9 @@ name: Server
 #
 # The three Test checks are required on main, and a required check must report
 # on every pull request. So the workflow starts on every pull request, and each
-# job skips its steps when no file in its paths-filter changed. The skip is at
-# step level: a matrix job that a job-level if: skips reports its unexpanded
-# name, which never matches the required name.
+# job skips its steps when the pull request changes no file in the paths below.
+# The skip is at step level: a matrix job that a job-level if: skips reports
+# its unexpanded name, which never matches the required name.
 #
 # macOS runs on macos-15: zig cannot link with Xcode 26.4 or later
 # (zig#31658), and the xcode-27 image has nothing older.
@@ -25,12 +25,11 @@ on:
       - "Macterm/Protocol/**"
       - "scripts/build-server.sh"
       - "scripts/protocol.sh"
+      - "scripts/server-zig.sh"
       - ".github/workflows/server.yml"
 
 permissions:
   contents: read
-  # paths-filter reads the files of a pull request through the API.
-  pull-requests: read
 
 concurrency:
   group: server-${{ github.event.pull_request.number || github.sha }}
@@ -55,19 +54,28 @@ jobs:
       run:
         working-directory: server
     steps:
+      # Depth 2: the merge commit of the pull request and its two parents.
       - uses: actions/checkout@v7
-
-      - uses: dorny/paths-filter@v4
-        id: changes
         with:
-          filters: |
-            server:
-              - "server/**"
-              - "protocol/**"
-              - "Macterm/Protocol/**"
-              - "scripts/build-server.sh"
-              - "scripts/protocol.sh"
-              - ".github/workflows/server.yml"
+          fetch-depth: 2
+
+      # The files that the pull request changes, from the merge commit. This
+      # needs no API call: dorny/paths-filter failed once when the API call
+      # failed with an empty message (run 42713507061). On a push, the paths
+      # of the trigger already matched.
+      - name: Find Server Changes
+        id: changes
+        working-directory: .
+        shell: bash
+        run: |
+          server=true
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            files="$(git diff --no-renames --name-only HEAD^1 HEAD)"
+            if ! grep -qE '^(server/|protocol/|Macterm/Protocol/|scripts/build-server\.sh$|scripts/protocol\.sh$|scripts/server-zig\.sh$|\.github/workflows/server\.yml$)' <<<"$files"; then
+              server=false
+            fi
+          fi
+          echo "server=$server" | tee -a "$GITHUB_OUTPUT"
 
       - name: Zig Version
         if: steps.changes.outputs.server == 'true'
@@ -75,29 +83,60 @@ jobs:
         working-directory: .
         run: echo "version=$(scripts/build-server.sh zig-version)" >> "$GITHUB_OUTPUT"
 
+      # The cache of setup-zig is off: it saves the cache also from a job that
+      # failed or that a newer push cancelled. Run 42760283476 restored such a
+      # cache, which named an output file that was not in it. The steps below
+      # save the cache only after a build that passed. The key changes only
+      # when build.zig.zon or the Zig version changes, so each key is saved once.
       - name: Install Zig
         if: steps.changes.outputs.server == 'true'
         uses: mlugg/setup-zig@v2
         with:
           version: ${{ steps.zig.outputs.version }}
+          use-cache: false
 
-      - name: Install Bats
+      - name: Restore the Zig Cache
+        if: steps.changes.outputs.server == 'true'
+        id: zig-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .zig-cache
+          key: server-zig-${{ runner.os }}-${{ runner.arch }}-${{ steps.zig.outputs.version }}-${{ hashFiles('server/build.zig.zon') }}
+          restore-keys: |
+            server-zig-${{ runner.os }}-${{ runner.arch }}-${{ steps.zig.outputs.version }}-
+
+      - name: Fetch the Zig Packages
+        if: steps.changes.outputs.server == 'true'
+        run: ../scripts/server-zig.sh fetch
+
+      # host_install.bats runs its own sshd as the runner's user. macOS has
+      # one at /usr/sbin/sshd.
+      - name: Install Bats and sshd
         if: steps.changes.outputs.server == 'true'
         run: |
           if [ "$RUNNER_OS" = macOS ]; then
             brew install bats-core
           else
             sudo apt-get update -q
-            sudo apt-get install -y -q bats
+            sudo apt-get install -y -q bats openssh-server
           fi
 
       - name: Run the Zig Tests
         if: steps.changes.outputs.server == 'true'
-        run: zig build test --summary all
+        run: ../scripts/server-zig.sh build test --summary all
 
       - name: Build
         if: steps.changes.outputs.server == 'true'
-        run: zig build
+        run: ../scripts/server-zig.sh build
+
+      # Only after a build that passed (the default if: is success()), and
+      # only for a new key.
+      - name: Save the Zig Cache
+        if: steps.changes.outputs.server == 'true' && steps.zig-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .zig-cache
+          key: ${{ steps.zig-cache.outputs.cache-primary-key }}
 
       # The Swift side of the protocol is generated from the Zig schema
       # (design/003 §3). This step fails in three cases:
