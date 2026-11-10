@@ -66,7 +66,7 @@ final class Updater {
         // A scripted run (MACTERM_BENCHMARK=1) of a local Release build has
         // the placeholder key (no SPARKLE_ED_PUBLIC_KEY at build time), so the
         // updater fails to start and its app-modal alert blocks the run
-        // loop at launch — on CI nobody can click OK.
+        // loop at launch — in a scripted run nobody can click OK.
         let isDebug: Bool = {
             #if DEBUG
             true

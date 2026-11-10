@@ -1064,7 +1064,7 @@ The suite starts the real Debug app in a hermetic way through `MactermHarness`. 
 
 Conventions:
 
-- There is one app instance for each session. Keep it the **active app** before every test (`_active_app` in `conftest.py`: `lsappinfo front`, taken again through the `activate` hook of `BenchmarkControl`). That hook forces activation, because the cooperative request is refused once another app holds the front).
+- There is one app instance for each session. Keep it the **active app** before every test (`_active_app` in `conftest.py`: `lsappinfo front`, taken again through the `activate` hook of `BenchmarkControl`). That hook forces activation, because the cooperative request is refused once another app holds the front.
   - The password monitor watches only the focused pane of the key window. It runs no timer while the app is inactive.
   - A test that starts an instance of its own (`open -n` fronts it) leaves the shared instance behind Finder when it kills its own. This is what timed out both tests of `test_passwords.py` on CI.
 - Use the `fresh_tab` fixture. Never change the initial pane.

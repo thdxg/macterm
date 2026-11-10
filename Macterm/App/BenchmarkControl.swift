@@ -8,7 +8,7 @@ private let logger = Logger(subsystem: appBundleID, category: "BenchmarkControl"
 ///
 /// When the app is launched with `MACTERM_BENCHMARK=1` it listens for Darwin
 /// notifications (posted from a shell with `notifyutil -p <name>`) that open
-/// a project and front, minimize or restore its window. Darwin notifications need no
+/// a project and front its window. Darwin notifications need no
 /// TCC grant — unlike AppleScript/System Events or synthetic key events — so a
 /// headless CI runner can script the app without touching the SIP-protected
 /// permission database.
@@ -47,8 +47,6 @@ enum BenchmarkControl {
     private enum Command: String, CaseIterable {
         case openProject = "open-project"
         case activate
-        case minimize
-        case restore
     }
 
     static func install() {
@@ -105,11 +103,6 @@ enum BenchmarkControl {
             openProject()
         case .activate:
             activate()
-        case .minimize:
-            mainWindow?.miniaturize(nil)
-        case .restore:
-            mainWindow?.deminiaturize(nil)
-            activate()
         }
     }
 
@@ -149,8 +142,8 @@ enum BenchmarkControl {
     /// the first candidate window only before that pointer is set (no
     /// command arrives before the window exists in practice). The candidate
     /// check excludes the surface incubator's permanently-invisible window,
-    /// which `open-project` creates on its way to warming panes — miniaturizing
-    /// or fronting *that* would act on the wrong window.
+    /// which `open-project` creates on its way to warming panes — fronting
+    /// *that* would act on the wrong window.
     private static var mainWindow: NSWindow? {
         appState?.appDelegate?.mainWindow
             ?? NSApp.windows.first(where: AppDelegate.isTerminalWindowCandidate)
