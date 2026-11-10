@@ -99,7 +99,7 @@ struct ExtensionScreenshotTests {
         )))
 
         let config = FileManager.default.temporaryDirectory.appendingPathComponent("macterm-shots-\(UUID().uuidString)", isDirectory: true)
-        let store = CustomPaletteStore(configDirectoryURL: config)
+        let store = CustomPaletteStore(configDirectoryURL: config, hotkeys: .isolated())
         let folder = store.extensionsURL.appendingPathComponent("kubernetes", isDirectory: true)
         try FileManager.default.createDirectory(at: folder.appendingPathComponent("screenshots"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: folder.appendingPathComponent("palettes"), withIntermediateDirectories: true)

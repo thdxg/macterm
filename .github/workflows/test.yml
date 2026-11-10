@@ -3,14 +3,21 @@ name: Test
 # All testing CI lives here so check names group in the PR UI as
 # "Test / Unit" and "Test / End-to-end" (the workflow name is the prefix;
 # the job name is the required-status-check context). Style gates stay in
-# checks.yml; the resource benchmark has its own workflow (artifact/report
-# plumbing).
+# checks.yml.
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+# A new push to a pull request cancels the runs of its older commit, so they
+# do not keep the macOS runners that the new jobs need. A push to main has a
+# group for each commit and is never cancelled: release-tip.yml needs the Test
+# and Checks results of each commit on main.
+concurrency:
+  group: test-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   changes:
@@ -105,7 +112,7 @@ jobs:
       # stale bytes under the new key). Without the fallback, a new week starts
       # empty, setup re-downloads once, and the fresh content is cached — the
       # intended "picked up within a week" behavior. Shared verbatim with the
-      # benchmark and release workflows.
+      # release workflows.
       - name: Cache GhosttyKit
         uses: actions/cache@v6
         with:
@@ -135,9 +142,7 @@ jobs:
 
       # Debug build products, keyed on the GhosttyKit ACTUALLY INSTALLED above,
       # so they can never be paired with a framework they weren't compiled
-      # against. Separate key prefix from the benchmark's Release cache: same
-      # on-disk path (build/DerivedData), different namespace, so the two
-      # configs never clobber each other.
+      # against.
       #
       # A PINNED RELEASE IS NOT IMMUTABLE — that's what makes the framework hash
       # load-bearing rather than belt-and-braces. thdxg/ghostty replaced
@@ -212,7 +217,7 @@ jobs:
           path: build/DerivedData
           key: ${{ steps.derived.outputs.cache-primary-key }}
 
-  # End-to-end: build the Debug app, launch it hermetically (the benchmark's
+  # End-to-end: build the Debug app, launch it hermetically (the
   # TCC-free recipe — Darwin notifications + LaunchServices activation, see
   # scripts/_harness.py), and drive it through the bundled `macterm` CLI's
   # control socket, asserting on libghostty's own state (`pane dump`/`list`).

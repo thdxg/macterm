@@ -81,7 +81,7 @@ struct RunCommandInMactermPaneIntent: AppIntent {
 /// apply — the two key-input paths share no gate.
 struct SendKeyToMactermPaneIntent: AppIntent {
     static let title: LocalizedStringResource = "Send Key"
-    static let description = IntentDescription("Send one key combination to a pane, such as ctrl+c, escape or up.")
+    static let description = IntentDescription("Send one key combination to a pane, such as ctrl+c, escape, or up.")
 
     #if compiler(>=6.2)
     @available(macOS 26.0, *)
@@ -90,7 +90,7 @@ struct SendKeyToMactermPaneIntent: AppIntent {
 
     @Parameter(
         title: "Key",
-        description: "A key combination such as ctrl+c, escape or up, or a single printable key such as j.",
+        description: "A key combination such as ctrl+c, escape, or up, or a single printable key such as j.",
         inputOptions: String.IntentInputOptions(
             capitalizationType: .none,
             autocorrect: false,
@@ -112,7 +112,7 @@ struct SendKeyToMactermPaneIntent: AppIntent {
         let ctx = try await MactermIntentHost.shared.authorizedContext()
         guard let shortcut = HotkeyRegistry.parseShortcut(key) else {
             throw MactermIntentError.badInput(
-                String(localized: "\"\(key)\" is not a key combination. Try ctrl+c, escape or up.")
+                String(localized: "\"\(key)\" is not a key combination. Try ctrl+c, escape, or up.")
             )
         }
         let target = try IntentTargets.pane(session: pane.id, in: ctx)
@@ -195,7 +195,7 @@ enum MactermPaneDetail: String, AppEnum {
 /// Read one fact about a pane.
 struct GetMactermPaneDetailsIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Pane Details"
-    static let description = IntentDescription("Read the ID, session, directory, process or size of a pane.")
+    static let description = IntentDescription("Read the ID, session, directory, process, or size of a pane.")
 
     #if compiler(>=6.2)
     @available(macOS 26.0, *)

@@ -15,12 +15,11 @@ mise run format       # Auto-fix formatting with swiftformat
 mise run lint         # swiftlint
 mise run test         # Run the unit test suite
 mise run e2e          # Debug build + end-to-end suite against the real app
-mise run bench        # Release build + resource benchmark
 mise run build        # Release build + DMG
 mise run install      # Copy the built app to /Applications
 ```
 
-`format`, `lint`, `test`, `e2e` and `bench` show a spinner. They print output only when they fail. **Always pass `--verbose`** (`mise run test --verbose`) to stream the raw output.
+`format`, `lint`, `test` and `e2e` show a spinner. They print output only when they fail. **Always pass `--verbose`** (`mise run test --verbose`) to stream the raw output.
 
 **The Debug app signs ad-hoc, unless `Configs/Local.xcconfig` names an identity.** An ad-hoc designated requirement is the cdhash, and the cdhash changes at each build. TCC (Screen Recording, Accessibility, Full Disk Access, Local Network) therefore refuses each new `Macterm Debug.app`. Git ignores `Configs/Local.xcconfig`. A line `CODE_SIGN_IDENTITY = <name>` in it gives every Debug target a stable requirement. `Configs/Debug.xcconfig` includes it with `#include?`. `scripts/embed-zmx.sh` signs the bundled zmx with the same identity. The recipe for the self-signed certificate is in CONTRIBUTING.md ("Keeping macOS permissions across Debug builds").
 
@@ -397,6 +396,20 @@ These rules for the spawn script come from tests against a real host:
 - **Each new login writes a log line**, `ssh login: host=<host> logins=<n>`, so the logins of a day can be counted from the log (design/005, the question of a link that roams).
 - A quit ends only a login that has not finished (`endLogins`). `disconnect` ends Macterm's master with `ssh -O exit`. A user's master is never ended.
 
+### A host's server (v2, design/005 steps 3 to 5)
+
+`RemoteServers` (`Macterm/Server/RemoteServers.swift`) reaches the server on a host over that host's connection. It installs the server first when it is not there. Nothing in a remote project uses it yet (issue 0057). The debug-only `macterm host server <host>` connects, and prints the server's build and the ssh commands that the connect ran.
+
+- **The host scripts are files** (`server/host/attach.sh`, `install.sh`, in the bundle at `Contents/Resources/host`), so that `server/test/host_install.bats` runs the same text over a real sshd on Linux and macOS. **The app sends each one as one line** (`HostScripts.oneLine`: no comment lines, the lines joined with spaces) in `sh -c '<script>' macterm <arguments>`. sshd gives that command to the user's login shell, and csh refuses a newline in single quotes. So every line of a host script ends where a join is valid (each command ends with `;`), it has no single quote, and no `!` that csh reads as history. Each argument is one plain word. `HostScripts.command` refuses anything else, and `RemoteServersTests` checks the bundled scripts with `sh -n` and `csh`.
+- **One command checks and attaches.** `attach.sh` prints `macterm-host proxy` and execs `~/.local/share/macterm/bin/macterm-<build key> proxy`. Its stdio is one end of a socket pair. The app drops every byte up to that line (`skipToProxy`: a shell rc file of the user can write to stdout first), then `ServerConnection.handshake(fd:)` does the handshake. A current host costs this one command after the login. With no file of this build, it exits 3 and writes `macterm-host missing <system> <machine> <host id or -> <host keys>` on stderr. Exit 4 is no writable home or an OS with no build. The check writes nothing on the host. Text from the host goes into a log or an error only with its control characters removed (`HostCheck.clean`).
+- **The first install asks** (`RemoteServerConsent`, on a terminal window: Install, or Continue Without Server, which Escape presses). The answer is kept in `Preferences.remoteServerConsents`: the destination as `ssh -G` resolves it (`user@hostname:port`) → the host id and the host keys. When `ssh -G` fails, it asks and keeps nothing.
+  - **The host id is a file that the first install writes** (`~/.local/share/macterm/host-id`, a UUID that the app makes), not `/etc/machine-id`: a container or a minimal host has none. An install never changes the file.
+  - **The host keys are a `cksum` of `/etc/ssh/ssh_host_*_key.pub`** (type and key, sorted), so a host key change asks again. Where the files cannot be read, the value is the same for every host, and only the host id counts.
+  - A host with no id file, another id or other host keys asks again. Later builds install with no question. Continue Without Server installs nothing (`Failure.declined`).
+- **The install** (`install.sh`) streams the bundled gzip build for the host's `uname` (`ServerBuilds`, `Contents/Resources/server/macterm-<key>-<target>.gz`) on stdin into `bin/.macterm-<key>.<pid>.<time>`, checks the SHA-256 of the binary (`sha256sum`, else `shasum`, else the binary's own `version` must name the build), `chmod 700`, and `mv`s it to `bin/macterm-<key>`. A trap removes the temp file on exit and on a signal (a lost link). Then a symlink to the new build replaces `~/.local/bin/macterm` with the same temp-name-and-`mv` step. A file or a folder of the user there stays. The app reads each build's checksum once for each run (`gzip -dc`).
+- **The newest install wins** (`shouldReplace`). A proxy of this build can reach a server that another build started. The app sends that server `server.exit`, once for each connect, and connects again; the sessions keep running and keep their build (design/002). It does this for a lower level, and at the same level only right after this connect installed its own build: builds of one level have no order. A server of a higher level stays: an app never downgrades a host. So two apps of one level on one host (a Debug and a Release build) share the server of the later install, and do not take turns replacing it.
+- **The server removes old builds** (`pruneBuilds` in `server.zig`): the files `macterm-<key>` in its own folder whose key no session reports, never its own, and none of the last minute (`fresh_build_ms`: an install whose proxy has not started yet). It does this when every session settled at start and after each session ends. It fails closed: only a server that runs from a `macterm-<own key>` file does it (not the Mac's bundle, not a file that an install replaced under it), and nothing while a session's build has no key. A temp file of an install is not a build.
+
 ### Session daemons and macOS attribution (#419)
 
 macOS attributes work that needs privacy permission (Local Network, TCC) to the *responsible process* of a process. The value is fixed when the process starts, and the process inherits it from its parent.
@@ -701,7 +714,6 @@ Rules:
   - Remote tabs get `project.zmxPath` before the warm. A split stamps the whole target tab, so the new sibling inherits the path of the source.
   - The start is asynchronous. It is not a promise that the shell prompt is ready when the CLI returns.
 - `pane run` types through the paste path (`sendText`). `--no-submit` withholds the newline and keeps the evidence of a submission armed. `pane key <chord>` uses the key-encoding path (`sendKey`) and **bypasses `keyDown`**, so the interceptions of `keyDown` do not apply. A bare printable key must carry `.text`, or it encodes to nothing. `pane resize` exists only under `#if DEBUG`.
-- `pane.latency` is a socket command with no CLI subcommand (`TypingLatencyProbe`). It types `x` into a pane, times each glyph to the first frame that shows it, and clears the line with ctrl+u. Only a Debug build or an app with `MACTERM_BENCHMARK=1` answers it; any other build answers `unknown_command`. `benchmark.py --latency-keys` sends it straight to the socket.
 
 ### The v2 protocol (`Macterm/Protocol/`)
 
@@ -989,7 +1001,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
     - The built-in screens are not extensions, and they have no card. There is no switch for on and off. To remove an extension, uninstall it.
   - `PasswordsSettings`.
   - `IntelligenceSettings` (Settings → Intelligence, macOS 26 and later): a header block in the shape of a System Settings pane's (the features need Apple Intelligence, nothing leaves the Mac, a link to the docs), the switch of Project Insights (disabled without Apple Intelligence), and the status of Apple's on-device model. The header block says those facts one time: the sections below do not repeat them.
-- `Macterm/Server/`: the app's client of the local server. `LocalServer` (start, reuse, replace) and `ServerConnection` (handshake, requests, events).
+- `Macterm/Server/`: the app's client of the local server and of a host's server. `LocalServer` (start, reuse, replace), `ServerConnection` (handshake, requests, events) and `RemoteServers` (check, consent, install and replace on a host).
 - `Macterm/Protocol/`: the v2 protocol. `MessagePack`, `ProtocolFrame`, `ProtocolControl`, and the generated `MactermProtocol`.
 - `Macterm/Control/`: `ControlProtocol` (shared with the CLI), `ControlSocketServer`, `ControlHandler`, and `AgentSkills/` (the text of `macterm skills`, shared with the CLI).
 - `Macterm/Intents/`: the surface of App Intents. `MactermIntentHost` and `IntentTargets` (`IntentHost.swift`), `IntentPermission`, `MactermIntentError`, `Entities`, `ProjectIntents`, `TabIntents`, `PaneIntents`, `CommandIntents` and `MactermShortcuts` (`AppShortcutsProvider`).
@@ -1046,7 +1058,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
 - `Macterm/Search/`: `SearchText` (prepared, folded text), `SearchScoring` (the scoring of fzf and the positions of highlights), and `SearchIndex` with `SearchSession` and `Search` (the engine, see Search).
 - `IconRenderer/`: `macterm-icon-renderer`, the adaptive icon's helper (`main.swift`), and `PrivateInterfaces/` (the hand-written IconRendering interface, the CoreUI header, and the two link stubs).
 - `CLI/`: the `macterm` binary. `MactermCommand` (the ArgumentParser tree), `ControlClient`, `Output`, `SSHCommand`, `TutorCommand`, `SkillsCommand`, `WidgetCommand`, `PaletteCommand` (`palette list`, and the hidden runner `palette exec`), and `AskpassCommand` (the hidden `askpass`, and the debug-only `host`).
-- `scripts/`: `setup.sh`, `build-server.sh` (the server builds and their key), `build.sh`, `_lib.sh` (version mapping, update channel), `publish-appcast.sh` and `benchmark.py` with `_harness.py` (`MactermHarness`, shared with e2e). It also has `e2e.sh` with `e2e/` (the pytest suite), `ghosttykit-api-diff.sh`, `ghostty-shim.sh` and `record-demos/` (the demo clips of the website).
+- `scripts/`: `setup.sh`, `build-server.sh` (the server builds and their key), `build.sh`, `_lib.sh` (version mapping, update channel), `publish-appcast.sh`, `_harness.py` (`MactermHarness`, for e2e) and `session_bench.py` (the session layer benchmark). It also has `e2e.sh` with `e2e/` (the pytest suite), `ghosttykit-api-diff.sh`, `ghostty-shim.sh` and `record-demos/` (the demo clips of the website).
 - `website/` has the docs site (`docs/pages/*.md`) and the Caddyfile that serves the update feed.
 
 ## Tests
@@ -1062,11 +1074,11 @@ There is one `XxxTests.swift` for each production type. It mirrors the source pa
 
 ### End-to-end (`scripts/e2e/`)
 
-The suite starts the real Debug app in a hermetic way through `MactermHarness`. It uses a throwaway `$HOME`, `MACTERM_BENCHMARK_DATA_DIR`, `MACTERM_RUNTIME_DIR` and `ZMX_DIR`. The runtime directory of the session server is per user. Without the override, a hermetic instance would use the developer's real server and share its sessions. The suite asserts through the CLI (`pane dump` and others read the live state of libghostty).
+The suite starts the real Debug app in a hermetic way through `MactermHarness`. It uses a throwaway `$HOME`, `MACTERM_BENCHMARK_DATA_DIR`, `MACTERM_RUNTIME_DIR` and `ZMX_DIR`. The runtime directory of the session server is per user. Without the override, a hermetic instance would use the developer's real server and share its sessions. The suite asserts through the CLI (`pane dump` and others read the live state of libghostty). Darwin notifications open the project and front the window (`BenchmarkControl`, which listens only under `MACTERM_BENCHMARK=1`; that flag also skips the notification prompt, Sparkle and the first-run seed).
 
 Conventions:
 
-- There is one app instance for each session. Keep it the **active app** before every test (`_active_app` in `conftest.py`: `lsappinfo front`, taken again through the `activate` hook of the bench). That hook forces activation, because the cooperative request is refused once another app holds the front).
+- There is one app instance for each session. Keep it the **active app** before every test (`_active_app` in `conftest.py`: `lsappinfo front`, taken again through the `activate` hook of `BenchmarkControl`). That hook forces activation, because the cooperative request is refused once another app holds the front.
   - The password monitor watches only the focused pane of the key window. It runs no timer while the app is inactive.
   - A test that starts an instance of its own (`open -n` fronts it) leaves the shared instance behind Finder when it kills its own. This is what timed out both tests of `test_passwords.py` on CI.
 - Use the `fresh_tab` fixture. Never change the initial pane.
@@ -1092,19 +1104,9 @@ Every other macOS job runs on `xcode-27` (macOS 27). `Test / Smoke` starts the R
 
 The script stops only the process that it started, and it kills its own zmx sessions. On a developer Mac it still reads and writes the real defaults domain of the build, because cfprefsd ignores `HOME`. The CLI takes `--socket` after the subcommand (`macterm status --socket <path>`).
 
-### Benchmarks
+### Session layer benchmark
 
-`mise run bench` and `.github/workflows/benchmark.yml` measure the delta of CPU time, memory and wakeups across `focused`, `workload-focused` and `workload-unfocused`. Darwin notifications drive them (`BenchmarkControl`, `MACTERM_BENCHMARK=1`, which also skips the notification prompt, Sparkle and the first-run seed).
-
-- Memory is the sum of `phys_footprint` over the process tree: the app, the zmx clients and session daemons of its bundle, and their shells (`tree_footprint`). Do not use `ps` RSS for memory. CPU time is the app's own, because a sum over the tree loses the short-lived children of a workload.
-- `results.json` records the runner image (`runner`, from `ImageOS` and `ImageVersion`). PR runs compare only against main runs of the same image OS and macOS version (`same_image`), because a change of image moves every number. A run with no record matches nothing.
-- Each state waits until the 1-minute load average is below half the CPU count (`wait_for_load` in `_harness.py`, at most 120 s). The state records the load. The report marks a state whose gate timed out.
-- PR runs compare against a pooled median of the last 10 runs on main.
-- A cell gets a flag only beyond ±25% and a noise floor.
-- The label `benchmark:regression` or `benchmark:improvement` needs at least 2 corroborating cells, and one of them under a workload state (`should_label`).
-- The writes of labels and comments are in `benchmark-report.yml`. The token of a PR from a fork is read-only.
-
-**The session layer** (`scripts/session_bench.py`) measures what the session layer adds to typing, to a reattach, to memory and to idle wakeups, for v1's and v2's local panes side by side. It runs no app: a pty driver plays the terminal. The macOS job runs it as its own step after the window states, with the zmx of the built app (`session-macos.json`), and adds its report to the PR comment. A failure of that step does not fail the job. The job `Session Layer (Linux)` runs it with the Linux build of the commit's server, against sshd on localhost with 25 ms of `netem` delay each way (`session-results-linux`). Each job writes a table into its summary. The report gives p50, p95 and p99, and a table of each v1/v2 pair with the ratio:
+`scripts/session_bench.py` measures what the session layer adds to typing, to a reattach, to memory and to idle wakeups, for v1's and v2's local panes side by side. It runs no app: a pty driver plays the terminal. CI runs it only on a pull request that changes `server/`, `protocol/`, the script or the server build, and by hand (`.github/workflows/session-bench.yml`). It writes the report to the job summary. It is not a required check. Run it locally with a zmx build (`run`, then `report`); `--ssh-host` adds the remote arms. The report gives p50, p95 and p99, and a table of each v1/v2 pair with the ratio:
 
 - **Local panes**: one binary has both. `v1` is `zmx attach <s> <command>` (a v1 daemon for each pane), `v2` is `zmx connect <s> -- <command>` (a v2 session made through the server). The run sets `MACTERM_RUNTIME_DIR` to its throwaway folder, so v2 never uses the user's server.
 - **Each pair runs in one run, alternated**: the echo keys go in rounds to v1 and v2 in turn, the reattaches alternate, and the idle panes of both are measured in the same window. A pair is never compared across runs or runners.
@@ -1115,9 +1117,9 @@ The script stops only the process that it started, and it kills its own zmx sess
 - A key goes in only after the client turns echo off on its pty and the session prints a ready marker. Before that, the kernel or the remote pty echoes the key, and the time is not the session layer's. An ssh client turns echo off before the remote side runs zmx.
 - The JSON records `ssh -V`: OpenSSH 9.5 and later delays keystrokes (`ObscureKeystrokeTiming`).
 - The report gives p95 and p99 only for 20 samples or more.
-- Not measured here: the GUI part of typing latency (`keyDown`, the render, the compositor), and the app's own memory. In m2 the app runs a client on a pty for both layers, so the window states measure the same app for both.
+- Not measured here: the GUI part of typing latency (`keyDown`, the render, the compositor), and the app's own memory.
 - Every session that a run makes is ended after the run, in a throwaway `ZMX_DIR` and runtime folder. A session with no client drops terminal replies.
-- No baseline comparison and no label yet.
+- No baseline comparison.
 
 ### Demo recordings
 
@@ -1264,7 +1266,7 @@ The GUI text is in three String Catalogs: `Macterm/Localizable.xcstrings` (the a
 - Workspaces are in `~/Library/Application Support/<display name>/workspaces_v3.json` (schema v6, written as v7 only while desktop widgets exist). Projects are in `projects.json`. The wrapper configs are next to them. Debug builds use `Macterm Debug/`, and the Debug bundle is `Macterm Debug.app` (`PRODUCT_MODULE_NAME` stays `Macterm`). Write the space wherever you name the bundle by path.
 - `Pane` IDs are new at every restore. The session identity (`sessionID` and `sessionName`, stored exactly as given) is what connects a pane to its session again.
   - Only an explicit Apply Layout applies a declared layout (palette, menu, Settings row, `layout apply`). When you select a project or start Macterm again, Macterm never reads it. The snapshot restores, and a project without a snapshot gets the default workspace.
-- **A directory is not an identity**. `ProjectStore.create` always appends a new project. `findOrCreate` exists only for callers that must be idempotent (the benchmark).
+- **A directory is not an identity**. `ProjectStore.create` always appends a new project. `findOrCreate` exists only for callers that must be idempotent (the `open-project` hook of `BenchmarkControl`, and the folder rows of the palette).
 - Project declarations are YAML in `~/.config/macterm/projects/`. All build flavors share them. They look at the `$HOME` env first, through `ProjectPath.currentHome`.
   - `name:` is for display only. `path:` is the identity (scp-style, with `~` when Macterm writes it). `tabs:` is optional.
   - The schema is `assets/project.schema.json`. Keep them in sync.

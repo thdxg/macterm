@@ -8,7 +8,9 @@ import Testing
 struct CustomPaletteScopeTests {
     /// A store in a temp directory holding the Kubernetes example and a
     /// broken file, and a context whose `AppState` reads from it.
-    private func makeContext(files: [String: String]) throws -> (PaletteContext, CustomPaletteStore, URL) {
+    private func makeContext(files: [String: String], hotkeys: PaletteHotkeys = .isolated()) throws
+        -> (PaletteContext, CustomPaletteStore, URL)
+    {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-palette-tests-\(UUID().uuidString)", isDirectory: true)
         let config = base.appendingPathComponent("config", isDirectory: true)
@@ -26,7 +28,8 @@ struct CustomPaletteScopeTests {
             projectFiles: ProjectFileStore(
                 directoryURL: base.appendingPathComponent("projects", isDirectory: true),
                 configDirectoryURL: config
-            )
+            ),
+            paletteHotkeys: hotkeys
         )
         let store = ProjectStore(fileURL: base.appendingPathComponent("projects.json"))
         let project = Project(name: "api", path: "/tmp", sortOrder: 0)
@@ -107,11 +110,15 @@ struct CustomPaletteScopeTests {
 
     @Test
     func the_store_reads_every_file_and_keeps_a_broken_one_with_its_error() throws {
-        let (_, store, dir) = try makeContext(files: [
-            "kubernetes.yaml": CustomPaletteFileTests.kubernetes,
-            "broken.yml": "name: Broken\nnodes: { root: { list: ls } }",
-            "notes.txt": "not a palette",
-        ])
+        let hotkeys = PaletteHotkeys.isolated()
+        let (_, store, dir) = try makeContext(
+            files: [
+                "kubernetes.yaml": CustomPaletteFileTests.kubernetes,
+                "broken.yml": "name: Broken\nnodes: { root: { list: ls } }",
+                "notes.txt": "not a palette",
+            ],
+            hotkeys: hotkeys
+        )
         #expect(store.entries.map(\.id) == ["t/broken", "t/kubernetes"], "by file name, yaml and yml alike, nothing else")
         #expect(store.palette(id: "t/kubernetes")?.name == "Kubernetes")
         #expect(store.entry(id: "t/broken")?.failure?.errorDescription == "root: needs enter: or action:")
@@ -121,7 +128,7 @@ struct CustomPaletteScopeTests {
         ))
         #expect(store.rootTarget(id: "t/broken")?.node == "root", "a broken file still opens: on its error")
         #expect(store.rootTarget(id: "t/nope") == nil)
-        #expect(PaletteHotkeys.shared.paletteIDs == ["t/broken", "t/kubernetes"], "the keybind table learns the files")
+        #expect(hotkeys.paletteIDs == ["t/broken", "t/kubernetes"], "the keybind table learns the files")
 
         // A save is seen on the next reload-if-changed; an untouched folder is left alone.
         try "name: Fixed\nnodes: { root: { list: ls, action: { copy: . } } }"

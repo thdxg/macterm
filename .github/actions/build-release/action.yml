@@ -65,8 +65,8 @@ runs:
       shell: bash
       run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
-    # GhosttyKit + bundled resources: the same key as the test and
-    # benchmark workflows, so a release rides the cache they keep warm.
+    # GhosttyKit + bundled resources: the same key as the test
+    # workflow, so a release rides the cache it keeps warm.
     - name: Cache GhosttyKit
       uses: actions/cache@v6
       with:
