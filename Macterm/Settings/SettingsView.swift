@@ -1466,6 +1466,13 @@ private struct AppearanceSettings: View {
                     } label: {
                         Text("Tab switcher position").dimsWhenDisabled()
                     }
+
+                    // Only where the button can show (`ProjectMemory.isEnabled`).
+                    if ProjectMemory.isEnabled {
+                        Toggle(isOn: $preferences.showProjectInsightsButton) {
+                            Text("Show Project Insights button").dimsWhenDisabled()
+                        }
+                    }
                 }
                 .disabled(preferences.hideTitleBar)
             }

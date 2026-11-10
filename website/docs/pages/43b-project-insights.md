@@ -34,6 +34,8 @@ Press <kbd>⌘</kbd><kbd>I</kbd>, or click the panel button in the toolbar. You 
 
 The panel floats over the right side of the terminal. It does not make your panes smaller. To hide it, press <kbd>⌘</kbd><kbd>I</kbd> again or click the panel button in the toolbar. The project icon in the panel is the icon that you chose in **Settings → Appearance → Project icon**, with the color of the project.
 
+To remove the panel button from the toolbar, turn off **Settings → Appearance → Toolbar → Show Project Insights button**, or right-click the toolbar and clear **Project Insights Button**. <kbd>⌘</kbd><kbd>I</kbd> and the **View** menu still show and hide the panel.
+
 The panel has these sections:
 
 | Section | What it shows |

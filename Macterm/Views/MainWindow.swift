@@ -204,8 +204,9 @@ struct MainWindow: View {
                 ToolbarItem(placement: .primaryAction) {
                     UpdateAvailableToolbarButton()
                 }
-                // Only while Project Insights is on (Settings → Intelligence).
-                if ProjectMemory.isEnabled {
+                // Only while Project Insights is on (Settings → Intelligence)
+                // and the button is not hidden (Settings → Appearance → Toolbar).
+                if ProjectMemory.isEnabled, preferences.showProjectInsightsButton {
                     ToolbarItem(placement: .primaryAction) {
                         // Filled while the panel is up, as a toggle's state.
                         Button(
