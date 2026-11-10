@@ -786,7 +786,7 @@ In automatic mode, Macterm delegates the user layer to `ghostty_config_load_defa
 
 **Wheel scrolling belongs to libghostty on every path**. `GhosttyTerminalNSView.scrollWheel` forwards events exactly as Ghostty.app does (2× precise deltas, momentum phase). `SurfaceScrollView` only draws the scroller. It turns scroller drags into `scroll_to_row` and, under smooth scrolling, into the sub-row remainder (see Animations). We removed the row accumulator in the style of iTerm2 from #102, with its Scroll speed slider. `mouse-scroll-multiplier` therefore means the same thing here as in Ghostty. Do not bring back a wheel path on the side of Macterm.
 
-Overrides that Macterm must lock. The `smooth-scroll`, `smooth-cursor` and `cursor-trail` lines from `MactermConfig.Animations` come in addition (see Animations).
+Overrides that Macterm must lock. The `smooth-scroll`, `smooth-cursor`, `cursor-morph` and `cursor-trail` lines from `MactermConfig.Animations` come in addition (see Animations).
 
 - `background-default-transparent = true`. This is a fork patch. The renderer skips the default background, so that `WindowAppearance` composites the translucency itself.
 - `background-opacity = <Preferences.windowOpacity>`. This is the real value, so that the `background-opacity-cells` of the user works.
@@ -825,7 +825,7 @@ The bundle mirrors Ghostty.app. `Contents/Resources/ghostty/{themes,shell-integr
 
 ### Animations (Settings → Animations)
 
-This is the motion pane. It is directly under Appearance in the sidebar of Settings. It has five toggles. **Smooth scrolling**, **Snap to whole row** and **Animate splits** ship **on**. The two cursor effects are opt-in. The pane was Settings → Experimental until the smooth-scrolling and split toggles graduated. Anything that is still settling in belongs here too, off by default, until it graduates.
+This is the motion pane. It is directly under Appearance in the sidebar of Settings. It has six toggles. **Smooth scrolling**, **Snap to whole row** and **Animate splits** ship **on**. The three cursor effects are opt-in. The pane was Settings → Experimental until the smooth-scrolling and split toggles graduated. Anything that is still settling in belongs here too, off by default, until it graduates.
 
 - **Smooth scrolling** is fork patch 0005 (`.github/downstream/0005-smooth-scroll.patch`). It is behind the fork key `smooth-scroll`. The toggle writes the key into the overrides through `MactermConfig.Animations` (`Preferences.smoothScrolling`, default on). The default of the ghostty key itself stays off.
   - `scrollCallback` of libghostty already accumulates precise trackpad deltas in pixels, and it commits whole rows. With the key on, the patch does these things:
@@ -893,6 +893,10 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
   - A reshape of the grid, a change of font or a toggle of the key snaps the cursor to its cell.
   - Programs that paint their own cursor cell still move that paint by cells, under the terminal cursor that glides. Examples are the theme style `ui.cursor` of Helix and its secondary cursors.
   - The previous implementation was a custom shader that glided a block over the composited frame, plus an override `cursor-opacity = 0`. Both are gone.
+- **Morph cursor while moving** is fork patch 0021 (`.github/downstream/0021-cursor-morph.patch`). It is behind the fork key `cursor-morph`. This is a mode of `smooth-cursor`. `MactermConfig.Animations` writes it only together with `smooth-cursor` (`Preferences.cursorMorph`, default off). The toggle is indented under Smooth cursor, and it is disabled without it.
+  - Only a block cursor changes. A bar, an underline and a hollow block glide as before. While a block glides, it is a comet (`CursorGlide.Comet`): a round head on the glide rect, with the area of the rect, and a body that gets thinner back to a round tail of half the radius of the head. The tail is where the head was 30% of the glide before (`lag`), so the comet is long while the cursor is fast, and it points the way that the cursor really moves, also on a diagonal. The body is at most 2.5 cell heights (`max_length`).
+  - The block turns into the comet in the first 10% of the glide and back into the block from 70% (`grow_until`, `settle_from`). A move of one cell height or less has no comet, so typing looks the same. A jump of a few columns or more gets a short comet. A retarget in the middle of a glide carries the comet into the next glide (`Comet.Carry`), so a held key bends it.
+  - The background coverage and `cursor_glide_text` fill and color by the coverage of the comet (`Uniforms.cursor_comet`), not by its box.
 - **Cursor trail** is fork patch 0009 (`.github/downstream/0009-cursor-trail.patch`). It is behind the fork key `cursor-trail`. `MactermConfig.Animations` writes it (`Preferences.cursorTrail`, default off).
   - It uses the same `CursorGlide` motion. The code tracks the glide whenever either key is on.
   - Under the trail, the streak (`CursorGlide.trail`) goes into the uniforms next to the rect. The streak is an axis-aligned box with the size of the drawn rect. It is swept from a tail to the head, where the cursor is drawn. The tail sets out halfway through the move. The streak fades as the move completes. A move of less than 1.5 cell heights leaves nothing, so typing does not leave a streak.
