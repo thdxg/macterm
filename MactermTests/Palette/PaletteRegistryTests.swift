@@ -79,7 +79,7 @@ struct PaletteRegistryTests {
 
     private func makeStore() throws -> CustomPaletteStore {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("macterm-registry-\(UUID().uuidString)", isDirectory: true)
-        return CustomPaletteStore(configDirectoryURL: dir)
+        return CustomPaletteStore(configDirectoryURL: dir, hotkeys: .isolated())
     }
 
     /// An extension of `palettes` (file name → YAML) with a README and

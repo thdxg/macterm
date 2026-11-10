@@ -21,6 +21,21 @@ import os
 final class PaletteHotkeys {
     static let shared = PaletteHotkeys()
 
+    /// Where the chords and flags are stored. A test gives its own suite,
+    /// because other suites change `Preferences.defaults` at the same time.
+    let defaults: UserDefaults
+    /// Reconciles the Carbon registrations after a change. A test gives a
+    /// closure that does nothing, so it registers no real hot key.
+    private let syncGlobalHotkeys: @MainActor () -> Void
+
+    init(
+        defaults: UserDefaults = Preferences.defaults,
+        syncGlobalHotkeys: @escaping @MainActor () -> Void = { GlobalHotkeys.shared.sync() }
+    ) {
+        self.defaults = defaults
+        self.syncGlobalHotkeys = syncGlobalHotkeys
+    }
+
     /// Every palette file's id, bound or not — set by the store on each
     /// load, so a file added after launch is matchable at once.
     var paletteIDs: [String] = [] {
@@ -29,7 +44,7 @@ final class PaletteHotkeys {
             shortcuts = nil
             // A file added or removed changes which palettes can hold a
             // global chord.
-            GlobalHotkeys.shared.sync()
+            syncGlobalHotkeys()
         }
     }
 
@@ -66,24 +81,24 @@ final class PaletteHotkeys {
     }
 
     func passesThrough(paletteID: String) -> Bool {
-        Preferences.defaults.bool(forKey: Self.passthroughDefaultsKey(paletteID: paletteID))
+        defaults.bool(forKey: Self.passthroughDefaultsKey(paletteID: paletteID))
     }
 
     /// Flag or unflag passthrough and reconcile Carbon at once: the two flags
     /// contradict each other, so a global registration is refused while
     /// passthrough is on (`GlobalHotkeyPlan.precheck`).
     func setPassesThrough(_ enabled: Bool, paletteID: String) {
-        Preferences.defaults.set(enabled, forKey: Self.passthroughDefaultsKey(paletteID: paletteID))
-        GlobalHotkeys.shared.sync()
+        defaults.set(enabled, forKey: Self.passthroughDefaultsKey(paletteID: paletteID))
+        syncGlobalHotkeys()
     }
 
     func isGlobal(paletteID: String) -> Bool {
-        Preferences.defaults.bool(forKey: Self.globalDefaultsKey(paletteID: paletteID))
+        defaults.bool(forKey: Self.globalDefaultsKey(paletteID: paletteID))
     }
 
     func setGlobal(_ enabled: Bool, paletteID: String) {
-        Preferences.defaults.set(enabled, forKey: Self.globalDefaultsKey(paletteID: paletteID))
-        GlobalHotkeys.shared.sync()
+        defaults.set(enabled, forKey: Self.globalDefaultsKey(paletteID: paletteID))
+        syncGlobalHotkeys()
     }
 
     /// The palettes on disk flagged to pass through, in file order.
@@ -112,15 +127,15 @@ final class PaletteHotkeys {
     }
 
     func selectedShortcutString(paletteID: String) -> String {
-        Preferences.defaults.string(forKey: Self.defaultsKey(paletteID: paletteID)) ?? "none"
+        defaults.string(forKey: Self.defaultsKey(paletteID: paletteID)) ?? "none"
     }
 
     func setShortcutString(_ shortcut: String, paletteID: String) {
-        Preferences.defaults.set(shortcut, forKey: Self.defaultsKey(paletteID: paletteID))
+        defaults.set(shortcut, forKey: Self.defaultsKey(paletteID: paletteID))
         shortcuts = nil
         Preferences.shared.bumpHotkeyVersion()
         // A global-flagged palette's registration follows its chord.
-        GlobalHotkeys.shared.sync()
+        syncGlobalHotkeys()
     }
 
     /// Clear a palette's chord — when the row is cleared in Settings.

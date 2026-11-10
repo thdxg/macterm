@@ -1,14 +1,21 @@
 name: Checks
 
 # Style gates only — the test suites live in test.yml (named so checks group
-# as "Test / Unit" and "Test / End-to-end" in the PR UI), the resource
-# benchmark in benchmark.yml.
+# as "Test / Unit" and "Test / End-to-end" in the PR UI).
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+# A new push to a pull request cancels the runs of its older commit, so they
+# do not keep the macOS runners that the new jobs need. A push to main has a
+# group for each commit and is never cancelled: release-tip.yml needs the Test
+# and Checks results of each commit on main.
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   changes:

@@ -95,9 +95,8 @@ jobs:
         run: scripts/build-server.sh build build/server
 
       # Never replaces an asset: an app that is out carries the checksums of
-      # what the release serves. Two runs of one key (test.yml and
-      # benchmark.yml) can both build it; the second finds the first's assets
-      # and keeps them.
+      # what the release serves. Two runs of one key can both build it;
+      # the second finds the first's assets and keeps them.
       - name: Upload the Prebuilt
         id: upload
         if: >-
