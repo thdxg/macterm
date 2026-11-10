@@ -327,6 +327,17 @@ final class Preferences {
         }
     }
 
+    /// The gliding cursor stretches along its motion with its speed and lands
+    /// in its cell shape. Off by default and meaningful only under
+    /// `smoothCursor`. The fork's `cursor-morph` key, written through the
+    /// overrides file (`MactermConfig.Animations`).
+    var cursorMorph: Bool {
+        didSet {
+            Keys.cursorMorph.write(cursorMorph, to: defaults)
+            notifyConfigChanged()
+        }
+    }
+
     /// A fading streak follows the cursor across larger moves. The fork's
     /// `cursor-trail` key, written through the overrides file.
     var cursorTrail: Bool {
@@ -992,6 +1003,7 @@ final class Preferences {
         smoothScrolling = Keys.smoothScrolling.read(defaults)
         snapScrollToRow = Keys.snapScrollToRow.read(defaults)
         smoothCursor = Keys.smoothCursor.read(defaults)
+        cursorMorph = Keys.cursorMorph.read(defaults)
         cursorTrail = Keys.cursorTrail.read(defaults)
         animatedSplits = Keys.animatedSplits.read(defaults)
         sidebarPeekStyle = Keys.sidebarPeekStyle.read(defaults)
@@ -1186,6 +1198,7 @@ final class Preferences {
         static let smoothScrolling = PreferenceStorageKey("macterm.terminal.smoothScrolling", default: true)
         static let snapScrollToRow = PreferenceStorageKey("macterm.terminal.snapScrollToRow", default: true)
         static let smoothCursor = PreferenceStorageKey("macterm.terminal.smoothCursor", default: false)
+        static let cursorMorph = PreferenceStorageKey("macterm.terminal.cursorMorph", default: false)
         static let cursorTrail = PreferenceStorageKey("macterm.terminal.cursorTrail", default: false)
         static let animatedSplits = PreferenceStorageKey("macterm.terminal.animatedSplits", default: true)
         static let sidebarPeekStyle = PreferenceStorageKey("macterm.sidebar.presentation", default: SidebarPeekStyle.resizeTerminal)

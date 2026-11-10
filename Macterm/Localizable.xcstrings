@@ -5253,6 +5253,22 @@
         }
       }
     },
+    "Morph with speed" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "속도에 따라 변형"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "随速度变形"
+          }
+        }
+      }
+    },
     "Move Down" : {
       "localizations" : {
         "ko" : {
@@ -10583,6 +10599,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地目标不存在，或不是常规文件或目录。"
+          }
+        }
+      }
+    },
+    "The moving cursor stretches in its direction of motion." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "움직이는 커서가 이동 방향으로 늘어납니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移动中的光标会沿移动方向拉伸。"
           }
         }
       }

@@ -148,6 +148,7 @@ Go to **Settings → Animations**. Smooth scrolling, snap to whole row and split
 | **Snap to whole row** | Works with smooth scrolling. Scrolling moves one whole row at a time, and each row slides into place, as `less` scrolls. It never stops between rows. On by default. |
 | **Animate splits** | Panes slide in and out of the split layout. It turns off by itself when Reduce Motion is on. |
 | **Smooth cursor** | The cursor glides between positions. The text that the cursor passes over has the cursor color, only as far as the cursor covers it. Programs that draw their own cursor (a second cursor in Helix, for example) still move it by cells. |
+| **Morph with speed** | Works with smooth cursor. The moving cursor stretches in its direction of motion and gets thinner across it, up to 2.5 cells long. It lands in its normal shape. A move of one row or less does not stretch it, so typing looks the same. A bar or an underline cursor stretches as far as a block. Off by default. |
 | **Cursor trail** | A fading streak follows the cursor on larger moves. It is under the text. If you use a community trail shader, turn it off. Otherwise you see two trails. |
 
 ## Running without a Dock icon

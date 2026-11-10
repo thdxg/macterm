@@ -183,4 +183,29 @@ struct MactermConfigTests {
         #expect(!alone.contains("smooth-cursor"))
         #expect(!alone.contains("custom-shader"))
     }
+
+    @Test
+    func morph_with_speed_is_the_forks_mode_of_smooth_cursor() {
+        let both = MactermConfig.overridesBody(
+            windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
+            animations: .init(smoothCursor: true, cursorMorph: true)
+        )
+        #expect(both.contains("smooth-cursor = true\ncursor-morph = true\n"))
+        // The glide alone leaves the morph key to the user.
+        let glide = MactermConfig.overridesBody(
+            windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
+            animations: .init(smoothCursor: true)
+        )
+        #expect(!glide.contains("cursor-morph"))
+    }
+
+    @Test
+    func morph_with_speed_without_smooth_cursor_writes_nothing() {
+        let body = MactermConfig.overridesBody(
+            windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
+            animations: .init(smoothCursor: false, cursorMorph: true, trail: true)
+        )
+        #expect(!body.contains("cursor-morph"))
+        #expect(!body.contains("smooth-cursor"))
+    }
 }
