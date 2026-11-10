@@ -31,6 +31,22 @@ struct RowHoverTracker: NSViewRepresentable {
         var onHoverChanged: ((Bool) -> Void)?
         private var isInside = false
 
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            // A view that does not clip to its bounds (the default since the
+            // macOS 14 SDK) has a visible rect as large as the visible part
+            // of its ancestors. The self-heal and the `.inVisibleRect` area
+            // read that rect, so without the clip each layout pass revealed
+            // the control of every row while the pointer was anywhere in
+            // the list (the Keymaps clear badges after a recording).
+            clipsToBounds = true
+        }
+
+        @available(*, unavailable)
+        required init?(coder _: NSCoder) {
+            fatalError("init(coder:) is not supported")
+        }
+
         /// Transparent to the mouse: the row beneath owns every click, drag,
         /// scroll and right-click. Tracking-area enter/exit is dispatched by
         /// geometry and is unaffected by this.
@@ -57,13 +73,9 @@ struct RowHoverTracker: NSViewRepresentable {
             // that an exit event arrived. Deferred because this runs inside
             // AppKit's layout, and the report writes SwiftUI state.
             Task { @MainActor [weak self] in
-                self?.reportPointer()
+                guard let self else { return }
+                report(pointerIsInside)
             }
-        }
-
-        /// Reports where the pointer is now.
-        func reportPointer() {
-            report(pointerIsInside)
         }
 
         override func viewDidMoveToWindow() {
@@ -79,24 +91,15 @@ struct RowHoverTracker: NSViewRepresentable {
             report(false)
         }
 
-        /// The pointer in window coordinates, or nil while the app is not
-        /// active. The tests replace it.
-        var pointerLocation: (NSWindow) -> NSPoint? = { window in
-            NSApp.isActive ? window.mouseLocationOutsideOfEventStream : nil
-        }
-
         /// Where the pointer actually is, asked of the window rather than
         /// inferred from the last event we happened to receive.
-        ///
-        /// `visibleRect` alone is not this view's area: a view that does not
-        /// clip to its bounds (the default since macOS 14) has a visible rect
-        /// as large as the visible part of its ancestors. With it alone, each
-        /// layout pass revealed the control of every row while the pointer
-        /// was anywhere in the list (the Keymaps clear badges after a
-        /// recording).
         private var pointerIsInside: Bool {
-            guard let window, let inWindow = pointerLocation(window) else { return false }
-            return bounds.intersection(visibleRect).contains(convert(inWindow, from: nil))
+            guard let window, NSApp.isActive else { return false }
+            return contains(windowPoint: window.mouseLocationOutsideOfEventStream)
+        }
+
+        func contains(windowPoint: NSPoint) -> Bool {
+            visibleRect.contains(convert(windowPoint, from: nil))
         }
 
         private func report(_ inside: Bool) {
