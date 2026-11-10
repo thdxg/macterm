@@ -80,7 +80,10 @@ struct IntelligenceSettings: View {
         ))
         var link = AttributedString(String(localized: "Learn more…"))
         link.link = DocsSection.projectInsights.url
-        caption.append(AttributedString(" "))
+        // Chinese puts no space after a full-width full stop.
+        if let last = caption.characters.last, !"。！？".contains(last) {
+            caption.append(AttributedString(" "))
+        }
         caption.append(link)
         return caption
     }

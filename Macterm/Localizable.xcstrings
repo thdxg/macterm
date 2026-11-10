@@ -10896,7 +10896,7 @@
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이 기능에는 Apple Intelligence가 필요합니다. Apple의 온디바이스 모델이 모든 작업을 하므로 아무것도 이 Mac을 떠나지 않습니다."
+            "value" : "이 기능에는 Apple Intelligence가 필요합니다. Apple의 온디바이스 모델이 모든 작업을 처리하므로 아무것도 이 Mac을 떠나지 않습니다."
           }
         },
         "zh-Hans" : {
