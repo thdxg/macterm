@@ -389,6 +389,13 @@ const Client = struct {
                         // In the output stream, so it lands in front of the
                         // output that the session sent after it.
                         writeAll(stdout, foregroundApc(&buf, fg)) catch return .detached;
+                    } else if (c.foreground_events and std.mem.eql(u8, msg.t, m.SnapshotStart.name)) {
+                        // Around the snapshot, so the app can tell the
+                        // replay from new output: a title in the replay is
+                        // old, and nothing says who set it.
+                        writeAll(stdout, snapshot_start_apc) catch return .detached;
+                    } else if (c.foreground_events and std.mem.eql(u8, msg.t, m.SnapshotEnd.name)) {
+                        writeAll(stdout, snapshot_end_apc) catch return .detached;
                     } else if (std.mem.eql(u8, msg.t, m.Exit.name)) {
                         const e = m.decodePane(m.Exit, arena, msg) catch return error.Protocol;
                         // The server takes the status (`take`), not the pane.
@@ -460,6 +467,12 @@ const Client = struct {
         try c.sendFrame(m.pane_channel, .msg, out.written());
     }
 };
+
+/// The APCs that a client with `ZMX_FOREGROUND_EVENTS` writes at the start
+/// and the end of a snapshot (`ZmxForegroundEvents.snapshotStart` and
+/// `snapshotEnd` in the app).
+pub const snapshot_start_apc = "\x1b_zmx;snapshot;start\x1b\\";
+pub const snapshot_end_apc = "\x1b_zmx;snapshot;end\x1b\\";
 
 /// A buffer this long holds any APC that `foregroundApc` writes.
 pub const apc_max = foreground.report_max + 4;

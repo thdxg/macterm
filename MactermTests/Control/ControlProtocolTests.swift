@@ -208,4 +208,13 @@ struct ControlProtocolTests {
         let decoded = try ControlProtocol.decodeResponse(ControlProtocol.encode(response))
         #expect(decoded.data?.dump == dump)
     }
+
+    @Test
+    func a_remote_pane_line_starts_on_a_line_of_its_own() {
+        // After an ssh the cursor is often after the prompt.
+        #expect(ControlRemotePane.paneText("box refuses.\nPress a key.", atLineStart: false)
+            == "\r\nbox refuses.\r\nPress a key.\r\n")
+        // After a line of the client, or at the start: no empty line.
+        #expect(ControlRemotePane.paneText("The session ended.", atLineStart: true) == "The session ended.\r\n")
+    }
 }

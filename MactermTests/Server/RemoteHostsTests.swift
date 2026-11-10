@@ -109,6 +109,41 @@ struct RemoteHostsTests {
     }
 
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(3)))
+    func a_key_in_one_lost_pane_brings_back_every_lost_pane_of_the_host() async throws {
+        try await withSSHDHost { host in
+            let fixture = Fixture(host)
+            let left = fixture.pane()
+            let right = fixture.pane()
+            let first = try await PTYProcess(fixture.run(left))
+            defer { first.terminate() }
+            let second = try await PTYProcess(fixture.run(right))
+            defer { second.terminate() }
+            second.type("printf 'right-%s\\n' up\n")
+            #expect(await second.wait(for: "right-up"))
+
+            host.sshd.dropConnections()
+            #expect(await first.waitForExit() == 255)
+            #expect(await second.waitForExit() == 255)
+            for pane in [left, right] {
+                #expect(await fixture.hosts.answer(.lost, session: pane.sessionName, panes: [pane]) == .wait(message: nil))
+                // Blurred: no line of Macterm's is on it.
+                #expect(pane.isRemoteLinkLost && !pane.showsRemoteLinkMessage)
+            }
+
+            // A key in the left pane logs in again. The right pane gets the
+            // wake too, and attaches with no key and no second login.
+            fixture.woken.removeAll()
+            _ = try await fixture.run(left, event: .retry, clear: true)
+            #expect(fixture.woken.contains(RemoteHosts.wakeName(for: right.sessionName)))
+            let again = try await PTYProcess(fixture.run(right, clear: true))
+            defer { again.terminate() }
+            #expect(await again.wait(for: "right-up"))
+            #expect(!right.isRemoteLinkLost)
+            #expect(host.sshd.acceptedLogins() == 2)
+        }
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(3)))
     func a_session_that_ended_on_the_host_asks_before_a_new_shell() async throws {
         try await withSSHDHost { host in
             // The host restarts at once: no grace for a new session.
@@ -127,7 +162,8 @@ struct RemoteHostsTests {
             }
             #expect(message.contains("ended"))
             // Return: a new shell in the same folder.
-            let arguments = try await fixture.run(pane, event: .create)
+            // The new shell starts on an empty pane: the line goes.
+            let arguments = try await fixture.run(pane, event: .create, clear: true)
             #expect(arguments.last?.contains("connect \"\(pane.sessionName)\" --") == true)
         }
     }

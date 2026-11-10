@@ -513,6 +513,23 @@ struct RemoteForegroundResolverTests {
     }
 
     @Test
+    func a_title_in_the_replay_of_an_attach_never_names_the_pane() {
+        // After a restart, `top` holds the pty and the replay carries the
+        // shell's last title from before `top` started.
+        let pane = remotePane()
+        pane.receiveUnknownAPC("zmx;foreground;0;0;top;top")
+        pane.receiveUnknownAPC(ZmxForegroundEvents.snapshotStart)
+        pane.receiveReportedTitle("dev@box: ~/work")
+        #expect(pane.programTitle == nil)
+        pane.receiveUnknownAPC(ZmxForegroundEvents.snapshotEnd)
+        #expect(pane.programTitle == nil)
+        #expect(pane.foregroundProcessName == "top")
+        // A title after the replay is new output, and counts.
+        pane.receiveReportedTitle("top - load")
+        #expect(pane.programTitle == "top - load")
+    }
+
+    @Test
     func a_run_that_ends_keeps_the_title_only_while_a_program_holds_the_pty() {
         let pane = remotePane()
         pane.receiveUnknownAPC(agentReport)

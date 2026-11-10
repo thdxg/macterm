@@ -258,3 +258,22 @@ private final class RecordingSocket {
         return try BundledCLI.run(arguments, environment: env)
     }
 }
+
+/// A remote pane's surface runs the client as its command wrapper, so the
+/// command that libghostty resolved, login(1) and a shell, comes after `--`.
+/// The client takes it and runs none of it.
+struct RemotePaneCommandTests {
+    @Test @MainActor
+    func the_client_takes_the_surface_command_and_does_not_run_it() throws {
+        #expect(GhosttyTerminalNSView.remoteClientArgv(client: "/bin/macterm", bypass: nil) == ["/bin/macterm", "remote-pane", "--"])
+        #expect(GhosttyTerminalNSView.remoteClientArgv(client: "/bin/macterm", bypass: .unitTestHost) == nil)
+        // With no session it stops before anything, and the trailing
+        // command is not a parse error (64).
+        let result = try BundledCLI.run(
+            ["remote-pane", "--", "/usr/bin/login", "-flp", "user", "/bin/bash", "--noprofile"],
+            environment: ["HOME": FileManager.default.temporaryDirectory.path]
+        )
+        #expect(result.status == 1)
+        #expect(result.stderr.contains("runs only in a remote pane"))
+    }
+}

@@ -65,8 +65,15 @@ final class Pane: Identifiable {
     @ObservationIgnored
     var hostSessionDirectory: String?
     /// A remote pane whose connection stopped: it waits for a trigger or a
-    /// key (`RemoteHosts`), and the leaf dims. Never persisted.
+    /// key (`RemoteHosts`). Its frozen screen is blurred and dimmed, as a
+    /// mirror that does not lead is, so that it does not look live. Never
+    /// persisted.
     var isRemoteLinkLost = false
+    /// A lost pane that shows a line of Macterm's (why the connect failed,
+    /// "Press a key to try again."): the leaf only dims, so that the line
+    /// stays legible. Set by `RemoteHosts` with the line, cleared when the
+    /// link comes back or stops again.
+    var showsRemoteLinkMessage = false
     /// Process the pane launches on first surface creation, injected into the
     /// shell as `command + "\n"`. Set from a declarative layout; nil for an
     /// interactively-created pane (plain shell). Recorded here so a layout
@@ -290,9 +297,26 @@ final class Pane: Identifiable {
     /// else is dropped. Local panes attach without the request, so a report
     /// can only reach a remote pane, and a local one is ignored either way.
     func receiveUnknownAPC(_ payload: String) {
-        guard isRemote, let report = ZmxForegroundEvents.parse(payload) else { return }
-        applyRemoteForeground(report, origin: .remoteEvent)
+        guard isRemote else { return }
+        switch payload {
+        case ZmxForegroundEvents.snapshotStart:
+            isReceivingRemoteSnapshot = true
+        case ZmxForegroundEvents.snapshotEnd:
+            isReceivingRemoteSnapshot = false
+        default:
+            guard let report = ZmxForegroundEvents.parse(payload) else { return }
+            applyRemoteForeground(report, origin: .remoteEvent)
+        }
     }
+
+    /// Between the two snapshot marks of a remote attach: the output is the
+    /// session's replay, not new output. Its title is the last one that the
+    /// session saw, maybe a prompt's from before the program in front
+    /// started, so it never names the tab (`receiveReportedTitle`): the
+    /// pushed foreground does. Cleared with the surface, and by the end
+    /// mark of the next attach when a connection stopped in a replay.
+    @ObservationIgnored
+    private(set) var isReceivingRemoteSnapshot = false
 
     /// Note an execution boundary reported outside the execution tracker —
     /// the OSC 133;D hook in `TerminalSurface`. Posts a poll event so a
@@ -719,6 +743,8 @@ final class Pane: Identifiable {
     /// have looked. `receiveReportedTitle(_:programPID:)` is the unthrottled
     /// core.
     func receiveReportedTitle(_ title: String) {
+        // Before the throttle, which can hold a title past the end mark.
+        guard !isReceivingRemoteSnapshot else { return }
         switch titleReportThrottle.receive(title, at: Date()) {
         case .evaluate:
             evaluateReportedTitle(title)
@@ -1160,6 +1186,7 @@ final class Pane: Identifiable {
         // The next surface asks the host again, and its first report sets
         // the flag again; until then the probe covers the pane.
         remoteForegroundIsPushed = false
+        isReceivingRemoteSnapshot = false
         view.onScrollbarUpdate = nil
         view.onLinkHover = nil
         view.onReadOnlyChange = nil

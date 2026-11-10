@@ -22,7 +22,9 @@ enum RemotePaneAnswer: Equatable {
     /// first.
     case wait(message: String?)
     /// Run this ssh on the pane's tty. `clear`: clear the screen and the
-    /// scrollback first, because the session sends its own on attach.
+    /// scrollback first: an attach replays the session's own, and a new
+    /// session starts on an empty pane. Either way no line of Macterm's
+    /// (a failure, "the session ended") stays above it.
     case run(arguments: [String], clear: Bool, message: String?)
     /// The pane's session is gone (the host restarted). Ask for Return.
     case ended(message: String)
@@ -114,8 +116,9 @@ final class RemoteHosts {
     @ObservationIgnored private var hosts: [String: Host] = [:]
     /// The sessions that wait for their host to be ready.
     @ObservationIgnored private var waiting: [String: Set<String>] = [:]
-    /// Sessions whose connection stopped: they wait for a trigger or a key.
-    @ObservationIgnored private var lost: Set<String> = []
+    /// Sessions whose connection stopped, with their destination: they wait
+    /// for a trigger, a key, or their host's link to come back.
+    @ObservationIgnored private var lost: [String: String] = [:]
     /// Sessions that ended on the host and wait for Return.
     @ObservationIgnored private var ended: Set<String> = []
     /// Sessions whose user pressed Return at "the session ended".
@@ -151,20 +154,25 @@ final class RemoteHosts {
         guard let pane = panes.first, let target = Target(pane) else { return .close }
         switch event {
         case .ask:
-            if lost.contains(session) {
-                mark(panes, lost: true)
-                return .wait(message: messages.removeValue(forKey: session))
+            if lost[session] != nil {
+                let message = messages.removeValue(forKey: session)
+                mark(panes, lost: true, message: message != nil)
+                return .wait(message: message)
             }
             if ended.contains(session) { return .ended(message: RemotePaneText.ended(host: target.host)) }
         case .lost:
             logger.info("remote pane: session=\(session, privacy: .public) host=\(target.destination, privacy: .public) lost")
-            lost.insert(session)
+            lost[session] = target.destination
+            // An attach cleared the screen since any earlier line.
+            for pane in panes {
+                pane.showsRemoteLinkMessage = false
+            }
             mark(panes, lost: true)
             // The next connect checks the connection again.
             drop(target.destination)
             return .wait(message: nil)
         case .retry:
-            lost.remove(session)
+            lost[session] = nil
         case .create:
             ended.remove(session)
             createRequested.insert(session)
@@ -175,7 +183,7 @@ final class RemoteHosts {
     /// A trigger lets these lost panes connect again. The caller applies
     /// the backoff.
     func reconnect(_ sessions: Set<String>) {
-        for session in sessions where lost.remove(session) != nil {
+        for session in sessions where lost.removeValue(forKey: session) != nil {
             configuration.post(Self.wakeName(for: session))
         }
     }
@@ -284,8 +292,8 @@ final class RemoteHosts {
             listFailures[destination] = failures
             guard failures < 2 else {
                 listFailures[destination] = nil
-                lost.insert(session)
-                mark(panes, lost: true)
+                lost[session] = destination
+                mark(panes, lost: true, message: true)
                 return .wait(message: RemotePaneText.withRetry(RemotePaneText.serverSilent(host: target.host)))
             }
             return await resolve(session, panes: panes, target: target)
@@ -326,7 +334,7 @@ final class RemoteHosts {
                 configuration.post(Self.wakeName(for: session))
             }
             let command = RemoteSpawn.sessionCommand(key: key, sessionName: session, create: directory)
-            return .run(arguments: connections.ttyArguments(route, destination, command), clear: false, message: nil)
+            return .run(arguments: connections.ttyArguments(route, destination, command), clear: true, message: nil)
         case .ended:
             logger.info("remote pane: session=\(session, privacy: .public) ended on \(destination, privacy: .public)")
             ended.insert(session)
@@ -413,17 +421,26 @@ final class RemoteHosts {
             }
             return
         }
+        var woken = sessions
         switch result {
         case let .success(host):
             hosts[destination] = host
+            // One login serves every pane of the host: the panes that lost
+            // the link, or that showed this host's last failure, attach too.
+            let others = lost.filter { $0.value == destination }.keys
+            for session in others {
+                lost[session] = nil
+                messages[session] = nil
+            }
+            woken.formUnion(others)
         case let .failure(failure):
             hosts[destination] = nil
             for session in sessions {
-                lost.insert(session)
+                lost[session] = destination
                 messages[session] = RemotePaneText.withRetry(failure.message)
             }
         }
-        for session in sessions {
+        for session in woken {
             configuration.post(Self.wakeName(for: session))
         }
     }
@@ -444,7 +461,7 @@ final class RemoteHosts {
 
     private func forget(_ session: String) {
         created[session] = nil
-        lost.remove(session)
+        lost[session] = nil
         ended.remove(session)
         createRequested.remove(session)
         messages[session] = nil
@@ -453,9 +470,14 @@ final class RemoteHosts {
         }
     }
 
-    private func mark(_ panes: [Pane], lost: Bool) {
-        for pane in panes where pane.isRemoteLinkLost != lost {
-            pane.isRemoteLinkLost = lost
+    /// `message`: the pane shows a line of Macterm's now. A line stays on
+    /// the screen until the next attach clears it, so only a link that
+    /// comes back or stops again (an attach ran in between) unsets it.
+    private func mark(_ panes: [Pane], lost: Bool, message: Bool = false) {
+        for pane in panes {
+            if pane.isRemoteLinkLost != lost { pane.isRemoteLinkLost = lost }
+            let shows = lost && (message || pane.showsRemoteLinkMessage)
+            if pane.showsRemoteLinkMessage != shows { pane.showsRemoteLinkMessage = shows }
         }
     }
 

@@ -179,6 +179,30 @@ assert q.wait_exit() == 0
 PY
 }
 
+@test "events: connect marks the snapshot with APCs only when asked" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+import os
+from ptyrun import Pty
+start, end = b"\x1b_zmx;snapshot;start\x1b\\", b"\x1b_zmx;snapshot;end\x1b\\"
+p = Pty([os.environ["ZMX"], "connect", "s1"])
+p.type("printf '\\033]2;old\\007'; printf 'out-%s\\n' 1\r")
+p.wait_output("out-1")
+p.type(b"\x1c")
+assert p.wait_exit() == 0
+assert start not in p.output, p.output[-300:]
+
+os.environ["ZMX_FOREGROUND_EVENTS"] = "1"
+q = Pty([os.environ["ZMX"], "connect", "s1"])
+q.wait_output(end.decode())
+# The replayed title is between the two marks.
+replay = q.output[q.output.index(start):q.output.index(end)]
+assert b"\x1b]2;old\x07" in replay, replay[-300:]
+q.type(b"\x1c")
+assert q.wait_exit() == 0
+PY
+}
+
 @test "events: program status reports become records, and the session answers the query" {
   query_py="$RT/query.py"
   printf '%s\n' \

@@ -27,6 +27,11 @@ struct RemotePaneCommand: ParsableCommand {
         shouldDisplay: false
     )
 
+    /// The command that the surface resolved (login(1) and a shell) after
+    /// the client, its command wrapper. The client never runs it.
+    @Argument(parsing: .postTerminator, help: .hidden)
+    var surfaceCommand: [String] = []
+
     func run() throws {
         let environment = ProcessInfo.processInfo.environment
         guard let session = environment[ControlProtocol.sessionEnvVar], !session.isEmpty,
@@ -52,6 +57,10 @@ struct RemotePaneClient {
     /// typed into the pty at the start (`initial_input`), and ssh passes it
     /// on.
     private var keysWake = false
+    /// Whether the cursor is at the start of a line: at the start, after a
+    /// clear and after a line of the client. False after an ssh, which
+    /// leaves the cursor where the session left it, often after a prompt.
+    private var atLineStart = true
 
     init(session: String, client: ControlClient) {
         self.session = session
@@ -98,10 +107,14 @@ struct RemotePaneClient {
                     event = "ask"
                     continue
                 }
-                if answer.clear == true { write("\u{1B}[H\u{1B}[2J\u{1B}[3J") }
+                if answer.clear == true {
+                    write("\u{1B}[H\u{1B}[2J\u{1B}[3J")
+                    atLineStart = true
+                }
                 restoreTTY()
                 keysWake = true
                 let status = spawnAndWait(arguments)
+                atLineStart = false
                 // 255 is only a lost connection: the host's command passes
                 // a shell's own 255 on as 254 (`RemoteSpawn.sessionCommand`).
                 guard status == 255 else { return status }
@@ -144,11 +157,13 @@ struct RemotePaneClient {
         wake = fd
     }
 
-    /// A line asks for a key, so keys wake the wait from then on.
+    /// A line asks for a key, so keys wake the wait from then on. It starts
+    /// on a line of its own.
     private mutating func show(_ message: String?) {
         guard let message, !message.isEmpty else { return }
         keysWake = true
-        write(message + "\n")
+        write(ControlRemotePane.paneText(message, atLineStart: atLineStart))
+        atLineStart = true
     }
 
     private func write(_ text: String) {

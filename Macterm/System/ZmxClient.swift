@@ -516,6 +516,13 @@ enum ZmxForegroundEvents {
     /// contain `;`.
     static let reportPrefix = "zmx;foreground;"
 
+    /// The same client writes these around the snapshot that the session
+    /// replays at an attach (`snapshot_start_apc` and `snapshot_end_apc` in
+    /// `server/src/attach.zig`). A title in the replay is old, and nothing
+    /// says who set it (`Pane.receiveReportedTitle`).
+    static let snapshotStart = "zmx;snapshot;start"
+    static let snapshotEnd = "zmx;snapshot;end"
+
     /// The report as a `RemoteForeground`, the same shape as one line of
     /// the probe, or nil for an APC that is not a report. Pure.
     nonisolated static func parse(_ payload: String) -> RemoteForeground? {
