@@ -230,10 +230,14 @@ struct GitStatusParserTests {
     }
 
     @Test
-    func a_diff_past_the_limit_leaves_out_whole_files() {
-        let big = String(repeating: "x", count: GitStatusParser.diffCharacterLimit)
-        let diff = "diff --git a/big.txt b/big.txt\n--- a/big.txt\n+++ b/big.txt\n@@ -1 +1 @@\n+\(big)\n"
-            + "diff --git a/small.txt b/small.txt\n--- a/small.txt\n+++ b/small.txt\n@@ -1 +1 @@\n+small\n"
+    func a_diff_past_the_limits_leaves_out_whole_files() {
+        let file = { (path: String, lines: [String]) in
+            "diff --git a/\(path) b/\(path)\n--- a/\(path)\n+++ b/\(path)\n@@ -1 +1,\(lines.count) @@\n"
+                + lines.map { "+" + $0 + "\n" }.joined()
+        }
+        let longLine = String(repeating: "x", count: GitStatusParser.diffLineLimit)
+        let manyLines = Array(repeating: "y", count: GitStatusParser.diffCharacterLimit / 3)
+        let diff = file("minified.js", ["a", longLine]) + file("big.txt", manyLines) + file("small.txt", ["small"])
         #expect(GitStatusParser.parseDiff(diff).map(\.path) == ["small.txt"])
     }
 }

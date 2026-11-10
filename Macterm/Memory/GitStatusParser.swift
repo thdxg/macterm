@@ -257,20 +257,30 @@ enum GitStatusParser {
 
     /// `git diff HEAD` with `a/` and `b/` prefixes, one entry for each file
     /// with hunks; a deleted file has `deletedFileLine` alone. Every line goes through `MemoryRedaction`. A binary file,
-    /// a file that `isLeftOutOfDiff`, a file with a private key block, and a
-    /// file that would pass `diffCharacterLimit` are left out whole.
+    /// a file that `isLeftOutOfDiff`, a file with a private key block or a
+    /// line past `diffLineLimit`, and a file that would pass
+    /// `diffCharacterLimit` are left out whole.
     static func parseDiff(_ text: String) -> [GitStatus.FileDiff] {
         var files: [GitStatus.FileDiff] = []
         var kept = 0
         for section in diffSections(text) {
             guard let file = fileDiff(section) else { continue }
+            // The size before redaction: the redaction of a file that is
+            // left out would cost time for nothing.
             let size = file.lines.reduce(0) { $0 + $1.count + 1 }
             guard kept + size <= diffCharacterLimit else { continue }
-            files.append(file)
+            files.append(GitStatus.FileDiff(path: file.path, lines: file.lines.map { MemoryRedaction.redact(String($0)) }))
             kept += size
         }
         return files
     }
+
+    /// The longest line of a diff that is kept. A longer line is generated
+    /// text, minified code or encoded data, which says little about the
+    /// work and can hide a secret; its file is left out. The redaction also
+    /// costs time with the square of a word's length: one word of 32,000
+    /// characters took 217 s.
+    static let diffLineLimit = 500
 
     /// The lines of each file, split at its `diff --git` line.
     private static func diffSections(_ text: String) -> [[Substring]] {
@@ -285,10 +295,12 @@ enum GitStatusParser {
         return sections
     }
 
-    private static func fileDiff(_ section: [Substring]) -> GitStatus.FileDiff? {
+    /// The path and the hunk lines of one file, not redacted yet. nil for a
+    /// file that is left out.
+    private static func fileDiff(_ section: [Substring]) -> (path: String, lines: [Substring])? {
         var oldPath: String?
         var newPath: String?
-        var hunks: [String] = []
+        var hunks: [Substring] = []
         for line in section {
             if hunks.isEmpty, !line.hasPrefix("@@") {
                 if line.hasPrefix("Binary files ") || line.hasPrefix("GIT binary patch") { return nil }
@@ -296,9 +308,7 @@ enum GitStatusParser {
                 if line.hasPrefix("+++ ") { newPath = diffPath(line.dropFirst(4), prefix: "b/") }
                 continue
             }
-            // A private key is a secret as a whole: no rule masks its lines.
-            if line.contains("PRIVATE KEY-----") { return nil }
-            hunks.append(MemoryRedaction.redact(String(line)))
+            hunks.append(line)
         }
         while hunks.last?.isEmpty == true {
             hunks.removeLast()
@@ -306,8 +316,10 @@ enum GitStatusParser {
         guard let path = newPath ?? oldPath, !hunks.isEmpty, !isLeftOutOfDiff(path) else { return nil }
         // The lines of a deleted file say nothing that its name does not,
         // and a long one would push every other file out of the budget.
-        if newPath == nil { return GitStatus.FileDiff(path: path, lines: [deletedFileLine]) }
-        return GitStatus.FileDiff(path: path, lines: hunks)
+        if newPath == nil { return (path, [Substring(deletedFileLine)]) }
+        // A private key is a secret as a whole: no rule masks its lines.
+        guard !hunks.contains(where: { $0.count > diffLineLimit || $0.contains("PRIVATE KEY-----") }) else { return nil }
+        return (path, hunks)
     }
 
     /// The path of a `---` or `+++` line. nil for `/dev/null` (an added or a
