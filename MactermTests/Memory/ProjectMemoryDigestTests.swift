@@ -173,7 +173,8 @@ struct ProjectMemoryDigestTests {
 
     @Test
     func the_instructions_put_git_first_and_cover_a_project_with_no_git_state() {
-        #expect(ProjectMemoryDigest.instructions.contains("Read the goal from Git first"))
+        #expect(ProjectMemoryDigest.instructions.contains("Read the work from Git first"))
+        #expect(ProjectMemoryDigest.instructions.contains("Do not state a goal"))
         #expect(ProjectMemoryDigest.instructions.contains("Do not retell the commands"))
         #expect(ProjectMemoryDigest.instructions.contains("When there is no Git state"))
     }
