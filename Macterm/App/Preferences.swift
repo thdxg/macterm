@@ -558,6 +558,15 @@ final class Preferences {
         set { defaults.set(newValue, forKey: Keys.endedV1Sessions) }
     }
 
+    /// The hosts where the user allowed the install of the Macterm server
+    /// (design/006 §5): the ssh destination as `ssh -G` resolves it
+    /// (`user@hostname:port`) → the host id that the install found or wrote.
+    /// A read-through: nothing in the UI reads it.
+    var remoteServerConsents: [String: String] {
+        get { defaults.dictionary(forKey: Keys.remoteServerConsents) as? [String: String] ?? [:] }
+        set { defaults.set(newValue, forKey: Keys.remoteServerConsents) }
+    }
+
     /// The `CFBundleShortVersionString` of the previous launch. `UpdateNotice`
     /// compares it with the running version to show the update toast. Like
     /// `hasSeededFirstRun`: nothing in the UI reads it, so it's a read-through.
@@ -1274,6 +1283,7 @@ final class Preferences {
         static let installationID = "macterm.installationID"
         static let hasSeededFirstRun = "macterm.firstRun.seeded"
         static let endedV1Sessions = "macterm.v2.endedV1Sessions"
+        static let remoteServerConsents = "macterm.remote.serverConsents"
         static let lastLaunchedVersion = "macterm.lastLaunchedVersion"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
         static let migrationRetiredToggleKeys = "macterm.migration.retired_toggle_keys"

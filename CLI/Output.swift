@@ -33,6 +33,11 @@ enum Output {
         if let host = data.host {
             print("host=\(host.host) controlPath=\(host.controlPath) usersOwn=\(host.usersOwn) logins=\(host.logins)")
         }
+        if let server = data.hostServer {
+            print(
+                "host=\(server.host) build=\(server.build) level=\(server.level) installed=\(server.installed) commands=\(server.commands)"
+            )
+        }
     }
 
     private static func renderPassword(_ state: ControlPasswordState) {

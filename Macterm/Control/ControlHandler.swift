@@ -108,6 +108,7 @@ final class ControlHandler {
         case "tab.merge": return try tabMerge(args)
         case "host.connect": return try await hostConnect(args)
         case "host.disconnect": return try await hostDisconnect(args)
+        case "host.server": return try await hostServer(args)
         #endif
         case "ssh.askpass": return try await sshAskpass(args, peerPID: peerPID)
         case "grid": return try grid(args)
@@ -1848,6 +1849,28 @@ extension ControlHandler {
                 usersOwn: route.isUsersOwn,
                 logins: SSHConnections.shared.logins[host, default: 0]
             ))
+        } catch let failure as SSHConnections.Failure {
+            throw ControlError(code: .internalError, message: failure.description)
+        }
+    }
+
+    /// Connects to the host's server, after the install that it needs, reads
+    /// its `hello` and closes the connection.
+    func hostServer(_ args: ControlArgs) async throws -> ControlData {
+        guard let host = args.host else { throw ControlError(code: .badRequest, message: "host server needs a host") }
+        do {
+            let link = try await RemoteServers.shared.connect(host)
+            defer { link.close() }
+            let hello = link.connection.serverHello
+            return ControlData(hostServer: ControlHostServerState(
+                host: host,
+                build: hello.build,
+                level: hello.level,
+                installed: link.installed,
+                commands: link.commands
+            ))
+        } catch let failure as RemoteServers.Failure {
+            throw ControlError(code: .internalError, message: failure.description)
         } catch let failure as SSHConnections.Failure {
             throw ControlError(code: .internalError, message: failure.description)
         }

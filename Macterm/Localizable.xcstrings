@@ -2664,6 +2664,23 @@
         }
       }
     },
+    "Continue Without Server" : {
+      "comment" : "The button that closes the server install sheet with no install.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서버 없이 계속"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不使用服务器继续"
+          }
+        }
+      }
+    },
     "Copy" : {
       "comment" : "Command palette: the Option action of an extension row that copies text",
       "localizations" : {
@@ -4253,6 +4270,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安装"
+          }
+        }
+      }
+    },
+    "Install the Macterm server on %@?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 Macterm 서버를 설치할까요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 上安装 Macterm 服务器？"
           }
         }
       }
@@ -12148,6 +12181,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的 %@ 副本与 Macterm 仓库中的版本不同。你的副本将移到废纸篓。"
+          }
+        }
+      }
+    },
+    "Your sessions on this host keep running when the connection stops. Macterm installs its server in ~/.local/share/macterm." : {
+      "comment" : "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결이 끊겨도 이 호스트의 세션은 계속 실행됩니다. Macterm은 서버를 ~/.local/share/macterm에 설치합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接中断时，此主机上的会话会继续运行。Macterm 会把服务器安装到 ~/.local/share/macterm。"
           }
         }
       }
