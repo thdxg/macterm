@@ -134,11 +134,12 @@ struct SplitLeafView: View {
     let onZoomRequest: () -> Void
     let paneDrop: PaneDropContext?
 
-    /// Whether the unfocused-split dim applies. A zoomed or single pane is
-    /// not "a split", and a pane painting its own adaptive background is
-    /// left color-accurate.
+    /// Whether the dim applies: an unfocused split, or a remote pane whose
+    /// connection stopped (`Pane.isRemoteLinkLost`, 0057), which keeps its
+    /// last screen. A zoomed or single pane is not "a split", and a pane
+    /// painting its own adaptive background is left color-accurate.
     private var isSplitDimmed: Bool {
-        !isFocused && isSplit && pane.adaptiveBackgroundColor == nil
+        pane.isRemoteLinkLost || (!isFocused && isSplit && pane.adaptiveBackgroundColor == nil)
     }
 
     var body: some View {

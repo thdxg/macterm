@@ -1169,12 +1169,12 @@ final class AppState {
     /// still raise a dialog, which a toast must never replace.
     private(set) var activeToast: Toast?
 
-    /// Show `toast`, replacing any toast already up (the newest outcome is the
-    /// one worth reading).
     /// Settings → Projects → Install Server on Host…, after the user declined
-    /// the server on that host (0057). The consent sheet asks again; new panes
-    /// there then get sessions.
+    /// the server on that host (0057). The consent sheet asks again, on a
+    /// terminal window, which comes to the front first: Settings would cover
+    /// it. New panes there then get sessions.
     func installRemoteServer(on destination: String) {
+        appDelegate?.showWindow()
         Task {
             do {
                 try await RemoteHosts.shared.installServer(destination)
@@ -1191,6 +1191,8 @@ final class AppState {
         }
     }
 
+    /// Show `toast`, replacing any toast already up (the newest outcome is the
+    /// one worth reading).
     func presentToast(_ title: String, subtitle: String? = nil) {
         activeToast = Toast(title: title, subtitle: subtitle)
     }

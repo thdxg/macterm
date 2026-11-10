@@ -8,14 +8,6 @@ enum ZmxHostTarget: String, CaseIterable, Equatable {
     case linuxAarch64 = "aarch64-linux"
     case macOS = "universal-macos"
 
-    var displayName: String {
-        switch self {
-        case .linuxX86_64: "Linux x86_64"
-        case .linuxAarch64: "Linux aarch64"
-        case .macOS: "macOS"
-        }
-    }
-
     /// The target from the host's `uname -s` and `uname -m`. Linux names the
     /// CPU as `x86_64` or `amd64`, and `aarch64` or `arm64`. A macOS host
     /// takes the universal build, whatever its CPU. Anything else (a BSD,
@@ -48,8 +40,6 @@ struct ZmxVersion: Equatable {
     /// `build-2026-11-06-abcdef1` from `1.0.1+thdxg.build-2026-11-06-abcdef1`,
     /// nil for an upstream binary or a fork build older than the marker.
     var forkTag: String?
-
-    var isFork: Bool { forkTag != nil }
 
     static let forkMarker = "+thdxg."
 

@@ -47,6 +47,11 @@ struct RemotePaneClient {
     private var token: Int32 = 0
     private var original = termios()
     private var hasTTY = false
+    /// Keys wake the wait only after the first ssh ran or a line asked for
+    /// one. Before that, input stays for the shell: a layout's `run:` is
+    /// typed into the pty at the start (`initial_input`), and ssh passes it
+    /// on.
+    private var keysWake = false
 
     init(session: String, client: ControlClient) {
         self.session = session
@@ -61,10 +66,22 @@ struct RemotePaneClient {
         signal(SIGQUIT, SIG_IGN)
         signal(SIGTSTP, SIG_IGN)
         var event = "ask"
+        var registered = false
         while true {
-            guard let answer = ask(event) else { return 1 }
-            if wake < 0 {
-                guard register(answer.wake) else { return 1 }
+            let answer: ControlRemotePane
+            switch ask(event) {
+            case let .success(reply):
+                answer = reply
+            case let .failure(problem):
+                // Never end the pane for a problem of the client: its exit
+                // would end the session.
+                show("macterm: \(problem.text). Press a key to try again.")
+                event = waitForWakeOrKey() ? "retry" : "ask"
+                continue
+            }
+            if !registered {
+                registered = true
+                register(answer.wake)
                 // A wake posted before the registration is lost: ask again.
                 if answer.action == "wait" {
                     event = "ask"
@@ -77,56 +94,60 @@ struct RemotePaneClient {
             case "wait":
                 event = waitForWakeOrKey() ? "retry" : "ask"
             case "run":
-                guard let arguments = answer.arguments, !arguments.isEmpty else { return 1 }
+                guard let arguments = answer.arguments, !arguments.isEmpty else {
+                    event = "ask"
+                    continue
+                }
                 if answer.clear == true { write("\u{1B}[H\u{1B}[2J\u{1B}[3J") }
                 restoreTTY()
+                keysWake = true
                 let status = spawnAndWait(arguments)
+                // 255 is only a lost connection: the host's command passes
+                // a shell's own 255 on as 254 (`RemoteSpawn.sessionCommand`).
                 guard status == 255 else { return status }
                 event = "lost"
             case "ended":
-                waitForReturn()
-                event = "create"
+                event = waitForReturnOrWake() ? "create" : "ask"
             default:
                 return 0
             }
         }
     }
 
+    struct Problem: Error {
+        var text: String
+    }
+
     /// One `remote.pane` request. A Macterm that starts, or that does not
     /// answer for a moment, is asked again for a minute.
-    private func ask(_ event: String) -> ControlRemotePane? {
+    private func ask(_ event: String) -> Result<ControlRemotePane, Problem> {
         var args = ControlArgs()
         args.session = session
         args.event = event
         let deadline = Date().addingTimeInterval(60)
         while true {
             if let response = try? client.send(command: "remote.pane", args: args) {
-                if response.ok, let answer = response.data?.remotePane { return answer }
+                if response.ok, let answer = response.data?.remotePane { return .success(answer) }
                 if response.error?.code != .starting {
-                    Output.printError(response.error?.message ?? "Macterm did not answer")
-                    return nil
+                    return .failure(Problem(text: response.error?.message ?? "Macterm did not answer"))
                 }
             }
-            guard Date() < deadline else {
-                Output.printError("cannot reach Macterm")
-                return nil
-            }
+            guard Date() < deadline else { return .failure(Problem(text: "cannot reach Macterm")) }
             usleep(500_000)
         }
     }
 
-    private mutating func register(_ name: String) -> Bool {
+    /// With no registration, the waits look again every few seconds.
+    private mutating func register(_ name: String) {
         var fd: Int32 = -1
-        guard notify_register_file_descriptor(name, &fd, 0, &token) == NOTIFY_STATUS_OK else {
-            Output.printError("cannot wait for Macterm")
-            return false
-        }
+        guard notify_register_file_descriptor(name, &fd, 0, &token) == NOTIFY_STATUS_OK else { return }
         wake = fd
-        return true
     }
 
-    private func show(_ message: String?) {
+    /// A line asks for a key, so keys wake the wait from then on.
+    private mutating func show(_ message: String?) {
         guard let message, !message.isEmpty else { return }
+        keysWake = true
         write(message + "\n")
     }
 
@@ -141,51 +162,77 @@ struct RemotePaneClient {
         }
     }
 
+    private enum Woken {
+        case wake
+        /// True for Return or a line end.
+        case key(Bool)
+
+        var isKey: Bool {
+            if case .key = self { return true }
+            return false
+        }
+    }
+
     /// True for a key, false for the wake.
     private func waitForWakeOrKey() -> Bool {
+        guard keysWake else { return wait(keys: false).isKey }
+        quietTTY()
+        defer { restoreTTY() }
+        return wait(keys: true).isKey
+    }
+
+    /// True for Return, false for the wake (a mirror of the pane started
+    /// the new shell).
+    private func waitForReturnOrWake() -> Bool {
         quietTTY()
         defer { restoreTTY() }
         while true {
-            var fds = [pollfd(fd: wake, events: Int16(POLLIN), revents: 0)]
-            if hasTTY { fds.append(pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)) }
-            guard poll(&fds, nfds_t(fds.count), -1) >= 0 else {
-                if errno == EINTR { continue }
-                return false
+            switch wait(keys: true) {
+            case .wake: return false
+            case let .key(isReturn) where isReturn: return true
+            case .key: continue
             }
-            if fds[0].revents != 0 {
+        }
+    }
+
+    /// Waits for the wake or, with `keys`, a key. A key that is Return or a
+    /// line end says so. With no wake registered, it ends after 5 s.
+    private func wait(keys: Bool) -> Woken {
+        while true {
+            var fds: [pollfd] = []
+            if wake >= 0 { fds.append(pollfd(fd: wake, events: Int16(POLLIN), revents: 0)) }
+            let tty = keys && hasTTY
+            if tty { fds.append(pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)) }
+            let ready = poll(&fds, nfds_t(fds.count), wake >= 0 ? -1 : 5000)
+            if ready < 0, errno == EINTR { continue }
+            guard ready > 0 else { return .wake }
+            if wake >= 0, fds[0].revents != 0 {
                 drain(wake)
-                return false
+                return .wake
             }
-            if fds.count > 1, fds[1].revents & Int16(POLLIN) != 0 {
-                drain(STDIN_FILENO)
-                return true
-            }
-            if fds.count > 1, fds[1].revents != 0 {
-                // The tty hung up: the pane closed.
-                exit(0)
-            }
+            guard tty, let input = fds.last, input.revents != 0 else { continue }
+            // The tty hung up: the pane closed.
+            guard input.revents & Int16(POLLIN) != 0 else { exit(0) }
+            let bytes = drain(STDIN_FILENO)
+            if bytes.isEmpty { exit(0) }
+            return .key(bytes.contains(0x0A) || bytes.contains(0x0D))
         }
     }
 
-    private func waitForReturn() {
-        guard hasTTY else { return }
-        quietTTY()
-        defer { restoreTTY() }
-        var byte: UInt8 = 0
-        while true {
-            let count = read(STDIN_FILENO, &byte, 1)
-            if count < 0, errno == EINTR { continue }
-            guard count > 0 else { exit(0) }
-            if byte == 0x0A || byte == 0x0D { return }
-        }
-    }
-
-    private func drain(_ fd: Int32) {
+    /// Reads everything that waits on `fd`.
+    @discardableResult
+    private func drain(_ fd: Int32) -> [UInt8] {
         var buffer = [UInt8](repeating: 0, count: 256)
+        var all: [UInt8] = []
         let flags = fcntl(fd, F_GETFL)
         _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
-        while read(fd, &buffer, buffer.count) > 0 {}
+        while true {
+            let count = read(fd, &buffer, buffer.count)
+            guard count > 0 else { break }
+            all += buffer[0 ..< count]
+        }
         _ = fcntl(fd, F_SETFL, flags)
+        return all
     }
 
     /// No echo, no line editing, no signals: a key wakes the wait and shows

@@ -25,7 +25,7 @@ struct RemoteSpawnTests {
         let attach = attach()
         #expect(attach.hasPrefix("sh -c '"))
         #expect(attach.contains("b=\"$HOME/.local/share/macterm/bin/macterm-0123abcd\""))
-        #expect(attach.contains("exec \"$b\" connect \"macterm-api-abc123\""))
+        #expect(attach.contains("\"$b\" connect \"macterm-api-abc123\"; "))
         // An attach never makes a session: a missing one is an error, never
         // a new shell in silence.
         #expect(!attach.contains(" --"))
@@ -33,7 +33,7 @@ struct RemoteSpawnTests {
         // A create goes to the folder, and `--` makes the missing session.
         let create = create()
         #expect(create.contains("cd ~/\"dev/api\""))
-        #expect(create.contains("exec \"$b\" connect \"macterm-api-abc123\" --"))
+        #expect(create.contains("\"$b\" connect \"macterm-api-abc123\" --; "))
     }
 
     @Test
@@ -42,6 +42,9 @@ struct RemoteSpawnTests {
         // pane wait, and the next connect installs again. A folder that is
         // not there starts the session in the home folder, so it persists.
         #expect(attach().contains("[ -x \"$b\" ] || exit 255"))
+        // 255 is only a lost connection: a shell's own 255 reaches the pane
+        // as 254, so its pane closes.
+        #expect(attach().hasSuffix("s=$?; [ \"$s\" -ne 255 ] || s=254; exit \"$s\"'"))
         let create = create()
         #expect(create.contains("cannot cd to"))
         #expect(create.contains(">&2; cd; }"))

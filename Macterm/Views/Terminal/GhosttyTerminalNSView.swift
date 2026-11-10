@@ -381,6 +381,10 @@ final class GhosttyTerminalNSView: NSView {
         $0.appendingPathComponent("bin/macterm").path
     }.flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
 
+    /// A remote pane with no client: one line, then a wait for the close.
+    static let noRemoteClientCommand =
+        "/bin/sh -c 'echo \"macterm: this build cannot connect remote panes\"; exec cat >/dev/null'"
+
     var onProcessExit: (() -> Void)?
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
     var onZoomRequest: (() -> Void)?
@@ -656,11 +660,15 @@ final class GhosttyTerminalNSView: NSView {
             // directory. The declared `shell:` doesn't apply either: the host
             // session runs the remote user's login shell. Logins go to a
             // sheet (`SSHLoginPrompts`), never to the pane.
-            // The unit-test host connects to no host: it restores the
-            // developer's panes (`ZmxBypass.unitTestHost`).
-            _ = remoteSpec
+            //
+            // Without the client (and in the unit-test host, which restores
+            // the developer's panes, `ZmxBypass.unitTestHost`) the pane says
+            // so and waits. Fail closed: never a local shell in a remote
+            // project, and never an exit, which would end the session.
             if let client = Self.remotePaneClientPath, ZmxClient.liveBypass != .unitTestHost {
                 config.command = cString("\(RemoteSpawn.shellQuote(client)) remote-pane")
+            } else {
+                config.command = cString(Self.noRemoteClientCommand)
             }
             // Teach the host our terminfo entry, if the user asked for it, so a
             // later session's `remoteTermPreamble` settles on xterm-ghostty

@@ -22,8 +22,6 @@ struct ProjectsSettings: View {
     /// the user can expect it to change.
     @State private var layouts: [ProjectFileStore.Listing] = []
     @State private var layoutPendingDeletion: ProjectFileStore.Listing?
-    /// The zmx install sheet for a remote project (#699), on this window:
-    /// the main window's copy would open behind Settings.
     @State private var deleteFailure: String?
 
     var body: some View {

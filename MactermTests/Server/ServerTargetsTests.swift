@@ -33,7 +33,6 @@ struct ServerTargetsTests {
     func a_fork_version_carries_its_release_tag() {
         let output = "zmx\t\t0.8.1+thdxg.build-2026-11-06-abcdef1\nghostty_vt\t1.3.2\nsocket_dir\t/tmp/zmx\n"
         #expect(ZmxVersion.parse(output) == ZmxVersion(upstream: "0.8.1", forkTag: "build-2026-11-06-abcdef1"))
-        #expect(ZmxVersion.parse(output)?.isFork == true)
     }
 
     /// The format of the pinned 1.0.1 build's `zmx version`.

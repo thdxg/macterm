@@ -207,10 +207,12 @@ enum RemoteSpawn {
     /// missing session is an error, never a new shell. Delivered as
     /// `sh -c '<script>'` (see `remoteShell`).
     ///
-    /// A binary that is not there (the host lost its files after the check)
-    /// exits 255, as a lost link does: the pane then waits, and the next
-    /// connect installs again. A folder that is not there prints a line and
-    /// starts the session in the home folder, so the shell still persists.
+    /// Exit 255 means only "the connection stopped", as ssh's own 255: the
+    /// pane then waits. A shell that exits 255 itself reaches the pane as
+    /// 254, so its pane closes. A binary that is not there (the host lost
+    /// its files after the check) exits 255 too, so the next connect installs
+    /// again. A folder that is not there prints a line and starts the session
+    /// in the home folder, so the shell still persists.
     static func sessionCommand(key: String, sessionName: String, create directory: String?) -> String {
         let binary = posixDoubleQuote(hostServerBinary(key: key)).replacingOccurrences(of: "\\$HOME", with: "$HOME")
         var steps = [
@@ -218,13 +220,14 @@ enum RemoteSpawn {
                 + "b=\(binary)",
             "[ -x \"$b\" ] || exit 255",
         ]
-        var connect = "exec \"$b\" connect \(posixDoubleQuote(sessionName))"
+        var connect = "\"$b\" connect \(posixDoubleQuote(sessionName))"
         if let directory {
             let quoted = quoteRemoteDirectory(directory)
             steps.append("cd \(quoted) || { echo \"macterm: cannot cd to \(quoted)\" >&2; cd; }")
             connect += " --"
         }
         steps.append(connect)
+        steps.append("s=$?; [ \"$s\" -ne 255 ] || s=254; exit \"$s\"")
         let script = assertSingleQuoteFree(steps.joined(separator: "; "))
         return "\(remoteShell) \(shellQuote(script))"
     }

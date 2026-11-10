@@ -111,7 +111,8 @@ struct RemoteHostsTests {
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(3)))
     func a_session_that_ended_on_the_host_asks_before_a_new_shell() async throws {
         try await withSSHDHost { host in
-            let fixture = Fixture(host)
+            // The host restarts at once: no grace for a new session.
+            let fixture = Fixture(host, creationGrace: 0)
             let pane = fixture.pane()
             let first = try await PTYProcess(fixture.run(pane))
             first.type("printf 'up-%s\\n' 1\n")
@@ -127,6 +128,21 @@ struct RemoteHostsTests {
             #expect(message.contains("ended"))
             // Return: a new shell in the same folder.
             let arguments = try await fixture.run(pane, event: .create)
+            #expect(arguments.last?.contains("connect \"\(pane.sessionName)\" --") == true)
+        }
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(3)))
+    func a_mirror_that_asks_before_the_new_session_starts_makes_it_too() async throws {
+        try await withSSHDHost { host in
+            let fixture = Fixture(host)
+            let pane = fixture.pane()
+            _ = try await fixture.run(pane)
+            #expect(pane.hostSessionDirectory == fixture.directory)
+            // The first client has not started its ssh yet: the host has no
+            // session. A second window's view of the pane asks now.
+            let mirror = Pane(mirroring: pane)
+            let arguments = try await fixture.run(mirror)
             #expect(arguments.last?.contains("connect \"\(pane.sessionName)\" --") == true)
         }
     }
@@ -166,9 +182,9 @@ struct RemoteHostsTests {
             set { posted.mutate { $0 = newValue } }
         }
 
-        init(_ host: SSHDHost) {
+        init(_ host: SSHDHost, creationGrace: TimeInterval = 30) {
             directory = host.home.path
-            var configuration = RemoteHosts.Configuration(key: host.key, declines: .memory())
+            var configuration = RemoteHosts.Configuration(key: host.key, declines: .memory(), creationGrace: creationGrace)
             configuration.post = { [posted] name in posted.mutate { $0.append(name) } }
             hosts = RemoteHosts(connections: host.connections, servers: host.servers, configuration: configuration)
         }

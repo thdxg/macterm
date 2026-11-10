@@ -70,6 +70,9 @@ final class RemoteHosts {
         /// Posts a Darwin notification.
         var post: (String) -> Void = { notify_post($0) }
         var declines: DeclineStore
+        /// How long a session that the app told a client to make counts as
+        /// made (`created`).
+        var creationGrace: TimeInterval = 30
 
         static var live: Configuration {
             Configuration(key: ServerBuilds.bundledKey, declines: .preferences)
@@ -100,7 +103,9 @@ final class RemoteHosts {
     private let configuration: Configuration
 
     private enum Host {
-        case preparing(Task<Void, Never>)
+        /// A login and a check run. The token tells this prepare from a
+        /// later one.
+        case preparing(UUID, Task<Void, Never>)
         case ready(SSHConnections.Route, RemoteServers.Link)
         /// No server: plain shells.
         case plain(SSHConnections.Route)
@@ -117,8 +122,13 @@ final class RemoteHosts {
     @ObservationIgnored private var createRequested: Set<String> = []
     /// A line for a session's pane, given with the next answer.
     @ObservationIgnored private var messages: [String: String] = [:]
-    /// Lists that failed right after a new link, for each host.
+    /// Lists that failed on the current link of a host, in a row.
     @ObservationIgnored private var listFailures: [String: Int] = [:]
+    /// When the app last told a session's client to make it. A second client
+    /// (a mirror) can ask before the host lists the new session, and a
+    /// channel can drop before the session starts: in this time a missing
+    /// session is made, not reported as ended.
+    @ObservationIgnored private var created: [String: Date] = [:]
 
     init(connections: SSHConnections, servers: RemoteServers, configuration: Configuration) {
         self.connections = connections
@@ -150,6 +160,7 @@ final class RemoteHosts {
             logger.info("remote pane: session=\(session, privacy: .public) host=\(target.destination, privacy: .public) lost")
             lost.insert(session)
             mark(panes, lost: true)
+            // The next connect checks the connection again.
             drop(target.destination)
             return .wait(message: nil)
         case .retry:
@@ -174,9 +185,15 @@ final class RemoteHosts {
     /// connection, the session stays.
     func endSession(_ session: String, destination: String) async {
         forget(session)
-        if case let .ready(_, link) = hosts[destination] {
+        switch hosts[destination] {
+        case let .ready(_, link):
             await Self.kill(session, over: link)
             return
+        case .plain:
+            return
+        case .preparing,
+             nil:
+            break
         }
         do {
             let link = try await servers.connect(destination, login: false, install: false)
@@ -191,10 +208,12 @@ final class RemoteHosts {
     /// user's click. New panes then get sessions; a plain shell stays plain.
     func installServer(_ destination: String) async throws {
         undecline(destination)
+        if case let .preparing(_, task) = hosts[destination] { await task.value }
         drop(destination)
         let route = try await connections.connect(destination)
         do {
             let link = try await servers.connect(destination)
+            if case let .ready(_, old) = hosts[destination] { old.close() }
             hosts[destination] = .ready(route, link)
         } catch RemoteServers.Failure.declined {
             decline(destination)
@@ -254,8 +273,12 @@ final class RemoteHosts {
         let destination = target.destination
         guard let key = configuration.key else { return .close }
         guard let sessions = await Self.list(over: link) else {
-            // The link broke: one new link. A second failure right after a
-            // new link is the host's answer.
+            // The link broke. Only a failure on the host's current link
+            // counts, and drops it: another request may have made a new one
+            // meanwhile. Two failures in a row are the host's answer.
+            guard case let .ready(_, current) = hosts[destination], current === link else {
+                return await resolve(session, panes: panes, target: target)
+            }
             drop(destination)
             let failures = listFailures[destination, default: 0] + 1
             listFailures[destination] = failures
@@ -265,9 +288,7 @@ final class RemoteHosts {
                 mark(panes, lost: true)
                 return .wait(message: RemotePaneText.withRetry(RemotePaneText.serverSilent(host: target.host)))
             }
-            prepare(destination, host: target.host)
-            waiting[destination, default: []].insert(session)
-            return .wait(message: nil)
+            return await resolve(session, panes: panes, target: target)
         }
         listFailures[destination] = nil
         let found = sessions.first { $0.name == session }
@@ -276,10 +297,12 @@ final class RemoteHosts {
             await Self.kill(session, over: link)
         }
         let known = panes.lazy.compactMap(\.hostSessionDirectory).first
+        let justCreated = created[session].map { Date().timeIntervalSince($0) < configuration.creationGrace } ?? false
+        if found?.isRunning == true { created[session] = nil }
         let step = Self.step(
             running: found?.isRunning == true,
             sessionDirectory: known,
-            createRequested: createRequested.remove(session) != nil,
+            createRequested: createRequested.remove(session) != nil || justCreated,
             projectDirectory: target.directory
         )
         switch step {
@@ -292,8 +315,13 @@ final class RemoteHosts {
             return .run(arguments: connections.ttyArguments(route, destination, command), clear: true, message: nil)
         case let .create(directory):
             mark(panes, lost: false)
+            created[session] = Date()
             for pane in panes {
                 pane.hostSessionDirectory = directory
+            }
+            // A mirror that waits at "the session ended" attaches now.
+            if ended.remove(session) != nil || panes.count > 1 {
+                configuration.post(Self.wakeName(for: session))
             }
             let command = RemoteSpawn.sessionCommand(key: key, sessionName: session, create: directory)
             return .run(arguments: connections.ttyArguments(route, destination, command), clear: false, message: nil)
@@ -330,6 +358,7 @@ final class RemoteHosts {
     /// Log in, then check and install the server, for the sessions that
     /// wait. The end wakes them.
     private func prepare(_ destination: String, host: String) {
+        let token = UUID()
         let task = Task { [weak self] in
             guard let self else { return }
             let result: Result<Host, PrepareFailure>
@@ -339,9 +368,9 @@ final class RemoteHosts {
                 logger.info("remote host \(destination, privacy: .public): \(String(describing: error), privacy: .public)")
                 result = .failure(PrepareFailure(message: RemotePaneText.connectFailure(error, host: host)))
             }
-            finish(destination, result)
+            finish(destination, token: token, result)
         }
-        hosts[destination] = .preparing(task)
+        hosts[destination] = .preparing(token, task)
     }
 
     private struct PrepareFailure: Error {
@@ -371,7 +400,12 @@ final class RemoteHosts {
         }
     }
 
-    private func finish(_ destination: String, _ result: Result<Host, PrepareFailure>) {
+    private func finish(_ destination: String, token: UUID, _ result: Result<Host, PrepareFailure>) {
+        guard case let .preparing(current, _) = hosts[destination], current == token else {
+            // Another step replaced this prepare (an install from Settings).
+            if case let .success(.ready(_, link)) = result { link.close() }
+            return
+        }
         let sessions = waiting.removeValue(forKey: destination) ?? []
         switch result {
         case let .success(host):
@@ -403,6 +437,7 @@ final class RemoteHosts {
     }
 
     private func forget(_ session: String) {
+        created[session] = nil
         lost.remove(session)
         ended.remove(session)
         createRequested.remove(session)

@@ -250,15 +250,18 @@ PY
 pane_command() {
   local s="ZMX_FOREGROUND_EVENTS=1; export ZMX_FOREGROUND_EVENTS; b=\"\$HOME/.local/share/macterm/bin/macterm-$A\"; [ -x \"\$b\" ] || exit 255; "
   if [[ "${2:-}" == create ]]; then
-    s+="cd; exec \"\$b\" connect \"$1\" --"
+    s+="cd; \"\$b\" connect \"$1\" --; "
   else
-    s+="exec \"\$b\" connect \"$1\""
+    s+="\"\$b\" connect \"$1\"; "
   fi
+  s+="s=\$?; [ \"\$s\" -ne 255 ] || s=254; exit \"\$s\""
   printf "sh -c '%s'" "$s"
 }
 
 @test "host: panes over one connection cost one login, report the foreground and attach again after a drop" {
   install_build $A pane-id
+  local before
+  before=$(grep -c 'Accepted publickey' "$T/sshd.log")
   ssh -F "$T/ssh_config" -M -N -f -S "$T/cm" -o ControlPersist=yes box
   ONE="$(pane_command one create)" TWO="$(pane_command two create)" AGAIN="$(pane_command one)" python3 - <<'PY'
 import os, subprocess
@@ -292,9 +295,13 @@ subprocess.run(ssh + ["-M", "-N", "-f", "-o", "ControlPersist=yes", "box"], chec
 again = pane(os.environ["AGAIN"])
 again.wait_output("ready-one")
 again.wait_output("sleep 60")
-os.kill(again.pid, 9)
+
+# A shell that exits 255 is not a lost connection: the pane gets 254.
+again.type("\x03exit 255\n")
+assert again.wait_exit() == 254, again.status
 PY
-  [ "$(grep -c 'Accepted publickey' "$T/sshd.log")" -eq 2 ]
+  # One login for the two panes, and one after the drop.
+  [ "$(grep -c 'Accepted publickey' "$T/sshd.log")" -eq $((before + 2)) ]
 }
 
 @test "host: an attach to a session that is not there makes none" {
