@@ -1043,23 +1043,6 @@ final class AppState {
         set { keyOrFirstWindow?.isNewRemoteProjectSheetPresented = newValue }
     }
 
-    /// Opens the zmx install sheet for a remote project in the key window
-    /// (`ZmxInstallSheet`, #699). Nothing for a local project.
-    func presentZmxInstall(for project: Project) {
-        guard project.isRemote else { return }
-        keyOrFirstWindow?.zmxInstall = ZmxInstallRequest(path: project.path, projectID: project.id, zmxPath: project.zmxPath)
-    }
-
-    /// After an install put a zmx on the host that the project's panes would
-    /// not run (another one comes first in PATH, or `zmxPath` names an old
-    /// one): make the project use it, now and in every pane.
-    func useInstalledZmx(at path: String, for projectID: UUID, store: ProjectStore) {
-        store.setZmxPath(id: projectID, to: path)
-        if let project = store.projects.first(where: { $0.id == projectID }) {
-            stampRemoteZmxPath(project)
-        }
-    }
-
     private var windowPersistTask: Task<Void, Never>?
 
     /// Persist the window list after it changes.
@@ -1188,6 +1171,26 @@ final class AppState {
 
     /// Show `toast`, replacing any toast already up (the newest outcome is the
     /// one worth reading).
+    /// Settings → Projects → Install Server on Host…, after the user declined
+    /// the server on that host (0057). The consent sheet asks again; new panes
+    /// there then get sessions.
+    func installRemoteServer(on destination: String) {
+        Task {
+            do {
+                try await RemoteHosts.shared.installServer(destination)
+                presentToast(
+                    String(localized: "Macterm installed its server on \(destination)"),
+                    subtitle: String(localized: "Sessions in new panes keep running when the connection stops.")
+                )
+            } catch {
+                presentToast(
+                    String(localized: "Macterm cannot install its server on \(destination)"),
+                    subtitle: (error as? CustomStringConvertible)?.description
+                )
+            }
+        }
+    }
+
     func presentToast(_ title: String, subtitle: String? = nil) {
         activeToast = Toast(title: title, subtitle: subtitle)
     }
@@ -1258,14 +1261,6 @@ final class AppState {
     /// See `endV1SessionsOnce`.
     @ObservationIgnored
     var v1SessionsEnded = OnceFlag.preferences
-    /// Orphan-sweep throttle (#281): destination (`user@host`) → when it
-    /// was last swept.
-    @ObservationIgnored
-    private var sweptDestinations: [String: Date] = [:]
-    /// Remote destinations whose owner stamp failed (`ZmxReaper.unstamped`),
-    /// so the warning logs once per host for the run.
-    @ObservationIgnored
-    private var unstampedDestinations: Set<String> = []
     private var autoTileObserver: Any?
 
     /// Re-reads each pane's foreground process so tab names track the running
@@ -1847,11 +1842,6 @@ final class AppState {
         guard !workspaceStore.loadFailed else { return }
         endV1SessionsOnce(names: localSessionNames())
         sweepLocalOrphans()
-        // The active project's remote host gets the labelled sweep (#281);
-        // other hosts are swept when their projects are selected.
-        if let id = activeProjectID, let project = projects.first(where: { $0.id == id }) {
-            sweepOrphanSessions(project: project)
-        }
     }
 
     func saveWorkspaces() {
@@ -1938,7 +1928,6 @@ final class AppState {
         stampRemoteZmxPath(project)
         acknowledgeActiveTab(projectID: project.id)
         reconnectDroppedRemotePanes(trigger: .projectSelected)
-        sweepOrphanSessions(project: project)
         warmFocusedProject()
         // Creating a workspace doesn't change any tab selection (the poll's
         // usual wake signal), so bump it directly.
@@ -2025,28 +2014,27 @@ final class AppState {
         case wake
         case activate
         case projectSelected
+        case network
     }
 
-    /// Redial the active project's dropped remote panes: any pane whose ssh
-    /// client died (libghostty's abnormal-exit overlay) while its remote zmx
-    /// session lives on. Respawning the surface re-runs the same
-    /// `ssh -t … exec zmx attach <sessionName>`, and zmx replays scrollback
-    /// on re-attach — per pane, exactly what quit-and-relaunch does today.
+    /// Let the active project's lost remote panes connect again: panes whose
+    /// connection stopped while their session lives on the host. Each pane's
+    /// client (`macterm remote-pane`) waits on its tty; `RemoteHosts` wakes
+    /// it, and the attach replays the session's screen. A login, when the
+    /// connection needs one, comes now: the user is at the Mac.
     ///
-    /// Trigger-driven only (system wake / app activation / project
-    /// selection), never a timer, and rate-limited per pane by
+    /// Trigger-driven only (system wake, a network change, app activation,
+    /// project selection), never a timer, and rate-limited per pane by
     /// `RemoteReconnectPolicy`, so a still-unreachable host is retried a
-    /// bounded number of times per return — not polled. Active project only,
-    /// mirroring the foreground probe's frontmost-only rule; other projects
-    /// reconnect via the `.projectSelected` trigger when opened.
+    /// bounded number of times per return — not polled. Active project
+    /// only; other projects reconnect via `.projectSelected` when opened. A
+    /// key in a lost pane connects at once, with no backoff.
     func reconnectDroppedRemotePanes(trigger: ReconnectTrigger) {
         guard Preferences.shared.reconnectRemotePanes else { return }
-        // A wake-burst closure can land mid-quit; respawning a surface while
-        // the teardown sweep is killing them would resurrect ssh clients.
         guard !AppTerminationState.isTerminating else { return }
         guard let projectID = activeProjectID, let ws = workspaces[projectID] else { return }
         let now = Date()
-        var reconnectedIDs: Set<UUID> = []
+        var sessions: Set<String> = []
         for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) where pane.isRemote {
             guard pane.isDisconnected else {
                 reconnectPolicy.observeAlive(pane.id, now: now)
@@ -2054,44 +2042,12 @@ final class AppState {
             }
             guard reconnectPolicy.shouldAttempt(pane.id, now: now) else { continue }
             reconnectPolicy.recordAttempt(pane.id, now: now)
-            reconnectSurface(of: pane)
-            reconnectedIDs.insert(pane.id)
+            sessions.insert(pane.sessionName)
         }
-        guard !reconnectedIDs.isEmpty else { return }
-        let count = reconnectedIDs.count
-        logger.info("reconnect(\(trigger.rawValue, privacy: .public)): respawning \(count, privacy: .public) dropped remote pane(s)")
-        // Panes in non-visible tabs have no live SwiftUI container to answer
-        // the reattach tick; a destroyed pane now matches the incubator's
-        // `surface == nil` guard, so the normal warm path respawns them
-        // off-screen (panesToWarm skips the active tab, whose panes rebuild
-        // through the tick).
-        warmFocusedProject()
-        // The rebuild replaced the focused pane's NSView, so first responder
-        // points at a retired view. Same async window fallback as
-        // focusPane(_:): the sweep can run while the app is not yet active.
-        if let tab = ws.activeTab, let focusedID = tab.focusedPaneID,
-           reconnectedIDs.contains(focusedID)
-        {
-            DispatchQueue.main.async {
-                let window = NSApp.keyWindow
-                    ?? NSApp.mainWindow
-                    ?? self.appDelegate?.mainWindow
-                FocusRestoration.restoreFocus(to: focusedID, in: tab.splitRoot, window: window)
-            }
-        }
-    }
-
-    /// Rebuild one pane's surface in place, WITHOUT killing its zmx session —
-    /// the session is the reattach target. Ordering is load-bearing:
-    /// `destroySurface` nils `onProcessExit` first (so the dead surface can't
-    /// race a `requestClosePane` at us mid-rebuild) and retires the old
-    /// NSView; the reattach tick then makes `TerminalSurface.updateNSView`
-    /// run `ensureScrollView` (a new view, with the pane's callbacks) →
-    /// `attach` → `configure` (the window's callbacks) → `createSurface`,
-    /// which re-dials ssh against the same persisted session name.
-    private func reconnectSurface(of pane: Pane) {
-        pane.destroySurface()
-        pane.requestSurfaceReattach()
+        guard !sessions.isEmpty else { return }
+        let count = sessions.count
+        logger.info("reconnect(\(trigger.rawValue, privacy: .public)): \(count, privacy: .public) lost remote pane(s)")
+        RemoteHosts.shared.reconnect(sessions)
     }
 
     // MARK: - The v1 sessions
@@ -2147,12 +2103,7 @@ final class AppState {
         )
     }
 
-    // MARK: - Orphan session sweep (#281)
-
-    /// Floor between sweeps of one destination. Project switches are cheap
-    /// and frequent; orphan creation is rare, so once per app run is the
-    /// intent and this just lets a long-lived run catch up eventually.
-    private static let orphanSweepInterval: TimeInterval = 600
+    // MARK: - Session claims
 
     /// Every session name a live or restored pane claims, across ALL
     /// workspaces: pinned live snapshots that haven't materialized yet
@@ -2184,6 +2135,12 @@ final class AppState {
         workspaces.values
             .flatMap(\.tabs)
             .flatMap { $0.splitRoot.allPanes() }
+    }
+
+    /// The remote panes that show `session`: its pane and the mirrors of it
+    /// (`RemoteHosts`, 0057).
+    func remotePanes(session: String) -> [Pane] {
+        allAttachedPanes().filter { $0.isRemote && $0.sessionName == session }
     }
 
     /// Every pane with a zmx client that Macterm knows of: the workspace panes
@@ -2504,76 +2461,6 @@ final class AppState {
     /// against an always-idle pane.
     @ObservationIgnored
     var paneNeedsConfirmClose: (Pane) -> Bool = { $0.needsConfirmClose }
-
-    private func shouldSweep(_ destination: String, now: Date) -> Bool {
-        if let last = sweptDestinations[destination],
-           now.timeIntervalSince(last) < Self.orphanSweepInterval
-        {
-            return false
-        }
-        sweptDestinations[destination] = now
-        return true
-    }
-
-    /// Reap orphaned zmx sessions of a remote project's host on project
-    /// selection (#281). Local sessions have no reaper: the server knows
-    /// every one, and a pane's close ends its session. A remote session is orphaned
-    /// when its kill silently no-op'd (`killRemoteSession` is best-effort:
-    /// closing a pane while the host is unreachable leaves the session
-    /// running with nobody tracking it); the sweep stamps
-    /// `macterm.owner=<installationID>` on every session our panes claim and
-    /// kills only sessions that carry OUR stamp, have zero clients, and no
-    /// pane claims — so another machine's sessions on a shared host are
-    /// structurally out of reach. Fail-closed at every layer: a failed
-    /// snapshot load sweeps nothing, a failed probe reaps nothing, and the
-    /// whole remote half sits behind `backgroundSSHConnections` (#272 — this
-    /// is exactly the background connection that switch governs).
-    func sweepOrphanSessions(project: Project) {
-        // The hosted unit-test suite calls `selectProject` on AppStates whose
-        // `zmx` defaults to `.live`, and its claim set is near-empty — a real
-        // sweep would reap the developer's own detached sessions.
-        guard !Preferences.isTestRun else { return }
-        guard !workspaceStore.loadFailed else { return }
-        let now = Date()
-        guard Preferences.shared.backgroundSSHConnections,
-              let remote = ProjectPath.remote(from: project.path),
-              case let .remote(user, host, _) = remote
-        else { return }
-        let destination = RemoteSpawn.destination(user: user, host: host)
-        guard shouldSweep(destination, now: now) else { return }
-        // Stamp only the sessions OUR panes claim on this host — the safety
-        // property that makes the owner label meaningful.
-        let claimed = workspaces.values
-            .flatMap(\.tabs)
-            .flatMap { $0.splitRoot.allPanes() }
-            .filter { pane in
-                guard case let .remote(paneUser, paneHost, _) = pane.remoteSpec else { return false }
-                return RemoteSpawn.destination(user: paneUser, host: paneHost) == destination
-            }
-            .map(\.sessionName)
-        let ownerID = Preferences.shared.installationID
-        let zmxPath = project.zmxPath
-        let known = claimedSessionNames()
-        Task { [zmx, weak self] in
-            guard let entries = await zmx.sweepRemoteOrphans(remote, zmxPath, claimed, ownerID)
-            else { return }
-            let unstamped = ZmxReaper.unstamped(in: entries, claimed: claimed, owner: ownerID)
-            if !unstamped.isEmpty, let self, self.unstampedDestinations.insert(destination).inserted {
-                // Once per host: a host older than zmx 0.7.0 fails every sweep.
-                let count = unstamped.count
-                let reason = "zmx (or the session daemon) is older than 0.7.0, so these sessions are never reaped"
-                logger.warning(
-                    "No owner stamp on \(destination, privacy: .public), \(count, privacy: .public) sessions: \(reason, privacy: .public)"
-                )
-            }
-            let orphans = ZmxReaper.orphans(in: entries, known: known, owner: ownerID)
-            guard !orphans.isEmpty else { return }
-            logger.info("Reaping \(orphans.count, privacy: .public) orphan remote session(s) on \(destination, privacy: .public)")
-            for name in orphans {
-                await zmx.killRemoteSession(remote, name, zmxPath)
-            }
-        }
-    }
 
     /// Shows an open panel, adds or finds the selected directory as a project,
     /// and selects it. Returns the selected project, nil if cancelled.
@@ -3650,86 +3537,21 @@ final class AppState {
     /// A pane's child process ended (libghostty's `close_surface`, routed
     /// through `onProcessExit`). Local panes close, as always — via
     /// `paneProcessExited`, so a pinned tab's last pane unloads its tab
-    /// instead (#285). A REMOTE
-    /// pane's child is its ssh client, and WHY it ended decides (#281):
-    /// a deliberate end (the user typed `exit`, ending the zmx session, or
-    /// killed it) should close the pane as before, while a dropped
-    /// connection must NOT — libghostty has already rendered its exit
-    /// message into the still-live surface, the session lives on host-side,
-    /// and the reconnect sweep redials it on the next trigger. Closing
-    /// unconditionally was the pre-#281 behavior, and because `closePane`
-    /// kills the pane's session, a wake-time ssh death destroyed the remote
-    /// work the moment the network came back.
-    ///
-    /// The discriminator is the HOST's answer, not the exit code — measured
-    /// on macOS the exit code is always 0 (ghostty's own Surface.zig notes
-    /// exit-code detection doesn't work on Darwin), so a one-shot BatchMode
-    /// listing settles it: session gone → deliberate end → close; session
-    /// alive or host unreachable → drop → keep. Fail-safe by construction:
-    /// wrongly keeping a pane costs a manual close, wrongly closing one
-    /// costs the user's running session. With `backgroundSSHConnections`
-    /// off (#272) no probe is allowed, so every remote exit keeps the pane.
-    ///
-    /// A kept pane shows libghostty's "Process exited. Press any key to
-    /// close the terminal." A key typed at it fires `close_surface` again
-    /// (`GhosttyTerminalNSView.exitAcknowledgedByKey`), and that close is
-    /// the user's own request, so no probe decides it: the pane closes the
-    /// way Cmd+W closes it, with the busy confirmation when the host still
-    /// reports a program in the session. Before this, the key re-ran the
-    /// probe, and a host that refuses us (`Permission denied`) kept the
-    /// pane at the message for ever.
+    /// instead (#285). A REMOTE pane's child is its client
+    /// (`macterm remote-pane`, 0057), which survives a dropped connection
+    /// and waits on the tty (#281). So it exits only when the session's shell
+    /// ended: the pane closes with no confirmation (nothing runs in it), and
+    /// the close ends the exited session on the host.
     func handleProcessExit(_ paneID: UUID, projectID: UUID) {
         let pane = workspaces[projectID]?.tabs
             .compactMap { $0.splitRoot.findPane(id: paneID) }
             .first
-        guard let pane, pane.isRemote, let remote = pane.remoteSpec else {
+        guard let pane, pane.isRemote, projectID != PinnedTabs.projectID else {
             paneProcessExited(paneID, projectID: projectID)
             return
         }
-        if pane.nsView?.exitAcknowledgedByKey == true {
-            logger.info("remote pane ssh ended and a key acknowledged it — closing the pane")
-            paneProcessExited(paneID, projectID: projectID)
-            return
-        }
-        guard Preferences.shared.backgroundSSHConnections else {
-            logger.info("remote pane ssh ended; probes disabled — keeping pane as disconnected")
-            return
-        }
-        let sessionName = pane.sessionName
-        let zmxPath = pane.remoteZmxPath
-        let ownerID = Preferences.shared.installationID
-        Task { [zmx, weak self] in
-            // The stamp-then-list op doubles as the liveness probe (stamping
-            // our own claimed session is what the sweep does anyway).
-            let entries = await zmx.sweepRemoteOrphans(remote, zmxPath, [sessionName], ownerID)
-            guard let entries else {
-                logger.info("remote pane ssh ended; host unreachable — keeping pane as disconnected")
-                return
-            }
-            guard !entries.contains(where: { $0.name == sessionName }) else {
-                logger.info("remote pane ssh ended but its session lives — keeping pane as disconnected")
-                return
-            }
-            guard let self else { return }
-            // Session is gone: deliberate end. Close — unless something
-            // (a reconnect trigger racing this probe) already revived the
-            // pane with a live child.
-            if let view = self.workspaces[projectID]?.tabs
-                .compactMap({ $0.splitRoot.findPane(id: paneID) })
-                .first?.nsView, view.surface != nil, !view.processExited
-            {
-                return
-            }
-            logger.info("remote pane ssh ended and its session is gone — closing the pane")
-            // A pinned tab's last pane unloads the tab rather than closing
-            // it (#285); everywhere else this is a plain close (the session
-            // is already gone, so no confirmation applies).
-            if projectID == PinnedTabs.projectID {
-                self.paneProcessExited(paneID, projectID: projectID)
-            } else {
-                self.closePane(paneID, projectID: projectID)
-            }
-        }
+        logger.info("remote pane client ended — closing the pane")
+        closePane(paneID, projectID: projectID)
     }
 
     func requestClosePane(_ paneID: UUID, projectID: UUID) {

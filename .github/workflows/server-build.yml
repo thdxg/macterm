@@ -126,10 +126,10 @@ jobs:
             fi
           done
 
-      # The app's zmx-release.json takes its checksums from build/server, so
-      # the Linux builds there must be the bytes that the release serves. When
-      # another run uploaded the key first, take its builds. The summary says
-      # if the two builds were the same bytes.
+      # The app bundles the Linux builds of build/server, so they must be the
+      # bytes that the release serves. When another run uploaded the key
+      # first, take its builds. The summary says if the two builds were the
+      # same bytes.
       - name: Use the Served Linux Builds
         if: steps.upload.outcome == 'success'
         env:

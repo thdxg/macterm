@@ -567,6 +567,14 @@ final class Preferences {
         set { defaults.set(newValue, forKey: Keys.remoteServerConsents) }
     }
 
+    /// The ssh destinations where the user declined the install of the
+    /// server (0057): their remote panes are plain ssh shells until
+    /// Settings → Projects installs it. `RemoteHosts.declined` mirrors it.
+    var remoteServerDeclines: [String] {
+        get { defaults.stringArray(forKey: Keys.remoteServerDeclines) ?? [] }
+        set { defaults.set(newValue, forKey: Keys.remoteServerDeclines) }
+    }
+
     /// The `CFBundleShortVersionString` of the previous launch. `UpdateNotice`
     /// compares it with the running version to show the update toast. Like
     /// `hasSeededFirstRun`: nothing in the UI reads it, so it's a read-through.
@@ -1284,6 +1292,7 @@ final class Preferences {
         static let hasSeededFirstRun = "macterm.firstRun.seeded"
         static let endedV1Sessions = "macterm.v2.endedV1Sessions"
         static let remoteServerConsents = "macterm.remote.serverConsents"
+        static let remoteServerDeclines = "macterm.remote.serverDeclines"
         static let lastLaunchedVersion = "macterm.lastLaunchedVersion"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
         static let migrationRetiredToggleKeys = "macterm.migration.retired_toggle_keys"

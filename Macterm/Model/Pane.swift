@@ -56,6 +56,17 @@ final class Pane: Identifiable {
     /// `killPersistentSession` (teardown). nil = resolve `zmx` via PATH.
     @ObservationIgnored
     var remoteZmxPath: String?
+    /// For a remote pane, the host folder of its session, once its session
+    /// ran on the host's server (0057): the folder of its creation, then the
+    /// shell's own (OSC 7) at each save. nil: the pane never had a v2
+    /// session there (a new pane, or one from before v2), so a missing
+    /// session starts with no question. Persisted
+    /// (`PaneSnapshot.hostSessionDirectory`).
+    @ObservationIgnored
+    var hostSessionDirectory: String?
+    /// A remote pane whose connection stopped: it waits for a trigger or a
+    /// key (`RemoteHosts`), and the leaf dims. Never persisted.
+    var isRemoteLinkLost = false
     /// Process the pane launches on first surface creation, injected into the
     /// shell as `command + "\n"`. Set from a declarative layout; nil for an
     /// interactively-created pane (plain shell). Recorded here so a layout
@@ -1032,17 +1043,12 @@ final class Pane: Identifiable {
 
     var nsView: GhosttyTerminalNSView? { _nsView }
 
-    /// Whether this remote pane's ssh connection has died under it (#281):
-    /// the surface's child (the `ssh` client) exited, leaving libghostty's
-    /// abnormal-exit overlay on screen while the remote zmx session lives on.
-    /// Read at trigger time (wake / activation / project selection) by the
-    /// reconnect sweep — `ghostty_surface_process_exited` is authoritative
-    /// while the overlay is up, so no exit-callback state is kept. Local
-    /// panes are never "disconnected": they have no network to lose, and a
-    /// normal local child exit closes the pane via `close_surface` instead
-    /// of stranding it.
+    /// Whether this remote pane's connection stopped (#281, 0057): its client
+    /// (`macterm remote-pane`) waits on the pane's tty while the session
+    /// lives on the host. Read at trigger time by the reconnect sweep. Local
+    /// panes are never "disconnected": they have no network to lose.
     var isDisconnected: Bool {
-        isRemote && (nsView?.processExited ?? false)
+        isRemote && isRemoteLinkLost
     }
 
     /// Whether closing this pane must be confirmed first because a foreground
@@ -1327,6 +1333,7 @@ final class Pane: Identifiable {
         // A host property, not pane identity — re-derived per open exactly as
         // AppState stamps it, so the mirror can tear down over ssh too.
         remoteZmxPath = source.remoteZmxPath
+        hostSessionDirectory = source.hostSessionDirectory
     }
 
     /// Re-point this pane at a new workspace after its tab is moved between

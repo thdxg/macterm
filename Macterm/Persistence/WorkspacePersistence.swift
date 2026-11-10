@@ -202,6 +202,13 @@ struct PaneSnapshot: Codable {
     /// did NOT survive (reboot, external kill) respawns where the user was.
     /// A surviving session reattaches with its own live cwd regardless.
     var workingDirectory: String?
+    /// A REMOTE pane's host folder, once its session ran on the host's
+    /// server (`Pane.hostSessionDirectory`, 0057): the shell's own folder at
+    /// save time. A pane with it whose session is gone on the host (a host
+    /// restart) asks before it starts a new shell there; a pane without it
+    /// (from before v2) starts one with no question. Optional, so older
+    /// files decode it as nil.
+    var hostSessionDirectory: String?
     // No `title`: the tab name is derived live from the pane's foreground
     // process, so there's nothing per-pane to persist. (An older snapshot's
     // `title` key is harmlessly ignored on decode.)
@@ -216,7 +223,8 @@ struct PaneSnapshot: Codable {
         completionFailed: Bool? = nil,
         sessionID: UUID? = nil,
         sessionName: String? = nil,
-        workingDirectory: String? = nil
+        workingDirectory: String? = nil,
+        hostSessionDirectory: String? = nil
     ) {
         self.id = id
         self.projectPath = projectPath
@@ -225,6 +233,7 @@ struct PaneSnapshot: Codable {
         self.sessionID = sessionID
         self.sessionName = sessionName
         self.workingDirectory = workingDirectory
+        self.hostSessionDirectory = hostSessionDirectory
     }
 }
 
@@ -515,7 +524,8 @@ enum WorkspaceSerializer {
                 completionFailed: completionFailed ? true : nil,
                 sessionID: p.sessionID,
                 sessionName: p.sessionName,
-                workingDirectory: liveCwd
+                workingDirectory: liveCwd,
+                hostSessionDirectory: p.isRemote ? p.hostSessionDirectory.map { p.nsView?.currentPwd ?? $0 } : nil
             ))
         case let .split(b):
             return .split(SplitBranchSnapshot(
@@ -550,6 +560,7 @@ enum WorkspaceSerializer {
             if p.needsAttention == true {
                 pane.restoreNeedsAttention(failed: p.completionFailed == true)
             }
+            if pane.isRemote { pane.hostSessionDirectory = p.hostSessionDirectory }
             return .pane(pane)
         case let .split(b):
             return .split(SplitBranch(
