@@ -1000,12 +1000,12 @@ final class GhosttyTerminalNSView: NSView {
         syncColorScheme()
     }
 
-    /// Push the split-resolution scheme into libghostty — keyed off the
-    /// tracked system scheme, never this view's `effectiveAppearance`, which
-    /// our own preferredColorScheme pins (issue #144).
+    /// Push the app's scheme into libghostty — `GhosttyApp.windowScheme`,
+    /// never this view's `effectiveAppearance`, which our own
+    /// preferredColorScheme pins (issue #144).
     func syncColorScheme() {
         guard let surface else { return }
-        let isDark = GhosttyApp.shared.systemScheme == .dark
+        let isDark = GhosttyApp.shared.windowScheme == .dark
         ghostty_surface_set_color_scheme(surface, isDark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
     }
 
