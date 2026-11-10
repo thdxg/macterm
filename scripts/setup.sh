@@ -84,7 +84,7 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # build-2026-11-09-91ba6a2: + downstream patch 0021 (thdxg/ghostty#44): the
 # `cursor-morph` key, a mode of `smooth-cursor`, stretches the gliding cursor
 # with its speed. Upstream through #15162. No C API change.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-09-91ba6a2}"
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-10-53dbc59}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.
