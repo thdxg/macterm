@@ -5,6 +5,7 @@ struct TerminalPane: View {
     let pane: Pane
     let focused: Bool
     let isZoomed: Bool
+    let isSplit: Bool
     /// Dimmed because another pane drives this session's size (#345).
     var isNonLeaderMirror = false
     let onFocus: () -> Void
@@ -41,6 +42,7 @@ struct TerminalPane: View {
                 pane: pane,
                 focused: focused,
                 isZoomed: isZoomed,
+                isSplit: isSplit,
                 isNonLeaderMirror: isNonLeaderMirror,
                 // Read here (not just passed through) so the observation
                 // dependency registers: an orphaned-with-no-host bump must
@@ -158,6 +160,7 @@ private struct TerminalSurface: NSViewRepresentable {
     let pane: Pane
     let focused: Bool
     let isZoomed: Bool
+    let isSplit: Bool
     /// Another pane drives this session's pty size (#345), so this surface's
     /// frame is laid out for foreign geometry.
     let isNonLeaderMirror: Bool
@@ -337,6 +340,7 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onSplitRequest = onSplitRequest
         view.onZoomRequest = onZoomRequest
         view.isZoomed = isZoomed
+        view.isSplit = isSplit
         // Each OSC title is a command-boundary signal that re-reads the
         // foreground process, and — when a real program (not the shell) holds
         // the foreground — becomes the pane's display title.
@@ -402,17 +406,13 @@ private struct TerminalSurface: NSViewRepresentable {
         // tab and the badge can never disagree about what counts as seen.
         view.onBell = { [weak pane] in pane?.ringBell() }
         view.onProgressStarted = { [weak pane] in
-            guard Preferences.shared.showTabStatusIndicator else { return }
             pane?.refreshForegroundProcess()
             pane?.markCommandRunning()
         }
         view.onProgressFinished = { [weak pane] failed in
             // Only a live run can end. The REMOVE a program sends after its
             // ERROR finds the pane already `.done` and leaves the red dot up.
-            guard let pane,
-                  Preferences.shared.showTabStatusIndicator,
-                  pane.executionState == .running
-            else { return }
+            guard let pane, pane.executionState == .running else { return }
             pane.refreshForegroundProcess()
             pane.markProgressFinished(failed: failed)
             onCommandFinished()
@@ -451,7 +451,7 @@ private struct TerminalSurface: NSViewRepresentable {
                 // next idle poll, so the bubble is up before the user types.
                 PasswordPromptMonitor.shared.viewDidOutput(view)
             }
-            guard let pane, Preferences.shared.showTabStatusIndicator else { return }
+            guard let pane else { return }
             // The single activity source. Output heartbeats fire from the pty
             // IO path regardless of occlusion, so they also reach background
             // tabs, and they carry the row total so the tracker can tell
@@ -482,9 +482,8 @@ private struct TerminalSurface: NSViewRepresentable {
             // rather than waiting for the next poll tick: the adaptive poll
             // slows to 2s when the app is inactive and stops entirely once no
             // window is visible, which is why a finished agent's icon and name
-            // used to linger until the user clicked or typed. Unconditional —
-            // names and agent icons are shown whether or not the status
-            // indicator is on, and `notePromptReturned` feeds the naming gate.
+            // used to linger until the user clicked or typed.
+            // `notePromptReturned` feeds the naming gate.
             pane.notePromptReturned()
             pane.refreshForegroundProcess()
             // The remote analogue of the refresh above: the local process
@@ -501,10 +500,8 @@ private struct TerminalSurface: NSViewRepresentable {
                     pane: pane, view: view, exitCode: exitCode, durationNs: durationNs, reportedCommand: command
                 )
             }
-            if Preferences.shared.showTabStatusIndicator {
-                pane.markCommandFinished()
-                onCommandFinished()
-            }
+            pane.markCommandFinished()
+            onCommandFinished()
             guard !(NSApp.isActive && view?.isFocused == true) else { return }
             let durationSec = Double(durationNs) / 1_000_000_000
             let duration = Self.formatDuration(durationSec)

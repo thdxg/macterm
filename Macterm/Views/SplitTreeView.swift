@@ -146,6 +146,7 @@ struct SplitLeafView: View {
             pane: pane,
             focused: isFocused,
             isZoomed: isZoomed,
+            isSplit: isSplit,
             isNonLeaderMirror: isNonLeaderMirror,
             onFocus: onFocus,
             onProcessExit: onProcessExit,

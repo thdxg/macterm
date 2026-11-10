@@ -116,22 +116,27 @@ struct SSHWrapperTests {
     }
 
     @Test
-    func install_script_probes_tic_and_compiles_from_stdin() {
-        let script = SSHWrapper.installScript(verbose: false)
-        #expect(script.contains("command -v tic"))
-        #expect(script.contains("tic -x - 2>/dev/null"))
+    func install_script_matches_ghostty_ssh() {
+        // ghostty-org/ghostty#15061 and #15112: compile into ~/.terminfo
+        // (`-o`, so a tic that runs as root never writes the system
+        // database), then check that infocmp finds the entry.
+        #expect(
+            SSHWrapper.installScript(verbose: false)
+                == "sh -c 'tic -x -o ~/.terminfo - 2>/dev/null && infocmp -x xterm-ghostty >/dev/null 2>&1'"
+        )
         // Verbose keeps tic's stderr — the commonest failure — visible.
-        #expect(!SSHWrapper.installScript(verbose: true).contains("tic -x - 2>/dev/null"))
-        #expect(SSHWrapper.installScript(verbose: true).contains("tic -x -"))
+        #expect(
+            SSHWrapper.installScript(verbose: true)
+                == "sh -c 'tic -x -o ~/.terminfo - && infocmp -x xterm-ghostty >/dev/null'"
+        )
     }
 
     @Test
     func install_script_survives_non_posix_login_shells() {
         // sshd hands the remote command to the LOGIN shell, so the script
         // must ship as `sh -c '<single-quote-free single-line script>'` —
-        // the RemoteSpawn wire rule. Sent bare (as ghostty does), a nushell
-        // login shell rejects `2>&1` and the install always fails; measured
-        // against a real sshd.
+        // the RemoteSpawn wire rule. Sent bare, a nushell login shell rejects
+        // `2>&1` and the install always fails; measured against a real sshd.
         for verbose in [true, false] {
             let command = SSHWrapper.installScript(verbose: verbose)
             #expect(command.hasPrefix("sh -c '"))
@@ -157,7 +162,7 @@ struct SSHWrapperTests {
         // `-x` on infocmp must match the `-x` the remote tic gets, or the
         // Tc/RGB capabilities silently drop out of the installed entry.
         #expect(SSHWrapper.sourceArgv() == ["-x", "xterm-ghostty"])
-        #expect(SSHWrapper.installScript(verbose: false).contains("tic -x -"))
+        #expect(SSHWrapper.installScript(verbose: false).contains("tic -x -o "))
     }
 
     // MARK: - bundled DB resolution

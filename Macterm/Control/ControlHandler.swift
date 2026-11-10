@@ -107,7 +107,7 @@ final class ControlHandler {
         case "project.memory": return try projectMemory(args)
         case "tab.merge": return try tabMerge(args)
         case "host.connect": return try await hostConnect(args)
-        case "host.disconnect": return try hostDisconnect(args)
+        case "host.disconnect": return try await hostDisconnect(args)
         #endif
         case "ssh.askpass": return try await sshAskpass(args, peerPID: peerPID)
         case "grid": return try grid(args)
@@ -1806,9 +1806,10 @@ final class ControlHandler {
 
 extension ControlHandler {
     /// `macterm askpass`: ask the user what an ssh master's login asks. The
-    /// answer goes only to a process whose parent is a master of Macterm
-    /// (design/006 §4). Any other process of the user could otherwise pose
-    /// as askpass and get a saved password.
+    /// answer goes only to a process under the ssh of a login of Macterm
+    /// (`SSHConnections.askpassOwner(forPeer:)`, design/006 §4). Any other
+    /// process of the user could otherwise pose as askpass and get a saved
+    /// password.
     func sshAskpass(_ args: ControlArgs, peerPID: pid_t?) async throws -> ControlData {
         guard let peerPID, let owner = SSHConnections.shared.askpassOwner(forPeer: peerPID) else {
             logger.warning("askpass refused: pid \(peerPID ?? 0, privacy: .public) is not a child of an ssh of Macterm")
@@ -1852,9 +1853,9 @@ extension ControlHandler {
         }
     }
 
-    func hostDisconnect(_ args: ControlArgs) throws -> ControlData {
+    func hostDisconnect(_ args: ControlArgs) async throws -> ControlData {
         guard let host = args.host else { throw ControlError(code: .badRequest, message: "host disconnect needs a host") }
-        SSHConnections.shared.disconnect(host)
+        await SSHConnections.shared.disconnect(host)
         return ControlData()
     }
     #endif

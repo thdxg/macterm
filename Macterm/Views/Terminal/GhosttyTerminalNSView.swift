@@ -430,6 +430,9 @@ final class GhosttyTerminalNSView: NSView {
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
     var onZoomRequest: (() -> Void)?
     var isZoomed: Bool = false
+    /// The tab shows more than one pane, so a pinch out can zoom this one.
+    var isSplit = false
+    private var pinchZoom = PinchZoomGesture()
     var onSearchStart: ((String?) -> Void)?
     var onSearchEnd: (() -> Void)?
     var onSearchTotal: ((Int?) -> Void)?
@@ -1680,6 +1683,18 @@ final class GhosttyTerminalNSView: NSView {
         case 10: GHOSTTY_MOUSE_ELEVEN
         default: GHOSTTY_MOUSE_UNKNOWN
         }
+    }
+
+    /// A pinch out zooms this pane, and a pinch in unzooms it: the path of
+    /// the context menu's Zoom Pane. The pane under the pointer gets the
+    /// event, so it takes focus first.
+    override func magnify(with event: NSEvent) {
+        guard let direction = pinchZoom.track(phase: event.phase, magnification: event.magnification),
+              PinchZoomGesture.togglesZoom(direction, isZoomed: isZoomed, isSplit: isSplit)
+        else { return super.magnify(with: event) }
+        onInteraction?()
+        if direction == .outward { window?.makeFirstResponder(self) }
+        onZoomRequest?()
     }
 
     override func scrollWheel(with event: NSEvent) {
