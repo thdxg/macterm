@@ -162,7 +162,7 @@ struct GitStatusParserTests {
         diff --git a/My Notes.md b/My Notes.md
         new file mode 100644
         --- /dev/null
-        +++ b/My Notes.md	
+        +++ b/My Notes.md\t
         @@ -0,0 +1 @@
         +hello
         diff --git a/old.swift b/old.swift
