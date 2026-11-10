@@ -105,8 +105,8 @@ final class MactermConfig {
     ///   own background was lost), and the `cursor-opacity = 0` override
     ///   that shader needed.
     /// - Stretch with speed is `cursor-morph`, a mode of `smooth-cursor`: the
-    ///   gliding rect stretches along its motion and thins across it, and
-    ///   lands in its cell shape. Written only under `smooth-cursor`, which
+    ///   gliding block cursor is a comet, longer when it is faster, and
+    ///   lands as a block. Written only under `smooth-cursor`, which
     ///   it modifies.
     /// - Cursor trail is `cursor-trail`: the streak behind the same motion,
     ///   drawn by the background shader under the text. It replaced a

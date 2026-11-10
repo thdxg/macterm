@@ -327,8 +327,8 @@ final class Preferences {
         }
     }
 
-    /// The gliding cursor stretches along its motion with its speed and lands
-    /// in its cell shape. Off by default and meaningful only under
+    /// A gliding block cursor becomes a comet, longer when it is faster, and
+    /// lands as a block. Off by default and meaningful only under
     /// `smoothCursor`. The fork's `cursor-morph` key, written through the
     /// overrides file (`MactermConfig.Animations`).
     var cursorMorph: Bool {

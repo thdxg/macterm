@@ -1589,7 +1589,7 @@ private struct AnimationsSettings: View {
                     .onChange(of: cursorMorph) { _, v in
                         Preferences.shared.cursorMorph = v
                     }
-                    Text("The moving cursor stretches in its direction of motion.")
+                    Text("A block cursor becomes a comet while it moves. A faster move makes a longer comet.")
                         .settingsCaption()
                 }
                 .disabled(!smoothCursor)

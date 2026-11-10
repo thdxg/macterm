@@ -666,6 +666,22 @@
         }
       }
     },
+    "A block cursor becomes a comet while it moves. A faster move makes a longer comet." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "블록 커서가 움직이는 동안 혜성 모양이 됩니다. 빠르게 움직일수록 혜성이 길어집니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "块状光标在移动时变成彗星形状。移动越快，彗星越长。"
+          }
+        }
+      }
+    },
     "A build of every commit that passes CI, and stable releases. Tip builds get no release tests." : {
       "localizations" : {
         "ko" : {
@@ -10711,22 +10727,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地目标不存在，或不是常规文件或目录。"
-          }
-        }
-      }
-    },
-    "The moving cursor stretches in its direction of motion." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "움직이는 커서가 이동 방향으로 늘어납니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "移动中的光标会沿移动方向拉伸。"
           }
         }
       }
