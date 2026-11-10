@@ -1185,7 +1185,7 @@ final class AppState {
             } catch {
                 presentToast(
                     String(localized: "Macterm cannot install its server on \(destination)"),
-                    subtitle: (error as? CustomStringConvertible)?.description
+                    subtitle: String(describing: error)
                 )
             }
         }
@@ -2032,6 +2032,10 @@ final class AppState {
     func reconnectDroppedRemotePanes(trigger: ReconnectTrigger) {
         guard Preferences.shared.reconnectRemotePanes else { return }
         guard !AppTerminationState.isTerminating else { return }
+        // A login may ask, and its sheet brings the app to the front. A wake
+        // or a network change while the user is in another app waits for the
+        // activation, which is a trigger too.
+        guard trigger == .activate || trigger == .projectSelected || NSApp.isActive else { return }
         guard let projectID = activeProjectID, let ws = workspaces[projectID] else { return }
         let now = Date()
         var sessions: Set<String> = []

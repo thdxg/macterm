@@ -8,23 +8,17 @@ description: Projects on a remote machine over SSH. The panes keep running on th
 
 # Remote projects
 
-A remote project is a project whose folder is on another machine. Each pane is a persistent [zmx](https://zmx.sh) session that runs **on that host** over SSH. Your shells, processes and scrollback keep running when you quit Macterm, when the connection drops and when you restart your Mac.
+A remote project is a project whose folder is on another machine. Each pane is a session of Macterm's server, which runs **on that host**. All panes of a host use one SSH connection, so you log in one time for each host. Your shells, processes and scrollback keep running when you quit Macterm, when the connection drops and when you restart your Mac.
 
 ## Requirements
 
-**SSH access to the host.** You sign in interactively in the pane. Anything that works for `ssh` works here.
+**SSH access to the host.** Anything that works for `ssh` works here. When the login asks for a password, a passphrase or a new host key, Macterm asks you in a sheet.
 
-**zmx 0.7.1 or later on the host**, in a folder in your `PATH`. Macterm finds `~/bin` and `~/.local/bin` also when the host does not load your profile. Macterm uses the session labels of zmx to find and remove orphan sessions. Labels start in zmx 0.7.0. Version 0.7.1 also fixes a hang with sessions that zmx 0.6.0 started.
+**Linux (x86_64 or aarch64) or macOS on the host.** At the first connection to a host, Macterm asks to install its server there, in `~/.local/share/macterm`. The server comes from Macterm, not from the internet of the host, and the host checks its checksum. Later versions install with no question.
 
-The simple way is **Install zmx on Host…** in Macterm, which puts Macterm's own build there (see "Installing zmx on the host" below). To install the upstream zmx by hand instead:
+If you choose **Continue Without Server**, each pane is a plain SSH shell. It ends when the connection stops, and its tab shows no program name. To install the server later, open the menu of the project in **Settings → Projects** and choose **Install Server on Host…**. A host with no build (for example, BSD) also gets plain shells.
 
-```sh title="on the remote host"
-curl -fsSL https://zmx.sh/a/zmx-0.8.1-linux-x86_64.tar.gz | tar xz -C ~/bin
-```
-
-For ARM hosts, use `linux-aarch64`. To see the version on the host, run `zmx version`.
-
-**Connection settings come from `~/.ssh/config`.** They never come from Macterm. Define a `Host` alias and use the alias as the host of the project.
+**Connection settings come from `~/.ssh/config`.** They never come from Macterm. Define a `Host` alias and use the alias as the host of the project. When your config has a `ControlMaster` that is running, Macterm uses it and logs in to nothing.
 
 ```text title="~/.ssh/config"
 Host devbox
@@ -32,10 +26,6 @@ Host devbox
   User deploy
   Port 2222
   IdentityFile ~/.ssh/id_ed25519
-  # makes new tabs and splits connect almost at once:
-  ControlMaster auto
-  ControlPath ~/.ssh/cm-%r@%h:%p
-  ControlPersist 10m
 ```
 
 ## Creating one
@@ -46,7 +36,6 @@ Go to **Sidebar → + → Remote Machine…**
 | --- | --- |
 | **Host** | `devbox`, `user@host` or any alias from your ssh config |
 | **Directory** | `~/dev/api`, `/srv/app`, or a path that is relative to the remote home |
-| **zmx path** *(optional)* | The absolute path to zmx on the host. Leave it empty to let Macterm find it. |
 
 You can also type `devbox:~/dev/api` in the command palette (<kbd>⌘P</kbd>) and select **Add remote project**.
 
@@ -54,22 +43,21 @@ You can also type `devbox:~/dev/api` in the command palette (<kbd>⌘P</kbd>) an
 
 | Action | Effect |
 |---|---|
-| New tab or split | A new zmx session starts on the host, in the project directory. |
-| Quit Macterm | The sessions disconnect and keep running on the host. |
+| New tab or split | A new session starts on the host, in the project directory. |
+| Quit Macterm | The sessions keep running on the host. |
 | Start Macterm again | Every pane connects to its session again, with its scrollback and processes. |
 | Close a pane or tab | Its session on the host ends. Macterm asks you first if a program is running. |
-| Restart your Mac, or the network drops | The sessions keep running. The panes that lost the connection connect again by themselves. |
+| The shell in a pane exits | The pane closes. |
+| Restart your Mac, or the network drops | The sessions keep running. The panes that lost the connection connect again. |
+| The host restarts | The sessions on the host end. Each pane says so. Press Return to start a new shell in the same folder. |
 
-Macterm connects a pane again when the Mac wakes, when you return to the app, and when you select the project. To turn this off, use **Settings → General → Remote Projects → Reconnect panes after a dropped connection**.
+A pane that lost its connection keeps its last screen, dimmed. Macterm connects it again when the Mac wakes, when the network changes, when you return to the app, and when you select the project. Press a key in the pane to connect at once. To connect only when you press a key, turn off **Settings → General → Remote Projects → Reconnect panes after a dropped connection**.
 
-A pane that lost its connection shows `Process exited. Press any key to close the terminal.` Press a key to close the pane. This is the same as **Close Pane**: Macterm asks you first if a program is running in the session.
+When a connection fails, the pane says why, for example `No host is named devbox.` or `devbox does not answer.` Press a key to try again.
 
 ### Tab names and busy panes
 
-Macterm names a remote tab after the program that runs in it, shows the logo of a coding agent, and asks before it closes a pane whose program still runs. How it learns what runs depends on the zmx on the host:
-
-- With [Macterm's zmx build](https://github.com/thdxg/zmx/releases) on the host, the session tells the pane about each change of its foreground process, through the connection of the pane itself. The name follows the host at once, and it works with **Background SSH connections** off.
-- With the upstream zmx, Macterm asks the host over a separate ssh connection about every 3 seconds. The name can be a few seconds late, and the questions stop when you turn **Background SSH connections** off.
+Macterm names a remote tab after the program that runs in it, shows the logo of a coding agent, and asks before it closes a pane whose program still runs. The server on the host tells the pane about each change of its foreground process, through the connection of the pane itself. The name follows the host at once.
 
 ## Layouts
 
@@ -78,7 +66,6 @@ Macterm names a remote tab after the program that runs in it, shows the logo of 
 ```yaml title="~/.config/macterm/projects/api.yaml"
 name: "API (devbox)"
 path: "devbox:~/dev/api"
-zmxPath: "~/bin/zmx"   # only if auto-detection fails
 tabs:
   - run: "npm run dev"
   - name: "Logs"
@@ -89,23 +76,15 @@ tabs:
 
 | Symptom | Fix |
 | --- | --- |
-| `macterm: zmx not found in PATH on this host` | Move zmx to `~/bin` or `~/.local/bin`. Or set the **zmx path** of the project to the absolute location. |
-| `macterm: cannot cd to …` | The directory does not exist on the host. The pane starts a shell in your home directory. |
-| Tabs or splits open slowly | Add `ControlMaster` to your ssh config (see the example above). |
-| Touch ID asks again and again | Add `ControlMaster`. Then background polls use the authenticated connection of the pane. If you cancel one time, Macterm stops polling that host. It starts again when you open a new pane on that host. |
+| `macterm: cannot cd to …` | The directory does not exist on the host. The session starts in your home directory. |
 | An agent shows its logo but never its busy or done dot | The session of the tab started before Macterm began to tell the host that it runs in Ghostty. Agents need this before they report progress. Open a new tab or pane for the agent. |
-| Any background prompt at all | Turn off **Settings → General → Remote Projects → Background SSH connections**. You lose remote `run:` capture in Save Layout and cleanup of orphan sessions. On a host with the upstream zmx, you also lose live tab names and agent logos, and, with no [shell integration](https://ghostty.org/docs/features/shell-integration), busy-close warnings. A host with Macterm's zmx build keeps all three (see "Tab names and busy panes"). |
 
-## Installing zmx on the host
+## Sessions from Macterm 1
 
-Macterm can put its own zmx build on the host. In **Settings → Projects**, open the menu of a remote project and choose **Install zmx on Host…**. The same button is in the **New Remote Project** sheet, so you can install before you add the project.
-
-The sheet asks the host what it is (Linux x86_64, Linux aarch64 or macOS) and which zmx it runs, and tells you what it will do. Nothing on the host changes until you click **Install** or **Update**. If the host asks for a password, a passphrase or a host key, the sheet asks you. The binary comes from Macterm, not from the internet of the host, and Macterm checks its checksum first. It goes to `~/.local/bin/zmx`, which the panes of Macterm find. When the host already has another zmx first in its PATH, Macterm sets the **zmx path** of the project to the new one.
-
-A session that is running keeps its old zmx until you close and open it again. Macterm's build has fixes that its remote panes rely on, for example the foreground reports (see "Tab names and busy panes"). Choose **Install zmx on Host…** again after a Macterm update to get the build that it pins.
+Macterm 1 ran a zmx session on the host for each pane. Macterm 2 does not use them: at the first start, each remote pane starts a new session in the project directory. The old sessions keep running on the host. To see and end them, run `zmx ls` and `zmx kill` on the host.
 
 ## Limitations
 
-- Orphan cleanup only touches sessions that this installation marked as its own. A zmx older than 0.7.0 cannot keep the mark. On such a host, Macterm removes no orphan sessions. After you upgrade zmx, the sessions that the old zmx started still have no mark. For these sessions, and for a session that became an orphan before the mark, run `zmx ls` and `zmx kill` by hand.
+- A session whose pane you close while the host is not connected stays on the host.
 - **Replace Project Path with Current Dir** and other local-directory features are off.
 - A session keeps the environment from the time when Macterm created it. After you upgrade Macterm, an existing remote tab does not get new variables (for example, the variable that lets agents report progress). Open a new tab or pane instead.

@@ -27,7 +27,6 @@ struct ServerTargetsTests {
         #expect(ZmxHostTarget.detect(system: system, machine: machine) == nil)
     }
 
-
     // MARK: - zmx version
 
     @Test
@@ -70,5 +69,4 @@ struct ServerTargetsTests {
         #expect(ServerBuilds.key(in: names + ["macterm-ffff-universal-macos.gz"]) == nil)
         #expect(ServerBuilds.key(in: ["macterm-a b-universal-macos.gz"]) == nil)
     }
-
 }

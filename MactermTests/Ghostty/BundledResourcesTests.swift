@@ -88,7 +88,7 @@ struct BundledResourcesTests {
     /// (`ServerBuilds.bundledKey`) is the key of the server that setup
     /// installed (`.server-key`).
     @Test
-    func the_bundled_server_key_is_the_installed_build() throws {
+    func the_bundled_server_key_is_the_installed_build() {
         guard let resourcesDir = Self.resourcesDir else { return }
         let stamp = resourcesDir
             .deletingLastPathComponent() // Macterm

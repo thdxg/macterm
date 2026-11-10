@@ -78,8 +78,8 @@ final class RemoteHosts {
 
     /// The destinations whose server install the user declined.
     struct DeclineStore {
-        var read: () -> [String]
-        var write: ([String]) -> Void
+        var read: @MainActor () -> [String]
+        var write: @MainActor ([String]) -> Void
 
         static var preferences: DeclineStore {
             DeclineStore(
@@ -167,11 +167,6 @@ final class RemoteHosts {
         for session in sessions where lost.remove(session) != nil {
             configuration.post(Self.wakeName(for: session))
         }
-    }
-
-    /// True when the session's pane waits for a trigger.
-    func isLost(_ session: String) -> Bool {
-        lost.contains(session)
     }
 
     /// End a session on its host, when its pane closed for good. It uses
@@ -363,7 +358,11 @@ final class RemoteHosts {
             case .declined:
                 decline(destination)
                 return .plain(route)
-            case .notInstalled, .noWritableHome, .unsupported, .noBuild, .notBundled:
+            case .notInstalled,
+                 .noWritableHome,
+                 .unsupported,
+                 .noBuild,
+                 .notBundled:
                 logger.info("remote host \(destination, privacy: .public): plain shells: \(failure.description, privacy: .public)")
                 return .plain(route)
             default:
@@ -397,7 +396,8 @@ final class RemoteHosts {
             hosts[destination] = nil
         case .plain:
             hosts[destination] = nil
-        case .preparing, nil:
+        case .preparing,
+             nil:
             break
         }
     }
@@ -465,15 +465,15 @@ enum RemotePaneText {
         switch error {
         case let failure as SSHConnections.Failure:
             switch failure {
-            case let .loginFailed(line): return loginFailure(line, host: host)
-            case .cancelled: return "You cancelled the login to \(host)."
-            case let .configUnreadable(line): return "ssh cannot read its configuration: \(HostCheck.clean(line))"
-            default: return "Macterm cannot connect to \(host): \(failure.description)."
+            case let .loginFailed(line): loginFailure(line, host: host)
+            case .cancelled: "You cancelled the login to \(host)."
+            case let .configUnreadable(line): "ssh cannot read its configuration: \(HostCheck.clean(line))"
+            default: "Macterm cannot connect to \(host): \(failure.description)."
             }
         case let failure as RemoteServers.Failure:
-            return "Macterm cannot start its server on \(host): \(failure.description)."
+            "Macterm cannot start its server on \(host): \(failure.description)."
         default:
-            return "Macterm cannot connect to \(host)."
+            "Macterm cannot connect to \(host)."
         }
     }
 

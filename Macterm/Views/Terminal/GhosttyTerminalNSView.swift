@@ -656,8 +656,10 @@ final class GhosttyTerminalNSView: NSView {
             // directory. The declared `shell:` doesn't apply either: the host
             // session runs the remote user's login shell. Logins go to a
             // sheet (`SSHLoginPrompts`), never to the pane.
+            // The unit-test host connects to no host: it restores the
+            // developer's panes (`ZmxBypass.unitTestHost`).
             _ = remoteSpec
-            if let client = Self.remotePaneClientPath {
+            if let client = Self.remotePaneClientPath, ZmxClient.liveBypass != .unitTestHost {
                 config.command = cString("\(RemoteSpawn.shellQuote(client)) remote-pane")
             }
             // Teach the host our terminfo entry, if the user asked for it, so a

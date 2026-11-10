@@ -8,6 +8,24 @@ struct SSHConnectionsTests {
     // MARK: - ControlPath
 
     @Test
+    func a_pane_is_a_tty_channel_over_the_connection_that_never_logs_in() {
+        let connections = SSHConnections(configuration: .init(
+            options: ["-F", "/tmp/config"], controlDirectory: URL(fileURLWithPath: NSTemporaryDirectory())
+        ))
+        let route = SSHConnections.Route(controlPath: "/tmp/Macterm Debug/cm/abc", isUsersOwn: false)
+        let argv = connections.ttyArguments(route, "deploy@10.0.0.5", "sh -c 'x'")
+        #expect(argv == [
+            "/usr/bin/env", "ssh", "-F", "/tmp/config",
+            "-S", "/tmp/Macterm Debug/cm/abc",
+            "-o", "ControlMaster=no",
+            "-o", "BatchMode=yes",
+            "-o", "ProxyCommand=/usr/bin/false",
+            "-o", "RemoteCommand=none",
+            "-q", "-t", "--", "deploy@10.0.0.5", "sh -c 'x'",
+        ])
+    }
+
+    @Test
     func the_user_control_path_comes_from_ssh_G() {
         let output = """
         user bob

@@ -131,10 +131,10 @@ struct RemotePaneClient {
     }
 
     private func write(_ text: String) {
-        var bytes = Array(text.utf8)
+        let bytes = Array(text.utf8)
         var offset = 0
         while offset < bytes.count {
-            let count = bytes.withUnsafeMutableBytes { Darwin.write(STDOUT_FILENO, $0.baseAddress! + offset, $0.count - offset) }
+            let count = bytes[offset...].withUnsafeBytes { Darwin.write(STDOUT_FILENO, $0.baseAddress, $0.count) }
             if count < 0, errno == EINTR { continue }
             guard count > 0 else { return }
             offset += count
