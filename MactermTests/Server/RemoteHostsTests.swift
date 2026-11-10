@@ -134,8 +134,9 @@ struct RemoteHostsTests {
             // is a trigger: the sweep wakes the right pane, which attaches
             // with no key and no second login.
             fixture.woken.removeAll()
+            let logins = fixture.connected.count
             _ = try await fixture.run(left, event: .retry, clear: true)
-            #expect(fixture.connected == ["box"])
+            #expect(fixture.connected.dropFirst(logins) == ["box"])
             #expect(!fixture.woken.contains(RemoteHosts.wakeName(for: right.sessionName)))
             fixture.hosts.reconnect([right.sessionName])
             #expect(fixture.woken.contains(RemoteHosts.wakeName(for: right.sessionName)))

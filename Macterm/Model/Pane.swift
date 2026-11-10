@@ -1086,7 +1086,7 @@ final class Pane: Identifiable {
 
     /// The ssh destination of a remote pane (`[user@]host`), the key of its
     /// host's one connection. nil for a local pane.
-    var remoteDestination: String? {
+    nonisolated var remoteDestination: String? {
         guard case let .remote(user, host, _) = remoteSpec else { return nil }
         return RemoteSpawn.destination(user: user, host: host)
     }
