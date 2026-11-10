@@ -49,7 +49,7 @@ struct ProjectsSettings: View {
                     }
                 }
                 Text("Change the order in the menu of a row. The order is the same as in the sidebar.")
-                    .settingsFootnote()
+                    .settingsSecondaryText()
             } header: {
                 HStack {
                     Text("Projects")
@@ -94,7 +94,7 @@ struct ProjectsSettings: View {
                     .truncationMode(.middle)
                 }
                 Text("Removing a layout deletes its file. The project stays.")
-                    .settingsFootnote()
+                    .settingsSecondaryText()
             } header: {
                 DocsSectionHeader("Layouts", docs: .layouts)
             }
@@ -263,8 +263,7 @@ private struct ProjectRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(project.name)
                 Text(project.path)
-                    .font(.subheadline)
-                    .settingsDescription()
+                    .settingsSecondaryText()
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -363,8 +362,7 @@ private struct LayoutRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(layout.filename)
                 Text(subtitle)
-                    .font(.subheadline)
-                    .settingsDescription()
+                    .settingsSecondaryText()
                     .lineLimit(1)
                     .truncationMode(.middle)
             }

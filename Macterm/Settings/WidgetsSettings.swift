@@ -34,7 +34,7 @@ struct WidgetsSettings: View {
                     .disabled(!exists)
                 }
                 Text("A widget is a terminal on your desktop.")
-                    .settingsFootnote()
+                    .settingsSecondaryText()
             } header: {
                 DocsSectionHeader("Widgets", docs: .desktopWidgets) {
                     Button {
@@ -80,8 +80,7 @@ private struct WidgetRow: View {
                     comment: "Settings → Widgets: the name of a widget that has no name"
                 ))
                 Text(subtitle)
-                    .font(.subheadline)
-                    .settingsDescription()
+                    .settingsSecondaryText()
                     .lineLimit(1)
                     .truncationMode(.middle)
             }

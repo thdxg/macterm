@@ -67,7 +67,7 @@ struct PasswordsSettings: View {
                     }
                 }
                 if let error = vault.lastError {
-                    Text(error).settingsFootnote()
+                    Text(error).settingsSecondaryText()
                 }
             } header: {
                 DocsSectionHeader("Saved Passwords", docs: .savedPasswords) {
@@ -175,8 +175,7 @@ private struct SavedPasswordRow: View {
 
             if let modified = entry.modified {
                 Text(modified, format: .dateTime.year().month().day())
-                    .font(.subheadline)
-                    .settingsDescription()
+                    .settingsSecondaryText()
             }
 
             Menu {

@@ -429,15 +429,15 @@ private struct DimsWhenDisabled: ViewModifier {
 extension View {
     /// The description of one control, as System Settings draws it: the
     /// second `Text` of the control's label, which a grouped form shows under
-    /// the title. A custom row with no native subtitle puts it in a `VStack`
-    /// with `.font(.subheadline)`.
+    /// the title. It sets the color only; the form gives the font.
     func settingsDescription() -> some View {
         modifier(SettingsDescription())
     }
 
-    /// A note about a whole section: a row of its own, the last of its
-    /// section, as System Settings draws it.
-    func settingsFootnote() -> some View {
+    /// Secondary text in a row that Macterm lays out itself: a section's
+    /// footnote, the description in a row with no native subtitle, a status
+    /// line. The font of a native subtitle, and its dimmed color.
+    func settingsSecondaryText() -> some View {
         font(.subheadline).settingsDescription()
     }
 
@@ -504,8 +504,7 @@ private struct SettingsSlider: View {
             }
             if let description {
                 Text(description)
-                    .font(.subheadline)
-                    .settingsDescription()
+                    .settingsSecondaryText()
             }
         }
         .background(HostWindowReader(host: host))
@@ -672,7 +671,7 @@ private struct GeneralSettings: View {
 
                 HStack {
                     Text("Macterm loads the files from top to bottom. A later file overrides an earlier file.")
-                        .settingsFootnote()
+                        .settingsSecondaryText()
                     Spacer()
                     Button("Reload") {
                         commitGhosttyConfig()
@@ -719,7 +718,7 @@ private struct GeneralSettings: View {
                 }
                 HStack {
                     Text(textFileDefaultsCaption)
-                        .settingsFootnote()
+                        .settingsSecondaryText()
                     Spacer()
                     if !textFileTypesNotOpenedHere.isEmpty {
                         Button("Set Macterm as Default App…") { isConfirmingTextFileDefaults = true }
@@ -1097,8 +1096,7 @@ private struct GhosttyDefaultLocationRow: View {
                     .help(file.searchedPath)
                 if let resolved = file.resolvedPath, resolved != file.searchedPath {
                     Text("Resolves to \((resolved as NSString).abbreviatingWithTildeInPath)")
-                        .font(.subheadline)
-                        .settingsDescription()
+                        .settingsSecondaryText()
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .help(resolved)
@@ -1108,8 +1106,7 @@ private struct GhosttyDefaultLocationRow: View {
             Spacer(minLength: 8)
 
             Text("Ghostty default")
-                .font(.subheadline)
-                .settingsDescription()
+                .settingsSecondaryText()
                 .fixedSize()
         }
         .padding(.vertical, 2)
@@ -1221,8 +1218,7 @@ private struct FullDiskAccessBanner: View {
                     macOS asks for each folder when a terminal command reads Documents, Downloads, \
                     or other protected places. One Full Disk Access grant covers all of them.
                     """)
-                    .font(.subheadline)
-                    .settingsDescription()
+                    .settingsSecondaryText()
                     if let url = FullDiskAccess.settingsURL {
                         Button("Open System Settings…") {
                             NSWorkspace.shared.open(url)
@@ -1253,8 +1249,7 @@ private struct NotificationPermissionBanner: View {
                     Text("Macterm has no notification permission")
                         .font(.system(size: 13, weight: .semibold))
                     Text("Your Ghostty config asks for notifications.")
-                        .font(.subheadline)
-                        .settingsDescription()
+                        .settingsSecondaryText()
                     if let url = NotificationHandler.settingsURL {
                         Button("Open System Settings…") {
                             NSWorkspace.shared.open(url)

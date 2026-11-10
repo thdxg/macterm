@@ -67,8 +67,7 @@ struct IntelligenceSettings: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(String(localized: "Intelligence", comment: "Settings pane"))
                 Text(headerCaption)
-                    .font(.subheadline)
-                    .settingsDescription()
+                    .settingsSecondaryText()
             }
         }
         .padding(.vertical, 4)
