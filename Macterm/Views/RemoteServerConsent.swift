@@ -11,7 +11,7 @@ enum RemoteServerConsent {
         alert.messageText = String(localized: "Install the Macterm server on \(host)?")
         alert.informativeText = String(
             localized: """
-            Keep your sessions on this host running when the connection stops. \
+            Your sessions on this host keep running when the connection stops. \
             Macterm installs its server in ~/.local/share/macterm.
             """,
             comment: "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is."
