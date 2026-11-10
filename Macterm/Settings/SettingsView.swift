@@ -1568,6 +1568,8 @@ private struct AnimationsSettings: View {
     @State
     private var smoothCursor: Bool = Preferences.shared.smoothCursor
     @State
+    private var cursorMorph: Bool = Preferences.shared.cursorMorph
+    @State
     private var cursorTrail: Bool = Preferences.shared.cursorTrail
     @State
     private var animatedSplits: Bool = Preferences.shared.animatedSplits
@@ -1605,6 +1607,19 @@ private struct AnimationsSettings: View {
                 .onChange(of: smoothCursor) { _, v in
                     Preferences.shared.smoothCursor = v
                 }
+
+                Group {
+                    Toggle(isOn: $cursorMorph) {
+                        Text("Morph cursor while moving").dimsWhenDisabled()
+                        Text("A block cursor becomes a comet while it moves. A faster move makes a longer comet.")
+                            .settingsDescription()
+                    }
+                    .onChange(of: cursorMorph) { _, v in
+                        Preferences.shared.cursorMorph = v
+                    }
+                }
+                .disabled(!smoothCursor)
+                .padding(.leading, 16)
 
                 Toggle(isOn: $cursorTrail) {
                     Text("Cursor trail")

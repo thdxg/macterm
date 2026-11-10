@@ -413,9 +413,11 @@ enum RemoteSpawn {
     }
 
     /// The git reads of the memory panel for a remote project, in one
-    /// connection (`ProjectGit.remoteStatus`): the same five reads that
+    /// connection (`ProjectGit.remoteStatus`): the same six reads that
     /// `ProjectGit.status` runs locally, with their outputs separated by
-    /// `ProjectGit.recordSeparator`. The script exits 2 when the directory
+    /// `ProjectGit.recordSeparator`. The diff runs only when the status has
+    /// a changed tracked file (a line that starts with `1`, `2` or `u`), as
+    /// locally. The script exits 2 when the directory
     /// is not there, 3 when the host has no git, 4 when the directory is not
     /// in a repository, and 0 in all other cases (`ProjectGit.branchLogScript`
     /// fails on a detached HEAD, which is not a failure of the read); ssh
@@ -432,12 +434,15 @@ enum RemoteSpawn {
                 + "GIT_OPTIONAL_LOCKS=0; GIT_TERMINAL_PROMPT=0; export GIT_OPTIONAL_LOCKS GIT_TERMINAL_PROMPT; "
                 + "cd \(quoteRemoteDirectory(directory)) 2>/dev/null || exit 2; "
                 + "command -v git >/dev/null 2>&1 || exit 3; "
-                + "\(git) status --porcelain=v2 --branch --show-stash 2>/dev/null || exit 4; \(separator); "
+                + "s=$(\(git) status --porcelain=v2 --branch --show-stash 2>/dev/null) || exit 4; "
+                + "printf \"%s\\n\" \"$s\"; \(separator); "
                 + "\(git) log -\(ProjectGit.recentCommitCount) --format=%h%x1f%s%x1f%ct 2>/dev/null; \(separator); "
                 + "\(git) for-each-ref refs/heads --sort=-committerdate --count=\(ProjectGit.recentBranchCount) "
                 + "--format=\"\(branchFormat)\" 2>/dev/null; \(separator); "
                 + "\(git) worktree list --porcelain 2>/dev/null; \(separator); "
-                + "{ \(ProjectGit.branchLogScript(git: git)); } 2>/dev/null; exit 0",
+                + "{ \(ProjectGit.branchLogScript(git: git)); } 2>/dev/null; \(separator); "
+                + "if printf \"%s\\n\" \"$s\" | grep -q \"^[12u] \"; then "
+                + "\(ProjectGit.diffCommand(git: git)); fi; exit 0",
             onViolation: .failNonZero
         )
         return [

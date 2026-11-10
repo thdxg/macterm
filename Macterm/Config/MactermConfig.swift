@@ -73,6 +73,7 @@ final class MactermConfig {
                 smoothScrolling: Preferences.shared.smoothScrolling,
                 smoothScrollRows: Preferences.shared.snapScrollToRow,
                 smoothCursor: Preferences.shared.smoothCursor,
+                cursorMorph: Preferences.shared.cursorMorph,
                 trail: Preferences.shared.cursorTrail
             )
         )
@@ -103,6 +104,10 @@ final class MactermConfig {
     ///   cursor-colored from the first frame, and a partly covered cell's
     ///   own background was lost), and the `cursor-opacity = 0` override
     ///   that shader needed.
+    /// - Morph cursor while moving is `cursor-morph`, a mode of
+    ///   `smooth-cursor`: the gliding block cursor is a comet, longer when
+    ///   it is faster, and lands as a block. Written only under
+    ///   `smooth-cursor`, which it modifies.
     /// - Cursor trail is `cursor-trail`: the streak behind the same motion,
     ///   drawn by the background shader under the text. It replaced a
     ///   bundled custom shader, which cost a full re-render of every frame
@@ -113,6 +118,7 @@ final class MactermConfig {
         var smoothScrolling = false
         var smoothScrollRows = false
         var smoothCursor = false
+        var cursorMorph = false
         var trail = false
 
         static let none = Animations()
@@ -127,6 +133,9 @@ final class MactermConfig {
             }
             if smoothCursor {
                 lines.append("smooth-cursor = true")
+                if cursorMorph {
+                    lines.append("cursor-morph = true")
+                }
             }
             if trail {
                 lines.append("cursor-trail = true")
