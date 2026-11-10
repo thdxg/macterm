@@ -926,15 +926,15 @@ struct SidebarContent: View {
                 }
             }
         }
-        Button("Pin Tab") {
-            appState.pinTab(tab.id, fromProject: project.id)
-        }
         if project.id != ScratchTabs.projectID {
             // Out of the project, shells intact (#665). The tab keeps its own
             // working directory; only its row moves below the projects.
             Button("Move to Scratch Tabs") {
                 appState.moveTabToScratchTabs(tab.id, from: project.id)
             }
+        }
+        Button("Pin Tab") {
+            appState.pinTab(tab.id, fromProject: project.id)
         }
         Divider()
         Button("Close Tab", role: .destructive) {
