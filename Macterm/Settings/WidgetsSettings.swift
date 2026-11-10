@@ -33,6 +33,8 @@ struct WidgetsSettings: View {
                     .truncationMode(.middle)
                     .disabled(!exists)
                 }
+                Text("A widget is a terminal on your desktop.")
+                    .settingsFootnote()
             } header: {
                 DocsSectionHeader("Widgets", docs: .desktopWidgets) {
                     Button {
@@ -44,9 +46,6 @@ struct WidgetsSettings: View {
                     .buttonStyle(.borderless)
                     .help("Add a widget at the center of the desktop")
                 }
-            } footer: {
-                Text("A widget is a terminal on your desktop.")
-                    .settingsCaption()
             }
         }
         .formStyle(.grouped)
@@ -81,7 +80,8 @@ private struct WidgetRow: View {
                     comment: "Settings → Widgets: the name of a widget that has no name"
                 ))
                 Text(subtitle)
-                    .settingsCaption()
+                    .font(.subheadline)
+                    .settingsDescription()
                     .lineLimit(1)
                     .truncationMode(.middle)
             }

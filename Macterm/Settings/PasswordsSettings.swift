@@ -21,23 +21,27 @@ struct PasswordsSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Enable password manager", isOn: $enabled)
-                    .onChange(of: enabled) { _, v in
-                        Preferences.shared.passwordManagerEnabled = v
-                    }
-                Text(Self.enabledCaption).settingsCaption()
+                Toggle(isOn: $enabled) {
+                    Text("Enable password manager")
+                    Text(Self.enabledDescription).settingsDescription()
+                }
+                .onChange(of: enabled) { _, v in
+                    Preferences.shared.passwordManagerEnabled = v
+                }
 
                 Group {
-                    Picker("Require authentication", selection: $authentication) {
+                    Picker(selection: $authentication) {
                         ForEach(PasswordAutofillAuthentication.allCases) { option in
                             Text(option.displayName).tag(option.rawValue)
                         }
+                    } label: {
+                        Text("Require authentication").dimsWhenDisabled()
+                        Text(Self.authenticationDescription).settingsDescription()
                     }
                     .onChange(of: authentication) { _, v in
                         Preferences.shared.passwordAutofillAuthentication = PasswordAutofillAuthentication(rawValue: v) ?? .untilLocked
                         PasswordAuthenticator.shared.lock()
                     }
-                    Text(Self.authenticationCaption).settingsCaption()
                 }
                 .disabled(!enabled)
             } header: {
@@ -63,7 +67,7 @@ struct PasswordsSettings: View {
                     }
                 }
                 if let error = vault.lastError {
-                    Text(error).settingsCaption()
+                    Text(error).settingsFootnote()
                 }
             } header: {
                 DocsSectionHeader("Saved Passwords", docs: .savedPasswords) {
@@ -102,11 +106,11 @@ struct PasswordsSettings: View {
         }
     }
 
-    private static let enabledCaption = String(localized: """
+    private static let enabledDescription = String(localized: """
     Offers to save a password that you type at a password prompt after it works, \
     and fills it in the next time that the prompt appears.
     """)
-    private static let authenticationCaption = String(localized: """
+    private static let authenticationDescription = String(localized: """
     Asks for Touch ID, or your login password, before it fills in \
     or shows a saved password. Macterm stores passwords in your login keychain.
     """)
@@ -171,7 +175,8 @@ private struct SavedPasswordRow: View {
 
             if let modified = entry.modified {
                 Text(modified, format: .dateTime.year().month().day())
-                    .settingsCaption()
+                    .font(.subheadline)
+                    .settingsDescription()
             }
 
             Menu {
