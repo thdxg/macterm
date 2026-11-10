@@ -252,8 +252,11 @@ enum GitStatusParser {
         return lockfileNames.contains(name) || name.hasPrefix(".env")
     }
 
+    /// The one line of a deleted file, in place of its hunks.
+    static let deletedFileLine = "(the file is deleted)"
+
     /// `git diff HEAD` with `a/` and `b/` prefixes, one entry for each file
-    /// with hunks. Every line goes through `MemoryRedaction`. A binary file,
+    /// with hunks; a deleted file has `deletedFileLine` alone. Every line goes through `MemoryRedaction`. A binary file,
     /// a file that `isLeftOutOfDiff`, a file with a private key block, and a
     /// file that would pass `diffCharacterLimit` are left out whole.
     static func parseDiff(_ text: String) -> [GitStatus.FileDiff] {
@@ -301,6 +304,9 @@ enum GitStatusParser {
             hunks.removeLast()
         }
         guard let path = newPath ?? oldPath, !hunks.isEmpty, !isLeftOutOfDiff(path) else { return nil }
+        // The lines of a deleted file say nothing that its name does not,
+        // and a long one would push every other file out of the budget.
+        if newPath == nil { return GitStatus.FileDiff(path: path, lines: [deletedFileLine]) }
         return GitStatus.FileDiff(path: path, lines: hunks)
     }
 

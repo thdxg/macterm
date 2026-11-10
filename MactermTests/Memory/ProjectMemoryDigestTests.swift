@@ -177,6 +177,7 @@ struct ProjectMemoryDigestTests {
         #expect(ProjectMemoryDigest.instructions.contains("Do not state a goal"))
         #expect(ProjectMemoryDigest.instructions.contains("Do not retell the commands"))
         #expect(ProjectMemoryDigest.instructions.contains("When there is no Git state"))
+        #expect(ProjectMemoryDigest.instructions.contains("The diff is uncommitted work: never call it commits."))
     }
 
     @Test

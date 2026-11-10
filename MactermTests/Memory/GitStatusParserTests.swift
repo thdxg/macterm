@@ -176,7 +176,7 @@ struct GitStatusParserTests {
         let files = GitStatusParser.parseDiff(diff)
         #expect(files.map(\.path) == ["app.swift", "My Notes.md", "old.swift"])
         #expect(files[0].lines == ["@@ -1,2 +1,2 @@ func total()", " let a = 1", "-let rate = 0.1", "+let rate = 0.2"])
-        #expect(files[2].lines == ["@@ -1 +0,0 @@", "-gone"])
+        #expect(files[2].lines == [GitStatusParser.deletedFileLine])
     }
 
     @Test

@@ -28,6 +28,7 @@ struct ProjectMemoryDigest: Equatable {
     Write two or three sentences, at most 60 words, that summarize the work in your own words. \
     Read the work from Git first: the commits on the current branch, and the changed files when the text lists them. \
     When the text has a diff of the uncommitted changes, say what those changes do in the code, not only which files changed. \
+    The diff is uncommitted work: never call it commits. \
     On a main branch, say what the latest commits did. Do not list the commit subjects one by one. \
     Mention a command only when it shows something about the work that Git does not show. \
     Do not retell the commands or their order. \
