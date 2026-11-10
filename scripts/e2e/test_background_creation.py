@@ -44,6 +44,30 @@ def test_background_tab_starts_without_selection(app, fresh_tab, live_pane, init
     assert _selection(app) == before
 
 
+def test_background_tab_reports_running_then_done(app, fresh_tab, live_pane):
+    """`pane list` follows a run in a pane that no window drew. The pane
+    connects its callbacks when it makes its view, not when a window draws
+    it, so its output heartbeat reaches the tracker. Agents start sub-agents
+    in such tabs and wait on these states."""
+    before = _selection(app)
+    child = app.cli_json("tab", "new", "--no-focus")["tabs"][0]
+    pane = app.panes(tab=child["id"])[0]
+    wait_for(lambda: app.pane_text(pane=pane["id"]), timeout=60, message="the hidden shell prompt")
+
+    def state():
+        assert _selection(app) == before
+        return next(p["state"] for p in app.panes(tab=child["id"]) if p["id"] == pane["id"])
+
+    # The marker comes after a pause: the output heartbeat fires at once on
+    # the echo of the command and drops output for 500 ms after it. The next
+    # heartbeat re-reads the foreground while `sh -c` holds it.
+    nonce = uuid.uuid4().hex[:12]
+    app.pane_run(f'/bin/sh -c "sleep 1; printf started-%s {nonce}; echo; sleep 6"', pane=pane["id"])
+    wait_for(lambda: state() == "running", timeout=30, message="pane list to report running")
+    # Nobody looks at the tab, so nothing acknowledges `done`.
+    wait_for(lambda: state() == "done", timeout=60, message="pane list to report done")
+
+
 @pytest.mark.parametrize("visibility", ["visible", "hidden_tab", "zoomed"])
 def test_no_focus_split_starts_even_when_hidden(app, fresh_tab, live_pane, visibility):
     hidden_tab = visibility == "hidden_tab"

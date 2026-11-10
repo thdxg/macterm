@@ -31,6 +31,52 @@ struct GitStatusParserTests {
         #expect(status.untracked == 2)
         #expect(status.changedFiles == 8)
         #expect(!status.isClean)
+        #expect(status.changedPaths == [
+            "Sources/App.swift", "README.md", "Package.swift", "New.swift", "Conflict.swift", "notes.md", "scratch/",
+        ])
+    }
+
+    @Test
+    func a_path_with_spaces_is_kept_whole() {
+        let output = "1 .M N... 100644 100644 100644 aaa bbb Docs/Read Me.md\n? My Notes.txt\n"
+        #expect(GitStatusParser.parseStatus(output).changedPaths == ["Docs/Read Me.md", "My Notes.txt"])
+    }
+
+    @Test
+    func the_branch_log_has_the_main_refs_and_the_commits_of_the_branch() throws {
+        let log = "refs/heads/main\nrefs/remotes/origin/main\nrefs/remotes/origin/main\na1b2c3d\u{1F}Apply tax\u{1F}1700000000\nend\n"
+        let status = GitStatusParser.status(statusOutput: "# branch.head feature/tax\n", logOutput: nil, branchLogOutput: log)
+        #expect(status.mainRefs == ["refs/heads/main", "refs/remotes/origin/main"])
+        #expect(status.branchCommits?.map(\.subject) == ["Apply tax"])
+        #expect(!status.isOnMainBranch)
+        let none = try #require(GitStatusParser.parseBranchLog("refs/heads/main\nend\n"))
+        #expect(none.commits.isEmpty)
+    }
+
+    @Test
+    func a_branch_log_that_did_not_finish_or_found_no_main_branch_is_unknown() {
+        #expect(GitStatusParser.parseBranchLog("refs/heads/main\na1b2c3d\u{1F}Apply tax\u{1F}1700000000\n") == nil)
+        #expect(GitStatusParser.parseBranchLog("a1b2c3d\u{1F}Apply tax\u{1F}1700000000\nend\n") == nil)
+        #expect(GitStatusParser.parseBranchLog("") == nil)
+        let detached = GitStatusParser.status(
+            statusOutput: "# branch.oid abcdef1234567890\n# branch.head (detached)\n",
+            logOutput: nil,
+            branchLogOutput: "refs/heads/main\nend\n"
+        )
+        #expect(detached.branchCommits == nil)
+    }
+
+    @Test
+    func the_branch_that_a_remote_head_names_is_a_main_branch() {
+        var status = GitStatus(branch: "develop")
+        status.mainRefs = ["refs/remotes/origin/develop"]
+        #expect(status.isOnMainBranch)
+        status.mainRefs = ["refs/heads/main", "refs/remotes/origin/main"]
+        #expect(!status.isOnMainBranch)
+        status.branch = "main"
+        #expect(status.isOnMainBranch)
+        status.branch = "team/main"
+        #expect(!status.isOnMainBranch)
     }
 
     @Test

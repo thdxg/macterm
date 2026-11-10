@@ -305,6 +305,19 @@ final class GhosttyCallbacks: @unchecked Sendable {
             // first if it doesn't exist yet, matching Ghostty.app.
             DispatchQueue.main.async { Self.openUserConfig() }
             return true
+        case GHOSTTY_ACTION_SET_WINDOW_THEME:
+            // `set_window_theme:config|system|light|dark`, an app action. A
+            // session override of `window-theme`, as in Ghostty.app.
+            let override: WindowTheme.Override?
+            switch action.action.set_window_theme {
+            case GHOSTTY_ACTION_WINDOW_THEME_CONFIG: override = nil
+            case GHOSTTY_ACTION_WINDOW_THEME_SYSTEM: override = .system
+            case GHOSTTY_ACTION_WINDOW_THEME_LIGHT: override = .light
+            case GHOSTTY_ACTION_WINDOW_THEME_DARK: override = .dark
+            default: return false
+            }
+            DispatchQueue.main.async { GhosttyApp.shared.setWindowThemeOverride(override) }
+            return true
         case GHOSTTY_ACTION_CHECK_FOR_UPDATES:
             // Same guard as the Check for Update command: no-op while a
             // Sparkle check is already in flight.

@@ -413,16 +413,18 @@ enum RemoteSpawn {
     }
 
     /// The git reads of the memory panel for a remote project, in one
-    /// connection (`ProjectGit.remoteStatus`): the same four commands that
+    /// connection (`ProjectGit.remoteStatus`): the same five reads that
     /// `ProjectGit.status` runs locally, with their outputs separated by
     /// `ProjectGit.recordSeparator`. The script exits 2 when the directory
-    /// is not there, 3 when the host has no git, and 4 when the directory is
-    /// not in a repository; ssh itself exits 255. `GIT_OPTIONAL_LOCKS=0` and
+    /// is not there, 3 when the host has no git, 4 when the directory is not
+    /// in a repository, and 0 in all other cases (`ProjectGit.branchLogScript`
+    /// fails on a detached HEAD, which is not a failure of the read); ssh
+    /// itself exits 255. `GIT_OPTIONAL_LOCKS=0` and
     /// `core.fsmonitor=false` for the same reasons as locally. Never sources
     /// a profile (see `remoteEnvPreamble`). nil for a local path.
     static func gitProbeArgv(remote: ProjectPath) -> [String]? {
         guard case let .remote(user, host, directory) = remote else { return nil }
-        let git = "git -c core.fsmonitor=false --no-pager"
+        let git = (["git"] + ProjectGit.gitOptions).joined(separator: " ")
         let separator = "printf \"\\036\""
         let branchFormat = "%(refname:short)%1f%(objectname:short)%1f%(committerdate:unix)%1f%(subject)"
         let script = assertSingleQuoteFree(
@@ -434,7 +436,8 @@ enum RemoteSpawn {
                 + "\(git) log -\(ProjectGit.recentCommitCount) --format=%h%x1f%s%x1f%ct 2>/dev/null; \(separator); "
                 + "\(git) for-each-ref refs/heads --sort=-committerdate --count=\(ProjectGit.recentBranchCount) "
                 + "--format=\"\(branchFormat)\" 2>/dev/null; \(separator); "
-                + "\(git) worktree list --porcelain 2>/dev/null",
+                + "\(git) worktree list --porcelain 2>/dev/null; \(separator); "
+                + "{ \(ProjectGit.branchLogScript(git: git)); } 2>/dev/null; exit 0",
             onViolation: .failNonZero
         )
         return [

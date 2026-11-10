@@ -14,10 +14,15 @@ struct RemoteTerminfoTests {
         // and silently rather than ever delaying a spawn.
         #expect(argv?.prefix(4) == ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"])
         #expect(argv?.dropFirst(4).first == "devbox")
-        // `tic -x -` compiles the piped source into the user's own ~/.terminfo,
-        // needing no privileges. `-x` must match `infocmp -x` or the extended
-        // caps (Tc/RGB — the entire point) are dropped in transit.
-        #expect(argv?.last?.contains("exec tic -x -") == true)
+        // `tic -x -o ~/.terminfo -` compiles the piped source into the user's
+        // own ~/.terminfo, as ghostty's +ssh does: without `-o`, a tic that
+        // runs as root writes the system database. `-x` must match
+        // `infocmp -x` or the extended caps (Tc/RGB — the entire point) are
+        // dropped in transit. The infocmp after it checks the entry resolves.
+        #expect(argv?.last == RemoteSpawn.remoteShell + " " + RemoteSpawn.shellQuote(
+            RemoteSpawn.remoteEnvPreamble
+                + "tic -x -o ~/.terminfo - && infocmp -x xterm-ghostty >/dev/null"
+        ))
         #expect(RemoteTerminfo.sourceArgv() == ["-x", RemoteTerminfo.entryName])
         // sh -c wrapped, single-quote-free, PATH preamble applied — the wire
         // format every remote command obeys so any login shell delivers it.

@@ -7461,6 +7461,22 @@
         }
       }
     },
+    "Project Insights Button" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 인사이트 버튼"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目洞察按钮"
+          }
+        }
+      }
+    },
     "Project Insights is off. Turn it on in Settings → Intelligence." : {
       "localizations" : {
         "ko" : {
@@ -9312,6 +9328,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示 AI 智能体图标"
+          }
+        }
+      }
+    },
+    "Show Project Insights button" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 인사이트 버튼 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示项目洞察按钮"
           }
         }
       }
