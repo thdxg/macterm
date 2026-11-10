@@ -110,18 +110,22 @@ final class ProjectMemorySummarizer {
             guard !Task.isCancelled else { return }
             let stream = streamer(ProjectMemoryDigest.instructions, digest.prompt, ProjectMemoryDigest.maximumReplyTokens)
             do {
+                var reply = ""
                 for try await partial in stream {
                     guard !Task.isCancelled else { return }
+                    reply = partial
+                    // The old text stays up until a whole word streams in.
+                    guard !Self.completeWords(partial).isEmpty else { continue }
                     states[projectID] = State(
                         phase: .streaming,
-                        text: Self.redacted(partial),
+                        text: Self.redacted(Self.completeWords(partial)),
                         key: digest.key,
                         suggestions: states[projectID]?.suggestions ?? []
                     )
                 }
                 // A cancelled loop ends with no error.
                 guard !Task.isCancelled else { return }
-                let text = states[projectID]?.text ?? ""
+                let text = Self.redacted(reply)
                 guard !text.isEmpty else {
                     states[projectID] = State(phase: .failed, text: "", key: digest.key)
                     return
@@ -153,6 +157,14 @@ final class ProjectMemorySummarizer {
     /// the prompts is not redacted, so a secret in it could reach a reply.
     static func redacted(_ text: String) -> String {
         MemoryRedaction.redact(text)
+    }
+
+    /// `partial` up to its last whitespace. A secret streams in a token at
+    /// a time, and the redaction knows a key only at its full length, so
+    /// the last word shows only when the next one starts.
+    static func completeWords(_ partial: String) -> String {
+        guard let end = partial.lastIndex(where: \.isWhitespace) else { return "" }
+        return String(partial[..<end])
     }
 
     /// Stop a run for a project whose panel went away. The stored summary

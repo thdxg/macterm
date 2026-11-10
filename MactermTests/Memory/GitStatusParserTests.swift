@@ -217,6 +217,11 @@ struct GitStatusParserTests {
         @@ -0,0 +1,2 @@
         +-----BEGIN PGP PRIVATE KEY BLOCK-----
         +lQOYBF0000000000
+        diff --git a/k8s/Secrets/prod.yaml b/k8s/Secrets/prod.yaml
+        --- a/k8s/Secrets/prod.yaml
+        +++ b/k8s/Secrets/prod.yaml
+        @@ -1 +1 @@
+        +password: hunter3
         diff --git a/logo.png b/logo.png
         index 1111111..2222222 100644
         Binary files a/logo.png and b/logo.png differ

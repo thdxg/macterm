@@ -67,7 +67,10 @@ enum ProjectGit {
 
     /// The sixth read: the staged and unstaged changes of the tracked files
     /// against HEAD, with one line of context, in the whole repository
-    /// (`:(top)`), without the files of `GitStatusParser.leftOutNames`. No
+    /// (`:(top)`), without the files of `GitStatusParser.leftOutNames` and
+    /// `leftOutFolders`. Each exclude has `top` too: without it, an exclude
+    /// matches only under the project folder, and a lockfile at the root of
+    /// the repository filled the byte limit. No
     /// color, no external diff and no textconv (both run programs that the
     /// repository's config names), and fixed `a/` and `b/` prefixes whatever
     /// `diff.noprefix` says. A repository with no commit has no HEAD, and
@@ -76,7 +79,8 @@ enum ProjectGit {
     static let diffArguments = [
         "diff", "HEAD", "--no-color", "--no-ext-diff", "--no-textconv", "-U1", "--src-prefix=a/", "--dst-prefix=b/", "--",
         ":(top)",
-    ] + GitStatusParser.leftOutNames.map { ":(exclude,glob,icase)**/\($0)" }
+    ] + GitStatusParser.leftOutNames.map { ":(top,exclude,glob,icase)**/\($0)" }
+        + GitStatusParser.leftOutFolders.map { ":(top,exclude,glob,icase)**/\($0)/**" }
 
     /// `diffArguments` after `git`, cut at `GitStatusParser.diffByteLimit`,
     /// as POSIX sh. A pathspec has no quote, `$`, backslash or backtick, so

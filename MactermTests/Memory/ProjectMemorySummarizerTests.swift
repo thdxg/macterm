@@ -215,6 +215,13 @@ struct ProjectMemorySummarizerTests {
     }
 
     @Test
+    func a_streaming_reply_shows_only_complete_words() {
+        #expect(ProjectMemorySummarizer.completeWords("You set ghp_abc") == "You set")
+        #expect(ProjectMemorySummarizer.completeWords("ghp_abc") == "")
+        #expect(ProjectMemorySummarizer.completeWords("You set ") == "You set")
+    }
+
+    @Test
     func a_failed_suggestion_request_keeps_the_text() async throws {
         let model = FakeModel()
         model.suggestionsFail = true

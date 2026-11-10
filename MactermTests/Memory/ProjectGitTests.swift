@@ -45,9 +45,12 @@ struct ProjectGitTests {
             #expect(ProjectGit.diffArguments.contains(option))
         }
         // git does not send the files that the parser leaves out.
-        #expect(ProjectGit.diffArguments.contains(":(exclude,glob,icase)**/.env*"))
+        // `top`: a project in a subfolder reads the whole repository, so an
+        // exclude must match from its root too.
+        #expect(ProjectGit.diffArguments.contains(":(top,exclude,glob,icase)**/.env*"))
+        #expect(ProjectGit.diffArguments.contains(":(top,exclude,glob,icase)**/*secret*/**"))
         let command = ProjectGit.diffCommand(git: "git")
-        #expect(command.contains(" -- \":(top)\" \":(exclude,glob,icase)**/package-lock.json\""))
+        #expect(command.contains(" -- \":(top)\" \":(top,exclude,glob,icase)**/package-lock.json\""))
         #expect(command.hasSuffix(" 2>/dev/null | head -c \(GitStatusParser.diffByteLimit)"))
         #expect(!command.contains("'"))
     }

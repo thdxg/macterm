@@ -262,10 +262,19 @@ enum GitStatusParser {
         "*.gpg", "*.asc", "id_rsa*", "id_ed25519*", "id_ecdsa*", ".netrc", ".npmrc", ".pypirc",
     ]
 
-    /// Whether the diff of `path` stays out of the digest (`leftOutNames`).
+    /// The folder names whose files are never read, as `leftOutNames`:
+    /// `secrets/prod.yaml` holds secrets by convention as `.env` does.
+    static let leftOutFolders = ["*secret*", "*credential*"]
+
+    /// Whether the diff of `path` stays out of the digest (`leftOutNames`,
+    /// `leftOutFolders`).
     static func isLeftOutOfDiff(_ path: String) -> Bool {
-        let name = (path as NSString).lastPathComponent
-        return leftOutNames.contains { fnmatch($0, name, FNM_CASEFOLD) == 0 }
+        let components = path.split(separator: "/").map(String.init)
+        guard let name = components.last else { return false }
+        if leftOutNames.contains(where: { fnmatch($0, name, FNM_CASEFOLD) == 0 }) { return true }
+        return components.dropLast().contains { folder in
+            leftOutFolders.contains { fnmatch($0, folder, FNM_CASEFOLD) == 0 }
+        }
     }
 
     /// The one line of a deleted file, in place of its hunks.
