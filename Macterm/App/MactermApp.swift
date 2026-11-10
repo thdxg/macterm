@@ -832,6 +832,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A master that exits takes its login questions with it.
         SSHConnections.shared.onConnectionExit = { SSHLoginPrompts.shared.cancel(sshPID: $0) }
         SSHConnections.shared.onLoginNotice = { SSHLoginPrompts.shared.showNotice(host: $0, sshPID: $1, line: $2) }
+        // The unit-test host must not end a master of the developer's Debug app.
+        if ZmxClient.liveBypass != .unitTestHost {
+            Task { await SSHConnections.shared.endStaleConnections() }
+        }
         finderServices.attach(appState: appState, projectStore: projectStore)
         // A global chord fired before this point can only toggle the quick
         // terminal; every other action needs the workspace this hands over.
@@ -881,7 +885,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_: Notification) {
         controlServer.stop()
-        SSHConnections.shared.disconnectAll()
+        // A master that logged in stays for the next launch.
+        SSHConnections.shared.endLogins()
         onTerminate?()
         // A command recorded in the last half second is still waiting for
         // its debounced write.
@@ -937,7 +942,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // The adaptive poll may be slow or fully paused here (e.g.
                     // quitting a minimized app), so the cached name can be
                     // stale — re-read before showing it in the dialog.
-                    pane.refreshForegroundProcess(trackExecution: false)
+                    pane.refreshForegroundProcess()
                     rows.append(RunningProcessRow(
                         projectName: projectName,
                         processName: pane.processTitle
@@ -949,7 +954,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rows += collectQuickTerminalRows()
         for widget in appState?.desktopWidgets ?? [] {
             for pane in widget.tab.splitRoot.allPanes() where pane.needsConfirmClose {
-                pane.refreshForegroundProcess(trackExecution: false)
+                pane.refreshForegroundProcess()
                 rows.append(RunningProcessRow(projectName: String(localized: "Desktop Widget"), processName: pane.processTitle))
             }
         }
@@ -963,7 +968,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var rows: [RunningProcessRow] = []
         let qtTab = QuickTerminalService.shared.splitState.tab
         for pane in qtTab.splitRoot.allPanes() where pane.needsConfirmClose {
-            pane.refreshForegroundProcess(trackExecution: false)
+            pane.refreshForegroundProcess()
             rows.append(RunningProcessRow(
                 projectName: String(localized: "Quick Terminal"),
                 processName: pane.processTitle

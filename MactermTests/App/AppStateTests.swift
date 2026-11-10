@@ -2148,6 +2148,32 @@ struct AppStateTests {
         #expect(pane.executionState == .done)
     }
 
+    /// The poll tracks execution whatever the status indicator setting is:
+    /// `pane list` reports the state, and the setting only chooses what the
+    /// tab row draws (#705). A remote pane keeps the tick deterministic: the
+    /// poll reads no local process for it.
+    @Test
+    func poll_settles_a_quiet_run_with_the_status_indicator_off() throws {
+        let priorIndicator = Preferences.shared.showTabStatusIndicator
+        let priorSSH = Preferences.shared.backgroundSSHConnections
+        defer {
+            Preferences.shared.showTabStatusIndicator = priorIndicator
+            Preferences.shared.backgroundSSHConnections = priorSSH
+        }
+        Preferences.shared.showTabStatusIndicator = false
+        Preferences.shared.backgroundSSHConnections = false
+        let state = makeAppState()
+        state.isAppActive = { false }
+        let p = seedProject(state, name: "remote", path: "devbox:~/dev/api")
+        let pane = try #require(state.workspaces[p.id]?.activeTab?.splitRoot.allPanes().first)
+        pane.recordUserInteraction()
+        pane.markTerminalActivity(at: Date().addingTimeInterval(-10))
+        #expect(pane.executionState == .running)
+
+        state.refreshAllForegroundProcesses()
+        #expect(pane.executionState == .done)
+    }
+
     // MARK: - zmx session lifecycle on close paths
 
     /// A ZmxClient that records every killed session name. Remote kills are
