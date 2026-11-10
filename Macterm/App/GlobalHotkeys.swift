@@ -248,9 +248,9 @@ final class GlobalHotkeys {
         guard installed else { return }
         var desired: [HotkeyBinding: HotkeyShortcut] = [:]
         var refused: [HotkeyBinding: GlobalHotkeyRefusal] = [:]
-        for binding in HotkeyBinding.globalBindings {
-            guard let shortcut = binding.selectedShortcut else { continue }
-            if let refusal = GlobalHotkeyPlan.precheck(shortcut, passesThroughToPrograms: binding.passesThroughToPrograms) {
+        for binding in HotkeyBinding.globalBindings() {
+            guard let shortcut = binding.selectedShortcut() else { continue }
+            if let refusal = GlobalHotkeyPlan.precheck(shortcut, passesThroughToPrograms: binding.passesThroughToPrograms()) {
                 refused[binding] = refusal
             } else {
                 desired[binding] = shortcut

@@ -51,13 +51,14 @@ struct AskpassCommand: ParsableCommand {
 }
 
 #if DEBUG
-/// DEBUG-only: open or end a host's one ssh connection (`SSHConnections`), so
-/// that the login sheet can be seen before remote projects use it.
+/// DEBUG-only: open or end a host's one ssh connection (`SSHConnections`),
+/// and reach its server (`RemoteServers`), so that the login sheet and the
+/// install's consent sheet can be seen before remote projects use them.
 struct HostCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "host",
-        abstract: "[debug] Open or end a host's ssh connection.",
-        subcommands: [Connect.self, Disconnect.self]
+        abstract: "[debug] Open or end a host's ssh connection, or reach its server.",
+        subcommands: [Connect.self, Server.self, Disconnect.self]
     )
 
     struct Connect: ParsableCommand {
@@ -72,6 +73,23 @@ struct HostCommand: ParsableCommand {
             var args = ControlArgs()
             args.host = host
             try runControlCommand(command: "host.connect", args: args, options: options, readTimeout: AskpassCommand.answerTimeout)
+        }
+    }
+
+    struct Server: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "[debug] Connect to a host's Macterm server. Install it first when it is not there."
+        )
+
+        @Argument(help: "The ssh destination: [user@]host.")
+        var host: String
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = ControlArgs()
+            args.host = host
+            try runControlCommand(command: "host.server", args: args, options: options, readTimeout: AskpassCommand.answerTimeout)
         }
     }
 

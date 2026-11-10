@@ -1,7 +1,7 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "\"%@\" is not a key combination. Try ctrl+c, escape or up." : {
+    "\"%@\" is not a key combination. Try ctrl+c, escape, or up." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -698,7 +698,7 @@
         }
       }
     },
-    "A key combination such as ctrl+c, escape or up, or a single printable key such as j." : {
+    "A key combination such as ctrl+c, escape, or up, or a single printable key such as j." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -2664,6 +2664,23 @@
         }
       }
     },
+    "Continue Without Server" : {
+      "comment" : "The button that closes the server install sheet with no install.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서버 없이 계속"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不使用服务器继续"
+          }
+        }
+      }
+    },
     "Copy" : {
       "comment" : "Command palette: the Option action of an extension row that copies text",
       "localizations" : {
@@ -3056,7 +3073,7 @@
         }
       }
     },
-    "Each pane is a persistent zmx session on the host, over ssh. zmx must be installed there: Install zmx on Host puts Macterm's build in ~/.local/bin on the host. If Macterm cannot find a zmx, set an absolute path, for example ~/bin/zmx or /usr/local/bin/zmx. Port, identity and ControlMaster come from ~/.ssh/config." : {
+    "Each pane is a persistent zmx session on the host, over ssh. zmx must be installed there: Install zmx on Host puts Macterm's build in ~/.local/bin on the host. If Macterm cannot find a zmx, set an absolute path, for example ~/bin/zmx or /usr/local/bin/zmx. Port, identity, and ControlMaster come from ~/.ssh/config." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -3120,7 +3137,7 @@
         }
       }
     },
-    "Enable for live tab names, close warnings and the Git state of remote projects." : {
+    "Enable for live tab names, close warnings, and the Git state of remote projects." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -3449,7 +3466,7 @@
         }
       }
     },
-    "Finder opens %lld more text file types with Macterm. To change a type back, select a file in Finder, choose File → Get Info and change Open with." : {
+    "Finder opens %lld more text file types with Macterm. To change a type back, select a file in Finder, choose File → Get Info, and change Open with." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -4253,6 +4270,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安装"
+          }
+        }
+      }
+    },
+    "Install the Macterm server on %@?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 Macterm 서버를 설치할까요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 上安装 Macterm 服务器？"
           }
         }
       }
@@ -7703,7 +7736,7 @@
         }
       }
     },
-    "Read the ID, session, directory, process or size of a pane." : {
+    "Read the ID, session, directory, process, or size of a pane." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -9074,7 +9107,7 @@
         }
       }
     },
-    "Send one key combination to a pane, such as ctrl+c, escape or up." : {
+    "Send one key combination to a pane, such as ctrl+c, escape, or up." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -9635,7 +9668,7 @@
         }
       }
     },
-    "Shows where you left off in each project, its Git branches and the commands to run next." : {
+    "Shows where you left off in each project, its Git branches, and the commands to run next." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -11067,12 +11100,34 @@
       }
     },
     "This palette needs %@ and %@, which are not on your PATH." : {
-      "comment" : "The first value is a list of program names with commas between them",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "This palette needs %1$@ and %2$@, which are not on your PATH."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 팔레트에는 %@ 및 %@이(가) 필요하지만 PATH에 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此面板需要 %1$@ 和 %2$@，但它们不在你的 PATH 中。"
+          }
+        }
+      }
+    },
+    "This palette needs %@, and %@, which are not on your PATH." : {
+      "comment" : "The first value is a list of program names with commas between them",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This palette needs %1$@, and %2$@, which are not on your PATH."
           }
         },
         "ko" : {
@@ -12152,6 +12207,23 @@
         }
       }
     },
+    "Your sessions on this host keep running when the connection stops. Macterm installs its server in ~/.local/share/macterm." : {
+      "comment" : "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결이 끊겨도 이 호스트의 세션은 계속 실행됩니다. Macterm은 서버를 ~/.local/share/macterm에 설치합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接中断时，此主机上的会话会继续运行。Macterm 会把服务器安装到 ~/.local/share/macterm。"
+          }
+        }
+      }
+    },
     "Zoom Pane" : {
       "localizations" : {
         "ko" : {
@@ -12330,7 +12402,7 @@
         }
       }
     },
-    "macOS asks for each folder when a terminal command reads Documents, Downloads or other protected places. One Full Disk Access grant covers all of them." : {
+    "macOS asks for each folder when a terminal command reads Documents, Downloads, or other protected places. One Full Disk Access grant covers all of them." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {

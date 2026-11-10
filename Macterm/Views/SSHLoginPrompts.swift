@@ -159,7 +159,7 @@ final class SSHLoginPrompts {
         }
         // No terminal window: no notice. A modal alert would hold the wait
         // for the login that closes it.
-        guard let wanted, let window = terminalWindow() else { return }
+        guard let wanted, let window = Self.terminalWindow() else { return }
         let pid = wanted.sshPID
         let alert = NSAlert()
         alert.messageText = String(localized: "Connecting to \(wanted.host)")
@@ -219,7 +219,7 @@ final class SSHLoginPrompts {
 
     /// A terminal window: the key window can be the quick terminal, a
     /// desktop widget or a popover, which a sheet does not suit.
-    private func terminalWindow() -> NSWindow? {
+    static func terminalWindow() -> NSWindow? {
         let candidates = [NSApp.keyWindow, NSApp.mainWindow].compactMap(\.self) + NSApp.windows.filter(\.isVisible)
         return candidates.first(where: { AppDelegate.isTerminalWindowCandidate($0) })
     }
@@ -276,7 +276,7 @@ final class SSHLoginPrompts {
             if savedID != nil { alert.addButton(withTitle: String(localized: "Use Saved Password")) }
         }
 
-        guard let window = terminalWindow() else {
+        guard let window = Self.terminalWindow() else {
             NSApp.activate()
             finish(pending, response: alert.runModal(), field: field, savedID: savedID)
             return

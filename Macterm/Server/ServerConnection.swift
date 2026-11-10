@@ -41,9 +41,20 @@ final class ServerConnection: @unchecked Sendable {
     /// blocks: call it off the main thread.
     static func connect(path: String) throws -> ServerConnection {
         let fd = try openSocket(path: path)
+        return try handshake(fd: fd, peerPID: peerPID(fd), timeout: handshakeTimeout)
+    }
+
+    /// Does the handshake as the GUI on `fd`, a connected stream socket: the
+    /// local server's socket, or one end of a socket pair whose other end is
+    /// the stdio of a host's `macterm proxy` (`RemoteServers`). The
+    /// connection owns `fd` from here, and closes it on a failure too.
+    /// `peerPID` is the server's pid, when the kernel names it. `buffered`
+    /// holds bytes of the stream that the caller read already. It blocks:
+    /// call it off the main thread.
+    static func handshake(fd: Int32, peerPID: pid_t?, timeout: TimeInterval, buffered: Data = Data()) throws -> ServerConnection {
         do {
-            var reader = FrameReader(fd: fd)
-            setReceiveTimeout(fd, seconds: handshakeTimeout)
+            var reader = FrameReader(fd: fd, buffer: buffered)
+            setReceiveTimeout(fd, seconds: timeout)
             let mine = MactermProtocol.Hello(
                 level: MactermProtocol.level,
                 minLevel: MactermProtocol.minLevel,
@@ -73,7 +84,7 @@ final class ServerConnection: @unchecked Sendable {
                 throw ServerClientError.serverTooOld(level: theirs.level)
             }
             setReceiveTimeout(fd, seconds: 0)
-            let connection = ServerConnection(fd: fd, hello: theirs, pid: peerPID(fd))
+            let connection = ServerConnection(fd: fd, hello: theirs, pid: peerPID)
             connection.startReading(reader)
             return connection
         } catch {
@@ -251,7 +262,7 @@ extension ServerConnection {
     }
 
     private static func setReceiveTimeout(_ fd: Int32, seconds: TimeInterval) {
-        var value = timeval(tv_sec: Int(seconds), tv_usec: 0)
+        var value = timeval(tv_sec: Int(seconds), tv_usec: Int32((seconds - seconds.rounded(.down)) * 1_000_000))
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &value, socklen_t(MemoryLayout<timeval>.size))
     }
 

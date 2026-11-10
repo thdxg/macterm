@@ -81,14 +81,16 @@ jobs:
         with:
           version: ${{ steps.zig.outputs.version }}
 
-      - name: Install Bats
+      # host_install.bats runs its own sshd as the runner's user. macOS has
+      # one at /usr/sbin/sshd.
+      - name: Install Bats and sshd
         if: steps.changes.outputs.server == 'true'
         run: |
           if [ "$RUNNER_OS" = macOS ]; then
             brew install bats-core
           else
             sudo apt-get update -q
-            sudo apt-get install -y -q bats
+            sudo apt-get install -y -q bats openssh-server
           fi
 
       - name: Run the Zig Tests

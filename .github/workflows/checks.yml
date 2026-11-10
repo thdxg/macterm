@@ -9,6 +9,14 @@ on:
   pull_request:
     branches: [main]
 
+# A new push to a pull request cancels the runs of its older commit, so they
+# do not keep the macOS runners that the new jobs need. A push to main has a
+# group for each commit and is never cancelled: release-tip.yml needs the Test
+# and Checks results of each commit on main.
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   changes:
     name: Detect changes

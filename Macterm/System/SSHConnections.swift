@@ -148,10 +148,53 @@ final class SSHConnections {
     }
 
     /// Run `command` on the host over its connection. It never logs in by
-    /// itself (see the type's comment).
-    func run(_ destination: String, _ command: String, timeout: Duration = .seconds(30)) async throws -> ProcessRunner.Outcome {
+    /// itself (see the type's comment). `input` is the command's stdin; nil
+    /// is `/dev/null`.
+    func run(
+        _ destination: String,
+        _ command: String,
+        input: FileHandle? = nil,
+        timeout: Duration = .seconds(30)
+    ) async throws -> ProcessRunner.Outcome {
         let route = try await connect(destination)
-        let outcome = await runSSH([
+        guard let executable = configuration.ssh.first,
+              let outcome = await ProcessRunner.run(
+                  executable,
+                  sshArguments(commandArguments(route, destination, command)),
+                  environment: ProcessInfo.processInfo.environment,
+                  input: input,
+                  timeout: timeout
+              )
+        else { throw Failure.cannotStart(configuration.ssh.joined(separator: " ")) }
+        return outcome
+    }
+
+    /// Start `command` on the host over its connection, with `stdio` as its
+    /// stdin and stdout. It is for a command that does not end by itself
+    /// (the server's proxy). stderr goes to the returned pipe. The caller
+    /// ends the process.
+    func start(_ destination: String, _ command: String, stdio: FileHandle) async throws -> (Process, CollectedPipe) {
+        let route = try await connect(destination)
+        guard let executable = configuration.ssh.first else { throw Failure.cannotStart("no ssh") }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = sshArguments(commandArguments(route, destination, command))
+        process.environment = ProcessInfo.processInfo.environment
+        process.standardInput = stdio
+        process.standardOutput = stdio
+        let stderr = CollectedPipe()
+        process.standardError = stderr.pipe
+        do {
+            try process.run()
+        } catch {
+            stderr.stop()
+            throw Failure.cannotStart(EnglishErrorText.describe(error))
+        }
+        return (process, stderr)
+    }
+
+    private func commandArguments(_ route: Route, _ destination: String, _ command: String) -> [String] {
+        [
             "-S", route.controlPath,
             "-o", "ControlMaster=no",
             "-o", "BatchMode=yes",
@@ -159,9 +202,18 @@ final class SSHConnections {
             // A `RemoteCommand` of the user's config refuses a command line.
             "-o", "RemoteCommand=none",
             "-T", "--", destination, command,
-        ], timeout: timeout)
-        guard let outcome else { throw Failure.cannotStart(configuration.ssh.joined(separator: " ")) }
-        return outcome
+        ]
+    }
+
+    /// The destination as ssh resolves it from the user's config (`ssh -G`):
+    /// `user@hostname:port`. Two names for one machine give one value, and
+    /// one name that the config points at another machine gives another.
+    /// nil when `ssh -G` fails.
+    func resolvedDestination(_ destination: String) async -> String? {
+        guard Self.isValidDestination(destination) else { return nil }
+        let outcome = await runSSH(["-G", "--", destination], timeout: .seconds(5))
+        guard let outcome, outcome.status == 0 else { return nil }
+        return SSHControlPath.resolvedDestination(fromConfig: outcome.stdout)
     }
 
     /// End Macterm's master for `destination`, or its login. A user's master
@@ -549,6 +601,24 @@ enum SSHControlPath {
             return value.isEmpty || value.lowercased() == "none" ? nil : value
         }
         return nil
+    }
+
+    /// `user@hostname:port` from the output of `ssh -G`. nil when a value
+    /// is missing.
+    static func resolvedDestination(fromConfig output: String) -> String? {
+        var values: [String: String] = [:]
+        for line in output.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: " ", maxSplits: 1)
+            guard parts.count == 2 else { continue }
+            let key = parts[0].lowercased()
+            if ["user", "hostname", "port"].contains(key), values[key] == nil {
+                values[key] = parts[1].trimmingCharacters(in: .whitespaces)
+            }
+        }
+        guard let user = values["user"], let hostname = values["hostname"], let port = values["port"],
+              !user.isEmpty, !hostname.isEmpty, !port.isEmpty
+        else { return nil }
+        return "\(user)@\(hostname):\(port)"
     }
 
     static func lastLine(of text: String) -> String {

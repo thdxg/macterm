@@ -327,6 +327,8 @@ struct ControlData: Codable {
     var askpass: ControlAskpassReply?
     /// A host's ssh connection (debug-only `host.connect`).
     var host: ControlHostState?
+    /// A host's server (debug-only `host.server`).
+    var hostServer: ControlHostServerState?
 
     init(
         status: ControlStatusInfo? = nil,
@@ -345,7 +347,8 @@ struct ControlData: Codable {
         widgets: [ControlWidgetInfo]? = nil,
         palettes: [ControlPaletteInfo]? = nil,
         askpass: ControlAskpassReply? = nil,
-        host: ControlHostState? = nil
+        host: ControlHostState? = nil,
+        hostServer: ControlHostServerState? = nil
     ) {
         self.status = status
         self.projects = projects
@@ -364,6 +367,7 @@ struct ControlData: Codable {
         self.widgets = widgets
         self.askpass = askpass
         self.host = host
+        self.hostServer = hostServer
     }
 }
 
@@ -380,6 +384,18 @@ struct ControlHostState: Codable, Equatable {
     var usersOwn: Bool
     /// The logins to this host in this run of the app.
     var logins: Int
+}
+
+/// The server that answers on a host (debug-only `host.server`).
+struct ControlHostServerState: Codable, Equatable {
+    var host: String
+    /// The server's build and protocol level, from its `hello`.
+    var build: String
+    var level: UInt32
+    /// This connect installed the server.
+    var installed: Bool
+    /// The ssh commands that this connect ran over the host's connection.
+    var commands: Int
 }
 
 /// What the password monitor knows about a pane (debug-only `pane.password`):

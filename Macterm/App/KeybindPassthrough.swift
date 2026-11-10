@@ -78,14 +78,16 @@ enum KeybindPassthrough {
     }
 
     /// The same verdict for any chord owner — an action or a custom palette
-    /// (`HotkeyBinding`).
+    /// (`HotkeyBinding`). `palettes` is the table of a palette's flag; only
+    /// a test gives another one.
     static func yields(
         binding: HotkeyBinding,
         pane: Pane?,
+        palettes: PaletteHotkeys = .shared,
         programs: () -> Set<String> = { programNames(from: Preferences.shared.passthroughPrograms) },
         foregroundName: (Pane) -> String? = { ProcessInspector.runningProcessName(forPane: $0) }
     ) -> Bool {
-        guard binding.passesThroughToPrograms else { return false }
+        guard binding.passesThroughToPrograms(palettes: palettes) else { return false }
         let listed = programs()
         guard !listed.isEmpty else { return false }
         guard let pane else { return false }
@@ -105,12 +107,12 @@ enum KeybindPassthrough {
     /// `event` matches, or nil: the gate the key responders run before their
     /// action branches.
     ///
-    /// Scans only the flagged bindings (`HotkeyBinding.passthroughBindings`),
+    /// Scans only the flagged bindings (`HotkeyBinding.passthroughBindings()`),
     /// so an unflagged configuration costs one `isEmpty` check per keystroke.
-    static func matchedBinding(for event: NSEvent) -> HotkeyBinding? {
-        let flagged = HotkeyBinding.passthroughBindings
+    static func matchedBinding(for event: NSEvent, palettes: PaletteHotkeys = .shared) -> HotkeyBinding? {
+        let flagged = HotkeyBinding.passthroughBindings(palettes: palettes)
         guard !flagged.isEmpty else { return nil }
-        return flagged.first { $0.matches(event) }
+        return flagged.first { $0.matches(event, palettes: palettes) }
     }
 
     /// Combined gate for a responder: true when `event` matches a flagged
