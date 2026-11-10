@@ -26,7 +26,9 @@ trap 'rm -f "$log"' EXIT
 clear_cache() {
   local dir
   for dir in "$ZIG_LOCAL_CACHE_DIR" "$ZIG_GLOBAL_CACHE_DIR"; do
-    [[ -d "$dir" ]] && find "$dir" -mindepth 1 -maxdepth 1 ! -name p -exec rm -rf {} +
+    if [[ -d "$dir" ]]; then
+      find "$dir" -mindepth 1 -maxdepth 1 ! -name p -exec rm -rf {} +
+    fi
   done
 }
 

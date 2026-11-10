@@ -70,7 +70,7 @@ jobs:
         run: |
           server=true
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            files="$(git diff --name-only HEAD^1 HEAD)"
+            files="$(git diff --no-renames --name-only HEAD^1 HEAD)"
             if ! grep -qE '^(server/|protocol/|Macterm/Protocol/|scripts/build-server\.sh$|scripts/protocol\.sh$|scripts/server-zig\.sh$|\.github/workflows/server\.yml$)' <<<"$files"; then
               server=false
             fi
@@ -86,8 +86,8 @@ jobs:
       # The cache of setup-zig is off: it saves the cache also from a job that
       # failed or that a newer push cancelled. Run 42760283476 restored such a
       # cache, which named an output file that was not in it. The steps below
-      # save the cache only after a build that passed, under a key that holds
-      # the packages, so a key is saved once.
+      # save the cache only after a build that passed. The key changes only
+      # when build.zig.zon or the Zig version changes, so each key is saved once.
       - name: Install Zig
         if: steps.changes.outputs.server == 'true'
         uses: mlugg/setup-zig@v2
