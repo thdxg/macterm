@@ -5349,6 +5349,22 @@
         }
       }
     },
+    "Morph cursor while moving" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이동 중 커서 모양 바꾸기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移动时光标变形"
+          }
+        }
+      }
+    },
     "Move Down" : {
       "localizations" : {
         "ko" : {
@@ -9922,22 +9938,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仅稳定版。"
-          }
-        }
-      }
-    },
-    "Stretch with speed" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "속도에 따라 늘어남"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "随速度拉伸"
           }
         }
       }

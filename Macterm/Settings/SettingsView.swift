@@ -1584,7 +1584,7 @@ private struct AnimationsSettings: View {
 
                 Group {
                     Toggle(isOn: $cursorMorph) {
-                        Text("Stretch with speed").dimsWhenDisabled()
+                        Text("Morph cursor while moving").dimsWhenDisabled()
                     }
                     .onChange(of: cursorMorph) { _, v in
                         Preferences.shared.cursorMorph = v
