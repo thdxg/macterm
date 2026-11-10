@@ -31,6 +31,12 @@ export const RELEASES_FILE = join(here, "docs", "releases.json");
 
 export const REPO = "macterm/macterm";
 
+// The repository whose releases the page lists. In GitHub Actions it is the
+// repository that runs the build (GITHUB_REPOSITORY), so the build reads the
+// releases from where they are, also while a repository transfer is in
+// progress. Links on the page always use REPO.
+const RELEASES_REPO = process.env.GITHUB_REPOSITORY || REPO;
+
 // Returns the stable releases, newest first, with only the fields the page
 // needs. Throws when GitHub does not answer, because a changelog that silently
 // lists nothing is worse than a failed build.
@@ -44,7 +50,7 @@ export async function fetchReleases() {
 
   const releases = [];
   for (let page = 1; ; page++) {
-    const url = `https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}`;
+    const url = `https://api.github.com/repos/${RELEASES_REPO}/releases?per_page=100&page=${page}`;
     const res = await fetch(url, { headers });
     if (!res.ok) {
       throw new Error(`GET ${url} returned ${res.status}: ${(await res.text()).slice(0, 200)}`);
@@ -65,7 +71,7 @@ export async function fetchReleases() {
     .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
 
   if (!stable.length) {
-    throw new Error(`${REPO} has no stable releases on GitHub`);
+    throw new Error(`${RELEASES_REPO} has no stable releases on GitHub`);
   }
   return stable;
 }
