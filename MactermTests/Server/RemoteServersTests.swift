@@ -139,7 +139,7 @@ struct RemoteServersTests {
             let link = try await host.servers.connect("box")
             #expect(link.installed)
             #expect(link.connection.serverHello.build.hasSuffix("+thdxg.\(host.key)"))
-            #expect(host.asked == [RemoteServers.ConsentRequest(host: "box", size: host.size)])
+            #expect(host.asked == ["box"])
             let file = host.home.appendingPathComponent(".local/share/macterm/bin/macterm-\(host.key)")
             let mode = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
             #expect(mode == 0o700)
@@ -254,16 +254,15 @@ struct RemoteServersTests {
         let runtime: URL
         let connections: SSHConnections
         let key: String
-        let size: Int64
         let answer: Bool
         private let builds: URL
-        private(set) var asked: [RemoteServers.ConsentRequest] = []
+        private(set) var asked: [String] = []
         var consents: [String: String] = [:]
         private(set) lazy var servers = makeServers(ServerBuilds.bundled)
 
         init(answer: Bool) async throws {
             let key = try #require(ServerBuilds.bundled.key, "no bundled server: run mise run setup")
-            let build = try #require(await ServerBuilds.bundled.build(for: .macOS))
+            _ = try #require(await ServerBuilds.bundled.build(for: .macOS))
             let root = URL(fileURLWithPath: "/tmp").appendingPathComponent("mt-host-\(UInt32.random(in: 0 ... .max))")
             home = root.appendingPathComponent("home")
             runtime = root.appendingPathComponent("run")
@@ -273,7 +272,6 @@ struct RemoteServersTests {
             sshd = try LocalSSHD(sshdOptions: ["SetEnv HOME=\(home.path) MACTERM_RUNTIME_DIR=\(runtime.path)"])
             connections = SSHConnections(configuration: sshd.configuration)
             self.key = key
-            size = build.size
             self.answer = answer
         }
 
@@ -289,8 +287,8 @@ struct RemoteServersTests {
             RemoteServers(connections: connections, configuration: .init(
                 scripts: HostScripts.bundled,
                 builds: builds,
-                askConsent: { [unowned self] request in
-                    asked.append(request)
+                askConsent: { [unowned self] host in
+                    asked.append(host)
                     return answer
                 },
                 consents: .init(read: { [unowned self] in consents }, write: { [unowned self] in consents = $0 })

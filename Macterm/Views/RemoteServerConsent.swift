@@ -6,14 +6,13 @@ import AppKit
 /// without the server.
 @MainActor
 enum RemoteServerConsent {
-    static func ask(_ request: RemoteServers.ConsentRequest) async -> Bool {
+    static func ask(_ host: String) async -> Bool {
         let alert = NSAlert()
-        alert.messageText = String(localized: "Install the Macterm server on \(request.host)?")
-        let size = ByteCountFormatter.string(fromByteCount: request.size, countStyle: .file)
+        alert.messageText = String(localized: "Install the Macterm server on \(host)?")
         alert.informativeText = String(
             localized: """
-            Your sessions on this host keep running when you quit Macterm or the connection stops. \
-            Macterm puts the server (\(size)) in ~/.local/share/macterm.
+            Keep your sessions on this host running when the connection stops. \
+            Macterm installs its server in ~/.local/share/macterm.
             """,
             comment: "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is."
         )

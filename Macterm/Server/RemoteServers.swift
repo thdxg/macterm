@@ -43,7 +43,7 @@ final class RemoteServers {
         var scripts: HostScripts?
         var builds: ServerBuilds
         /// Asks the user to allow the first install on a host. False: no.
-        var askConsent: @MainActor (ConsentRequest) async -> Bool
+        var askConsent: @MainActor (_ host: String) async -> Bool
         var consents: ConsentStore
         /// How long the handshake waits for the server's `hello`: the ssh
         /// round trip and a server start.
@@ -57,12 +57,6 @@ final class RemoteServers {
                 consents: .preferences
             )
         }
-    }
-
-    struct ConsentRequest: Equatable {
-        var host: String
-        /// The size of the server on the host, in bytes.
-        var size: Int64
     }
 
     /// The hosts where the user allowed the install: the resolved
@@ -299,7 +293,7 @@ final class RemoteServers {
         guard let build = await configuration.builds.build(for: target) else { throw Failure.noBuild(target.rawValue) }
         let resolved = await connections.resolvedDestination(destination)
         if !Self.consented(configuration.consents.read(), destination: resolved, host: host) {
-            guard await configuration.askConsent(ConsentRequest(host: destination, size: build.size)) else {
+            guard await configuration.askConsent(destination) else {
                 logger.info("server: host=\(destination, privacy: .public) install declined")
                 throw Failure.declined
             }
@@ -508,13 +502,11 @@ struct ServerBuild: Equatable {
     var file: URL
     /// The SHA-256 of the binary, which the host checks after `gunzip`.
     var sha256: String
-    /// The size of the binary on the host, in bytes.
-    var size: Int64
 }
 
 /// The gzip builds that the app carries for every host target
 /// (`Contents/Resources/server/macterm-<key>-<target>.gz`, design/007 §3A).
-/// The checksum and the size of each one are read once for each run.
+/// The checksum of each one is read once for each run.
 actor ServerBuilds {
     nonisolated let key: String?
     private let directory: URL?
@@ -536,14 +528,14 @@ actor ServerBuilds {
         if let build = measured[target] { return build }
         guard let key, let directory else { return nil }
         let file = directory.appendingPathComponent("macterm-\(key)-\(target.rawValue).gz")
-        guard let (sha256, size) = await Task.detached(operation: { Self.measure(file) }).value else { return nil }
-        let build = ServerBuild(target: target, file: file, sha256: sha256, size: size)
+        guard let sha256 = await Task.detached(operation: { Self.measure(file) }).value else { return nil }
+        let build = ServerBuild(target: target, file: file, sha256: sha256)
         measured[target] = build
         return build
     }
 
-    /// The SHA-256 and the size of the binary in a gzip file.
-    private static func measure(_ file: URL) -> (String, Int64)? {
+    /// The SHA-256 of the binary in a gzip file. Nil for an empty binary.
+    private static func measure(_ file: URL) -> String? {
         guard FileManager.default.isReadableFile(atPath: file.path) else { return nil }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
@@ -565,6 +557,6 @@ actor ServerBuilds {
         }
         process.waitUntilExit()
         guard process.terminationStatus == 0, size > 0 else { return nil }
-        return (hash.finalize().map { String(format: "%02x", $0) }.joined(), size)
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }
