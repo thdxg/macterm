@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// What the project memory summary sends to the on-device model
@@ -26,6 +27,9 @@ struct ProjectMemoryDigest: Equatable {
     repository and a log of the commands that ran there. \
     Write two or three sentences, at most 60 words, that summarize the work in your own words. \
     Read the work from Git first: the commits on the current branch, and the changed files when the text lists them. \
+    When the text has a diff of the uncommitted changes, say what those changes do in the code, not only which files changed. \
+    The diff is uncommitted work: never call it commits. \
+    Never write a key, token, password or other secret value, also when the diff has one. \
     On a main branch, say what the latest commits did. Do not list the commit subjects one by one. \
     Mention a command only when it shows something about the work that Git does not show. \
     Do not retell the commands or their order. \
@@ -114,13 +118,25 @@ struct ProjectMemoryDigest: Equatable {
         let branchCommits = git?.branchCommits.map { ["own"] + $0.map(\.hash) } ?? []
         let changedPaths = git?.changedPaths.prefix(changedPathLimit).map(\.self) ?? []
         return ([projectName] + records + [git.map(gitLine) ?? "", git?.recentCommits.first?.hash ?? ""] + branchCommits
-            + changedPaths).joined(separator: "|")
+            + changedPaths + [diffHash(git?.diff)]).joined(separator: "|")
+    }
+
+    /// A hash of the diff that `GitStatusParser.parseDiff` kept, so that an
+    /// edit to a file that is already in the list makes a new key. All of
+    /// it, not the part that fits the digest: that part depends on the
+    /// length of the command lines, which changes as time passes. Empty
+    /// without a diff.
+    static func diffHash(_ diff: [GitStatus.FileDiff]?) -> String {
+        guard let diff, !diff.isEmpty else { return "" }
+        let text = diff.map { ([$0.path] + $0.lines).joined(separator: "\n") }.joined(separator: "\n\u{0}")
+        return SHA256.hash(data: Data(text.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
     }
 
     /// The git state, then the latest commands, newest first, as lines.
     /// The Git facts that show the work come first: the commits of the
-    /// branch and the changed files. The other branches are not in it: the
-    /// model wrote about them in place of the current branch.
+    /// branch, the changed files and the diff of the uncommitted work. The
+    /// other branches are not in it: the model wrote about them in place of
+    /// the current branch.
     static func digest(entries: [MemoryEntry], git: GitStatus?, now: Date) -> String {
         var lines: [String] = []
         if let git {
@@ -142,14 +158,54 @@ struct ProjectMemoryDigest: Equatable {
                 lines.append(line)
             }
         }
+        var commands: [String] = []
         let recent = entries.suffix(recentCommandCount).reversed()
         if !recent.isEmpty {
-            lines.append("Commands, newest first:")
+            commands.append("Commands, newest first:")
             for entry in recent {
-                lines.append(contentsOf: commandLines(entry, now: now))
+                commands.append(contentsOf: commandLines(entry, now: now))
             }
         }
-        return lines.joined(separator: "\n")
+        // The diff gets the budget that the rest leaves.
+        if let diff = git?.diff, !diff.isEmpty {
+            lines += diffLines(diff, tokenBudget: textTokenBudget - tokens(lines + commands))
+        }
+        return (lines + commands).joined(separator: "\n")
+    }
+
+    /// The tokens that `OutputExplanation.excerpt` counts for `lines`. An
+    /// element can hold more than one line (a command with a heredoc), and
+    /// the excerpt counts each line.
+    static func tokens(_ lines: [String]) -> Int {
+        lines.reduce(0) { total, element in
+            element.split(separator: "\n", omittingEmptySubsequences: false)
+                .reduce(total) { $0 + OutputExplanation.estimatedTokens($1) + 1 }
+        }
+    }
+
+    /// The diff, a whole file at a time, in the order of git, within
+    /// `tokenBudget`: a file that does not fit is left out whole, never
+    /// cut in a hunk, and a last line counts what was left out. Empty when
+    /// no file fits.
+    static func diffLines(_ diff: [GitStatus.FileDiff], tokenBudget: Int) -> [String] {
+        let header = "Diff of the uncommitted changes:"
+        let leftOutLine = { (count: Int) in "[\(count) more changed file\(count == 1 ? "" : "s") in the diff not shown]" }
+        // The header and the line that counts the files left out.
+        var spent = tokens([header, leftOutLine(diff.count)])
+        var lines: [String] = []
+        var leftOut = 0
+        for file in diff {
+            let fileLines = ["File `\(file.path)`:"] + file.lines
+            let cost = tokens(fileLines)
+            guard spent + cost <= tokenBudget else {
+                leftOut += 1
+                continue
+            }
+            lines += fileLines
+            spent += cost
+        }
+        guard !lines.isEmpty else { return [] }
+        return [header] + lines + (leftOut > 0 ? [leftOutLine(leftOut)] : [])
     }
 
     private static func subjects(_ commits: [GitStatus.Commit]) -> String {

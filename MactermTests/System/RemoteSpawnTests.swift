@@ -448,7 +448,7 @@ struct RemoteSpawnTests {
     // MARK: - Git probe
 
     @Test
-    func git_probe_runs_the_five_reads_in_one_connection() throws {
+    func git_probe_runs_the_six_reads_in_one_connection() throws {
         let argv = try #require(RemoteSpawn.gitProbeArgv(remote: remote))
         #expect(argv.contains("BatchMode=yes"))
         #expect(argv.contains("devbox"))
@@ -459,15 +459,20 @@ struct RemoteSpawnTests {
         #expect(!script.contains("'"))
         #expect(script.contains("cd ~/\"dev/api\" 2>/dev/null || exit 2"))
         #expect(script.contains("command -v git >/dev/null 2>&1 || exit 3"))
-        #expect(script.contains("status --porcelain=v2 --branch --show-stash 2>/dev/null || exit 4"))
+        #expect(script.contains("status --porcelain=v2 --branch --show-stash 2>/dev/null) || exit 4"))
         #expect(script.contains("log -5 --format=%h%x1f%s%x1f%ct"))
         #expect(script.contains("for-each-ref refs/heads --sort=-committerdate --count=6"))
         #expect(script.contains("worktree list --porcelain"))
         #expect(script.contains("GIT_OPTIONAL_LOCKS=0"))
         #expect(script.contains("{ " + ProjectGit.branchLogScript(git: "git -c core.fsmonitor=false -c core.quotePath=false --no-pager")))
         // A detached HEAD has no branch log, and that is not a failure.
-        #expect(script.hasSuffix("; } 2>/dev/null; exit 0"))
-        #expect(script.components(separatedBy: "printf \"\\036\"").count == 5)
+        #expect(script.contains("; } 2>/dev/null; printf"))
+        // The diff only when a tracked file changed, as locally.
+        #expect(script.hasSuffix(
+            "if printf \"%s\\n\" \"$s\" | grep -q \"^[12u] \"; then "
+                + ProjectGit.diffCommand(git: "git -c core.fsmonitor=false -c core.quotePath=false --no-pager") + "; fi; exit 0"
+        ))
+        #expect(script.components(separatedBy: "printf \"\\036\"").count == 6)
         // A git on the host's PATH only; profiles are never sourced.
         #expect(!script.contains("profile"))
     }

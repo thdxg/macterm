@@ -143,4 +143,132 @@ struct GitStatusParserTests {
         #expect(commits.first?.subject == "Fix the thing")
         #expect(commits.first?.date == Date(timeIntervalSince1970: 1_700_000_000))
     }
+
+    // MARK: - Diff
+
+    private let changedStatus = "# branch.head main\n1 .M N... 100644 100644 100644 aaa bbb app.swift\n"
+
+    @Test
+    func a_diff_keeps_the_hunks_of_each_file() {
+        let diff = """
+        diff --git a/app.swift b/app.swift
+        index 1111111..2222222 100644
+        --- a/app.swift
+        +++ b/app.swift
+        @@ -1,2 +1,2 @@ func total()
+         let a = 1
+        -let rate = 0.1
+        +let rate = 0.2
+        diff --git a/My Notes.md b/My Notes.md
+        new file mode 100644
+        --- /dev/null
+        +++ b/My Notes.md\t
+        @@ -0,0 +1 @@
+        +hello
+        diff --git a/old.swift b/old.swift
+        deleted file mode 100644
+        --- a/old.swift
+        +++ /dev/null
+        @@ -1 +0,0 @@
+        -gone
+
+        """
+        let files = GitStatusParser.parseDiff(diff)
+        #expect(files.map(\.path) == ["app.swift", "My Notes.md", "old.swift"])
+        #expect(files[0].lines == ["@@ -1,2 +1,2 @@ func total()", " let a = 1", "-let rate = 0.1", "+let rate = 0.2"])
+        #expect(files[2].lines == [GitStatusParser.deletedFileLine])
+    }
+
+    @Test
+    func secret_files_are_left_out_and_the_other_hunks_stay_as_they_are() {
+        let diff = """
+        diff --git a/config.yml b/config.yml
+        --- a/config.yml
+        +++ b/config.yml
+        @@ -1 +1,3 @@
+        +db_password: hunter2
+        +API_TOKEN=abc123
+        +"client_secret": "s3cr3t",
+        diff --git a/.env.local b/.env.local
+        --- a/.env.local
+        +++ b/.env.local
+        @@ -1 +1 @@
+        +STRIPE=sk_live_plain
+        diff --git a/web/package-lock.json b/web/package-lock.json
+        --- a/web/package-lock.json
+        +++ b/web/package-lock.json
+        @@ -1 +1 @@
+        +"lockfileVersion": 3
+        diff --git a/deploy/key b/deploy/key
+        --- a/deploy/key
+        +++ b/deploy/key
+        @@ -0,0 +1,3 @@
+        +-----BEGIN OPENSSH PRIVATE KEY-----
+        +b3BlbnNzaC1rZXktdjEAAAAA
+        +-----END OPENSSH PRIVATE KEY-----
+        diff --git a/deploy/app.env b/deploy/app.env
+        --- a/deploy/app.env
+        +++ b/deploy/app.env
+        @@ -1 +1 @@
+        +STRIPE=sk_live_plain
+        diff --git a/release.asc.txt b/release.asc.txt
+        --- a/release.asc.txt
+        +++ b/release.asc.txt
+        @@ -0,0 +1,2 @@
+        +-----BEGIN PGP PRIVATE KEY BLOCK-----
+        +lQOYBF0000000000
+        diff --git a/k8s/Secrets/prod.yaml b/k8s/Secrets/prod.yaml
+        --- a/k8s/Secrets/prod.yaml
+        +++ b/k8s/Secrets/prod.yaml
+        @@ -1 +1 @@
+        +password: hunter3
+        diff --git a/logo.png b/logo.png
+        index 1111111..2222222 100644
+        Binary files a/logo.png and b/logo.png differ
+        """
+        let files = GitStatusParser.parseDiff(diff)
+        #expect(files.map(\.path) == ["config.yml"])
+        // The diff goes only to the on-device model, so its lines are not
+        // masked; the summary is (`ProjectMemorySummarizer.redacted`).
+        #expect(files[0].lines == ["@@ -1 +1,3 @@", "+db_password: hunter2", "+API_TOKEN=abc123", "+\"client_secret\": \"s3cr3t\","])
+    }
+
+    @Test
+    func a_clean_tree_reads_no_diff() {
+        let diff = "diff --git a/app.swift b/app.swift\n--- a/app.swift\n+++ b/app.swift\n@@ -1 +1 @@\n+x\n"
+        // Untracked files alone have no diff to read.
+        for statusOutput in ["# branch.head main\n", "# branch.head main\n? notes.md\n"] {
+            #expect(GitStatusParser.status(statusOutput: statusOutput, logOutput: nil, diffOutput: diff).diff == nil)
+        }
+        #expect(GitStatusParser.status(statusOutput: changedStatus, logOutput: nil, diffOutput: diff).diff?.count == 1)
+    }
+
+    @Test
+    func a_diff_past_the_limits_leaves_out_whole_files() {
+        let file = { (path: String, lines: [String]) in
+            "diff --git a/\(path) b/\(path)\n--- a/\(path)\n+++ b/\(path)\n@@ -1 +1,\(lines.count) @@\n"
+                + lines.map { "+" + $0 + "\n" }.joined()
+        }
+        let longLine = String(repeating: "x", count: GitStatusParser.diffLineLimit)
+        let manyLines = Array(repeating: "y", count: GitStatusParser.diffCharacterLimit / 3)
+        let diff = file("minified.js", ["a", longLine]) + file("big.txt", manyLines) + file("small.txt", ["small"])
+        #expect(GitStatusParser.parseDiff(diff).map(\.path) == ["small.txt"])
+    }
+
+    @Test
+    func a_crlf_file_does_not_join_the_next_file() {
+        let diff = "diff --git a/run.bat b/run.bat\r\n--- a/run.bat\r\n+++ b/run.bat\r\n@@ -1 +1 @@\r\n+echo hi\r\n"
+            + "diff --git a/.env b/.env\n--- a/.env\n+++ b/.env\n@@ -1 +1 @@\n+STRIPE_KEY=sk_live_plain\n"
+        let files = GitStatusParser.parseDiff(diff)
+        #expect(files == [GitStatus.FileDiff(path: "run.bat", lines: ["@@ -1 +1 @@", "+echo hi"])])
+    }
+
+    @Test
+    func a_read_that_the_byte_limit_cut_leaves_out_its_last_file() {
+        let file = { (path: String) in "diff --git a/\(path) b/\(path)\n--- a/\(path)\n+++ b/\(path)\n@@ -1 +1 @@\n+x\n" }
+        // A long file before them, left out for its own reasons, makes the read reach the limit.
+        let long = "diff --git a/yarn.lock b/yarn.lock\n" + String(repeating: "+x\n", count: GitStatusParser.diffByteLimit / 3)
+        #expect(GitStatusParser.parseDiff(long + file("a.txt") + file("b.txt")).map(\.path) == ["a.txt"])
+        #expect(GitStatusParser.parseDiff(file("a.txt") + file("b.txt")).map(\.path) == ["a.txt", "b.txt"])
+    }
 }
