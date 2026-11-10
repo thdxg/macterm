@@ -534,28 +534,12 @@ final class Preferences {
         didSet { Keys.passwordAutofillAuthentication.write(passwordAutofillAuthentication, to: defaults) }
     }
 
-    /// Stable per-installation identity, lazily created on first use. Stamped
-    /// onto remote zmx sessions as a `macterm.owner` label so the orphan sweep
-    /// can tell OUR sessions apart from another machine's on a shared host
-    /// (#281) — never the hostname, which two Macs can share and the user can
-    /// rename. UUID hex without dashes, because zmx label values allow only
-    /// `[A-Za-z0-9._-]`. Not `@Observable` state (no UI reads it), so it's a
-    /// computed lazy read-through rather than a stored property.
-    var installationID: String {
-        if let existing = defaults.string(forKey: Keys.installationID), !existing.isEmpty {
-            return existing
-        }
-        let fresh = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
-        defaults.set(fresh, forKey: Keys.installationID)
-        return fresh
-    }
-
     /// Whether the first-run seed (`FirstRunSeed`) has already had its say.
     /// Set on the first launch that can answer the question — whether or not
     /// it actually seeded — so an existing install is never examined twice
     /// and a user who removes every project doesn't get a Home project back.
-    /// Like `installationID`: nothing in the UI reads it, so it's a
-    /// read-through rather than `@Observable` state.
+    /// Nothing in the UI reads it, so it's a read-through rather than
+    /// `@Observable` state.
     var hasSeededFirstRun: Bool {
         get { defaults.bool(forKey: Keys.hasSeededFirstRun) }
         set { defaults.set(newValue, forKey: Keys.hasSeededFirstRun) }
@@ -576,6 +560,14 @@ final class Preferences {
     var remoteServerConsents: [String: String] {
         get { defaults.dictionary(forKey: Keys.remoteServerConsents) as? [String: String] ?? [:] }
         set { defaults.set(newValue, forKey: Keys.remoteServerConsents) }
+    }
+
+    /// The ssh destinations where the user declined the install of the
+    /// server (0057): their remote panes are plain ssh shells until
+    /// Settings → Projects installs it. `RemoteHosts.declined` mirrors it.
+    var remoteServerDeclines: [String] {
+        get { defaults.stringArray(forKey: Keys.remoteServerDeclines) ?? [] }
+        set { defaults.set(newValue, forKey: Keys.remoteServerDeclines) }
     }
 
     /// The `CFBundleShortVersionString` of the previous launch. `UpdateNotice`
@@ -1293,10 +1285,10 @@ final class Preferences {
         static let hasAddedMactermConfigFile = "macterm.ghostty.addedMactermConfigFile"
         /// Legacy single-path key. Read only for migration.
         static let userGhosttyConfigPath = "macterm.ghostty.userConfigPath"
-        static let installationID = "macterm.installationID"
         static let hasSeededFirstRun = "macterm.firstRun.seeded"
         static let endedV1Sessions = "macterm.v2.endedV1Sessions"
         static let remoteServerConsents = "macterm.remote.serverConsents"
+        static let remoteServerDeclines = "macterm.remote.serverDeclines"
         static let lastLaunchedVersion = "macterm.lastLaunchedVersion"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
         static let migrationRetiredToggleKeys = "macterm.migration.retired_toggle_keys"

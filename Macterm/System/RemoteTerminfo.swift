@@ -77,7 +77,7 @@ enum RemoteTerminfo {
     }
 
     /// argv (for `/usr/bin/ssh`) compiling the piped source on the remote.
-    /// The same non-interactive profile as `RemoteSpawn.opArgv` — `BatchMode`
+    /// The same non-interactive profile as `RemoteSpawn.foregroundProbeArgv` — `BatchMode`
     /// so it can never hang on an auth prompt, `ConnectTimeout` so a dead host
     /// can't wedge the task — and `sh -c`-wrapped like every remote command so
     /// any login shell delivers it intact.

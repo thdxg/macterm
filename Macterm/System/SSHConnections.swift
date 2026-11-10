@@ -95,6 +95,8 @@ final class SSHConnections {
         case loginFailed(String)
         /// The user cancelled a question of the login.
         case cancelled
+        /// No connection is up, and the caller asked for no login.
+        case notConnected
 
         var description: String {
             switch self {
@@ -104,6 +106,7 @@ final class SSHConnections {
             case let .configUnreadable(reason): "ssh cannot read the config: \(reason)"
             case let .loginFailed(reason): reason.isEmpty ? "the ssh login failed" : "the ssh login failed: \(reason)"
             case .cancelled: "the ssh login was cancelled"
+            case .notConnected: "no ssh connection is up"
             }
         }
     }
@@ -137,9 +140,12 @@ final class SSHConnections {
     }
 
     /// The route to `destination`, after the login if there is none yet.
-    /// Calls for one host at the same time share one login.
-    func connect(_ destination: String) async throws -> Route {
+    /// Calls for one host at the same time share one login. With `login`
+    /// false, only a connection that is up: it throws `notConnected` and
+    /// never asks the user (a pane close ends its session with it).
+    func connect(_ destination: String, login: Bool = true) async throws -> Route {
         guard Self.isValidDestination(destination) else { throw Failure.invalidDestination(destination) }
+        guard login else { return try await liveRoute(destination) }
         if let task = connecting[destination] { return try await task.value }
         let task = Task { try await self.open(destination) }
         connecting[destination] = task
@@ -173,8 +179,13 @@ final class SSHConnections {
     /// stdin and stdout. It is for a command that does not end by itself
     /// (the server's proxy). stderr goes to the returned pipe. The caller
     /// ends the process.
-    func start(_ destination: String, _ command: String, stdio: FileHandle) async throws -> (Process, CollectedPipe) {
-        let route = try await connect(destination)
+    func start(
+        _ destination: String,
+        _ command: String,
+        stdio: FileHandle,
+        login: Bool = true
+    ) async throws -> (Process, CollectedPipe) {
+        let route = try await connect(destination, login: login)
         guard let executable = configuration.ssh.first else { throw Failure.cannotStart("no ssh") }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
@@ -203,6 +214,33 @@ final class SSHConnections {
             "-o", "RemoteCommand=none",
             "-T", "--", destination, command,
         ]
+    }
+
+    /// The argv of an ssh channel over `route` that runs `command` on a tty:
+    /// a remote pane (0057). It never logs in by itself, as `run`; `-q`
+    /// keeps ssh's own notices (`Shared connection to box closed.`) out of
+    /// the pane. A lost connection exits 255.
+    func ttyArguments(_ route: Route, _ destination: String, _ command: String) -> [String] {
+        configuration.ssh + configuration.options + [
+            "-S", route.controlPath,
+            "-o", "ControlMaster=no",
+            "-o", "BatchMode=yes",
+            "-o", "ProxyCommand=/usr/bin/false",
+            "-o", "RemoteCommand=none",
+            "-q", "-t", "--", destination, command,
+        ]
+    }
+
+    /// The route of a connection that is up, with no login: the user's own
+    /// master, or Macterm's.
+    private func liveRoute(_ destination: String) async throws -> Route {
+        let config = try await resolvedConfig(destination)
+        if let path = SSHControlPath.userPath(fromConfig: config), await controlAnswers(destination, at: path) {
+            return Route(controlPath: path, isUsersOwn: true)
+        }
+        let own = SSHControlPath.own(forConfig: config, in: configuration.controlDirectory)
+        guard await controlAnswers(destination, at: own) else { throw Failure.notConnected }
+        return Route(controlPath: own, isUsersOwn: false)
     }
 
     /// The destination as ssh resolves it from the user's config (`ssh -G`):

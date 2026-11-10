@@ -22,9 +22,6 @@ struct ProjectsSettings: View {
     /// the user can expect it to change.
     @State private var layouts: [ProjectFileStore.Listing] = []
     @State private var layoutPendingDeletion: ProjectFileStore.Listing?
-    /// The zmx install sheet for a remote project (#699), on this window:
-    /// the main window's copy would open behind Settings.
-    @State private var zmxInstall: ZmxInstallRequest?
     @State private var deleteFailure: String?
 
     var body: some View {
@@ -49,7 +46,7 @@ struct ProjectsSettings: View {
                     }
                 }
                 Text("Change the order in the menu of a row. The order is the same as in the sidebar.")
-                    .settingsCaption()
+                    .settingsSecondaryText()
             } header: {
                 HStack {
                     Text("Projects")
@@ -94,19 +91,13 @@ struct ProjectsSettings: View {
                     .truncationMode(.middle)
                 }
                 Text("Removing a layout deletes its file. The project stays.")
-                    .settingsCaption()
+                    .settingsSecondaryText()
             } header: {
                 DocsSectionHeader("Layouts", docs: .layouts)
             }
         }
         .formStyle(.grouped)
         .onAppear { reloadLayouts() }
-        .sheet(item: $zmxInstall) { request in
-            ZmxInstallSheet(request: request) { installed in
-                guard let projectID = request.projectID else { return }
-                appState.useInstalledZmx(at: installed, for: projectID, store: projectStore)
-            }
-        }
         // Reflect a Save Layout made from this pane (or elsewhere while it's
         // open) — a save can create a file the list doesn't know about yet.
         .onChange(of: appState.layoutFilesVersion) { _, _ in reloadLayouts() }
@@ -150,13 +141,8 @@ struct ProjectsSettings: View {
             canMoveUp: index > 0,
             canMoveDown: index < projectStore.projects.count - 1,
             onMoveUp: { projectStore.reorder(fromOffsets: [index], toOffset: index - 1) },
-            onMoveDown: { projectStore.reorder(fromOffsets: [index], toOffset: index + 2) },
-            onInstallZmx: { installZmx(on: project) }
+            onMoveDown: { projectStore.reorder(fromOffsets: [index], toOffset: index + 2) }
         )
-    }
-
-    private func installZmx(on project: Project) {
-        zmxInstall = ZmxInstallRequest(path: project.path, projectID: project.id, zmxPath: project.zmxPath)
     }
 
     /// Folder picker → new project → select it, the same as the sidebar's
@@ -243,13 +229,19 @@ private struct ProjectRow: View {
     let canMoveDown: Bool
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
-    /// Opens the zmx install sheet for a remote project (#699).
-    let onInstallZmx: () -> Void
 
     @Environment(AppState.self)
     private var appState
     @Environment(ProjectStore.self)
     private var projectStore
+
+    /// The project's ssh destination, when the user declined the server
+    /// there.
+    private var declinedDestination: String? {
+        guard case let .remote(user, host, _) = ProjectPath.remote(from: project.path) else { return nil }
+        let destination = RemoteSpawn.destination(user: user, host: host)
+        return RemoteHosts.shared.declined.contains(destination) ? destination : nil
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -263,7 +255,7 @@ private struct ProjectRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(project.name)
                 Text(project.path)
-                    .settingsCaption()
+                    .settingsSecondaryText()
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -289,12 +281,14 @@ private struct ProjectRow: View {
                 }
                 .disabled(appState.workspaces[project.id] == nil)
 
-                if project.isRemote {
+                // Only after the user declined the server on this host: its
+                // panes are plain ssh shells until then (0057).
+                if let destination = declinedDestination {
                     Divider()
 
-                    // Install or update: the sheet decides which after it
-                    // asked the host.
-                    Button("Install zmx on Host…") { onInstallZmx() }
+                    Button("Install Server on Host…") {
+                        appState.installRemoteServer(on: destination)
+                    }
                 }
 
                 Divider()
@@ -362,7 +356,7 @@ private struct LayoutRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(layout.filename)
                 Text(subtitle)
-                    .settingsCaption()
+                    .settingsSecondaryText()
                     .lineLimit(1)
                     .truncationMode(.middle)
             }

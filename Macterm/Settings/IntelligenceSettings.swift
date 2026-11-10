@@ -16,12 +16,9 @@ struct IntelligenceSettings: View {
             }
 
             Section {
-                Group {
-                    Toggle(isOn: projectInsights) {
-                        Text("Enable Project Insights").dimsWhenDisabled()
-                    }
-                    Text(projectInsightsCaption)
-                        .settingsCaption()
+                Toggle(isOn: projectInsights) {
+                    Text("Enable Project Insights").dimsWhenDisabled()
+                    Text(projectInsightsCaption).settingsDescription()
                 }
                 .disabled(!modelIsAvailable)
                 LabeledContent("Recorded commands") {
@@ -70,7 +67,7 @@ struct IntelligenceSettings: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(String(localized: "Intelligence", comment: "Settings pane"))
                 Text(headerCaption)
-                    .settingsCaption()
+                    .settingsSecondaryText()
             }
         }
         .padding(.vertical, 4)

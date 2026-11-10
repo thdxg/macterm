@@ -135,7 +135,7 @@ struct RemoteServersTests {
 
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(2)))
     func the_first_install_asks_once_and_a_current_host_costs_one_command() async throws {
-        try await withHost { host in
+        try await withSSHDHost { host in
             let link = try await host.servers.connect("box")
             #expect(link.installed)
             #expect(link.connection.serverHello.build.hasSuffix("+thdxg.\(host.key)"))
@@ -163,7 +163,7 @@ struct RemoteServersTests {
 
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(2)))
     func a_cancel_installs_nothing() async throws {
-        try await withHost(answer: false) { host in
+        try await withSSHDHost(answer: false) { host in
             await #expect(throws: RemoteServers.Failure.declined) { try await host.servers.connect("box") }
             #expect(host.asked.count == 1)
             #expect(!FileManager.default.fileExists(atPath: host.home.appendingPathComponent(".local").path))
@@ -173,7 +173,7 @@ struct RemoteServersTests {
 
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(2)))
     func a_changed_host_id_asks_again_and_the_same_one_does_not() async throws {
-        try await withHost { host in
+        try await withSSHDHost { host in
             try await host.servers.connect("box").close()
             let share = host.home.appendingPathComponent(".local/share/macterm")
             try await host.stopServer()
@@ -207,7 +207,7 @@ struct RemoteServersTests {
 
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(2)))
     func an_update_replaces_the_server_and_keeps_old_sessions() async throws {
-        try await withHost { host in
+        try await withSSHDHost { host in
             let first = try await host.servers.connect("box")
             let oldEpoch = first.connection.serverHello.epoch
             _ = try await first.connection.call(MactermProtocol.SessionCreate.self, .init(
@@ -241,89 +241,5 @@ struct RemoteServersTests {
             #expect(back.connection.serverHello.epoch == link.connection.serverHello.epoch)
             back.close()
         }
-    }
-
-    // MARK: - Fixture
-
-    /// A host on a local sshd, with its own home and runtime folder, and the
-    /// app's bundled builds and scripts.
-    @MainActor
-    private final class Host {
-        let sshd: LocalSSHD
-        let home: URL
-        let runtime: URL
-        let connections: SSHConnections
-        let key: String
-        let answer: Bool
-        private let builds: URL
-        private(set) var asked: [String] = []
-        var consents: [String: String] = [:]
-        private(set) lazy var servers = makeServers(ServerBuilds.bundled)
-
-        init(answer: Bool) async throws {
-            let key = try #require(ServerBuilds.bundled.key, "no bundled server: run mise run setup")
-            _ = try #require(await ServerBuilds.bundled.build(for: .macOS))
-            let root = URL(fileURLWithPath: "/tmp").appendingPathComponent("mt-host-\(UInt32.random(in: 0 ... .max))")
-            home = root.appendingPathComponent("home")
-            runtime = root.appendingPathComponent("run")
-            builds = root.appendingPathComponent("builds")
-            try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(at: builds, withIntermediateDirectories: true)
-            sshd = try LocalSSHD(sshdOptions: ["SetEnv HOME=\(home.path) MACTERM_RUNTIME_DIR=\(runtime.path)"])
-            connections = SSHConnections(configuration: sshd.configuration)
-            self.key = key
-            self.answer = answer
-        }
-
-        func servers(key: String) throws -> RemoteServers {
-            let source = try #require(ServerBuilds.bundled.key.map {
-                Bundle.main.resourceURL!.appendingPathComponent("server/macterm-\($0)-universal-macos.gz")
-            })
-            try FileManager.default.copyItem(at: source, to: builds.appendingPathComponent("macterm-\(key)-universal-macos.gz"))
-            return makeServers(ServerBuilds(key: key, directory: builds))
-        }
-
-        private func makeServers(_ builds: ServerBuilds) -> RemoteServers {
-            RemoteServers(connections: connections, configuration: .init(
-                scripts: HostScripts.bundled,
-                builds: builds,
-                askConsent: { [unowned self] host in
-                    asked.append(host)
-                    return answer
-                },
-                consents: .init(read: { [unowned self] in consents }, write: { [unowned self] in consents = $0 })
-            ))
-        }
-
-        /// Ends the host's server and its sessions, as a host that restarted.
-        func stopServer() async throws {
-            let path = runtime.appendingPathComponent(".server").path
-            guard FileManager.default.fileExists(atPath: path),
-                  let connection = try? ServerConnection.connect(path: path)
-            else { return }
-            for session in await (try? connection.call(MactermProtocol.SessionList.self, .init()).sessions) ?? [] {
-                _ = try? await connection.call(MactermProtocol.SessionKill.self, .init(id: session.id))
-            }
-            _ = try? await connection.call(MactermProtocol.ServerExit.self, .init())
-            connection.close()
-        }
-
-        func stop() async {
-            try? await stopServer()
-            await connections.disconnect("box")
-            sshd.stop()
-            try? FileManager.default.removeItem(at: home.deletingLastPathComponent())
-        }
-    }
-
-    private func withHost(answer: Bool = true, _ body: (Host) async throws -> Void) async throws {
-        let host = try await Host(answer: answer)
-        do {
-            try await body(host)
-        } catch {
-            await host.stop()
-            throw error
-        }
-        await host.stop()
     }
 }

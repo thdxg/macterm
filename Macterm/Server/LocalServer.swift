@@ -15,7 +15,7 @@ struct LocalServer {
     /// The runtime directory that holds the server's and the sessions'
     /// sockets. The app gives it to the server, so the two agree.
     var directory: URL
-    /// The build key of `executable` (`ZmxRelease.tag`). Nil: never replace
+    /// The build key of `executable` (`ServerBuilds.bundledKey`). Nil: never replace
     /// a server of the same level.
     var buildTag: String?
 
@@ -31,7 +31,7 @@ struct LocalServer {
         guard let executable = Bundle.main.url(forResource: "zmx", withExtension: nil, subdirectory: "zmx"),
               let directory = runtimeDirectory(environment: ProcessInfo.processInfo.environment)
         else { return nil }
-        return LocalServer(executable: executable, directory: directory, buildTag: ZmxRelease.bundled?.tag)
+        return LocalServer(executable: executable, directory: directory, buildTag: ServerBuilds.bundledKey)
     }
 
     /// The runtime directory as `resolveDir` in `server/src/runtime.zig`

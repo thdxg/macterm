@@ -1,4 +1,5 @@
 import AppKit
+import Network
 import os
 import SwiftUI
 import UserNotifications
@@ -338,6 +339,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var configObserver: Any?
     private var appFocusObservers: [Any] = []
     private var reconnectObservers: [Any] = []
+    /// Reports network changes for the remote reconnect (0057).
+    private var networkMonitor: NWPathMonitor?
     private var mainAppResponder: MainAppResponder?
     private var hasInstalledResponders = false
     /// Exists from delegate init — NOT created in applicationDidFinishLaunching
@@ -541,6 +544,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             },
         ]
+        // A new network (another Wi-Fi, a VPN) is a trigger too. The first
+        // update describes the network at start, which is no change.
+        let monitor = NWPathMonitor()
+        let previous = OSAllocatedUnfairLock<NWPath?>(initialState: nil)
+        monitor.pathUpdateHandler = { [weak self] path in
+            let changed = previous.withLock { old in
+                defer { old = path }
+                return old.map { $0 != path } ?? false
+            }
+            guard changed, path.status == .satisfied else { return }
+            DispatchQueue.main.async {
+                self?.appState?.reconnectDroppedRemotePanes(trigger: .network)
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "com.thdxg.macterm.network-path"))
+        networkMonitor = monitor
     }
 
     /// Seconds after wake at which the reconnect sweep runs. The first waits

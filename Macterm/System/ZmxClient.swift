@@ -25,10 +25,9 @@ struct ZmxClient {
     /// Tear down a session. No-op on a missing session. Bounded by the
     /// subprocess timeout so a stuck daemon can't hold the close path forever.
     var killSession: @Sendable (_ sessionID: String) async -> Void
-    /// Tear down a session on a REMOTE host (#104), via
-    /// `ssh -o BatchMode=yes … zmx kill <id>`. Best-effort: an unreachable
-    /// host or auth failure logs and moves on (the session either detached
-    /// with its dead ssh client or will be the user's to `zmx kill`).
+    /// Tear down a session on a REMOTE host (#104), through the host's
+    /// server (`RemoteHosts.endSession`). Best-effort: with no connection up
+    /// it asks for no login, and the session stays.
     var killRemoteSession: @Sendable (_ remote: ProjectPath, _ sessionID: String, _ zmxPath: String?) async -> Void
     /// One batched foreground probe of a remote host (#104): session name →
     /// foreground (`comm` for tab naming, full command line for layout `run:`
@@ -38,18 +37,6 @@ struct ZmxClient {
     /// resolver can keep retrying a flaky link but suspend a host that
     /// refused our non-interactive auth (#272).
     var remoteForegrounds: @Sendable (_ remote: ProjectPath, _ zmxPath: String?) async -> RemoteProbeOutcome
-    /// One stamp-then-list round trip for the remote orphan sweep (#281):
-    /// re-assert `macterm.owner=<ownerID>` on every claimed session, then
-    /// return the host's full listing (nil = probe failed → reap NOTHING).
-    /// The caller (`AppState.sweepOrphanSessions`) judges the listing via
-    /// `ZmxReaper.orphans(in:known:owner:)` and kills through
-    /// `killRemoteSession`.
-    var sweepRemoteOrphans: @Sendable (
-        _ remote: ProjectPath,
-        _ zmxPath: String?,
-        _ sessionNames: [String],
-        _ ownerID: String
-    ) async -> [ZmxSessionListParser.Entry]?
     /// Every local v2 session from the server (`LocalSessions`), or nil when
     /// the server cannot be reached. nil means UNKNOWN: a caller never ends
     /// or restarts anything on it.
@@ -101,16 +88,10 @@ extension ZmxClient {
                 guard resolveExecutable() != nil else { return }
                 await LocalSessions.shared.kill(sessionID)
             },
-            killRemoteSession: { remote, sessionID, zmxPath in
-                guard let argv = RemoteSpawn.opArgv(
-                    remote: remote, zmxArguments: ["kill", sessionID], zmxPath: zmxPath
-                )
-                else { return }
-                _ = await runZmx(
-                    remoteSSHArgv(argv),
-                    executable: remoteSSHExecutable,
-                    timeout: .seconds(10)
-                )
+            killRemoteSession: { remote, sessionID, _ in
+                guard case let .remote(user, host, _) = remote else { return }
+                let destination = RemoteSpawn.destination(user: user, host: host)
+                await RemoteHosts.shared.endSession(sessionID, destination: destination)
             },
             remoteForegrounds: { remote, zmxPath in
                 guard let argv = RemoteSpawn.foregroundProbeArgv(remote: remote, zmxPath: zmxPath)
@@ -129,23 +110,6 @@ extension ZmxClient {
                     return RemoteProbeOutcome.classifyFailure(stderr: outcome.stderr)
                 }
                 return .success(RemoteForegroundResolver.parseProbeOutput(outcome.stdout))
-            },
-            sweepRemoteOrphans: { remote, zmxPath, sessionNames, ownerID in
-                guard let argv = RemoteSpawn.orphanSweepArgv(
-                    remote: remote, zmxPath: zmxPath,
-                    sessionNames: sessionNames, ownerID: ownerID
-                )
-                else { return nil }
-                // nil (spawn error / timeout / non-zero ssh exit) = UNKNOWN:
-                // the caller reaps nothing.
-                guard let stdout = await runZmx(
-                    remoteSSHArgv(argv),
-                    executable: remoteSSHExecutable,
-                    captureStdout: true,
-                    timeout: .seconds(10)
-                )
-                else { return nil }
-                return ZmxSessionListParser.parse(stdout)
             },
             listSessions: {
                 // The unit-test host starts no server (`ZmxBypass.unitTestHost`).
@@ -173,7 +137,6 @@ extension ZmxClient {
         killSession: { _ in },
         killRemoteSession: { _, _, _ in },
         remoteForegrounds: { _, _ in .unreachable },
-        sweepRemoteOrphans: { _, _, _, _ in nil },
         listSessions: { [] },
         endV1Sessions: { _ in true }
     )
@@ -202,36 +165,13 @@ extension ZmxClient {
         return nil
     }
 
-    /// Runs a zmx subcommand — directly (the bundled binary) or through ssh
-    /// (remote ops pass `/usr/bin/ssh` and a `RemoteSpawn.opArgv`). Returns
-    /// captured stdout on success, or nil on any failure (unbundled, spawn
-    /// error, timeout, non-zero exit). Local callers use the non-budget-gated
-    /// `bundledExecutable` so kill paths work even when this launch is over
-    /// budget. Remote callers pass a longer `timeout`: ssh's ConnectTimeout
-    /// alone can eat the local 5s budget.
-    /// A completed subprocess: exit status plus both captured streams.
-    /// Callers that only care about happy-path stdout use the `runZmx`
-    /// wrapper; the probe path reads `exitStatus`/`stderr` itself to
-    /// classify failures (`RemoteProbeOutcome`).
+    /// A completed subprocess: exit status plus both captured streams. The
+    /// probe path reads `exitStatus`/`stderr` itself to classify failures
+    /// (`RemoteProbeOutcome`).
     private struct SubprocessOutcome {
         let exitStatus: Int32
         let stdout: String
         let stderr: String
-    }
-
-    /// Exit-zero-only convenience over `runZmxProcess`: nil on spawn
-    /// failure, timeout, or non-zero exit; stdout only when requested.
-    private static func runZmx(
-        _ arguments: [String],
-        executable: URL?,
-        captureStdout: Bool = false,
-        timeout: Duration = subprocessTimeout
-    ) async -> String? {
-        guard let outcome = await runZmxProcess(
-            arguments, executable: executable, captureStdout: captureStdout, timeout: timeout
-        ), outcome.exitStatus == 0
-        else { return nil }
-        return captureStdout ? outcome.stdout : nil
     }
 
     private static func runZmxProcess(
@@ -433,71 +373,6 @@ enum ZmxSessionName {
     }
 }
 
-/// Shared lexer for zmx's full (`ls`, non-`--short`) tab-delimited listing.
-/// Each line is `[→ |  ]name=<name>\tk=v\t...`. Both `ZmxSessionListParser`
-/// (client counts) and `ZmxForegroundResolver.parseLeaderPIDs` (leader pids)
-/// consume this — one grammar, one tokenizer, so the two projections can't
-/// drift.
-enum ZmxListLexer {
-    /// Parse one `ls` line into its `key=value` field map, or nil for lines
-    /// that carry no fields. Strips the leading `→ ` current-session marker
-    /// and any indentation before splitting on tabs.
-    static func fields(in line: Substring) -> [Substring: Substring]? {
-        var trimmed = line
-        if trimmed.hasPrefix("→ ") { trimmed = trimmed.dropFirst(2) }
-        while trimmed.first?.isWhitespace == true {
-            trimmed = trimmed.dropFirst()
-        }
-        var values: [Substring: Substring] = [:]
-        for field in trimmed.split(separator: "\t") {
-            guard let separator = field.firstIndex(of: "=") else { continue }
-            values[field[field.startIndex ..< separator]] = field[field.index(after: separator)...]
-        }
-        return values.isEmpty ? nil : values
-    }
-
-    /// Map each line's field map over the whole listing.
-    static func forEachLine(_ stdout: String, _ body: ([Substring: Substring]) -> Void) {
-        for line in stdout.split(whereSeparator: \.isNewline) {
-            guard let values = fields(in: Substring(line)) else { continue }
-            body(values)
-        }
-    }
-}
-
-/// Pure parser for zmx's full (`ls`, non-`--short`) tab-delimited listing.
-/// Each line is `[→ |  ]name=<name>\tk=v\t...`; a healthy session carries
-/// `clients=<n>`, an unreachable one carries `err=`/`status=` (no count).
-enum ZmxSessionListParser {
-    struct Entry: Equatable {
-        var name: String
-        /// nil when the count is unknown (err/status line); the reaper spares these.
-        var clients: Int?
-        /// The `macterm.owner` label value (#281), nil when absent — a session
-        /// from another machine, another user, or one created before this
-        /// installation ever stamped it. The remote reaper spares nil.
-        var owner: String?
-
-        init(name: String, clients: Int?, owner: String? = nil) {
-            self.name = name
-            self.clients = clients
-            self.owner = owner
-        }
-    }
-
-    static func parse(_ stdout: String) -> [Entry] {
-        var entries: [Entry] = []
-        ZmxListLexer.forEachLine(stdout) { values in
-            guard let name = values["name"], name.hasPrefix(ZmxSessionName.prefix) else { return }
-            // Absent `clients=` (err/status line) → nil = unknown, not zero.
-            let clients = values["clients"].flatMap { Int($0) }
-            let owner = values[Substring(RemoteSpawn.ownerLabelKey)].map(String.init)
-            entries.append(Entry(name: String(name), clients: clients, owner: owner))
-        }
-        return entries
-    }
-}
-
 /// Pure orphan-selection logic, split out so the reap policy is
 /// unit-testable without a server or subprocesses.
 enum ZmxReaper {
@@ -515,53 +390,6 @@ enum ZmxReaper {
                   !known.contains(session.name)
             else { return nil }
             return session.name
-        }
-    }
-
-    /// Names safe to reap: a `macterm-` session with `clients == 0` that the
-    /// `known` set doesn't claim, and that carries OUR `macterm.owner` label.
-    /// Spares unknown counts (`clients == nil`), attached sessions, foreign
-    /// prefixes, and anything still owned by a live/restored pane. A shared
-    /// host legitimately parks zero-client `macterm-*` sessions belonging to
-    /// other machines, so an unlabelled or foreign-owned session is spared
-    /// unconditionally — the sweep only ever stamps names our own panes claim
-    /// (`RemoteSpawn.orphanSweepScript`), which is what makes `owner == ours`
-    /// mean "this installation created it and later failed to kill it".
-    static func orphans(
-        in entries: [ZmxSessionListParser.Entry],
-        known: Set<String>,
-        owner: String
-    ) -> [String] {
-        entries.compactMap { entry in
-            guard entry.name.hasPrefix(ZmxSessionName.prefix),
-                  entry.clients == 0,
-                  !known.contains(entry.name),
-                  entry.owner == owner
-            else { return nil }
-            return entry.name
-        }
-    }
-
-    /// The claimed sessions that the listing shows WITHOUT our owner label,
-    /// although the same sweep stamped them just before it listed. The stamp
-    /// is `|| true`-guarded (`RemoteSpawn.orphanSweepScript`), so this is the
-    /// only sign that it failed: the host's zmx is older than 0.7.0 (no `zmx
-    /// set`, no labels in `zmx ls`), or the session's daemon is. The reaper
-    /// spares such a session for ever. Only healthy lines count
-    /// (`clients != nil`): an `err=` line carries no labels, and its daemon
-    /// did not answer the stamp either.
-    static func unstamped(
-        in entries: [ZmxSessionListParser.Entry],
-        claimed: [String],
-        owner: String
-    ) -> [String] {
-        let claimedSet = Set(claimed)
-        return entries.compactMap { entry in
-            guard claimedSet.contains(entry.name),
-                  entry.clients != nil,
-                  entry.owner != owner
-            else { return nil }
-            return entry.name
         }
     }
 }

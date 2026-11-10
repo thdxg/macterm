@@ -275,7 +275,6 @@ struct ControlHandlerTests {
             killSession: { _ in },
             killRemoteSession: { _, _, _ in },
             remoteForegrounds: { _, _ in .unreachable },
-            sweepRemoteOrphans: { _, _, _, _ in nil },
             listSessions: { sessions },
             endV1Sessions: { _ in true }
         )
@@ -1492,7 +1491,6 @@ struct ControlHandlerTests {
             killSession: { name in await killed.append(name) },
             killRemoteSession: { _, _, _ in },
             remoteForegrounds: { _, _ in .unreachable },
-            sweepRemoteOrphans: { _, _, _, _ in nil },
             listSessions: { [LocalSession(name: "macterm-x-000011112222")] },
             endV1Sessions: { _ in true }
         )
