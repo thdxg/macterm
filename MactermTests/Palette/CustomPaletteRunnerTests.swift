@@ -242,6 +242,6 @@ struct CustomPaletteRunnerTests {
         #expect(CustomPaletteRequirements.message(missing: ["kubectl", "jq"])
             == "This palette needs kubectl and jq, which are not on your PATH.")
         #expect(CustomPaletteRequirements.message(missing: ["kubectl", "jq", "helm"])
-            == "This palette needs kubectl, jq and helm, which are not on your PATH.")
+            == "This palette needs kubectl, jq, and helm, which are not on your PATH.")
     }
 }

@@ -95,6 +95,8 @@ final class SSHConnections {
         case loginFailed(String)
         /// The user cancelled a question of the login.
         case cancelled
+        /// No connection is up, and the caller asked for no login.
+        case notConnected
 
         var description: String {
             switch self {
@@ -104,6 +106,7 @@ final class SSHConnections {
             case let .configUnreadable(reason): "ssh cannot read the config: \(reason)"
             case let .loginFailed(reason): reason.isEmpty ? "the ssh login failed" : "the ssh login failed: \(reason)"
             case .cancelled: "the ssh login was cancelled"
+            case .notConnected: "no ssh connection is up"
             }
         }
     }
@@ -137,9 +140,12 @@ final class SSHConnections {
     }
 
     /// The route to `destination`, after the login if there is none yet.
-    /// Calls for one host at the same time share one login.
-    func connect(_ destination: String) async throws -> Route {
+    /// Calls for one host at the same time share one login. With `login`
+    /// false, only a connection that is up: it throws `notConnected` and
+    /// never asks the user (a pane close ends its session with it).
+    func connect(_ destination: String, login: Bool = true) async throws -> Route {
         guard Self.isValidDestination(destination) else { throw Failure.invalidDestination(destination) }
+        guard login else { return try await liveRoute(destination) }
         if let task = connecting[destination] { return try await task.value }
         let task = Task { try await self.open(destination) }
         connecting[destination] = task
@@ -148,10 +154,58 @@ final class SSHConnections {
     }
 
     /// Run `command` on the host over its connection. It never logs in by
-    /// itself (see the type's comment).
-    func run(_ destination: String, _ command: String, timeout: Duration = .seconds(30)) async throws -> ProcessRunner.Outcome {
+    /// itself (see the type's comment). `input` is the command's stdin; nil
+    /// is `/dev/null`.
+    func run(
+        _ destination: String,
+        _ command: String,
+        input: FileHandle? = nil,
+        timeout: Duration = .seconds(30)
+    ) async throws -> ProcessRunner.Outcome {
         let route = try await connect(destination)
-        let outcome = await runSSH([
+        guard let executable = configuration.ssh.first,
+              let outcome = await ProcessRunner.run(
+                  executable,
+                  sshArguments(commandArguments(route, destination, command)),
+                  environment: ProcessInfo.processInfo.environment,
+                  input: input,
+                  timeout: timeout
+              )
+        else { throw Failure.cannotStart(configuration.ssh.joined(separator: " ")) }
+        return outcome
+    }
+
+    /// Start `command` on the host over its connection, with `stdio` as its
+    /// stdin and stdout. It is for a command that does not end by itself
+    /// (the server's proxy). stderr goes to the returned pipe. The caller
+    /// ends the process.
+    func start(
+        _ destination: String,
+        _ command: String,
+        stdio: FileHandle,
+        login: Bool = true
+    ) async throws -> (Process, CollectedPipe) {
+        let route = try await connect(destination, login: login)
+        guard let executable = configuration.ssh.first else { throw Failure.cannotStart("no ssh") }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = sshArguments(commandArguments(route, destination, command))
+        process.environment = ProcessInfo.processInfo.environment
+        process.standardInput = stdio
+        process.standardOutput = stdio
+        let stderr = CollectedPipe()
+        process.standardError = stderr.pipe
+        do {
+            try process.run()
+        } catch {
+            stderr.stop()
+            throw Failure.cannotStart(EnglishErrorText.describe(error))
+        }
+        return (process, stderr)
+    }
+
+    private func commandArguments(_ route: Route, _ destination: String, _ command: String) -> [String] {
+        [
             "-S", route.controlPath,
             "-o", "ControlMaster=no",
             "-o", "BatchMode=yes",
@@ -159,9 +213,45 @@ final class SSHConnections {
             // A `RemoteCommand` of the user's config refuses a command line.
             "-o", "RemoteCommand=none",
             "-T", "--", destination, command,
-        ], timeout: timeout)
-        guard let outcome else { throw Failure.cannotStart(configuration.ssh.joined(separator: " ")) }
-        return outcome
+        ]
+    }
+
+    /// The argv of an ssh channel over `route` that runs `command` on a tty:
+    /// a remote pane (0057). It never logs in by itself, as `run`; `-q`
+    /// keeps ssh's own notices (`Shared connection to box closed.`) out of
+    /// the pane. A lost connection exits 255.
+    func ttyArguments(_ route: Route, _ destination: String, _ command: String) -> [String] {
+        configuration.ssh + configuration.options + [
+            "-S", route.controlPath,
+            "-o", "ControlMaster=no",
+            "-o", "BatchMode=yes",
+            "-o", "ProxyCommand=/usr/bin/false",
+            "-o", "RemoteCommand=none",
+            "-q", "-t", "--", destination, command,
+        ]
+    }
+
+    /// The route of a connection that is up, with no login: the user's own
+    /// master, or Macterm's.
+    private func liveRoute(_ destination: String) async throws -> Route {
+        let config = try await resolvedConfig(destination)
+        if let path = SSHControlPath.userPath(fromConfig: config), await controlAnswers(destination, at: path) {
+            return Route(controlPath: path, isUsersOwn: true)
+        }
+        let own = SSHControlPath.own(forConfig: config, in: configuration.controlDirectory)
+        guard await controlAnswers(destination, at: own) else { throw Failure.notConnected }
+        return Route(controlPath: own, isUsersOwn: false)
+    }
+
+    /// The destination as ssh resolves it from the user's config (`ssh -G`):
+    /// `user@hostname:port`. Two names for one machine give one value, and
+    /// one name that the config points at another machine gives another.
+    /// nil when `ssh -G` fails.
+    func resolvedDestination(_ destination: String) async -> String? {
+        guard Self.isValidDestination(destination) else { return nil }
+        let outcome = await runSSH(["-G", "--", destination], timeout: .seconds(5))
+        guard let outcome, outcome.status == 0 else { return nil }
+        return SSHControlPath.resolvedDestination(fromConfig: outcome.stdout)
     }
 
     /// End Macterm's master for `destination`, or its login. A user's master
@@ -549,6 +639,24 @@ enum SSHControlPath {
             return value.isEmpty || value.lowercased() == "none" ? nil : value
         }
         return nil
+    }
+
+    /// `user@hostname:port` from the output of `ssh -G`. nil when a value
+    /// is missing.
+    static func resolvedDestination(fromConfig output: String) -> String? {
+        var values: [String: String] = [:]
+        for line in output.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: " ", maxSplits: 1)
+            guard parts.count == 2 else { continue }
+            let key = parts[0].lowercased()
+            if ["user", "hostname", "port"].contains(key), values[key] == nil {
+                values[key] = parts[1].trimmingCharacters(in: .whitespaces)
+            }
+        }
+        guard let user = values["user"], let hostname = values["hostname"], let port = values["port"],
+              !user.isEmpty, !hostname.isEmpty, !port.isEmpty
+        else { return nil }
+        return "\(user)@\(hostname):\(port)"
     }
 
     static func lastLine(of text: String) -> String {

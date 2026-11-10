@@ -81,7 +81,11 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # keybind action, no default chord). Macterm does not handle it yet, so a
 # binding of it does nothing. The tag renumbers OUTPUT_ACTIVITY (70 → 71)
 # and UNKNOWN_APC (71 → 72).
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-09-f159ca9}"
+# build-2026-11-10-53dbc59: + downstream patch 0021 (macterm/ghostty#44, #45):
+# the `cursor-morph` key, a mode of `smooth-cursor`, makes a gliding block
+# cursor a comet, longer when it is faster. Other cursor shapes do not
+# change. Upstream through #15162. No C API change.
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-10-53dbc59}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.
@@ -204,10 +208,9 @@ SERVER_RELEASE="server-prebuilt"
 SERVER_DIR="Macterm/Resources/zmx"
 SERVER_STAMP=".server-key"
 SERVER_DIST="build/server"
-# The release file the app's zmx installer reads (`ZmxRelease`, #699): the key,
-# and the SHA-256 of the Linux builds, so a download for a remote host is
-# checked before it goes over ssh.
-SERVER_RELEASE_FILE="Macterm/Resources/zmx-release.json"
+# The release file of the retired zmx installer (#699). The app reads the key
+# from the names of its server files now; setup removes an old copy.
+OLD_RELEASE_FILE="Macterm/Resources/zmx-release.json"
 SERVER_TARGETS=(universal-macos x86_64-linux aarch64-linux)
 
 # Exit 0 when $1 holds a checked tarball for every target of key $2.
@@ -239,18 +242,8 @@ install_server() {
   for target in x86_64-linux aarch64-linux; do
     tar xzf "$dir/macterm-$key-$target.tar.gz" -O zmx | gzip -n -9 > "$SERVER_DIR/macterm-$key-$target.gz"
   done
-  python3 - "$key" "$dir" > "$SERVER_RELEASE_FILE" <<'PY'
-import json, sys
-key, directory = sys.argv[1], sys.argv[2]
-assets = {}
-for target in ("x86_64-linux", "aarch64-linux"):
-    name = f"macterm-{key}-{target}.tar.gz"
-    digest = open(f"{directory}/{name}.sha256").read().split()[0].lower()
-    assert len(digest) == 64, name
-    assets[name] = digest
-print(json.dumps({"tag": key, "assets": assets}, indent=2, sort_keys=True))
-PY
   printf '%s\n' "$key" > "$SERVER_STAMP"
+  rm -f "$OLD_RELEASE_FILE"
   rm -f .zmx-tag
   echo "Installed the server $key"
 }
@@ -272,8 +265,8 @@ ensure_server() {
   key="$(scripts/build-server.sh key)"
   [[ -f "$SERVER_STAMP" ]] && stamped="$(cat "$SERVER_STAMP")"
   if [[ -x "$SERVER_DIR/zmx" && -f "$SERVER_DIR/macterm-$key-x86_64-linux.gz" &&
-    -f "$SERVER_DIR/macterm-$key-aarch64-linux.gz" && -f "$SERVER_RELEASE_FILE" &&
-    "$stamped" == "$key" ]]; then
+    -f "$SERVER_DIR/macterm-$key-aarch64-linux.gz" && "$stamped" == "$key" ]]; then
+    rm -f "$OLD_RELEASE_FILE"
     return 0
   fi
   if server_dist_complete "$SERVER_DIST" "$key" 2>/dev/null; then

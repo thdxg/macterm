@@ -149,8 +149,6 @@ struct ControlArgs: Codable, Equatable {
     var slot: Int?
     /// Custom title for `tab.rename`.
     var title: String?
-    /// How many keys `pane.latency` types.
-    var count: Int?
     /// Reset custom title back to automatic default (`tab.rename`).
     var reset: Bool?
     /// Whether `pane.run` submits the text it pastes. ABSENT means submit —
@@ -177,6 +175,9 @@ struct ControlArgs: Codable, Equatable {
     var confirm: Bool?
     /// An ssh destination (`[user@]host`), for the debug-only `host.*` verbs.
     var host: String?
+    /// What a remote pane's client reports (`remote.pane`): a
+    /// `RemotePaneEvent` raw value.
+    var event: String?
 
     init(
         project: String? = nil,
@@ -324,13 +325,15 @@ struct ControlData: Codable {
     var widgets: [ControlWidgetInfo]?
     /// The palettes of the installed extensions (`palette.list`).
     var palettes: [ControlPaletteInfo]?
-    /// Typing latency (`pane.latency`, debug and benchmark builds only).
-    var latency: ControlLatencyResult?
     /// The user's answer to an ssh prompt (`ssh.askpass`). It goes only to an
     /// askpass that an ssh of Macterm started.
     var askpass: ControlAskpassReply?
     /// A host's ssh connection (debug-only `host.connect`).
     var host: ControlHostState?
+    /// A host's server (debug-only `host.server`).
+    var hostServer: ControlHostServerState?
+    /// What a remote pane's client does next (`remote.pane`).
+    var remotePane: ControlRemotePane?
 
     init(
         status: ControlStatusInfo? = nil,
@@ -348,9 +351,10 @@ struct ControlData: Codable {
         memory: ControlMemoryState? = nil,
         widgets: [ControlWidgetInfo]? = nil,
         palettes: [ControlPaletteInfo]? = nil,
-        latency: ControlLatencyResult? = nil,
         askpass: ControlAskpassReply? = nil,
-        host: ControlHostState? = nil
+        host: ControlHostState? = nil,
+        hostServer: ControlHostServerState? = nil,
+        remotePane: ControlRemotePane? = nil
     ) {
         self.status = status
         self.projects = projects
@@ -367,9 +371,10 @@ struct ControlData: Codable {
         self.memory = memory
         self.palettes = palettes
         self.widgets = widgets
-        self.latency = latency
         self.askpass = askpass
         self.host = host
+        self.hostServer = hostServer
+        self.remotePane = remotePane
     }
 }
 
@@ -388,11 +393,31 @@ struct ControlHostState: Codable, Equatable {
     var logins: Int
 }
 
-/// The result of `pane.latency`: milliseconds from each key to the frame that
-/// shows its glyph, and the keys that showed no glyph.
-struct ControlLatencyResult: Codable, Equatable {
-    var samples: [Double]
-    var misses: Int
+/// What a remote pane's client does next (`remote.pane`, 0057). Both ends
+/// are in one bundle, so the shape changes with the app.
+struct ControlRemotePane: Codable, Equatable {
+    /// `wait`, `run`, `ended` or `close` (`RemotePaneAnswer`).
+    var action: String
+    /// The Darwin notification that wakes a client that waits.
+    var wake: String
+    /// The ssh argv for `run`.
+    var arguments: [String]?
+    /// Clear the screen and the scrollback before `run`.
+    var clear: Bool?
+    /// A line for the pane, before the action.
+    var message: String?
+}
+
+/// The server that answers on a host (debug-only `host.server`).
+struct ControlHostServerState: Codable, Equatable {
+    var host: String
+    /// The server's build and protocol level, from its `hello`.
+    var build: String
+    var level: UInt32
+    /// This connect installed the server.
+    var installed: Bool
+    /// The ssh commands that this connect ran over the host's connection.
+    var commands: Int
 }
 
 /// What the password monitor knows about a pane (debug-only `pane.password`):

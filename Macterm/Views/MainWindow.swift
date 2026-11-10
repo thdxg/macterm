@@ -311,12 +311,6 @@ struct MainWindow: View {
         .sheet(isPresented: $windowState.isNewRemoteProjectSheetPresented) {
             NewRemoteProjectSheet()
         }
-        .sheet(item: $windowState.zmxInstall) { request in
-            ZmxInstallSheet(request: request) { installed in
-                guard let projectID = request.projectID else { return }
-                appState.useInstalledZmx(at: installed, for: projectID, store: projectStore)
-            }
-        }
         .sheet(
             item: $windowState.passwordEditor,
             onDismiss: { appState.restoreFocusToActivePane() },

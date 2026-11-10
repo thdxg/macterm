@@ -113,15 +113,6 @@ final class ProjectStore {
         save()
     }
 
-    /// The zmx a remote project runs on its host (`Project.zmxPath`). nil
-    /// goes back to PATH resolution.
-    func setZmxPath(id: UUID, to path: String?) {
-        guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
-        guard projects[index].zmxPath != path else { return }
-        projects[index].zmxPath = path
-        save()
-    }
-
     func setPath(id: UUID, to newPath: String) {
         guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
         let normalized = ProjectPath.normalizedForStorage(newPath)

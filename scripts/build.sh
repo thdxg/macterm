@@ -33,7 +33,7 @@ SPARKLE_ED_PUBLIC_KEY="${SPARKLE_ED_PUBLIC_KEY:-SPARKLE_ED_PUBLIC_KEY_PLACEHOLDE
 # imported self-signed release certificate (see release.yml's "Import signing
 # certificate" step) so the requirement stays stable across releases and grants
 # survive updates. Unset = ad-hoc (project.yml's default), which is fine for
-# local and benchmark builds that are never distributed.
+# local and test builds that are never distributed.
 CODESIGN_IDENTITY="${MACTERM_CODESIGN_IDENTITY:-}"
 SIGNING_OVERRIDES=()
 if [[ -n "$CODESIGN_IDENTITY" ]]; then
@@ -122,21 +122,10 @@ if ! grep -q "^Identifier=com.thdxg.macterm$" <<<"$ZMX_SIGNATURE"; then
   echo "ERROR: $ZMX_BINARY is not signed as com.thdxg.macterm. Pane programs would ask for permission as a second app" >&2
   exit 1
 fi
-# The zmx installer (#699) reads the release this build pins from this file.
-# Without it the install sheet offers nothing, and nothing else notices: the
-# release build of 1.33.2-tip.27 shipped that way.
-ZMX_RELEASE_JSON="$APP_BUNDLE/Contents/Resources/zmx-release.json"
-if ! python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d.get("tag")' "$ZMX_RELEASE_JSON" 2>/dev/null; then
-  echo "ERROR: $ZMX_RELEASE_JSON is missing or names no release. Run scripts/setup.sh" >&2
-  exit 1
-fi
 # The bundled server must be the one built from server/ at this commit: its
-# key is the tree's, and `zmx version` names that key.
-ZMX_KEY="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag"])' "$ZMX_RELEASE_JSON")"
-if [[ "$ZMX_KEY" != "$(scripts/build-server.sh key)" ]]; then
-  echo "ERROR: the bundled server is build $ZMX_KEY, not the build of this tree. Run scripts/setup.sh" >&2
-  exit 1
-fi
+# key is the tree's, and `zmx version` names that key. The app reads the key
+# from the names of the server files below (`ServerBuilds.bundledKey`).
+ZMX_KEY="$(scripts/build-server.sh key)"
 ZMX_VERSION_OUTPUT="$("$ZMX_BINARY" version 2>&1 || true)"
 if ! grep -qF "+thdxg.$ZMX_KEY" <<<"$ZMX_VERSION_OUTPUT"; then
   echo "ERROR: $ZMX_BINARY does not report build $ZMX_KEY" >&2

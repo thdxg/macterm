@@ -8,7 +8,7 @@ name: Bump GhosttyKit
 # The PR is a real test, not a rubber stamp. Changing setup.sh changes the
 # GhosttyKit cache key (every workflow keys on hashFiles('scripts/setup.sh')),
 # so the run downloads the NEW pin from scratch and puts it through Unit,
-# End-to-end, and the benchmark. That is the check that would have caught the
+# End-to-end, and Smoke. That is the check that would have caught the
 # sentry-init crash before it shipped in a release.
 #
 # Dependabot can't do this — a GitHub release asset is not a package ecosystem —
@@ -193,7 +193,7 @@ jobs:
           {
             echo "Moves the pinned \`macterm/ghostty\` release (\`GHOSTTYKIT_TAG\` in \`scripts/setup.sh\`) from \`${CURRENT}\` to \`${LATEST}\`."
             echo
-            echo "**CI on this PR is the gate.** Editing \`scripts/setup.sh\` changes the GhosttyKit cache key, so this run downloads the new pin from scratch and exercises it through Unit, End-to-end, and the benchmark — rather than a release being the first thing to try it."
+            echo "**CI on this PR is the gate.** Editing \`scripts/setup.sh\` changes the GhosttyKit cache key, so this run downloads the new pin from scratch and exercises it through Unit, End-to-end, and Smoke — rather than a release being the first thing to try it."
             echo
             echo "Compare upstream: [\`${CURRENT}...${LATEST}\`](https://github.com/macterm/ghostty/compare/${CURRENT}...${LATEST})"
             echo

@@ -177,6 +177,7 @@ struct ProjectMemoryDigestTests {
         #expect(ProjectMemoryDigest.instructions.contains("Do not state a goal"))
         #expect(ProjectMemoryDigest.instructions.contains("Do not retell the commands"))
         #expect(ProjectMemoryDigest.instructions.contains("When there is no Git state"))
+        #expect(ProjectMemoryDigest.instructions.contains("The diff is uncommitted work: never call it commits."))
     }
 
     @Test
@@ -239,5 +240,99 @@ struct ProjectMemoryDigestTests {
     func a_git_state_with_nothing_to_say_has_no_git_line() throws {
         let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: [], git: GitStatus(), now: now))
         #expect(digest.text.isEmpty)
+    }
+
+    // MARK: - Diff
+
+    private func changed(_ diff: String) -> GitStatus {
+        GitStatusParser.status(
+            statusOutput: "# branch.head main\n1 .M N... 100644 100644 100644 aaa bbb app.swift\n",
+            logOutput: nil,
+            diffOutput: diff
+        )
+    }
+
+    private func fileDiff(_ path: String, _ line: String) -> String {
+        "diff --git a/\(path) b/\(path)\n--- a/\(path)\n+++ b/\(path)\n@@ -1 +1 @@\n-old\n+\(line)\n"
+    }
+
+    @Test
+    func the_diff_follows_the_changed_files() throws {
+        let git = changed(fileDiff("app.swift", "let rate = 0.2"))
+        let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: [], git: git, now: now))
+        #expect(digest.text.hasSuffix("""
+        Diff of the uncommitted changes:
+        File `app.swift`:
+        @@ -1 +1 @@
+        -old
+        +let rate = 0.2
+        """))
+    }
+
+    @Test
+    func code_in_a_hunk_reaches_the_digest_unmasked_and_secret_files_do_not() throws {
+        let git = changed(fileDiff("Upload.swift", "let token: String")
+            + fileDiff(".env", "SECRET_THING=from-env-file")
+            + fileDiff("deploy/app.env", "SECRET_THING=from-env-file"))
+        let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: [], git: git, now: now))
+        #expect(digest.text.contains("+let token: String"))
+        #expect(!digest.text.contains("from-env-file"))
+        #expect(!digest.text.contains("File `.env`"))
+    }
+
+    @Test
+    func the_diff_gets_only_the_budget_that_is_left_and_cuts_whole_files() throws {
+        // Each file is about 250 tokens; the commands take most of the budget.
+        let bodyLine = String(repeating: "a", count: 100)
+        let body = Array(repeating: bodyLine, count: 6).joined(separator: "\n+")
+        let git = changed((1 ... 6).map { fileDiff("f\($0).txt", body) }.joined())
+        let entries = (1 ... 12).map { entry("make target-\($0) " + String(repeating: "b", count: 100), exit: 0, minutesAgo: Double($0)) }
+        let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: entries, git: git, now: now))
+        let lines = digest.text.split(separator: "\n").map(String.init)
+        // Nothing was cut by the excerpt: the commands are all there.
+        #expect(ProjectMemoryDigest.tokens(lines) <= ProjectMemoryDigest.textTokenBudget)
+        #expect(!digest.text.contains("lines not shown"))
+        #expect(digest.text.contains("make target-12"))
+        // Each file that is shown is whole.
+        let shown = lines.count(where: { $0.hasPrefix("File `") })
+        #expect(shown > 0 && shown < 6)
+        #expect(lines.count(where: { $0 == "+" + bodyLine }) == shown * 6)
+        #expect(digest.text.contains("[\(6 - shown) more changed files in the diff not shown]"))
+        // The diff comes before the commands.
+        let diffIndex = try #require(lines.firstIndex(of: "Diff of the uncommitted changes:"))
+        let commandsIndex = try #require(lines.firstIndex(of: "Commands, newest first:"))
+        #expect(diffIndex < commandsIndex)
+    }
+
+    @Test
+    func a_diff_with_no_room_is_left_out() {
+        let file = GitStatus.FileDiff(path: "a.txt", lines: ["@@ -1 +1 @@", "+" + String(repeating: "a", count: 600)])
+        #expect(ProjectMemoryDigest.diffLines([file], tokenBudget: 100).isEmpty)
+    }
+
+    @Test
+    func the_key_changes_on_an_edit_to_a_file_that_is_already_changed() {
+        let first = changed(fileDiff("app.swift", "let rate = 0.2"))
+        let edited = changed(fileDiff("app.swift", "let rate = 0.25"))
+        #expect(first.changedPaths == edited.changedPaths)
+        let key = { (git: GitStatus) in ProjectMemoryDigest.key(projectName: "x", entries: [], git: git) }
+        #expect(key(first) != key(edited))
+        #expect(key(first) == key(changed(fileDiff("app.swift", "let rate = 0.2"))))
+        var unread = first
+        unread.diff = nil
+        #expect(key(unread) != key(first))
+    }
+
+    @Test
+    func a_command_with_more_than_one_line_counts_each_line_and_the_diff_stays_whole() throws {
+        let bodyLine = String(repeating: "a", count: 100)
+        let body = Array(repeating: bodyLine, count: 6).joined(separator: "\n+")
+        let git = changed((1 ... 6).map { fileDiff("f\($0).txt", body) }.joined())
+        let heredoc = "cat <<EOF\n" + Array(repeating: "x", count: 200).joined(separator: "\n") + "\nEOF"
+        let digest = try #require(ProjectMemoryDigest(
+            projectName: "x", entries: [entry(heredoc, exit: 0, minutesAgo: 1)], git: git, now: now
+        ))
+        #expect(!digest.text.contains("lines not shown"))
+        #expect(ProjectMemoryDigest.tokens(["a\nb"]) == ProjectMemoryDigest.tokens(["a", "b"]))
     }
 }

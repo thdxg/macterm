@@ -7,32 +7,88 @@ struct RemoteSpawnTests {
 
     // MARK: - Pane command
 
-    @Test
-    func pane_command_execs_zmx_after_guarding_zmx_and_cd() {
-        // The remote side is `sh -c '<script>'` with a single-quote-free
-        // script — the one form every login shell (bash/zsh/fish/nu)
-        // tokenizes identically before POSIX sh takes over.
-        let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123")
-        // Missing zmx / bad cwd must NOT close the pane — they drop into a
-        // login shell with a diagnostic instead of exiting.
-        #expect(cmd?.contains("command -v zmx") == true)
-        #expect(cmd?.contains("zmx not found in PATH") == true)
-        #expect(cmd?.contains("cannot cd to") == true)
-        #expect(cmd?.contains("exec ${SHELL:-/bin/sh}") == true)
-        // Happy path still execs the attach into the declared dir.
-        #expect(cmd?.contains("cd ~/\"dev/api\"") == true)
-        #expect(cmd?.contains("exec zmx attach \"macterm-api-abc123\"") == true)
+    private let key = "0123abcd"
+
+    private func attach(_ session: String = "macterm-api-abc123") -> String {
+        RemoteSpawn.sessionCommand(key: key, sessionName: session, create: nil)
+    }
+
+    private func create(_ directory: String = "~/dev/api") -> String {
+        RemoteSpawn.sessionCommand(key: key, sessionName: "macterm-api-abc123", create: directory)
     }
 
     @Test
-    func pane_command_with_explicit_zmx_path_skips_the_presence_guard() {
-        // An explicit path is used verbatim and needs no `command -v` guard —
-        // its own failure surfaces as zmx's error, still visible in the pane.
-        let cmd = RemoteSpawn.paneCommand(
-            remote: remote, sessionName: "macterm-api-abc123", zmxPath: "~/bin/zmx"
-        )
-        #expect(cmd?.contains("command -v zmx") == false)
-        #expect(cmd?.contains("exec \"~/bin/zmx\" attach \"macterm-api-abc123\"") == true)
+    func a_pane_runs_the_host_servers_own_client_of_its_session() {
+        // The remote side is `sh -c '<script>'` with a single-quote-free
+        // script — the one form every login shell (bash/zsh/fish/nu)
+        // tokenizes identically before POSIX sh takes over.
+        let attach = attach()
+        #expect(attach.hasPrefix("sh -c '"))
+        #expect(attach.contains("b=\"$HOME/.local/share/macterm/bin/macterm-0123abcd\""))
+        #expect(attach.contains("\"$b\" connect \"macterm-api-abc123\"; "))
+        // An attach never makes a session: a missing one is an error, never
+        // a new shell in silence.
+        #expect(!attach.contains(" --"))
+        #expect(!attach.contains("cd "))
+        // A create goes to the folder, and `--` makes the missing session.
+        let create = create()
+        #expect(create.contains("cd ~/\"dev/api\""))
+        #expect(create.contains("\"$b\" connect \"macterm-api-abc123\" --; "))
+    }
+
+    @Test
+    func a_missing_binary_is_a_lost_connection_and_a_bad_folder_still_persists() {
+        // A host that lost its files after the check: exit 255 makes the
+        // pane wait, and the next connect installs again. A folder that is
+        // not there starts the session in the home folder, so it persists.
+        #expect(attach().contains("[ -x \"$b\" ] || exit 255"))
+        // 255 is only a lost connection: a shell's own 255 reaches the pane
+        // as 254, so its pane closes.
+        #expect(attach().hasSuffix("s=$?; [ \"$s\" -ne 255 ] || s=254; exit \"$s\"'"))
+        let create = create()
+        #expect(create.contains("cannot cd to"))
+        #expect(create.contains(">&2; cd; }"))
+        // The folder is one quoted word in the line, never inside another
+        // pair of quotes, where its text would be live.
+        #expect(create.contains("echo \"macterm: cannot cd to\" ~/\"dev/api\" >&2"))
+    }
+
+    @Test
+    func a_hostile_folder_stays_text_in_the_host_command() throws {
+        // A folder can come from the host (OSC 7). It must never run.
+        let command = RemoteSpawn.plainShellCommand(directory: "/nonexistent;echo INJECTED")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", command]
+        process.environment = ["SHELL": "/usr/bin/true", "TERM": "dumb", "PATH": "/usr/bin:/bin"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        try process.run()
+        process.waitUntilExit()
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        #expect(output.contains("cannot cd to /nonexistent;echo INJECTED"))
+        #expect(!output.contains("\nINJECTED"))
+    }
+
+    @Test
+    func a_folder_that_the_host_reported_must_be_a_plain_path() {
+        #expect(RemoteSpawn.isSafeHostFolder("/srv/app src"))
+        #expect(RemoteSpawn.isSafeHostFolder("~/dev"))
+        #expect(!RemoteSpawn.isSafeHostFolder("relative"))
+        #expect(!RemoteSpawn.isSafeHostFolder("/srv\\x"))
+        #expect(!RemoteSpawn.isSafeHostFolder("/srv/it's"))
+        #expect(!RemoteSpawn.isSafeHostFolder("/srv\nrm -rf ~"))
+    }
+
+    @Test
+    func a_plain_shell_is_a_login_shell_in_the_folder() {
+        let plain = RemoteSpawn.plainShellCommand(directory: "~/dev/api")
+        #expect(plain.hasPrefix("sh -c '"))
+        #expect(plain.contains("cd ~/\"dev/api\""))
+        #expect(plain.contains("if [ -n \"$SHELL\" ]; then exec \"$SHELL\" -l; else exec /bin/sh; fi"))
+        #expect(!plain.contains("connect"))
+        #expect(!plain.contains("ZMX_FOREGROUND_EVENTS"))
     }
 
     @Test
@@ -49,16 +105,17 @@ struct RemoteSpawnTests {
         // `-o SetEnv=TERM=xterm-ghostty` from the client because its wrapper has
         // no remote-side script; ours reads the remote DB directly, so it needs
         // no cache and works where env requests are dropped.
-        let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123") ?? ""
-        #expect(cmd.contains("if ! infocmp \"$TERM\" >/dev/null 2>&1; then "))
-        #expect(cmd.contains("if infocmp xterm-ghostty >/dev/null 2>&1; then TERM=xterm-ghostty;"))
-        #expect(cmd.contains("else TERM=xterm-256color; fi; export TERM; fi;"))
+        for cmd in [attach(), RemoteSpawn.plainShellCommand(directory: "~")] {
+            #expect(cmd.contains("if ! infocmp \"$TERM\" >/dev/null 2>&1; then "))
+            #expect(cmd.contains("if infocmp xterm-ghostty >/dev/null 2>&1; then TERM=xterm-ghostty;"))
+            #expect(cmd.contains("else TERM=xterm-256color; fi; export TERM; fi;"))
+        }
         // Nested `if`, never `&&`/`||` chaining — the chained form's
         // left-to-right precedence binds the else-branch wrong.
         #expect(!RemoteSpawn.remoteTermPreamble.contains("||"))
         // Pane-only: a background op has no terminal to describe.
-        let op = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["ls"])?.joined(separator: " ") ?? ""
-        #expect(!op.contains("infocmp"))
+        let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
+        #expect(!probe.contains("infocmp"))
     }
 
     @Test
@@ -71,12 +128,10 @@ struct RemoteSpawnTests {
         // Without this, helix refuses a truecolor theme ("theme requires true
         // color support") on any host where TERM isn't xterm-ghostty — which
         // `remoteTermPreamble` can't fix, since it only ever downgrades.
-        let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123")
-        #expect(cmd?.contains("COLORTERM=truecolor; export COLORTERM;") == true)
+        #expect(attach().contains("COLORTERM=truecolor; export COLORTERM;"))
+        #expect(RemoteSpawn.plainShellCommand(directory: "~").contains("COLORTERM=truecolor; export COLORTERM;"))
         // Pane-only: background ops and the naming probe render nothing.
-        let op = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["ls"])?.joined(separator: " ") ?? ""
         let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
-        #expect(!op.contains("COLORTERM"))
         #expect(!probe.contains("COLORTERM"))
     }
 
@@ -85,62 +140,23 @@ struct RemoteSpawnTests {
         // Claude Code sends OSC 9;4 progress — the agent's busy/done dot —
         // only to TERM_PROGRAM=ghostty at 1.2.0 or later, and ssh carries
         // neither variable on its own.
-        let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123") ?? ""
-        #expect(cmd.contains(RemoteSpawn.remoteTerminalProgramPreamble))
+        #expect(attach().contains(RemoteSpawn.remoteTerminalProgramPreamble))
         #expect(RemoteSpawn.remoteTerminalProgramPreamble.hasPrefix("TERM_PROGRAM=ghostty; export TERM_PROGRAM; "))
         let preamble = RemoteSpawn.terminalProgramPreamble(version: "1.3.2-main+b368389")
         #expect(preamble.contains("TERM_PROGRAM_VERSION=1.3.2-main+b368389; export TERM_PROGRAM_VERSION;"))
-        let op = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["ls"])?.joined(separator: " ") ?? ""
         let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
-        #expect(!op.contains("TERM_PROGRAM"))
         #expect(!probe.contains("TERM_PROGRAM"))
     }
 
     @Test
-    func zmx_install_connections_run_without_batch_mode_and_stay_single_quote_free() throws {
-        // The install is a click, so ssh may ask (`TTYCommand`): no
-        // BatchMode. The scripts ship as `sh -c '<script>'`, so they hold no
-        // single quote of their own.
-        let check = try #require(RemoteSpawn.zmxHostCheckArgv(remote: remote))
-        #expect(check.first == "ssh")
-        #expect(!check.joined(separator: " ").contains("BatchMode"))
-        #expect(check.contains("devbox"))
-        let checkScript = check.last ?? ""
-        #expect(checkScript.contains("uname -s"))
-        #expect(checkScript.contains("uname -m"))
-        #expect(checkScript.contains("command -v zmx"))
-        #expect(!RemoteSpawn.zmxHostCheckScript.contains("'"))
-        #expect(!RemoteSpawn.zmxInstallScript.contains("'"))
-
-        // A project's own zmx path is what the check asks about.
-        let own = RemoteSpawn.zmxHostCheckArgv(remote: remote, zmxPath: "/opt/zmx/bin/zmx")?.last ?? ""
-        #expect(own.contains("command -v \"/opt/zmx/bin/zmx\""))
-
-        let upload = try #require(RemoteSpawn.zmxUploadArgv(remote: remote, localPath: "/tmp/zmx-x86_64-linux"))
-        #expect(upload.first == "scp")
-        #expect(upload.contains("/tmp/zmx-x86_64-linux"))
-        #expect(upload.last == "devbox:.zmx.macterm")
-
-        let install = try #require(RemoteSpawn.zmxInstallArgv(remote: remote))
-        #expect(install.first == "ssh")
-        let installScript = install.last ?? ""
-        #expect(installScript.contains("mkdir -p \"$HOME/.local/bin\""))
-        #expect(installScript.contains("mv -f \"$HOME/.zmx.macterm\" \"$HOME/.local/bin/zmx\""))
-        #expect(installScript.contains("installed=%s"))
-        #expect(RemoteSpawn.zmxHostCheckArgv(remote: .local("/tmp")) == nil)
-    }
-
-    @Test
-    func pane_command_asks_the_host_zmx_for_foreground_reports() throws {
-        // The fork's client reads the variable (`ZmxForegroundEvents`) and
-        // removes it before the session starts. Background operations never
-        // attach, so they carry nothing.
-        let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123") ?? ""
+    func pane_command_asks_the_host_for_foreground_reports() throws {
+        // The client reads the variable (`ZmxForegroundEvents`) and removes
+        // it before the session starts. Background operations never attach,
+        // so they carry nothing.
+        let cmd = attach()
         #expect(cmd.contains("ZMX_FOREGROUND_EVENTS=1; export ZMX_FOREGROUND_EVENTS; "))
-        #expect(try #require(cmd.range(of: "ZMX_FOREGROUND_EVENTS")?.lowerBound) < cmd.range(of: "attach")!.lowerBound)
-        let op = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["ls"])?.joined(separator: " ") ?? ""
+        #expect(try #require(cmd.range(of: "ZMX_FOREGROUND_EVENTS")?.lowerBound) < cmd.range(of: "connect")!.lowerBound)
         let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
-        #expect(!op.contains("ZMX_FOREGROUND_EVENTS"))
         #expect(!probe.contains("ZMX_FOREGROUND_EVENTS"))
     }
 
@@ -152,53 +168,6 @@ struct RemoteSpawnTests {
         }
     }
 
-    // MARK: - Orphan sweep (#281)
-
-    @Test
-    func orphan_sweep_stamps_only_the_names_passed_then_lists() {
-        // The safety property: the stamp half can only ever touch sessions
-        // OUR panes claim, so it can never brand another machine's session.
-        let script = RemoteSpawn.orphanSweepScript(
-            sessionNames: ["macterm-api-aa11", "macterm-api-bb22"],
-            ownerID: "cafe01",
-            zmxPath: nil
-        )
-        #expect(script.contains("for n in \"macterm-api-aa11\" \"macterm-api-bb22\""))
-        #expect(script.contains("zmx set \"$n\" \"macterm.owner=cafe01\""))
-        // A session that died between listing and stamping must not fail the
-        // sweep, and stamp chatter must not pollute the parsed listing.
-        #expect(script.contains(">/dev/null 2>&1 || true"))
-        #expect(script.hasSuffix("zmx ls"))
-        #expect(!script.contains("'"))
-    }
-
-    @Test
-    func orphan_sweep_with_no_claimed_names_just_lists() {
-        let script = RemoteSpawn.orphanSweepScript(sessionNames: [], ownerID: "cafe01", zmxPath: nil)
-        #expect(!script.contains("for n in"))
-        #expect(!script.contains("zmx set"))
-        #expect(script.hasSuffix("zmx ls"))
-    }
-
-    @Test
-    func orphan_sweep_argv_uses_the_background_ssh_profile() {
-        // BatchMode + ConnectTimeout: a background op can never answer a
-        // prompt, so it must fail fast instead of hanging on one.
-        let argv = RemoteSpawn.orphanSweepArgv(
-            remote: remote, zmxPath: "~/bin/zmx",
-            sessionNames: ["macterm-api-aa11"], ownerID: "cafe01"
-        )
-        let wire = argv?.joined(separator: " ") ?? ""
-        #expect(wire.contains("BatchMode=yes"))
-        #expect(wire.contains("ConnectTimeout=5"))
-        // Explicit zmxPath is used verbatim for both the stamp and the list.
-        #expect(wire.contains("\"~/bin/zmx\" set"))
-        #expect(wire.contains("\"~/bin/zmx\" ls"))
-        #expect(RemoteSpawn.orphanSweepArgv(
-            remote: .local("/a"), zmxPath: nil, sessionNames: [], ownerID: "x"
-        ) == nil)
-    }
-
     @Test
     func remote_scripts_never_source_profiles() {
         // Locked-in decision (#104): profiles are arbitrary code in the
@@ -207,13 +176,8 @@ struct RemoteSpawnTests {
         // hosts (exec hijack of our fds, tty-stdin read-block, profile
         // exec-loop spin). PATH comes from the fallback dir list; anything
         // else is the project's explicit zmxPath.
-        let pane = RemoteSpawn.paneCommand(remote: remote, sessionName: "s") ?? ""
-        let op = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["ls"])?.joined(separator: " ") ?? ""
         let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
-        let sweep = RemoteSpawn.orphanSweepArgv(
-            remote: remote, zmxPath: nil, sessionNames: ["macterm-a-1"], ownerID: "x"
-        )?.joined(separator: " ") ?? ""
-        for wire in [pane, op, probe, sweep] {
+        for wire in [attach(), create(), RemoteSpawn.plainShellCommand(directory: "~"), probe] {
             #expect(!wire.contains(".profile"))
             #expect(!wire.contains("/etc/profile"))
         }
@@ -222,63 +186,10 @@ struct RemoteSpawnTests {
     @Test
     func pane_command_script_is_single_quote_free() {
         // Single quotes in the script would break the `sh -c '<script>'`
-        // wrapper on a non-POSIX login shell.
-        let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123")
-        // The only single quotes are the two that wrap the sh -c argument
-        // (the outer ssh quoting escapes them as '\'').
-        #expect(cmd?.contains("'\\''") == true)
-    }
-
-    @Test
-    func pane_command_includes_user_in_destination() {
-        let cmd = RemoteSpawn.paneCommand(
-            remote: .remote(user: "deploy", host: "10.0.0.5", directory: "/srv/app"),
-            sessionName: "macterm-app-ff00"
-        )
-        #expect(cmd?.contains("ssh -t 'deploy@10.0.0.5'") == true)
-        #expect(cmd?.contains("cd \"/srv/app\"") == true)
-    }
-
-    @Test
-    func pane_command_has_no_batchmode_so_auth_can_prompt() {
-        let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123")
-        #expect(cmd?.contains("BatchMode") == false)
-    }
-
-    @Test
-    func pane_command_is_nil_for_local_paths() {
-        #expect(RemoteSpawn.paneCommand(remote: .local("/a/b"), sessionName: "s") == nil)
-    }
-
-    // MARK: - Background op argv
-
-    @Test
-    func op_argv_uses_batchmode_and_connect_timeout() {
-        let argv = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["kill", "macterm-api-abc123"])
-        #expect(argv == [
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=5",
-            "devbox",
-            "\(RemoteSpawn.remoteShell) " + RemoteSpawn.shellQuote(
-                RemoteSpawn.remoteEnvPreamble + "exec zmx \"kill\" \"macterm-api-abc123\""
-            ),
-        ])
-        // sh -c (NOT sh -lc): the login flag is unportable — older dash rejects
-        // it and drops to an interactive shell.
-        #expect(RemoteSpawn.remoteShell == "sh -c")
-    }
-
-    @Test
-    func op_argv_uses_explicit_zmx_path_verbatim() {
-        let argv = RemoteSpawn.opArgv(
-            remote: remote, zmxArguments: ["kill", "s"], zmxPath: "~/bin/zmx"
-        )
-        #expect(argv?.last?.contains("exec \"~/bin/zmx\" \"kill\" \"s\"") == true)
-    }
-
-    @Test
-    func op_argv_is_nil_for_local_paths() {
-        #expect(RemoteSpawn.opArgv(remote: .local("/a"), zmxArguments: ["ls"]) == nil)
+        // wrapper on a non-POSIX login shell: the only two wrap it.
+        for cmd in [attach(), create(), RemoteSpawn.plainShellCommand(directory: "/srv/app")] {
+            #expect(cmd.count { $0 == "'" } == 2)
+        }
     }
 
     // MARK: - Foreground probe
@@ -304,6 +215,9 @@ struct RemoteSpawnTests {
         // script stays free of single quotes.
         #expect(!RemoteSpawn.foregroundProbeScript.contains("'"))
         #expect(RemoteSpawn.foregroundProbeArgv(remote: .local("/a")) == nil)
+        // sh -c (NOT sh -lc): the login flag is unportable — older dash rejects
+        // it and drops to an interactive shell.
+        #expect(RemoteSpawn.remoteShell == "sh -c")
     }
 
     @Test
@@ -395,10 +309,10 @@ struct RemoteSpawnTests {
 
     @Test
     func assert_single_quote_free_op_path_exits_nonzero_not_a_shell() {
-        // A kill/probe (background op) with a `'`-carrying path must FAIL
+        // A background op (the probe) with a `'`-carrying path must FAIL
         // honestly (exit 1), not drop into an interactive shell that exits 0 —
-        // otherwise killRemoteSession would report a silent no-op success.
-        let dirty = "exec zmx kill \"it's\""
+        // otherwise it would report a silent no-op success.
+        let dirty = "exec zmx ls \"it's\""
         let result = RemoteSpawn.assertSingleQuoteFree(dirty, onViolation: .failNonZero)
         #expect(!result.contains("'"))
         #expect(result.contains("unsupported single quote"))
@@ -410,22 +324,19 @@ struct RemoteSpawnTests {
     func pane_command_with_single_quote_in_directory_stays_quote_free() {
         // End-to-end: a `'` in the remote directory must not survive into the
         // shipped `sh -c '<script>'` (its `'` would break the outer quoting).
-        let remoteWithQuote = ProjectPath.remote(user: nil, host: "devbox", directory: "~/it's")
-        let cmd = RemoteSpawn.paneCommand(remote: remoteWithQuote, sessionName: "macterm-x-abc123")
-        // The script body (between the outer single quotes) carries no attach —
-        // it was replaced by the quote-free diagnostic.
-        #expect(cmd?.contains("unsupported single quote") == true)
-        #expect(cmd?.contains("exec zmx attach") == false)
+        // The pane gets the diagnostic and a shell, never a silent close.
+        for cmd in [create("~/it's"), RemoteSpawn.plainShellCommand(directory: "~/it's")] {
+            #expect(cmd.contains("unsupported single quote"))
+            #expect(!cmd.contains("connect"))
+            #expect(cmd.count { $0 == "'" } == 2)
+        }
     }
 
     @Test
-    func op_argv_with_single_quote_in_zmx_path_stays_quote_free() {
-        let cmd = RemoteSpawn.opArgv(
-            remote: remote, zmxArguments: ["kill", "macterm-x-abc123"], zmxPath: "~/it's/zmx"
-        )
-        let script = try? #require(cmd?.last)
+    func probe_argv_with_single_quote_in_zmx_path_stays_quote_free() {
+        let script = RemoteSpawn.foregroundProbeArgv(remote: remote, zmxPath: "~/it's/zmx")?.last
         #expect(script?.contains("unsupported single quote") == true)
-        #expect(script?.contains("kill") == false)
+        #expect(script?.contains(" ls") == false)
     }
 
     @Test
@@ -448,7 +359,7 @@ struct RemoteSpawnTests {
     // MARK: - Git probe
 
     @Test
-    func git_probe_runs_the_five_reads_in_one_connection() throws {
+    func git_probe_runs_the_six_reads_in_one_connection() throws {
         let argv = try #require(RemoteSpawn.gitProbeArgv(remote: remote))
         #expect(argv.contains("BatchMode=yes"))
         #expect(argv.contains("devbox"))
@@ -459,15 +370,20 @@ struct RemoteSpawnTests {
         #expect(!script.contains("'"))
         #expect(script.contains("cd ~/\"dev/api\" 2>/dev/null || exit 2"))
         #expect(script.contains("command -v git >/dev/null 2>&1 || exit 3"))
-        #expect(script.contains("status --porcelain=v2 --branch --show-stash 2>/dev/null || exit 4"))
+        #expect(script.contains("status --porcelain=v2 --branch --show-stash 2>/dev/null) || exit 4"))
         #expect(script.contains("log -5 --format=%h%x1f%s%x1f%ct"))
         #expect(script.contains("for-each-ref refs/heads --sort=-committerdate --count=6"))
         #expect(script.contains("worktree list --porcelain"))
         #expect(script.contains("GIT_OPTIONAL_LOCKS=0"))
         #expect(script.contains("{ " + ProjectGit.branchLogScript(git: "git -c core.fsmonitor=false -c core.quotePath=false --no-pager")))
         // A detached HEAD has no branch log, and that is not a failure.
-        #expect(script.hasSuffix("; } 2>/dev/null; exit 0"))
-        #expect(script.components(separatedBy: "printf \"\\036\"").count == 5)
+        #expect(script.contains("; } 2>/dev/null; printf"))
+        // The diff only when a tracked file changed, as locally.
+        #expect(script.hasSuffix(
+            "if printf \"%s\\n\" \"$s\" | grep -q \"^[12u] \"; then "
+                + ProjectGit.diffCommand(git: "git -c core.fsmonitor=false -c core.quotePath=false --no-pager") + "; fi; exit 0"
+        ))
+        #expect(script.components(separatedBy: "printf \"\\036\"").count == 6)
         // A git on the host's PATH only; profiles are never sourced.
         #expect(!script.contains("profile"))
     }

@@ -106,7 +106,7 @@ actor LocalSessions {
     /// The reply, or `ServerClientError.noAnswer` after `requestTimeout`. A
     /// request that waits for its reply cannot be cancelled, so the two race
     /// in tasks of their own and the first to finish answers.
-    private static func bounded<T: Sendable>(_ body: @escaping @Sendable () async throws -> T) async throws -> T {
+    static func bounded<T: Sendable>(_ body: @escaping @Sendable () async throws -> T) async throws -> T {
         let answered = OSAllocatedUnfairLock(initialState: false)
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<T, Error>) in
             func finish(_ result: Result<T, Error>) {

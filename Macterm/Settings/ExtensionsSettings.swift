@@ -51,12 +51,12 @@ struct ExtensionsSettings: View {
                 RegistryStatus(state: registry.state)
                 if let problem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
-                        .settingsCaption()
+                        .settingsSecondaryText()
                 }
 
                 if items.isEmpty {
                     Text(query.isEmpty && filter == .all ? "No extensions yet." : "No extensions match.")
-                        .settingsCaption()
+                        .settingsSecondaryText()
                 }
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
                     ForEach(items) { item in
@@ -88,7 +88,7 @@ struct ExtensionsSettings: View {
 
                 HStack(alignment: .firstTextBaseline) {
                     Text("Extensions add screens to the command palette.")
-                        .settingsCaption()
+                        .settingsSecondaryText()
                     Spacer()
                     DocsLink(.extensionsSettings)
                 }
@@ -211,11 +211,11 @@ private struct RegistryStatus: View {
         case .loading:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Reading the extensions from the Macterm repository…").settingsCaption()
+                Text("Reading the extensions from the Macterm repository…").settingsSecondaryText()
             }
         case let .failed(reason):
             Label("Cannot read the extensions of Macterm: \(reason)", systemImage: "exclamationmark.triangle.fill")
-                .settingsCaption()
+                .settingsSecondaryText()
         }
     }
 }
@@ -274,7 +274,7 @@ private struct ExtensionCard: View {
                     button
                 }
                 Text(item.summary)
-                    .settingsCaption()
+                    .settingsSecondaryText()
                     .lineLimit(2, reservesSpace: true)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -1,7 +1,7 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "\"%@\" is not a key combination. Try ctrl+c, escape or up." : {
+    "\"%@\" is not a key combination. Try ctrl+c, escape, or up." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -666,6 +666,22 @@
         }
       }
     },
+    "A block cursor becomes a comet while it moves. A faster move makes a longer comet." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "블록 커서가 움직이는 동안 혜성 모양이 됩니다. 빠르게 움직일수록 혜성이 길어집니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "块状光标在移动时变成彗星形状。移动越快，彗星越长。"
+          }
+        }
+      }
+    },
     "A build of every commit that passes CI, and stable releases. Tip builds get no release tests." : {
       "localizations" : {
         "ko" : {
@@ -698,7 +714,7 @@
         }
       }
     },
-    "A key combination such as ctrl+c, escape or up, or a single printable key such as j." : {
+    "A key combination such as ctrl+c, escape, or up, or a single printable key such as j." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -2214,22 +2230,6 @@
         }
       }
     },
-    "Checking the host…" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트 확인 중…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在检查主机…"
-          }
-        }
-      }
-    },
     "Choose Files…" : {
       "localizations" : {
         "ko" : {
@@ -2664,6 +2664,23 @@
         }
       }
     },
+    "Continue Without Server" : {
+      "comment" : "The button that closes the server install sheet with no install.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서버 없이 계속"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不使用服务器继续"
+          }
+        }
+      }
+    },
     "Copy" : {
       "comment" : "Command palette: the Option action of an extension row that copies text",
       "localizations" : {
@@ -2758,22 +2775,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "拷贝会话 ID"
-          }
-        }
-      }
-    },
-    "Copying the binary to the host…" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "바이너리를 호스트에 복사하는 중…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在将二进制文件复制到主机…"
           }
         }
       }
@@ -3023,22 +3024,6 @@
         }
       }
     },
-    "Done. New tabs and splits use this zmx. A session that is running keeps its old daemon until you create it again." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "완료. 새 탭과 분할은 이 zmx를 사용합니다. 실행 중인 세션은 다시 만들 때까지 이전 데몬을 유지합니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "完成。新标签页和分割窗格将使用此 zmx。正在运行的会话在重新创建之前仍使用旧的守护进程。"
-          }
-        }
-      }
-    },
     "Dynamic" : {
       "comment" : "Quick terminal position or size: remembered from the panel",
       "localizations" : {
@@ -3056,18 +3041,18 @@
         }
       }
     },
-    "Each pane is a persistent zmx session on the host, over ssh. zmx must be installed there: Install zmx on Host puts Macterm's build in ~/.local/bin on the host. If Macterm cannot find a zmx, set an absolute path, for example ~/bin/zmx or /usr/local/bin/zmx. Port, identity and ControlMaster come from ~/.ssh/config." : {
+    "Each pane is a session on the host, over one ssh connection. At the first connection, Macterm asks to install its server on the host. Port, identity, and ControlMaster come from ~/.ssh/config." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "각 창은 ssh를 통한 호스트의 영구 zmx 세션입니다. 호스트에 zmx가 설치되어 있어야 합니다. 호스트에 zmx 설치는 Macterm의 빌드를 호스트의 ~/.local/bin에 넣습니다. Macterm이 zmx를 찾지 못하면 ~/bin/zmx 또는 /usr/local/bin/zmx 같은 절대 경로를 설정하세요. 포트, 신원, ControlMaster는 ~/.ssh/config에서 가져옵니다."
+            "value" : "각 창은 하나의 ssh 연결을 통한 호스트의 세션입니다. 처음 연결할 때 Macterm은 호스트에 서버를 설치할지 묻습니다. 포트, 신원, ControlMaster는 ~/.ssh/config에서 가져옵니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每个窗格都是主机上通过 ssh 连接的持久 zmx 会话。主机上必须安装 zmx：“在主机上安装 zmx”会把 Macterm 的构建放到主机的 ~/.local/bin。如果 Macterm 找不到 zmx，请设置绝对路径，例如 ~/bin/zmx 或 /usr/local/bin/zmx。端口、身份和 ControlMaster 来自 ~/.ssh/config。"
+            "value" : "每个窗格都是主机上的会话，通过一个 ssh 连接。第一次连接时，Macterm 会询问是否在主机上安装其服务器。端口、身份和 ControlMaster 来自 ~/.ssh/config。"
           }
         }
       }
@@ -3120,7 +3105,7 @@
         }
       }
     },
-    "Enable for live tab names, close warnings and the Git state of remote projects." : {
+    "Enable for live tab names, close warnings, and the Git state of remote projects." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -3164,22 +3149,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "输入路径…"
-          }
-        }
-      }
-    },
-    "Every feature that uses a model uses Apple's on-device model. Nothing leaves this Mac." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "모델을 사용하는 모든 기능은 Apple의 온디바이스 모델을 사용합니다. 아무것도 이 Mac을 떠나지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "所有使用模型的功能都使用 Apple 的设备端模型。任何内容都不会离开这台 Mac。"
           }
         }
       }
@@ -3449,7 +3418,7 @@
         }
       }
     },
-    "Finder opens %lld more text file types with Macterm. To change a type back, select a file in Finder, choose File → Get Info and change Open with." : {
+    "Finder opens %lld more text file types with Macterm. To change a type back, select a file in Finder, choose File → Get Info, and change Open with." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -3851,22 +3820,6 @@
         }
       }
     },
-    "Getting the binary and checking its checksum…" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "바이너리를 가져와 체크섬을 확인하는 중…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在获取二进制文件并校验其校验和…"
-          }
-        }
-      }
-    },
     "Ghostty Config" : {
       "localizations" : {
         "ko" : {
@@ -4241,6 +4194,22 @@
         }
       }
     },
+    "Install Server on Host…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "호스트에 서버 설치…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在主机上安装服务器…"
+          }
+        }
+      }
+    },
     "Install it" : {
       "localizations" : {
         "ko" : {
@@ -4257,34 +4226,18 @@
         }
       }
     },
-    "Install zmx on %@" : {
+    "Install the Macterm server on %@?" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@에 zmx 설치"
+            "value" : "%@에 Macterm 서버를 설치할까요?"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在 %@ 上安装 zmx"
-          }
-        }
-      }
-    },
-    "Install zmx on Host…" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트에 zmx 설치…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在主机上安装 zmx…"
+            "value" : "在 %@ 上安装 Macterm 服务器？"
           }
         }
       }
@@ -4694,6 +4647,22 @@
         }
       }
     },
+    "Learn more…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "더 알아보기…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进一步了解…"
+          }
+        }
+      }
+    },
     "Leave copy mode" : {
       "localizations" : {
         "ko" : {
@@ -4851,6 +4820,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 无法捕捉面板所在的显示器。"
+          }
+        }
+      }
+    },
+    "Macterm cannot install its server on %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 %@에 서버를 설치할 수 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 无法在 %@ 上安装其服务器"
           }
         }
       }
@@ -5015,24 +5000,18 @@
         }
       }
     },
-    "Macterm has no zmx build for %@ on %@." : {
+    "Macterm installed its server on %@" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Macterm has no zmx build for %1$@ on %2$@."
-          }
-        },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Macterm에는 %@의 %@용 zmx 빌드가 없습니다."
+            "value" : "Macterm이 %@에 서버를 설치했습니다"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Macterm 没有适用于 %@ 上 %@ 的 zmx 构建。"
+            "value" : "Macterm 已在 %@ 上安装其服务器"
           }
         }
       }
@@ -5171,22 +5150,6 @@
         }
       }
     },
-    "Macterm's build" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm의 빌드"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm 的构建"
-          }
-        }
-      }
-    },
     "Macterm's repository has no extensions at %@." : {
       "localizations" : {
         "ko" : {
@@ -5199,22 +5162,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 的仓库中在 %@ 没有扩展。"
-          }
-        }
-      }
-    },
-    "Macterm's zmx release has no build for %@." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm의 zmx 릴리스에는 %@용 빌드가 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm 的 zmx 发行版没有适用于 %@ 的构建。"
           }
         }
       }
@@ -5296,6 +5243,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "模式"
+          }
+        }
+      }
+    },
+    "Morph cursor while moving" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이동 중 커서 모양 바꾸기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移动时光标变形"
           }
         }
       }
@@ -5456,22 +5419,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移到草稿标签页"
-          }
-        }
-      }
-    },
-    "Moving it into place on the host…" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트에서 제자리로 옮기는 중…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在主机上将其移动到位…"
           }
         }
       }
@@ -5794,22 +5741,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "项目中的下一个标签页"
-          }
-        }
-      }
-    },
-    "No" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "아니요"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "否"
           }
         }
       }
@@ -7167,22 +7098,6 @@
         }
       }
     },
-    "Password or passphrase" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "암호 또는 패스프레이즈"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "密码或口令"
-          }
-        }
-      }
-    },
     "Paste" : {
       "localizations" : {
         "ko" : {
@@ -7703,7 +7618,7 @@
         }
       }
     },
-    "Read the ID, session, directory, process or size of a pane." : {
+    "Read the ID, session, directory, process, or size of a pane." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -9074,7 +8989,7 @@
         }
       }
     },
-    "Send one key combination to a pane, such as ctrl+c, escape or up." : {
+    "Send one key combination to a pane, such as ctrl+c, escape, or up." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -9198,6 +9113,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "会话保留已关闭。此系统的 zmx 套接字路径过长。终端将在不保留会话的情况下运行。"
+          }
+        }
+      }
+    },
+    "Sessions in new panes keep running when the connection stops." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결이 끊겨도 새 창의 세션은 계속 실행됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接中断时，新窗格中的会话会继续运行。"
           }
         }
       }
@@ -9635,7 +9566,7 @@
         }
       }
     },
-    "Shows where you left off in each project, its Git branches and the commands to run next." : {
+    "Shows where you left off in each project, its Git branches, and the commands to run next." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -10344,54 +10275,6 @@
         }
       }
     },
-    "The download failed: %@" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다운로드 실패: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下载失败：%@"
-          }
-        }
-      }
-    },
-    "The downloaded archive could not be unpacked." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다운로드한 아카이브를 풀 수 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法解压下载的归档文件。"
-          }
-        }
-      }
-    },
-    "The downloaded file does not match the checksum of the release." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다운로드한 파일이 릴리스의 체크섬과 일치하지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下载的文件与发行版的校验和不匹配。"
-          }
-        }
-      }
-    },
     "The file target names another computer, or carries a query or fragment." : {
       "localizations" : {
         "ko" : {
@@ -10404,102 +10287,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文件目标指向另一台电脑，或包含查询或片段。"
-          }
-        }
-      }
-    },
-    "The host already runs the build this Macterm pins." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트가 이미 이 Macterm이 고정한 빌드를 실행 중입니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机已在运行此 Macterm 固定的构建。"
-          }
-        }
-      }
-    },
-    "The host did not answer the check. See the connection's output below." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트가 확인에 응답하지 않았습니다. 아래 연결 출력을 확인하세요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机没有响应检查。请查看下方的连接输出。"
-          }
-        }
-      }
-    },
-    "The host has no zmx. Macterm's build goes to ~/.local/bin/zmx, which its panes find. Nothing on the host is changed before you click Install." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트에 zmx가 없습니다. Macterm의 빌드는 ~/.local/bin/zmx에 설치되며, Macterm의 창이 이를 찾습니다. 설치를 클릭하기 전에는 호스트에서 아무것도 변경되지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机上没有 zmx。Macterm 的构建将安装到 ~/.local/bin/zmx，其窗格可以找到它。在你点击“安装”之前，主机上不会有任何改动。"
-          }
-        }
-      }
-    },
-    "The host runs another build of Macterm's zmx. The pinned build goes to ~/.local/bin/zmx. Nothing on the host is changed before you click Update." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트가 Macterm zmx의 다른 빌드를 실행 중입니다. 고정된 빌드가 ~/.local/bin/zmx에 설치됩니다. 업데이트를 클릭하기 전에는 호스트에서 아무것도 변경되지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机运行的是 Macterm zmx 的另一个构建。固定的构建将安装到 ~/.local/bin/zmx。在你点击“更新”之前，主机上不会有任何改动。"
-          }
-        }
-      }
-    },
-    "The host runs the upstream zmx. Macterm's build has the fixes that its remote panes rely on. It goes to ~/.local/bin/zmx. Nothing on the host is changed before you click Update." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트가 업스트림 zmx를 실행 중입니다. Macterm의 빌드에는 원격 창이 의존하는 수정 사항이 있습니다. ~/.local/bin/zmx에 설치됩니다. 업데이트를 클릭하기 전에는 호스트에서 아무것도 변경되지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机运行的是上游 zmx。Macterm 的构建包含其远程窗格依赖的修复。它将安装到 ~/.local/bin/zmx。在你点击“更新”之前，主机上不会有任何改动。"
-          }
-        }
-      }
-    },
-    "The install on the host failed (ssh exited with %d)." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트 설치 실패(ssh 종료 코드 %d)."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机上的安装失败（ssh 以 %d 退出）。"
           }
         }
       }
@@ -10730,22 +10517,6 @@
         }
       }
     },
-    "The project path is not a remote path." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "프로젝트 경로가 원격 경로가 아닙니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "项目路径不是远程路径。"
-          }
-        }
-      }
-    },
     "The row has no directory" : {
       "localizations" : {
         "ko" : {
@@ -10858,22 +10629,6 @@
         }
       }
     },
-    "The upload failed (scp exited with %d)." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "업로드 실패(scp 종료 코드 %d)."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上传失败（scp 以 %d 退出）。"
-          }
-        }
-      }
-    },
     "The web target does not contain a valid host." : {
       "localizations" : {
         "ko" : {
@@ -10886,22 +10641,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "网页目标不包含有效的主机。"
-          }
-        }
-      }
-    },
-    "The zmx in this Macterm bundle is missing." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 Macterm 번들의 zmx가 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此 Macterm 包中的 zmx 缺失。"
           }
         }
       }
@@ -10938,34 +10677,18 @@
         }
       }
     },
-    "This Macterm build has no zmx binary for %@." : {
+    "These features need Apple Intelligence. Apple's on-device model does all the work, so nothing leaves this Mac." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이 Macterm 빌드에는 %@용 zmx 바이너리가 없습니다."
+            "value" : "이 기능에는 Apple Intelligence가 필요합니다. Apple의 온디바이스 모델이 모든 작업을 처리하므로 아무것도 이 Mac을 떠나지 않습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此 Macterm 构建没有适用于 %@ 的 zmx 二进制文件。"
-          }
-        }
-      }
-    },
-    "This build of Macterm carries no zmx release to install." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 Macterm 빌드에는 설치할 zmx 릴리스가 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此 Macterm 构建没有可安装的 zmx 发行版。"
+            "value" : "这些功能需要 Apple 智能。Apple 的设备端模型完成所有工作，因此任何内容都不会离开这台 Mac。"
           }
         }
       }
@@ -11067,12 +10790,34 @@
       }
     },
     "This palette needs %@ and %@, which are not on your PATH." : {
-      "comment" : "The first value is a list of program names with commas between them",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "This palette needs %1$@ and %2$@, which are not on your PATH."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 팔레트에는 %@ 및 %@이(가) 필요하지만 PATH에 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此面板需要 %1$@ 和 %2$@，但它们不在你的 PATH 中。"
+          }
+        }
+      }
+    },
+    "This palette needs %@, and %@, which are not on your PATH." : {
+      "comment" : "The first value is a list of program names with commas between them",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This palette needs %1$@, and %2$@, which are not on your PATH."
           }
         },
         "ko" : {
@@ -11295,22 +11040,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "顶部"
-          }
-        }
-      }
-    },
-    "Try Again" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다시 시도"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重试"
           }
         }
       }
@@ -11716,22 +11445,6 @@
         }
       }
     },
-    "Update zmx on %@" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@에서 zmx 업데이트"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在 %@ 上更新 zmx"
-          }
-        }
-      }
-    },
     "Updates" : {
       "comment" : "Settings pane",
       "localizations" : {
@@ -12072,22 +11785,6 @@
         }
       }
     },
-    "Yes" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "예"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "是"
-          }
-        }
-      }
-    },
     "You already have a palette named %@." : {
       "localizations" : {
         "ko" : {
@@ -12148,6 +11845,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的 %@ 副本与 Macterm 仓库中的版本不同。你的副本将移到废纸篓。"
+          }
+        }
+      }
+    },
+    "Your sessions on this host keep running when the connection stops. Macterm installs its server in ~/.local/share/macterm." : {
+      "comment" : "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결이 끊겨도 이 호스트의 세션은 계속 실행됩니다. Macterm은 서버를 ~/.local/share/macterm에 설치합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接中断时，此主机上的会话会继续运行。Macterm 会把服务器安装到 ~/.local/share/macterm。"
           }
         }
       }
@@ -12314,23 +12028,7 @@
         }
       }
     },
-    "find it in PATH" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PATH에서 찾기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在 PATH 中查找"
-          }
-        }
-      }
-    },
-    "macOS asks for each folder when a terminal command reads Documents, Downloads or other protected places. One Full Disk Access grant covers all of them." : {
+    "macOS asks for each folder when a terminal command reads Documents, Downloads, or other protected places. One Full Disk Access grant covers all of them." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -12342,22 +12040,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当终端命令读取“文稿”“下载”或其他受保护的位置时，macOS 会针对每个文件夹询问。授予一次完全磁盘访问权限即可涵盖所有位置。"
-          }
-        }
-      }
-    },
-    "none" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "없음"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无"
           }
         }
       }
@@ -12640,38 +12322,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "输入“%@”的密码"
-          }
-        }
-      }
-    },
-    "zmx on the host" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트의 zmx"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机上的 zmx"
-          }
-        }
-      }
-    },
-    "zmx path (optional)" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "zmx 경로(선택 사항)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "zmx 路径（可选）"
           }
         }
       }

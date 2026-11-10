@@ -1,26 +1,23 @@
 import Foundation
 
-/// Builds the ssh invocations behind remote projects (#104). Pure string
-/// assembly — every command line is unit-testable without a host.
+/// Builds the commands behind remote projects (#104). Pure string assembly:
+/// every command line is unit-testable without a host.
 ///
-/// Two deliberately different ssh profiles:
-/// - **The pane command** (`paneCommand`): interactive. `-t` forces a tty and
-///   there is NO BatchMode, so password/2FA prompts render inside the pane
-///   and interactive auth just works. It cd's into the project directory and
-///   exec's `zmx attach <session>` — persistence lives entirely in the
-///   *remote* daemon. A local zmx wrapper must never be layered on top:
-///   nested zmx (a local session wrapping an ssh'd remote attach) is broken
-///   upstream.
-/// - **Background ops** (`opArgv`): non-interactive `zmx <args>` (kill/ls).
+/// Two deliberately different profiles:
+/// - **A pane's command** (`sessionCommand`, `plainShellCommand`): it runs
+///   on the tty of an ssh channel over the host's one connection
+///   (`SSHConnections.ttyArguments`, 0057). The login happened before, in
+///   the master, so the channel never asks. Persistence lives in the
+///   host's server.
+/// - **The foreground probe** (`foregroundProbeArgv`): non-interactive.
 ///   `BatchMode=yes` + `ConnectTimeout` so a dead host or an auth prompt can
-///   never hang a close/quit path.
+///   never hang it.
 ///
 /// Port, identity, ControlMaster, and IPv6 literals are deliberately not
 /// expressible here — point the host field at an `~/.ssh/config` alias for
 /// those (the same stance the `path:` grammar took in #137).
 enum RemoteSpawn {
-    /// Connection timeout for background ops. The pane command gets none —
-    /// a human is watching it and may be typing a passphrase.
+    /// Connection timeout for background ops.
     static let opConnectTimeoutSeconds = 5
 
     /// The ssh destination for a parsed remote: `user@host` or bare `host`.
@@ -62,7 +59,7 @@ enum RemoteSpawn {
     ///   can unblock.
     /// The fallback dir list below covers where zmx actually lives in
     /// practice (`~/bin` included), and the project `zmxPath` covers
-    /// everything else, deterministically — see `paneCommand`.
+    /// everything else, deterministically.
     static let remoteEnvPreamble =
         "PATH=\"$PATH:$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin\"; "
             + "export PATH; "
@@ -198,136 +195,66 @@ enum RemoteSpawn {
         return posixDoubleQuote(zmxPath.trimmingCharacters(in: .whitespaces))
     }
 
-    /// Whether the zmx-presence guard is needed: only when relying on PATH
-    /// resolution. An explicit path is used directly (its failure surfaces as
-    /// zmx's own error, still visible in the pane).
-    private static func zmxPresenceGuard(zmx: String, fallbackShell: String) -> String? {
-        zmx == "zmx"
-            ? "command -v zmx >/dev/null 2>&1 || "
-            + "{ echo \"macterm: zmx not found in PATH on this host ($PATH)\" >&2; \(fallbackShell); }"
-            : nil
+    /// Where the host's server lives (`server/host/attach.sh`, `d` and `b`).
+    static func hostServerBinary(key: String) -> String {
+        "$HOME/.local/share/macterm/bin/macterm-\(key)"
     }
 
-    /// The surface command for a remote pane, as the single string handed to
-    /// ghostty's `command`: `ssh -t <dest> 'sh -c <script>'`. nil for a local
-    /// path. `zmxPath` (optional) is an absolute remote zmx path used verbatim.
+    /// What a remote pane runs on the host: the host server's own client of
+    /// the session (`macterm-<key> connect <name>`), on the tty of the
+    /// pane's ssh channel (0057). `create` adds `--`, so a missing session is
+    /// made in `directory` with the user's login shell; without it, a
+    /// missing session is an error, never a new shell. Delivered as
+    /// `sh -c '<script>'` (see `remoteShell`).
     ///
-    /// Delivered as `sh -c '<single-quote-free script>'` (see `remoteShell`):
-    /// portable across every `/bin/sh`, and the single-quoted argument
-    /// tokenizes identically whether sshd hands the outer string to bash, zsh,
-    /// fish, or nu.
-    static func paneCommand(remote: ProjectPath, sessionName: String, zmxPath: String? = nil) -> String? {
-        guard case let .remote(user, host, directory) = remote else { return nil }
-        // On failure DON'T let the script exit — that closes the pane with no
-        // explanation (the surface's command exiting fires closeSurface).
-        // Instead print a diagnostic and drop into a shell so the failure is
-        // visible and the pane is still usable. Only the happy path `exec`s
-        // zmx (replacing the shell, so its exit is the session detaching).
-        let quotedDir = quoteRemoteDirectory(directory)
-        let quotedSession = posixDoubleQuote(sessionName)
-        let zmx = zmxInvocation(zmxPath: zmxPath)
-        // `${SHELL:-/bin/sh}`: fall back to /bin/sh when the remote leaves
-        // $SHELL unset, so the diagnostic shell can never itself exit-and-close
-        // the pane. No `-l` (unportable — see remoteShell).
-        let fallbackShell = "exec ${SHELL:-/bin/sh}"
-        let preamble = remoteEnvPreamble + remoteTermPreamble + remoteColorPreamble
-            + remoteTerminalProgramPreamble + remoteForegroundEventsPreamble
-        let script = assertSingleQuoteFree(preamble + [
-            zmxPresenceGuard(zmx: zmx, fallbackShell: fallbackShell),
-            "cd \(quotedDir) || "
-                + "{ echo \"macterm: cannot cd to \(quotedDir)\" >&2; \(fallbackShell); }",
-            "exec \(zmx) attach \(quotedSession)",
-        ].compactMap(\.self).joined(separator: "; "))
-        let remoteCommand = "\(remoteShell) \(shellQuote(script))"
-        return "ssh -t \(shellQuote(destination(user: user, host: host))) \(shellQuote(remoteCommand))"
+    /// Exit 255 means only "the connection stopped", as ssh's own 255: the
+    /// pane then waits. A shell that exits 255 itself reaches the pane as
+    /// 254, so its pane closes. A binary that is not there (the host lost
+    /// its files after the check) exits 255 too, so the next connect installs
+    /// again. A folder that is not there prints a line and starts the session
+    /// in the home folder, so the shell still persists.
+    static func sessionCommand(key: String, sessionName: String, create directory: String?) -> String {
+        let binary = posixDoubleQuote(hostServerBinary(key: key)).replacingOccurrences(of: "\\$HOME", with: "$HOME")
+        var steps = [
+            remoteTermPreamble + remoteColorPreamble + remoteTerminalProgramPreamble + remoteForegroundEventsPreamble
+                + "b=\(binary)",
+            "[ -x \"$b\" ] || exit 255",
+        ]
+        var connect = "\"$b\" connect \(posixDoubleQuote(sessionName))"
+        if let directory {
+            let quoted = quoteRemoteDirectory(directory)
+            steps.append("cd \(quoted) || { echo \"macterm: cannot cd to\" \(quoted) >&2; cd; }")
+            connect += " --"
+        }
+        steps.append(connect)
+        steps.append("s=$?; [ \"$s\" -ne 255 ] || s=254; exit \"$s\"")
+        let script = assertSingleQuoteFree(steps.joined(separator: "; "))
+        return "\(remoteShell) \(shellQuote(script))"
     }
 
-    /// What the install sheet asks a host first (#699): its OS and CPU, which
-    /// zmx the project would run (`zmxPath`, else the first `zmx` in PATH)
-    /// and what that zmx says. `key=value` lines, read by
-    /// `ZmxHostState.parse`; the version line is the first of `zmx version`.
-    /// `<ZMX>` is the resolved invocation, as in the probe script.
-    static let zmxHostCheckScript = """
-    printf "system=%s\\n" "$(uname -s)"; printf "machine=%s\\n" "$(uname -m)"; \
-    z=$(command -v <ZMX> 2>/dev/null); printf "path=%s\\n" "$z"; \
-    if [ -n "$z" ]; then printf "version=%s\\n" "$("$z" version 2>/dev/null | head -n 1)"; fi
-    """
+    /// True for a folder that may go into a host command: a path (absolute,
+    /// or from `~`) with no control character, no backslash and no single
+    /// quote. A folder that the host reported (OSC 7) is the host's text: a
+    /// backslash leaves `"…"` under fish, and a control character is never a
+    /// folder the user typed.
+    static func isSafeHostFolder(_ folder: String) -> Bool {
+        guard folder.hasPrefix("/") || folder.hasPrefix("~") else { return false }
+        return !folder.unicodeScalars.contains {
+            CharacterSet.controlCharacters.contains($0) || $0 == "\\" || $0 == "'"
+        }
+    }
 
-    /// Where the install puts the binary: in the fallback PATH of the pane
-    /// script (`remoteEnvPreamble`), so a pane finds it with no `zmxPath`.
-    static let zmxInstallDirectory = "$HOME/.local/bin"
-    /// Where `scp` lands the binary first: in the home, which exists, under
-    /// a name no program uses. The install script moves it into place.
-    static let zmxUploadName = ".zmx.macterm"
-
-    /// What the install sheet runs after the upload: the binary moves into
-    /// `zmxInstallDirectory` in one `mv`, so a running `zmx attach` on the
-    /// host never sees a half-written file, and the new binary names
-    /// itself. `installed=` is the line the sheet reads back.
-    static let zmxInstallScript = """
-    mkdir -p "\(zmxInstallDirectory)" && mv -f "$HOME/\(zmxUploadName)" "\(zmxInstallDirectory)/zmx" \
-    && chmod 755 "\(zmxInstallDirectory)/zmx" && printf "installed=%s\\n" "\(zmxInstallDirectory)/zmx" \
-    && "\(zmxInstallDirectory)/zmx" version | head -n 1
-    """
-
-    /// argv for the host check, run under a pty (`TTYCommand`), so ssh may
-    /// ask for a password or a host key: no `BatchMode`, a longer connect
-    /// timeout than a poll gets. nil for a local path.
-    static func zmxHostCheckArgv(remote: ProjectPath, zmxPath: String? = nil) -> [String]? {
-        guard case let .remote(user, host, _) = remote else { return nil }
+    /// What a remote pane runs on a host with no server (the user declined
+    /// the install, or the host has no build): a plain login shell in
+    /// `directory`, as v1 without zmx. It ends with the connection.
+    static func plainShellCommand(directory: String) -> String {
+        let quoted = quoteRemoteDirectory(directory)
         let script = assertSingleQuoteFree(
-            remoteEnvPreamble
-                + zmxHostCheckScript.replacingOccurrences(of: "<ZMX>", with: zmxInvocation(zmxPath: zmxPath)),
-            onViolation: .failNonZero
+            remoteTermPreamble + remoteColorPreamble + remoteTerminalProgramPreamble
+                + "cd \(quoted) || echo \"macterm: cannot cd to\" \(quoted) >&2; "
+                + "if [ -n \"$SHELL\" ]; then exec \"$SHELL\" -l; else exec /bin/sh; fi"
         )
-        return [
-            "ssh", "-o", "ConnectTimeout=\(installConnectTimeoutSeconds)",
-            destination(user: user, host: host),
-            "\(remoteShell) \(shellQuote(script))",
-        ]
-    }
-
-    /// argv for the upload of the binary at `localPath` to the host's home
-    /// as `zmxUploadName`, under a pty like the check.
-    static func zmxUploadArgv(remote: ProjectPath, localPath: String) -> [String]? {
-        guard case let .remote(user, host, _) = remote else { return nil }
-        return [
-            "scp", "-q", "-o", "ConnectTimeout=\(installConnectTimeoutSeconds)",
-            localPath,
-            "\(destination(user: user, host: host)):\(zmxUploadName)",
-        ]
-    }
-
-    /// argv for the move into place and the check of the installed binary.
-    static func zmxInstallArgv(remote: ProjectPath) -> [String]? {
-        guard case let .remote(user, host, _) = remote else { return nil }
-        return [
-            "ssh", "-o", "ConnectTimeout=\(installConnectTimeoutSeconds)",
-            destination(user: user, host: host),
-            "\(remoteShell) \(shellQuote(zmxInstallScript))",
-        ]
-    }
-
-    /// An install is a click, and the user waits on it: a host that takes
-    /// longer than a poll's 5 s to answer still gets the install.
-    static let installConnectTimeoutSeconds = 15
-
-    /// argv (for `/usr/bin/ssh`) running a background `zmx` operation on the
-    /// remote host, `sh -c`-wrapped like every remote command. `zmxPath`
-    /// (optional) is used verbatim. nil for a local path.
-    static func opArgv(remote: ProjectPath, zmxArguments: [String], zmxPath: String? = nil) -> [String]? {
-        guard case let .remote(user, host, _) = remote else { return nil }
-        let op = assertSingleQuoteFree(
-            remoteEnvPreamble + "exec \(zmxInvocation(zmxPath: zmxPath)) "
-                + zmxArguments.map(posixDoubleQuote).joined(separator: " "),
-            onViolation: .failNonZero
-        )
-        return [
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
-            destination(user: user, host: host),
-            "\(remoteShell) \(shellQuote(op))",
-        ]
+        return "\(remoteShell) \(shellQuote(script))"
     }
 
     /// One-round-trip foreground probe for tier-2 remote tab naming and layout
@@ -355,7 +282,7 @@ enum RemoteSpawn {
     ///
     /// Deliberately contains NO single quotes: it ships to the host wrapped
     /// as `sh -c '<script>'`, and the outer quoting must survive any login
-    /// shell (see `paneCommand`).
+    /// shell (see `remoteShell`).
     /// `<ZMX>` is substituted with the resolved zmx invocation (bare `zmx` or
     /// the explicit quoted path) before shipping.
     static let foregroundProbeScript = """
@@ -394,7 +321,7 @@ enum RemoteSpawn {
     """
 
     /// argv (for `/usr/bin/ssh`) running the foreground probe on the remote
-    /// host — the same non-interactive profile as `opArgv`, `sh -c`-wrapped so
+    /// host — non-interactive (`BatchMode`), `sh -c`-wrapped so
     /// any login shell delivers it intact. `zmxPath` (optional) is used
     /// verbatim. nil for a local path.
     static func foregroundProbeArgv(remote: ProjectPath, zmxPath: String? = nil) -> [String]? {
@@ -413,9 +340,11 @@ enum RemoteSpawn {
     }
 
     /// The git reads of the memory panel for a remote project, in one
-    /// connection (`ProjectGit.remoteStatus`): the same five reads that
+    /// connection (`ProjectGit.remoteStatus`): the same six reads that
     /// `ProjectGit.status` runs locally, with their outputs separated by
-    /// `ProjectGit.recordSeparator`. The script exits 2 when the directory
+    /// `ProjectGit.recordSeparator`. The diff runs only when the status has
+    /// a changed tracked file (a line that starts with `1`, `2` or `u`), as
+    /// locally. The script exits 2 when the directory
     /// is not there, 3 when the host has no git, 4 when the directory is not
     /// in a repository, and 0 in all other cases (`ProjectGit.branchLogScript`
     /// fails on a detached HEAD, which is not a failure of the read); ssh
@@ -432,65 +361,15 @@ enum RemoteSpawn {
                 + "GIT_OPTIONAL_LOCKS=0; GIT_TERMINAL_PROMPT=0; export GIT_OPTIONAL_LOCKS GIT_TERMINAL_PROMPT; "
                 + "cd \(quoteRemoteDirectory(directory)) 2>/dev/null || exit 2; "
                 + "command -v git >/dev/null 2>&1 || exit 3; "
-                + "\(git) status --porcelain=v2 --branch --show-stash 2>/dev/null || exit 4; \(separator); "
+                + "s=$(\(git) status --porcelain=v2 --branch --show-stash 2>/dev/null) || exit 4; "
+                + "printf \"%s\\n\" \"$s\"; \(separator); "
                 + "\(git) log -\(ProjectGit.recentCommitCount) --format=%h%x1f%s%x1f%ct 2>/dev/null; \(separator); "
                 + "\(git) for-each-ref refs/heads --sort=-committerdate --count=\(ProjectGit.recentBranchCount) "
                 + "--format=\"\(branchFormat)\" 2>/dev/null; \(separator); "
                 + "\(git) worktree list --porcelain 2>/dev/null; \(separator); "
-                + "{ \(ProjectGit.branchLogScript(git: git)); } 2>/dev/null; exit 0",
-            onViolation: .failNonZero
-        )
-        return [
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
-            destination(user: user, host: host),
-            "\(remoteShell) \(shellQuote(script))",
-        ]
-    }
-
-    /// The zmx label key marking a session as created by a Macterm
-    /// installation (`macterm.owner=<Preferences.installationID>`). Labels
-    /// are in-memory and settable only on a LIVE session — `zmx set` has no
-    /// attach-time form — so ownership can't be stamped at creation; the
-    /// sweep re-asserts it on every pass instead (`orphanSweepScript`).
-    static let ownerLabelKey = "macterm.owner"
-
-    /// One-connection stamp-then-list for the remote orphan sweep (#281):
-    /// re-assert our ownership label on every session a live pane claims,
-    /// then list ALL sessions (each line carries `clients=` and the labels)
-    /// for the Swift-side verdict. Two rules keep this safe on a shared host:
-    /// the stamp half only ever names sessions WE pass in, so it can never
-    /// brand another machine's session as ours; and the list half filters
-    /// nothing host-side — `zmx ls --where` is advertised in zmx's help but
-    /// silently unimplemented (thdxg/zmx `src/main.zig` parses only
-    /// `--short`, so `--where` would return EVERY session) — the reap
-    /// decision lives in tested Swift (`ZmxReaper.orphans(in:known:owner:)`).
-    /// Each `set` is `|| true`-guarded: a session that died between listing
-    /// and stamping must not fail the sweep.
-    static func orphanSweepScript(sessionNames: [String], ownerID: String, zmxPath: String?) -> String {
-        let zmx = zmxInvocation(zmxPath: zmxPath)
-        var script = remoteEnvPreamble
-        if !sessionNames.isEmpty {
-            let quoted = sessionNames.map(posixDoubleQuote).joined(separator: " ")
-            let label = posixDoubleQuote("\(ownerLabelKey)=\(ownerID)")
-            script += "for n in \(quoted); do \(zmx) set \"$n\" \(label) >/dev/null 2>&1 || true; done; "
-        }
-        script += "\(zmx) ls"
-        return script
-    }
-
-    /// argv (for `/usr/bin/ssh`) running the orphan sweep on the remote host —
-    /// the same non-interactive profile as `opArgv`/`foregroundProbeArgv`.
-    /// nil for a local path.
-    static func orphanSweepArgv(
-        remote: ProjectPath,
-        zmxPath: String?,
-        sessionNames: [String],
-        ownerID: String
-    ) -> [String]? {
-        guard case let .remote(user, host, _) = remote else { return nil }
-        let script = assertSingleQuoteFree(
-            orphanSweepScript(sessionNames: sessionNames, ownerID: ownerID, zmxPath: zmxPath),
+                + "{ \(ProjectGit.branchLogScript(git: git)); } 2>/dev/null; \(separator); "
+                + "if printf \"%s\\n\" \"$s\" | grep -q \"^[12u] \"; then "
+                + "\(ProjectGit.diffCommand(git: git)); fi; exit 0",
             onViolation: .failNonZero
         )
         return [
@@ -505,7 +384,7 @@ enum RemoteSpawn {
     /// embedded quotes (`'` → `'\''`). For strings parsed by a shell that is
     /// KNOWN to be POSIX — the local bash ghostty spawns through, or the
     /// inside of an `sh -c` script. Never for text a remote login shell
-    /// tokenizes with embedded quotes present (see `paneCommand`).
+    /// tokenizes with embedded quotes present (see `remoteShell`).
     static func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
