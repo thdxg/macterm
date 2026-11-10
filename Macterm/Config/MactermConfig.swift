@@ -104,7 +104,7 @@ final class MactermConfig {
     ///   cursor-colored from the first frame, and a partly covered cell's
     ///   own background was lost), and the `cursor-opacity = 0` override
     ///   that shader needed.
-    /// - Morph with speed is `cursor-morph`, a mode of `smooth-cursor`: the
+    /// - Stretch with speed is `cursor-morph`, a mode of `smooth-cursor`: the
     ///   gliding rect stretches along its motion and thins across it, and
     ///   lands in its cell shape. Written only under `smooth-cursor`, which
     ///   it modifies.

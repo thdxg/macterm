@@ -809,7 +809,7 @@ The bundle mirrors Ghostty.app. `Contents/Resources/ghostty/{themes,shell-integr
 
 ### Animations (Settings → Animations)
 
-This is the motion pane. It is directly under Appearance in the sidebar of Settings. It has six toggles. **Smooth scrolling**, **Snap to whole row** and **Animate splits** ship **on**. The two cursor effects are opt-in. The pane was Settings → Experimental until the smooth-scrolling and split toggles graduated. Anything that is still settling in belongs here too, off by default, until it graduates.
+This is the motion pane. It is directly under Appearance in the sidebar of Settings. It has six toggles. **Smooth scrolling**, **Snap to whole row** and **Animate splits** ship **on**. The three cursor effects are opt-in. The pane was Settings → Experimental until the smooth-scrolling and split toggles graduated. Anything that is still settling in belongs here too, off by default, until it graduates.
 
 - **Smooth scrolling** is fork patch 0005 (`.github/downstream/0005-smooth-scroll.patch`). It is behind the fork key `smooth-scroll`. The toggle writes the key into the overrides through `MactermConfig.Animations` (`Preferences.smoothScrolling`, default on). The default of the ghostty key itself stays off.
   - `scrollCallback` of libghostty already accumulates precise trackpad deltas in pixels, and it commits whole rows. With the key on, the patch does these things:
@@ -877,7 +877,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
   - A reshape of the grid, a change of font or a toggle of the key snaps the cursor to its cell.
   - Programs that paint their own cursor cell still move that paint by cells, under the terminal cursor that glides. Examples are the theme style `ui.cursor` of Helix and its secondary cursors.
   - The previous implementation was a custom shader that glided a block over the composited frame, plus an override `cursor-opacity = 0`. Both are gone.
-- **Morph with speed** is fork patch 0021 (`.github/downstream/0021-cursor-morph.patch`). It is behind the fork key `cursor-morph`. This is a mode of `smooth-cursor`. `MactermConfig.Animations` writes it only together with `smooth-cursor` (`Preferences.cursorMorph`, default off). The toggle is indented under Smooth cursor, and it is disabled without it.
+- **Stretch with speed** is fork patch 0021 (`.github/downstream/0021-cursor-morph.patch`). It is behind the fork key `cursor-morph`. This is a mode of `smooth-cursor`. `MactermConfig.Animations` writes it only together with `smooth-cursor` (`Preferences.cursorMorph`, default off). The toggle is indented under Smooth cursor, and it is disabled without it.
   - While the cursor glides, the drawn rect stretches along the motion and gets thinner across it by the same factor (`CursorGlide.morphAt`). The trailing edge eases on the cubic of the glide and the leading edge on a quintic. The gap between them is the stretch. It is largest at about 25% of the glide, and it is almost zero when the cursor lands. There is no overshoot.
   - The stretch is at most 2.5 cell sizes (a soft limit). A move of one row or less does not stretch, so typing looks the same. A bar or an underline stretches as far as a block in its cell.
   - The deformed rect is the glide rect, so the background coverage, `cursor_glide_text` and the head of `cursor-trail` follow it with no other change.

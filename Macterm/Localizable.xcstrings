@@ -5253,22 +5253,6 @@
         }
       }
     },
-    "Morph with speed" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "속도에 따라 변형"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "随速度变形"
-          }
-        }
-      }
-    },
     "Move Down" : {
       "localizations" : {
         "ko" : {
@@ -9810,6 +9794,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仅稳定版。"
+          }
+        }
+      }
+    },
+    "Stretch with speed" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "속도에 따라 늘어남"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "随速度拉伸"
           }
         }
       }
