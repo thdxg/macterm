@@ -53,7 +53,7 @@ struct NewRemoteProjectSheet: View {
             Text("""
             Each pane is a session on the host, over one ssh connection. \
             At the first connection, Macterm asks to install its server on the host. \
-            Port, identity and ControlMaster come from ~/.ssh/config.
+            Port, identity, and ControlMaster come from ~/.ssh/config.
             """)
             .font(.caption)
             .foregroundStyle(.secondary)

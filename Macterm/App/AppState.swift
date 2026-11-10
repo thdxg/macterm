@@ -1483,13 +1483,14 @@ final class AppState {
     init(
         workspaceStore: WorkspaceStore = WorkspaceStore(),
         projectFiles: ProjectFileStore = ProjectFileStore(),
+        paletteHotkeys: PaletteHotkeys = .shared,
         quickTerminal: QuickTerminalSplitState? = nil
     ) {
         self.workspaceStore = workspaceStore
         self.projectFiles = projectFiles
         pinnedLayoutStore = PinnedLayoutStore(directoryURL: projectFiles.configDirectoryURL)
         widgetLayoutStore = WidgetLayoutStore(directoryURL: projectFiles.configDirectoryURL)
-        customPalettes = CustomPaletteStore(configDirectoryURL: projectFiles.configDirectoryURL)
+        customPalettes = CustomPaletteStore(configDirectoryURL: projectFiles.configDirectoryURL, hotkeys: paletteHotkeys)
         if let quickTerminal { adoptQuickTerminal(quickTerminal) }
         let autoTileToken = NotificationCenter.default.addObserver(
             forName: .autoTilingEnabledDidChange,

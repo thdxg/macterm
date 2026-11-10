@@ -172,7 +172,7 @@ struct KeybindPassthroughTests {
     func matched_action_is_nil_when_nothing_is_flagged() throws {
         let event = try ctrlH()
         #expect(HotkeyRegistry.passthroughActions().isEmpty)
-        #expect(KeybindPassthrough.matchedBinding(for: event) == nil)
+        #expect(KeybindPassthrough.matchedBinding(for: event, palettes: .isolated()) == nil)
     }
 
     @Test
@@ -183,12 +183,12 @@ struct KeybindPassthroughTests {
 
         // Flagged but bound elsewhere: the chord must not match it.
         withPassthrough(.focusPaneRight) {
-            #expect(KeybindPassthrough.matchedBinding(for: event) == nil)
+            #expect(KeybindPassthrough.matchedBinding(for: event, palettes: .isolated()) == nil)
         }
 
         withPassthrough(.focusPaneLeft) {
             #expect(HotkeyRegistry.passthroughActions() == [.focusPaneLeft])
-            #expect(KeybindPassthrough.matchedBinding(for: event) == .action(.focusPaneLeft))
+            #expect(KeybindPassthrough.matchedBinding(for: event, palettes: .isolated()) == .action(.focusPaneLeft))
         }
     }
 
