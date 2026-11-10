@@ -34,6 +34,19 @@ struct GitStatus: Equatable {
     /// The paths with changes of any kind, in the order of `git status`.
     var changedPaths: [String] = []
 
+    /// One file of the uncommitted diff, with its lines redacted.
+    struct FileDiff: Equatable {
+        var path: String
+        /// The hunks: `@@` headers, context, `-` and `+` lines.
+        var lines: [String]
+    }
+
+    /// The diff of the tracked files against HEAD (`ProjectGit.diffArguments`),
+    /// in the order of git. Read only when a tracked file has changes
+    /// (`hasTrackedChanges`); nil when it was not read or the read failed.
+    /// Untracked files are only in `changedPaths`.
+    var diff: [FileDiff]?
+
     /// A local branch, with the worktree that has it checked out.
     struct Branch: Equatable {
         var name: String
@@ -58,6 +71,8 @@ struct GitStatus: Equatable {
     /// Files with changes of any kind.
     var changedFiles: Int { staged + unstaged + untracked + conflicted }
     var isClean: Bool { changedFiles == 0 }
+    /// A tracked file has changes, so there is a diff to read.
+    var hasTrackedChanges: Bool { staged + unstaged + conflicted > 0 }
 }
 
 /// Parses the output of the git commands that `ProjectGit` runs. Pure.
@@ -196,9 +211,11 @@ enum GitStatusParser {
         logOutput: String?,
         branchesOutput: String? = nil,
         worktreesOutput: String? = nil,
-        branchLogOutput: String? = nil
+        branchLogOutput: String? = nil,
+        diffOutput: String? = nil
     ) -> GitStatus {
         var status = parseStatus(statusOutput)
+        if status.hasTrackedChanges, let diffOutput { status.diff = parseDiff(diffOutput) }
         if status.branch != nil { status.detachedAt = nil }
         status.recentCommits = logOutput.map(parseLog) ?? []
         if status.branch != nil, let branchLog = branchLogOutput.flatMap(parseBranchLog) {
@@ -212,5 +229,91 @@ enum GitStatusParser {
             return branch
         }
         return status
+    }
+
+    // MARK: - Diff
+
+    /// The most text of the diff that is kept, in characters. The digest
+    /// has room for a small part of it; the rest is left out whole.
+    static let diffCharacterLimit = 32000
+
+    /// Lockfiles: generated, long, and say nothing about the work.
+    static let lockfileNames: Set<String> = [
+        "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "bun.lockb",
+        "Cargo.lock", "Gemfile.lock", "Podfile.lock", "Package.resolved", "composer.lock", "poetry.lock",
+        "Pipfile.lock", "uv.lock", "pdm.lock", "go.sum", "mix.lock", "flake.lock", "pubspec.lock", "deno.lock",
+        "gradle.lockfile", "packages.lock.json", "mise.lock",
+    ]
+
+    /// Whether the diff of `path` stays out of the digest: a lockfile, or an
+    /// `.env` file, which holds secrets by convention.
+    static func isLeftOutOfDiff(_ path: String) -> Bool {
+        let name = (path as NSString).lastPathComponent
+        return lockfileNames.contains(name) || name.hasPrefix(".env")
+    }
+
+    /// `git diff HEAD` with `a/` and `b/` prefixes, one entry for each file
+    /// with hunks. Every line goes through `MemoryRedaction`. A binary file,
+    /// a file that `isLeftOutOfDiff`, a file with a private key block, and a
+    /// file that would pass `diffCharacterLimit` are left out whole.
+    static func parseDiff(_ text: String) -> [GitStatus.FileDiff] {
+        var files: [GitStatus.FileDiff] = []
+        var kept = 0
+        for section in diffSections(text) {
+            guard let file = fileDiff(section) else { continue }
+            let size = file.lines.reduce(0) { $0 + $1.count + 1 }
+            guard kept + size <= diffCharacterLimit else { continue }
+            files.append(file)
+            kept += size
+        }
+        return files
+    }
+
+    /// The lines of each file, split at its `diff --git` line.
+    private static func diffSections(_ text: String) -> [[Substring]] {
+        var sections: [[Substring]] = []
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.hasPrefix("diff --git ") {
+                sections.append([line])
+            } else if !sections.isEmpty {
+                sections[sections.count - 1].append(line)
+            }
+        }
+        return sections
+    }
+
+    private static func fileDiff(_ section: [Substring]) -> GitStatus.FileDiff? {
+        var oldPath: String?
+        var newPath: String?
+        var hunks: [String] = []
+        for line in section {
+            if hunks.isEmpty, !line.hasPrefix("@@") {
+                if line.hasPrefix("Binary files ") || line.hasPrefix("GIT binary patch") { return nil }
+                if line.hasPrefix("--- ") { oldPath = diffPath(line.dropFirst(4), prefix: "a/") }
+                if line.hasPrefix("+++ ") { newPath = diffPath(line.dropFirst(4), prefix: "b/") }
+                continue
+            }
+            // A private key is a secret as a whole: no rule masks its lines.
+            if line.contains("PRIVATE KEY-----") { return nil }
+            hunks.append(MemoryRedaction.redact(String(line)))
+        }
+        while hunks.last?.isEmpty == true {
+            hunks.removeLast()
+        }
+        guard let path = newPath ?? oldPath, !hunks.isEmpty, !isLeftOutOfDiff(path) else { return nil }
+        return GitStatus.FileDiff(path: path, lines: hunks)
+    }
+
+    /// The path of a `---` or `+++` line. nil for `/dev/null` (an added or a
+    /// deleted file). git ends a path that has a space with a tab, and
+    /// quotes a path with a control character.
+    private static func diffPath(_ value: Substring, prefix: String) -> String? {
+        var value = String(value)
+        if value.hasSuffix("\t") { value.removeLast() }
+        if value.hasPrefix("\""), value.hasSuffix("\""), value.count > 1 {
+            value = String(value.dropFirst().dropLast())
+        }
+        guard value.hasPrefix(prefix) else { return nil }
+        return String(value.dropFirst(prefix.count))
     }
 }

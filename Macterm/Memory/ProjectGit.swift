@@ -17,7 +17,13 @@ import Foundation
 /// cannot tell them apart: on a new branch they are mostly the main
 /// branch's own history, and the summary named that as the user's work.
 ///
-/// A remote read is one ssh connection that runs the same five commands on
+/// A sixth read, `diffArguments`, runs only when a tracked file has changes:
+/// the diff of the uncommitted work, so that the summary can say what
+/// changed in the files and not only which files. A clean tree reads no
+/// diff, and the diff of a commit is never read: its subject is in the
+/// digest already.
+///
+/// A remote read is one ssh connection that runs the same six commands on
 /// the host (`RemoteSpawn.gitProbeArgv`), with the outputs separated by
 /// `recordSeparator`. It is a background connection like the foreground
 /// probe, so `Preferences.backgroundSSHConnections` gates it (#272), and a
@@ -29,7 +35,7 @@ enum ProjectGit {
     static let remoteTimeout: Duration = .seconds(15)
     static let recentCommitCount = 5
     static let recentBranchCount = 6
-    /// Between the five outputs of a remote read (ASCII record separator).
+    /// Between the six outputs of a remote read (ASCII record separator).
     static let recordSeparator: Character = "\u{1E}"
 
     /// The git state of the repository at `path`, or nil when it is not in
@@ -46,14 +52,27 @@ enum ProjectGit {
         ], in: path)
         let worktreesOutput = await run(git, ["worktree", "list", "--porcelain"], in: path)
         let branchLogOutput = await runBranchLog(git, in: path)
+        let diffOutput = GitStatusParser.parseStatus(statusOutput).hasTrackedChanges
+            ? await run(git, diffArguments, in: path)
+            : nil
         return GitStatusParser.status(
             statusOutput: statusOutput,
             logOutput: logOutput,
             branchesOutput: branchesOutput,
             worktreesOutput: worktreesOutput,
-            branchLogOutput: branchLogOutput
+            branchLogOutput: branchLogOutput,
+            diffOutput: diffOutput
         )
     }
+
+    /// The sixth read: the staged and unstaged changes of the tracked files
+    /// against HEAD, with one line of context. No color, no external diff
+    /// and no textconv (both run programs that the repository's config
+    /// names), and fixed `a/` and `b/` prefixes whatever `diff.noprefix`
+    /// says. A repository with no commit has no HEAD, and the read fails.
+    static let diffArguments = [
+        "diff", "HEAD", "--no-color", "--no-ext-diff", "--no-textconv", "-U1", "--src-prefix=a/", "--dst-prefix=b/",
+    ]
 
     /// The refs that can be the main branch: the default branch of each
     /// remote (`origin/HEAD`, which the read resolves to the branch it
@@ -125,9 +144,10 @@ enum ProjectGit {
         }
     }
 
-    /// The five outputs of `RemoteSpawn.gitProbeArgv`, split at the record
+    /// The six outputs of `RemoteSpawn.gitProbeArgv`, split at the record
     /// separator, through `GitStatusParser`. A reply with fewer parts has
-    /// the rest as nil.
+    /// the rest as nil. The diff is last, so a separator inside it stays
+    /// part of it.
     static func parseRemoteOutput(_ output: String) -> GitStatus? {
         let parts = output.split(separator: recordSeparator, omittingEmptySubsequences: false).map(String.init)
         // An empty status is no repository, whatever the exit code was.
@@ -139,7 +159,8 @@ enum ProjectGit {
             logOutput: parts.count > 1 ? parts[1] : nil,
             branchesOutput: parts.count > 2 ? parts[2] : nil,
             worktreesOutput: parts.count > 3 ? parts[3] : nil,
-            branchLogOutput: parts.count > 4 ? parts[4] : nil
+            branchLogOutput: parts.count > 4 ? parts[4] : nil,
+            diffOutput: parts.count > 5 ? parts[5...].joined(separator: String(recordSeparator)) : nil
         )
     }
 
