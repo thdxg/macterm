@@ -1,11 +1,8 @@
 name: Session Benchmark
 
-# The v1/v2 session layer benchmark (scripts/session_bench.py): typing echo,
-# reattach, idle memory and wakeups, and the ssh arms on Linux. It runs no
-# app, so it runs only on a pull request that changes what it measures: the
-# server and the pane's session client (server/), the protocol, the script
-# and the server build. It also runs by hand. It reports to the job summary
-# and fails no pull request.
+# The v1/v2 session layer benchmark (scripts/session_bench.py). AGENTS.md
+# ("Session layer benchmark") says what it measures and when it runs. It is
+# not a required check.
 
 on:
   pull_request:
