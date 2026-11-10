@@ -3,12 +3,12 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "BenchmarkControl")
 
-/// CI-only remote control for the window-state benchmark
-/// (`.github/workflows/benchmark.yml` → `scripts/benchmark.py`).
+/// Remote control for scripted runs (`scripts/_harness.py`, which the e2e
+/// suite uses).
 ///
 /// When the app is launched with `MACTERM_BENCHMARK=1` it listens for Darwin
-/// notifications (posted from a shell with `notifyutil -p <name>`) and drives
-/// itself through the benchmarked window states. Darwin notifications need no
+/// notifications (posted from a shell with `notifyutil -p <name>`) that open
+/// a project and front, minimize or restore its window. Darwin notifications need no
 /// TCC grant — unlike AppleScript/System Events or synthetic key events — so a
 /// headless CI runner can script the app without touching the SIP-protected
 /// permission database.
@@ -17,7 +17,7 @@ enum BenchmarkControl {
     static let isEnabled = ProcessInfo.processInfo.environment["MACTERM_BENCHMARK"] == "1"
 
     // Strong references are fine here: both objects live for the app's
-    // lifetime, and benchmark mode never releases them.
+    // lifetime, and a scripted run never releases them.
     private static var appState: AppState?
     private static var projectStore: ProjectStore?
 
@@ -39,12 +39,9 @@ enum BenchmarkControl {
 
     private static let notificationPrefix = "com.thdxg.macterm.bench."
 
-    /// Held for the app's lifetime in benchmark mode. Without it, App Nap
+    /// Held for the app's lifetime in a scripted run. Without it, App Nap
     /// suspends the backgrounded/occluded app — queued Darwin notifications
     /// go undelivered and, on a busy desktop, the window never even appears.
-    /// It also makes the numbers measure what we care about: the app's own
-    /// timer/render/wakeup behavior, not the OS's nap throttling masking a
-    /// regression.
     private static var activity: NSObjectProtocol?
 
     private enum Command: String, CaseIterable {
@@ -58,7 +55,7 @@ enum BenchmarkControl {
         guard isEnabled else { return }
         activity = ProcessInfo.processInfo.beginActivity(
             options: .userInitiatedAllowingIdleSystemSleep,
-            reason: "window-state benchmark"
+            reason: "scripted run"
         )
         nudgeActivationUntilWindowExists()
         let center = CFNotificationCenterGetDarwinNotifyCenter()
@@ -134,8 +131,7 @@ enum BenchmarkControl {
 
     /// Select (creating if needed) a project at `MACTERM_BENCHMARK_DIR` (or
     /// `$HOME`) so the window hosts a live terminal pane. A fresh CI runner
-    /// otherwise sits on the WelcomeView, and the benchmark would measure an
-    /// app with no surface, no shell, and no foreground-process poll.
+    /// otherwise sits on the WelcomeView, with no surface and no shell.
     private static func openProject() {
         guard let appState, let projectStore else {
             logger.info("bench open-project queued until state objects exist")
@@ -150,11 +146,11 @@ enum BenchmarkControl {
     /// The terminal window: the pointer `AppDelegate` cached when the first
     /// window became main — NOT identified by `isTerminalWindowCandidate`,
     /// which also matches the Settings window (a plain NSWindow). Falls back to
-    /// the first candidate window only before that pointer is set (no benchmark
+    /// the first candidate window only before that pointer is set (no
     /// command arrives before the window exists in practice). The candidate
     /// check excludes the surface incubator's permanently-invisible window,
     /// which `open-project` creates on its way to warming panes — miniaturizing
-    /// or fronting *that* would measure the wrong window.
+    /// or fronting *that* would act on the wrong window.
     private static var mainWindow: NSWindow? {
         appState?.appDelegate?.mainWindow
             ?? NSApp.windows.first(where: AppDelegate.isTerminalWindowCandidate)

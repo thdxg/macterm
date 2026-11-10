@@ -38,5 +38,5 @@ APP="$DERIVED_DATA/Build/Products/Debug/Macterm Debug.app"
 # launch-time activation counts as user intent, so the app becomes active and
 # SwiftUI creates its window. A directly-exec'd app starts backgrounded and can
 # be denied activation indefinitely, never getting a window — the same reason
-# scripts/benchmark.py launches with `open -n`.
+# scripts/_harness.py launches with `open -n`.
 open -n "$APP"
