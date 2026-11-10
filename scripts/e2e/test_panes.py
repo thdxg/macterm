@@ -179,51 +179,53 @@ def _app_log(app):
         return ""
 
 
-def _process_exited(app, pane_id):
-    """processExited via pane inspect, None while the surface is mid-rebuild
-    (inspect errors with no_surface during the destroy→respawn window)."""
-    try:
-        return app.pane_inspect(pane=pane_id).get("processExited")
-    except Exception:
-        return None
+BAD_HOST = "e2e-badhost.invalid"
+NO_HOST = f"No host is named {BAD_HOST}."
 
 
-def test_dropped_remote_pane_reconnects_on_project_select(app):
-    """A remote pane whose ssh client died is respawned by the reconnect
-    sweep's `.projectSelected` trigger — the one trigger drivable headlessly
-    (wake and app-activation need real system transitions; there is
-    deliberately NO manual reconnect verb — automatic or nothing, #281).
-    The host is unreachable by construction, so what's asserted is the
-    automatic respawn attempt itself: ssh dies → overlay (processExited) →
-    select away and back → the sweep logs a respawn and a fresh ssh dials
-    (and dies again, same pane, same session). The full round trip against a
-    reachable host lives in test_remote_reconnect.py (docker-gated)."""
+def _no_host_lines(app, pane_id):
+    """How many times the pane said that the host has no name. Each failed
+    connect prints the line again (0057)."""
+    return (app.pane_text(pane=pane_id, scrollback=True) or "").count(NO_HOST)
+
+
+def _unreachable_remote_pane(app, name):
+    app.cli("project", "create", f"{BAD_HOST}:/tmp", "--name", name, "--select")
+    pane = wait_for(lambda: app.panes(), timeout=30, message="the remote pane")[0]
+    wait_for(
+        lambda: _no_host_lines(app, pane["id"]) == 1,
+        timeout=60,
+        message="the pane's line about the failed connect",
+    )
+    assert "Press a key to try again." in app.pane_text(pane=pane["id"], scrollback=True)
+    return pane
+
+
+def test_unreachable_remote_pane_tries_again_on_project_select(app):
+    """A remote pane that cannot connect says why, stays, and waits for a
+    trigger (#281, 0057). The project's selection is the one trigger that a
+    test can drive (wake, activation and a network change need real system
+    events; there is no reconnect verb). The host has no name, so the try
+    after the trigger fails again and the pane says so a second time, in the
+    same pane with the same session."""
     projects = app.cli_json("project", "list")["projects"]
     original = next(p for p in projects if p.get("active"))
-    app.cli("project", "create", "e2e-badhost.invalid:/tmp", "--name", "deadremote", "--select")
     try:
-        pane = wait_for(lambda: app.panes(), timeout=30, message="the remote pane")[0]
-        wait_for(
-            lambda: _process_exited(app, pane["id"]) is True,
-            timeout=60,
-            message="the ssh client's death (processExited)",
-        )
-        assert "reconnect(projectSelected): respawning" not in _app_log(app)
+        pane = _unreachable_remote_pane(app, "deadremote")
+        assert "reconnect(projectSelected)" not in _app_log(app)
 
         app.cli("project", "select", original["name"])
         app.cli("project", "select", "deadremote")
 
         wait_for(
-            lambda: "reconnect(projectSelected): respawning 1 dropped remote pane" in _app_log(app),
+            lambda: "reconnect(projectSelected): 1 lost remote pane(s)" in _app_log(app),
             timeout=30,
-            message="the reconnect sweep's respawn log line",
+            message="the reconnect trigger's log line",
         )
-        # The respawned ssh dials the same unreachable host and dies again —
-        # same pane identity, same session name, back on the overlay.
         wait_for(
-            lambda: _process_exited(app, pane["id"]) is True,
+            lambda: _no_host_lines(app, pane["id"]) == 2,
             timeout=60,
-            message="the respawned ssh client's death",
+            message="the second failed connect",
         )
         panes = {p["id"]: p for p in app.panes()}
         assert pane["id"] in panes
@@ -232,30 +234,21 @@ def test_dropped_remote_pane_reconnects_on_project_select(app):
         app.cli("project", "select", original["name"], check=False)
 
 
-def test_key_at_dead_remote_pane_closes_it(app):
-    """libghostty's exit message says "Press any key to close the terminal".
-    The exit itself asks the host whether the session survived and keeps
-    the pane when the host cannot answer (#281) — this host never answers.
-    The key typed at the kept pane is the user's own close request, so it
-    closes the pane without that probe (the pane is the tab's last, so the
-    tab goes with it and the workspace opens a fresh one)."""
+def test_key_at_unreachable_remote_pane_tries_again(app):
+    """The pane says "Press a key to try again." A key connects again: the
+    pane stays, and it says why the connect failed a second time."""
     projects = app.cli_json("project", "list")["projects"]
     original = next(p for p in projects if p.get("active"))
-    app.cli("project", "create", "e2e-badhost.invalid:/tmp", "--name", "deadremotekey", "--select")
     try:
-        pane = wait_for(lambda: app.panes(), timeout=30, message="the remote pane")[0]
-        wait_for(
-            lambda: _process_exited(app, pane["id"]) is True,
-            timeout=60,
-            message="the ssh client's death (processExited)",
-        )
+        pane = _unreachable_remote_pane(app, "deadremotekey")
 
         app.cli("pane", "key", "return", "--pane", pane["id"])
 
         wait_for(
-            lambda: pane["id"] not in {p["id"] for p in app.panes()},
-            timeout=30,
-            message="the dead pane closing on the key",
+            lambda: _no_host_lines(app, pane["id"]) == 2,
+            timeout=60,
+            message="the failed connect after the key",
         )
+        assert pane["id"] in {p["id"] for p in app.panes()}
     finally:
         app.cli("project", "select", original["name"], check=False)
