@@ -84,28 +84,20 @@ struct BundledResourcesTests {
         #expect(exists("ghostty/themes/\(theme)"), "default theme \(theme) is not bundled")
     }
 
-    /// `scripts/setup.sh` writes the release file the zmx installer reads
-    /// (#699) next to the server it installed, and its tag is the build key
-    /// of that server (`.server-key`). It lists both Linux builds.
+    /// The build key that the app reads from the names of its server files
+    /// (`ServerBuilds.bundledKey`) is the key of the server that setup
+    /// installed (`.server-key`).
     @Test
-    func zmx_release_file_names_the_bundled_build() throws {
+    func the_bundled_server_key_is_the_installed_build() {
         guard let resourcesDir = Self.resourcesDir else { return }
         let stamp = resourcesDir
             .deletingLastPathComponent() // Macterm
             .deletingLastPathComponent() // repo root
             .appendingPathComponent(".server-key")
-        guard let tag = try? String(contentsOf: stamp, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
-              !tag.isEmpty
+        guard let key = try? String(contentsOf: stamp, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+              !key.isEmpty
         else { return }
-        let release = try #require(
-            ZmxRelease.bundled,
-            "zmx-release.json missing from the built bundle — run `mise run setup`"
-        )
-        #expect(release.tag == tag)
-        for target in [ZmxHostTarget.linuxX86_64, .linuxAarch64] {
-            let sha = release.sha256(for: target)
-            #expect(sha?.count == 64, "no SHA-256 for \(release.assetName(for: target))")
-        }
+        #expect(ServerBuilds.bundledKey == key, "the bundle's server files are not build \(key) — run `mise run setup`")
     }
 
     /// The zmx inside the built bundle must be signed as the app itself. Each
@@ -140,10 +132,7 @@ struct BundledResourcesTests {
     /// binary for the machine that its name says.
     @Test
     func server_builds_ship_for_every_host_target() throws {
-        let release = try #require(
-            ZmxRelease.bundled,
-            "zmx-release.json missing from the built bundle — run `mise run setup`"
-        )
+        let key = try #require(ServerBuilds.bundledKey, "no server build in the bundle — run `mise run setup`")
         let zmx = try #require(Bundle.main.url(forResource: "zmx", withExtension: nil, subdirectory: "zmx"))
         let bundledZmx = try Data(contentsOf: zmx)
         for target in ZmxHostTarget.allCases {
@@ -152,7 +141,7 @@ struct BundledResourcesTests {
             case .linuxX86_64: { Self.isELF($0, machine: 62) }
             case .linuxAarch64: { Self.isELF($0, machine: 183) }
             }
-            let name = "macterm-\(release.tag)-\(target.rawValue)"
+            let name = "macterm-\(key)-\(target.rawValue)"
             let url = try #require(
                 Bundle.main.url(forResource: name, withExtension: "gz", subdirectory: "server"),
                 "server/\(name).gz missing from the built bundle — run `mise run setup`"

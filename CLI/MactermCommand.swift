@@ -26,6 +26,7 @@ struct MactermCommand: ParsableCommand {
             SSHCommand.self,
             SkillsCommand.self,
             AskpassCommand.self,
+            RemotePaneCommand.self,
         ] + debugSubcommands
     )
 

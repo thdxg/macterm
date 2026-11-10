@@ -2,62 +2,6 @@ import Foundation
 @testable import Macterm
 import Testing
 
-/// Pure-logic coverage for the zmx persistence helpers: the `zmx ls` parser, the
-/// socket-path budget probe, session-id formatting, and the launch resolver +
-/// shell quoting. The subprocess runner and live daemon interaction need a real
-/// zmx binary and are exercised by the manual end-to-end run instead.
-struct ZmxSessionListParserTests {
-    @Test
-    func parsesHealthySessionsWithClientCounts() {
-        let stdout = """
-        → name=macterm-abc\tclients=1\tcreated=123
-          name=macterm-def\tclients=0\tcreated=456
-        """
-        let entries = ZmxSessionListParser.parse(stdout)
-        #expect(entries == [
-            .init(name: "macterm-abc", clients: 1),
-            .init(name: "macterm-def", clients: 0),
-        ])
-    }
-
-    @Test
-    func absentClientCountIsUnknownNotZero() {
-        // An err/status line carries no `clients=`; that must decode to nil
-        // (unknown) so the reaper spares it, not 0 (which it would reap).
-        let entries = ZmxSessionListParser.parse("  name=macterm-xyz\terr=unreachable")
-        #expect(entries == [.init(name: "macterm-xyz", clients: nil)])
-    }
-
-    @Test
-    func ignoresForeignSessionsWithoutPrefix() {
-        // Only `macterm-` sessions are ours; a co-resident tmux/other-app zmx
-        // session must be skipped entirely.
-        let entries = ZmxSessionListParser.parse("name=other-session\tclients=2")
-        #expect(entries.isEmpty)
-    }
-
-    @Test
-    func emptyListingYieldsNoEntries() {
-        #expect(ZmxSessionListParser.parse("").isEmpty)
-        #expect(ZmxSessionListParser.parse("\n  \n").isEmpty)
-    }
-
-    @Test
-    func extractsTheOwnerLabelWhenPresent() {
-        // A full `zmx ls` line carries every session label as trailing
-        // tab-separated k=v pairs; the owner stamp (#281) rides one of them.
-        let stdout = """
-        name=macterm-abc\tpid=42\tclients=0\tcreated=123\tcwd=/home/u\tmacterm.owner=cafe01
-          name=macterm-def\tclients=0\tcreated=456
-        """
-        let entries = ZmxSessionListParser.parse(stdout)
-        #expect(entries == [
-            .init(name: "macterm-abc", clients: 0, owner: "cafe01"),
-            .init(name: "macterm-def", clients: 0, owner: nil),
-        ])
-    }
-}
-
 /// Why new panes start without zmx. Settings reports only a real problem,
 /// so the unit-test host (zmx off on purpose) must not read as an over-long
 /// socket path.
@@ -204,55 +148,6 @@ struct ZmxReaperTests {
     func a_hermetic_run_never_ends_v1_sessions_or_writes_the_flag() {
         // The unit-test host is hermetic, as the benchmark and e2e are.
         #expect(AppState.OnceFlag.preferences.read())
-    }
-
-    private func entry(_ name: String, clients: Int?, owner: String?) -> ZmxSessionListParser.Entry {
-        .init(name: name, clients: clients, owner: owner)
-    }
-
-    @Test
-    func remote_reaps_only_our_labelled_unclaimed_detached_sessions() {
-        let entries = [
-            entry("macterm-a", clients: 0, owner: "us"), // ours, orphan → reap
-            entry("macterm-b", clients: 0, owner: "them"), // another machine → spare
-            entry("macterm-c", clients: 0, owner: nil), // unstamped → spare
-            entry("macterm-d", clients: 0, owner: "us"), // claimed → spare
-            entry("macterm-e", clients: 1, owner: "us"), // attached → spare
-            entry("macterm-f", clients: nil, owner: "us"), // unknown count → spare
-            entry("supa-g", clients: 0, owner: "us"), // foreign prefix → spare
-        ]
-        let orphans = ZmxReaper.orphans(in: entries, known: ["macterm-d"], owner: "us")
-        #expect(orphans == ["macterm-a"])
-    }
-
-    @Test
-    func unstamped_names_claimed_sessions_that_lack_our_label() {
-        // A zmx older than 0.7.0 has no `zmx set` and lists no labels, so
-        // every claimed session comes back with no owner.
-        let entries = [
-            entry("macterm-a", clients: 1, owner: "us"), // stamp took → fine
-            entry("macterm-b", clients: 1, owner: nil), // old zmx → unstamped
-            entry("macterm-c", clients: 0, owner: "them"), // claimed, wrong owner → unstamped
-            entry("macterm-d", clients: nil, owner: nil), // err line → no verdict
-            entry("macterm-e", clients: 0, owner: nil), // not claimed → not ours to judge
-        ]
-        let unstamped = ZmxReaper.unstamped(
-            in: entries,
-            claimed: ["macterm-a", "macterm-b", "macterm-c", "macterm-d", "macterm-gone"],
-            owner: "us"
-        )
-        #expect(unstamped == ["macterm-b", "macterm-c"])
-    }
-
-    @Test
-    func unstamped_is_empty_when_nothing_is_claimed() {
-        let entries = [entry("macterm-a", clients: 0, owner: nil)]
-        #expect(ZmxReaper.unstamped(in: entries, claimed: [], owner: "us").isEmpty)
-    }
-
-    @Test
-    func remote_empty_listing_reaps_nothing() {
-        #expect(ZmxReaper.orphans(in: [], known: [], owner: "us").isEmpty)
     }
 }
 

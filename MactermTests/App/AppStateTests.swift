@@ -2188,7 +2188,6 @@ struct AppStateTests {
             killSession: { name in await killed.append(name) },
             killRemoteSession: { _, name, _ in await (remoteKilled ?? killed).append(name) },
             remoteForegrounds: { _, _ in .unreachable },
-            sweepRemoteOrphans: { _, _, _, _ in nil },
             listSessions: { [] },
             endV1Sessions: { _ in true }
         )
@@ -2312,19 +2311,14 @@ struct AppStateTests {
 
     // MARK: - Process-exit routing (#281)
 
-    /// A ZmxClient whose orphan-sweep probe answers with a fixed listing (the
-    /// process-exit liveness probe) and records remote kills.
-    private func probeAnsweringZmx(
-        entries: [ZmxSessionListParser.Entry]?,
-        remoteKilled: KilledSessions
-    ) -> ZmxClient {
+    /// A ZmxClient that records remote kills.
+    private func remoteKillRecordingZmx(_ remoteKilled: KilledSessions) -> ZmxClient {
         ZmxClient(
             executableURL: { nil },
             isBundled: { true },
             killSession: { _ in },
             killRemoteSession: { _, name, _ in await remoteKilled.append(name) },
             remoteForegrounds: { _, _ in .unreachable },
-            sweepRemoteOrphans: { _, _, _, _ in entries },
             listSessions: { [] },
             endV1Sessions: { _ in true }
         )
@@ -2349,47 +2343,11 @@ struct AppStateTests {
     }
 
     @Test
-    func remote_process_exit_keeps_the_pane_while_its_session_lives() async throws {
-        // The drop case (#281): the ssh client died but the host still has
-        // the session — the pane must survive for the reconnect sweep, and
-        // nothing may kill the session.
-        let remoteKilled = KilledSessions()
-        let state = makeAppState()
-        let p = seedProject(state, name: "remote", path: "devbox:~/dev/api")
-        let pane = try #require(state.workspaces[p.id]?.activeTab?.splitRoot.allPanes().first)
-        state.zmx = probeAnsweringZmx(
-            entries: [.init(name: pane.sessionName, clients: 0, owner: "us")],
-            remoteKilled: remoteKilled
-        )
-
-        state.handleProcessExit(pane.id, projectID: p.id)
-
-        await remoteKilled.settleExpectingNone()
-        #expect(state.workspaces[p.id]?.activeTab?.splitRoot.findPane(id: pane.id) != nil)
-        #expect(await remoteKilled.names.isEmpty)
-    }
-
-    @Test
-    func remote_process_exit_keeps_the_pane_when_the_host_is_unreachable() async throws {
-        // Fail-safe: no answer must never destroy the pane (wrongly keeping
-        // one costs a manual close; wrongly closing one costs the session).
-        let remoteKilled = KilledSessions()
-        let state = makeAppState()
-        let p = seedProject(state, name: "remote", path: "devbox:~/dev/api")
-        let pane = try #require(state.workspaces[p.id]?.activeTab?.splitRoot.allPanes().first)
-        state.zmx = probeAnsweringZmx(entries: nil, remoteKilled: remoteKilled)
-
-        state.handleProcessExit(pane.id, projectID: p.id)
-
-        await remoteKilled.settleExpectingNone()
-        #expect(state.workspaces[p.id]?.activeTab?.splitRoot.findPane(id: pane.id) != nil)
-        #expect(await remoteKilled.names.isEmpty)
-    }
-
-    @Test
-    func remote_process_exit_closes_the_pane_when_the_session_is_gone() async throws {
-        // The deliberate end (typed `exit` killed the session): the host
-        // positively reports it gone, so the pane closes as it always did.
+    func remote_process_exit_closes_the_pane_and_ends_its_session() async throws {
+        // The client on a remote pane's tty (`macterm remote-pane`) waits
+        // through a dropped connection, so it exits only when the session's
+        // shell ended (0057): the pane closes with no question, and the close
+        // ends the exited session on the host.
         let remoteKilled = KilledSessions()
         let state = makeAppState()
         let p = seedProject(state, name: "remote", path: "devbox:~/dev/api")
@@ -2397,56 +2355,13 @@ struct AppStateTests {
         _ = state.workspaces[p.id]?.createTab(projectPath: "devbox:~/dev/api")
         let tab = try #require(state.workspaces[p.id]?.activeTab)
         let pane = try #require(tab.splitRoot.allPanes().first)
-        state.zmx = probeAnsweringZmx(entries: [], remoteKilled: remoteKilled)
-
-        state.handleProcessExit(pane.id, projectID: p.id)
-
-        // The close happens after the async probe answers.
-        await remoteKilled.settle(expecting: 1)
-        #expect(state.workspaces[p.id]?.tabs.allSatisfy { $0.splitRoot.findPane(id: pane.id) == nil } == true)
-    }
-
-    @Test
-    func remote_process_exit_closes_the_pane_when_a_key_acknowledged_it() async throws {
-        // The user pressed the key that libghostty's exit message asks for:
-        // the close is their own request, so no probe decides it. The host
-        // here would answer "unreachable" (nil), which alone keeps the pane.
-        let remoteKilled = KilledSessions()
-        let state = makeAppState()
-        let p = seedProject(state, name: "remote", path: "devbox:~/dev/api")
-        _ = state.workspaces[p.id]?.createTab(projectPath: "devbox:~/dev/api")
-        let tab = try #require(state.workspaces[p.id]?.activeTab)
-        let pane = try #require(tab.splitRoot.allPanes().first)
-        state.zmx = probeAnsweringZmx(entries: nil, remoteKilled: remoteKilled)
-        pane.ensureNSView().exitAcknowledgedByKey = true
+        state.zmx = remoteKillRecordingZmx(remoteKilled)
 
         state.handleProcessExit(pane.id, projectID: p.id)
 
         #expect(state.workspaces[p.id]?.tabs.allSatisfy { $0.splitRoot.findPane(id: pane.id) == nil } == true)
         await remoteKilled.settle(expecting: 1)
         #expect(await remoteKilled.names == [pane.sessionName])
-    }
-
-    @Test
-    func remote_process_exit_keeps_the_pane_when_probes_are_disabled() async throws {
-        // backgroundSSHConnections off (#272): no probe is allowed, so every
-        // remote exit conservatively keeps the pane.
-        let prior = Preferences.shared.backgroundSSHConnections
-        defer { Preferences.shared.backgroundSSHConnections = prior }
-        Preferences.shared.backgroundSSHConnections = false
-        let remoteKilled = KilledSessions()
-        let state = makeAppState()
-        let p = seedProject(state, name: "remote", path: "devbox:~/dev/api")
-        let pane = try #require(state.workspaces[p.id]?.activeTab?.splitRoot.allPanes().first)
-        state.zmx = probeAnsweringZmx(
-            entries: [],
-            remoteKilled: remoteKilled
-        )
-
-        state.handleProcessExit(pane.id, projectID: p.id)
-
-        await remoteKilled.settleExpectingNone()
-        #expect(state.workspaces[p.id]?.activeTab?.splitRoot.findPane(id: pane.id) != nil)
     }
 
     // MARK: - Background ssh connections toggle (#272)
@@ -2463,7 +2378,6 @@ struct AppStateTests {
                 await probes.append(UUID().uuidString)
                 return .unreachable
             },
-            sweepRemoteOrphans: { _, _, _, _ in nil },
             listSessions: { [] },
             endV1Sessions: { _ in true }
         )
