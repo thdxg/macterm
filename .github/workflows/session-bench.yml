@@ -1,0 +1,131 @@
+name: Session Benchmark
+
+# The v1/v2 session layer benchmark (scripts/session_bench.py): typing echo,
+# reattach, idle memory and wakeups, and the ssh arms on Linux. It runs no
+# app, so it runs only on a pull request that changes what it measures: the
+# server and the pane's session client (server/), the protocol, the script
+# and the server build. It also runs by hand. It reports to the job summary
+# and fails no pull request.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "protocol/**"
+      - "scripts/session_bench.py"
+      - "scripts/build-server.sh"
+      - ".github/workflows/session-bench.yml"
+      - ".github/workflows/server-build.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: session-bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The session server of this commit (server-build.yml).
+  server:
+    name: Server
+    permissions:
+      contents: write
+    uses: ./.github/workflows/server-build.yml
+
+  # v1's and v2's local panes side by side. The idle arm reads libproc, so it
+  # runs on macOS only.
+  macos:
+    name: Session Layer (macOS)
+    needs: server
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download the Server
+        uses: actions/download-artifact@v8
+        with:
+          name: server
+          path: build/server
+
+      - name: Unpack the Server
+        env:
+          KEY: ${{ needs.server.outputs.key }}
+        run: |
+          name="macterm-$KEY-universal-macos.tar.gz"
+          (cd build/server && shasum -a 256 -c "$name.sha256")
+          mkdir -p zmx
+          tar xzf "build/server/$name" -C zmx zmx
+          zmx/zmx version
+
+      - name: Measure
+        run: |
+          python3 scripts/session_bench.py run --zmx zmx/zmx --out session-macos.json
+          python3 scripts/session_bench.py report session-macos.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        uses: actions/upload-artifact@v7
+        with:
+          name: session-results-macos
+          path: session-macos.json
+
+  # The latency arms plus the ssh arms, against sshd on localhost with 25 ms
+  # of delay each way (50 ms round trip). Linux, because sshd and netem are an
+  # apt install there.
+  linux:
+    name: Session Layer (Linux)
+    needs: server
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download the Server
+        uses: actions/download-artifact@v8
+        with:
+          name: server
+          path: build/server
+
+      - name: Unpack the Server
+        env:
+          KEY: ${{ needs.server.outputs.key }}
+        run: |
+          name="macterm-$KEY-x86_64-linux.tar.gz"
+          (cd build/server && sha256sum -c "$name.sha256")
+          mkdir -p zmx
+          tar xzf "build/server/$name" -C zmx zmx
+          zmx/zmx version
+
+      - name: Start sshd on localhost
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends openssh-server
+          sudo mkdir -p /run/sshd
+          sudo /usr/sbin/sshd
+          ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519 -q
+          cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=no localhost true
+
+      - name: Delay loopback by 25 ms
+        run: |
+          sudo modprobe sch_netem || true
+          sudo tc qdisc add dev lo root netem delay 25ms
+          ping -c 3 localhost
+
+      - name: Measure
+        run: |
+          python3 scripts/session_bench.py run --zmx zmx/zmx --ssh-host localhost \
+            --network "localhost, netem delay 25 ms each way" --out session-linux.json
+          python3 scripts/session_bench.py report session-linux.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        uses: actions/upload-artifact@v7
+        with:
+          name: session-results-linux
+          path: session-linux.json
