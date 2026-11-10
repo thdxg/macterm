@@ -1,8 +1,7 @@
 name: Checks
 
 # Style gates only — the test suites live in test.yml (named so checks group
-# as "Test / Unit" and "Test / End-to-end" in the PR UI), the resource
-# benchmark in benchmark.yml.
+# as "Test / Unit" and "Test / End-to-end" in the PR UI).
 
 on:
   push:

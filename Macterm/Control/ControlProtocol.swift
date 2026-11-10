@@ -149,8 +149,6 @@ struct ControlArgs: Codable, Equatable {
     var slot: Int?
     /// Custom title for `tab.rename`.
     var title: String?
-    /// How many keys `pane.latency` types.
-    var count: Int?
     /// Reset custom title back to automatic default (`tab.rename`).
     var reset: Bool?
     /// Whether `pane.run` submits the text it pastes. ABSENT means submit —
@@ -324,8 +322,6 @@ struct ControlData: Codable {
     var widgets: [ControlWidgetInfo]?
     /// The palettes of the installed extensions (`palette.list`).
     var palettes: [ControlPaletteInfo]?
-    /// Typing latency (`pane.latency`, debug and benchmark builds only).
-    var latency: ControlLatencyResult?
     /// The user's answer to an ssh prompt (`ssh.askpass`). It goes only to an
     /// askpass that an ssh of Macterm started.
     var askpass: ControlAskpassReply?
@@ -350,7 +346,6 @@ struct ControlData: Codable {
         memory: ControlMemoryState? = nil,
         widgets: [ControlWidgetInfo]? = nil,
         palettes: [ControlPaletteInfo]? = nil,
-        latency: ControlLatencyResult? = nil,
         askpass: ControlAskpassReply? = nil,
         host: ControlHostState? = nil,
         hostServer: ControlHostServerState? = nil
@@ -370,7 +365,6 @@ struct ControlData: Codable {
         self.memory = memory
         self.palettes = palettes
         self.widgets = widgets
-        self.latency = latency
         self.askpass = askpass
         self.host = host
         self.hostServer = hostServer
@@ -402,13 +396,6 @@ struct ControlHostServerState: Codable, Equatable {
     var installed: Bool
     /// The ssh commands that this connect ran over the host's connection.
     var commands: Int
-}
-
-/// The result of `pane.latency`: milliseconds from each key to the frame that
-/// shows its glyph, and the keys that showed no glyph.
-struct ControlLatencyResult: Codable, Equatable {
-    var samples: [Double]
-    var misses: Int
 }
 
 /// What the password monitor knows about a pane (debug-only `pane.password`):
