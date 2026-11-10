@@ -33,7 +33,7 @@ SPARKLE_ED_PUBLIC_KEY="${SPARKLE_ED_PUBLIC_KEY:-SPARKLE_ED_PUBLIC_KEY_PLACEHOLDE
 # imported self-signed release certificate (see release.yml's "Import signing
 # certificate" step) so the requirement stays stable across releases and grants
 # survive updates. Unset = ad-hoc (project.yml's default), which is fine for
-# local and benchmark builds that are never distributed.
+# local and test builds that are never distributed.
 CODESIGN_IDENTITY="${MACTERM_CODESIGN_IDENTITY:-}"
 SIGNING_OVERRIDES=()
 if [[ -n "$CODESIGN_IDENTITY" ]]; then
