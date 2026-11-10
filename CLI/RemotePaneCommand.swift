@@ -98,6 +98,10 @@ struct RemotePaneClient {
                     continue
                 }
             }
+            if answer.action == "run", answer.clear == true {
+                write("\u{1B}[H\u{1B}[2J\u{1B}[3J")
+                atLineStart = true
+            }
             show(answer.message)
             switch answer.action {
             case "wait":
@@ -106,10 +110,6 @@ struct RemotePaneClient {
                 guard let arguments = answer.arguments, !arguments.isEmpty else {
                     event = "ask"
                     continue
-                }
-                if answer.clear == true {
-                    write("\u{1B}[H\u{1B}[2J\u{1B}[3J")
-                    atLineStart = true
                 }
                 restoreTTY()
                 keysWake = true

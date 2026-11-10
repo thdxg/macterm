@@ -309,14 +309,21 @@ final class Pane: Identifiable {
         }
     }
 
-    /// Between the two snapshot marks of a remote attach: the output is the
+    /// Between the two snapshot marks of a remote pane: the output is the
     /// session's replay, not new output. Its title is the last one that the
     /// session saw, maybe a prompt's from before the program in front
     /// started, so it never names the tab (`receiveReportedTitle`): the
-    /// pushed foreground does. Cleared with the surface, and by the end
-    /// mark of the next attach when a connection stopped in a replay.
+    /// pushed foreground does. Cleared with the surface and when the
+    /// connection stops.
     @ObservationIgnored
     private(set) var isReceivingRemoteSnapshot = false
+
+    /// The pane's connection stopped (`RemoteHosts`): a replay that it cut
+    /// is over, and the next attach clears any line of Macterm's.
+    func remoteLinkDidStop() {
+        isReceivingRemoteSnapshot = false
+        showsRemoteLinkMessage = false
+    }
 
     /// Note an execution boundary reported outside the execution tracker —
     /// the OSC 133;D hook in `TerminalSurface`. Posts a poll event so a
@@ -1075,6 +1082,13 @@ final class Pane: Identifiable {
     /// panes are never "disconnected": they have no network to lose.
     var isDisconnected: Bool {
         isRemote && isRemoteLinkLost
+    }
+
+    /// The ssh destination of a remote pane (`[user@]host`), the key of its
+    /// host's one connection. nil for a local pane.
+    var remoteDestination: String? {
+        guard case let .remote(user, host, _) = remoteSpec else { return nil }
+        return RemoteSpawn.destination(user: user, host: host)
     }
 
     /// Whether closing this pane must be confirmed first because a foreground

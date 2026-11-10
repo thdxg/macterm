@@ -543,6 +543,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.appState?.reconnectDroppedRemotePanes(trigger: .activate)
                 }
             },
+            focusCenter.addObserver(
+                forName: .remoteHostDidConnect,
+                object: nil,
+                queue: .main
+            ) { [weak self] note in
+                let destination = note.object as? String
+                MainActor.assumeIsolated {
+                    self?.appState?.reconnectDroppedRemotePanes(trigger: .hostConnected, destination: destination)
+                }
+            },
         ]
         // A new network (another Wi-Fi, a VPN) is a trigger too. The first
         // update describes the network at start, which is no change.

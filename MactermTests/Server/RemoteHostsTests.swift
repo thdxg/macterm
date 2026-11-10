@@ -130,10 +130,14 @@ struct RemoteHostsTests {
                 #expect(pane.isRemoteLinkLost && !pane.showsRemoteLinkMessage)
             }
 
-            // A key in the left pane logs in again. The right pane gets the
-            // wake too, and attaches with no key and no second login.
+            // A key in the left pane logs in again. The link that came back
+            // is a trigger: the sweep wakes the right pane, which attaches
+            // with no key and no second login.
             fixture.woken.removeAll()
             _ = try await fixture.run(left, event: .retry, clear: true)
+            #expect(fixture.connected == ["box"])
+            #expect(!fixture.woken.contains(RemoteHosts.wakeName(for: right.sessionName)))
+            fixture.hosts.reconnect([right.sessionName])
             #expect(fixture.woken.contains(RemoteHosts.wakeName(for: right.sessionName)))
             let again = try await PTYProcess(fixture.run(right, clear: true))
             defer { again.terminate() }
@@ -211,6 +215,9 @@ struct RemoteHostsTests {
         let hosts: RemoteHosts
         let directory: String
         private let posted = LockedBox<[String]>([])
+        private let connections = LockedBox<[String]>([])
+        /// The hosts whose link came back (`hostDidConnect`).
+        var connected: [String] { connections.value }
 
         /// The wakes that the app posted.
         var woken: [String] {
@@ -222,6 +229,7 @@ struct RemoteHostsTests {
             directory = host.home.path
             var configuration = RemoteHosts.Configuration(key: host.key, declines: .memory(), creationGrace: creationGrace)
             configuration.post = { [posted] name in posted.mutate { $0.append(name) } }
+            configuration.hostDidConnect = { [connections] destination in connections.mutate { $0.append(destination) } }
             hosts = RemoteHosts(connections: host.connections, servers: host.servers, configuration: configuration)
         }
 

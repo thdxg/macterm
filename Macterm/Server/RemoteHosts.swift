@@ -21,10 +21,11 @@ enum RemotePaneAnswer: Equatable {
     /// Wait for the wake notification or a key. `message` goes into the pane
     /// first.
     case wait(message: String?)
-    /// Run this ssh on the pane's tty. `clear`: clear the screen and the
-    /// scrollback first: an attach replays the session's own, and a new
-    /// session starts on an empty pane. Either way no line of Macterm's
-    /// (a failure, "the session ended") stays above it.
+    /// Run this ssh on the pane's tty, after `message`. `clear`: clear the
+    /// screen and the scrollback first: an attach replays the session's
+    /// own, and a new session or a plain shell starts on an empty pane. No
+    /// line of Macterm's from before (a failure, "the session ended") stays
+    /// above it.
     case run(arguments: [String], clear: Bool, message: String?)
     /// The pane's session is gone (the host restarted). Ask for Return.
     case ended(message: String)
@@ -71,6 +72,12 @@ final class RemoteHosts {
         var key: String?
         /// Posts a Darwin notification.
         var post: (String) -> Void = { notify_post($0) }
+        /// A host's link came back: the reconnect sweep, with its backoff
+        /// and its setting, lets the other lost panes of the host attach.
+        var hostDidConnect: @MainActor (String) -> Void = {
+            NotificationCenter.default.post(name: .remoteHostDidConnect, object: $0)
+        }
+
         var declines: DeclineStore
         /// How long a session that the app told a client to make counts as
         /// made (`created`).
@@ -116,9 +123,8 @@ final class RemoteHosts {
     @ObservationIgnored private var hosts: [String: Host] = [:]
     /// The sessions that wait for their host to be ready.
     @ObservationIgnored private var waiting: [String: Set<String>] = [:]
-    /// Sessions whose connection stopped, with their destination: they wait
-    /// for a trigger, a key, or their host's link to come back.
-    @ObservationIgnored private var lost: [String: String] = [:]
+    /// Sessions whose connection stopped: they wait for a trigger or a key.
+    @ObservationIgnored private var lost: Set<String> = []
     /// Sessions that ended on the host and wait for Return.
     @ObservationIgnored private var ended: Set<String> = []
     /// Sessions whose user pressed Return at "the session ended".
@@ -154,7 +160,7 @@ final class RemoteHosts {
         guard let pane = panes.first, let target = Target(pane) else { return .close }
         switch event {
         case .ask:
-            if lost[session] != nil {
+            if lost.contains(session) {
                 let message = messages.removeValue(forKey: session)
                 mark(panes, lost: true, message: message != nil)
                 return .wait(message: message)
@@ -162,17 +168,16 @@ final class RemoteHosts {
             if ended.contains(session) { return .ended(message: RemotePaneText.ended(host: target.host)) }
         case .lost:
             logger.info("remote pane: session=\(session, privacy: .public) host=\(target.destination, privacy: .public) lost")
-            lost[session] = target.destination
-            // An attach cleared the screen since any earlier line.
+            lost.insert(session)
             for pane in panes {
-                pane.showsRemoteLinkMessage = false
+                pane.remoteLinkDidStop()
             }
             mark(panes, lost: true)
             // The next connect checks the connection again.
             drop(target.destination)
             return .wait(message: nil)
         case .retry:
-            lost[session] = nil
+            lost.remove(session)
         case .create:
             ended.remove(session)
             createRequested.insert(session)
@@ -183,7 +188,7 @@ final class RemoteHosts {
     /// A trigger lets these lost panes connect again. The caller applies
     /// the backoff.
     func reconnect(_ sessions: Set<String>) {
-        for session in sessions where lost.removeValue(forKey: session) != nil {
+        for session in sessions where lost.remove(session) != nil {
             configuration.post(Self.wakeName(for: session))
         }
     }
@@ -238,8 +243,7 @@ final class RemoteHosts {
         var directory: String
 
         init?(_ pane: Pane) {
-            guard case let .remote(user, host, directory) = pane.remoteSpec else { return nil }
-            let destination = RemoteSpawn.destination(user: user, host: host)
+            guard case let .remote(_, host, directory) = pane.remoteSpec, let destination = pane.remoteDestination else { return nil }
             guard SSHConnections.isValidDestination(destination) else { return nil }
             self.destination = destination
             self.host = host
@@ -263,7 +267,7 @@ final class RemoteHosts {
                 arguments: connections.ttyArguments(
                     route, destination, RemoteSpawn.plainShellCommand(directory: target.directory)
                 ),
-                clear: false,
+                clear: true,
                 message: RemotePaneText.plainShell(host: target.host)
             )
         case let .ready(route, link):
@@ -292,7 +296,7 @@ final class RemoteHosts {
             listFailures[destination] = failures
             guard failures < 2 else {
                 listFailures[destination] = nil
-                lost[session] = destination
+                lost.insert(session)
                 mark(panes, lost: true, message: true)
                 return .wait(message: RemotePaneText.withRetry(RemotePaneText.serverSilent(host: target.host)))
             }
@@ -421,26 +425,20 @@ final class RemoteHosts {
             }
             return
         }
-        var woken = sessions
         switch result {
         case let .success(host):
             hosts[destination] = host
-            // One login serves every pane of the host: the panes that lost
-            // the link, or that showed this host's last failure, attach too.
-            let others = lost.filter { $0.value == destination }.keys
-            for session in others {
-                lost[session] = nil
-                messages[session] = nil
-            }
-            woken.formUnion(others)
+            // One login serves every pane of the host. The sweep owns when a
+            // lost pane connects again, so this never loops.
+            configuration.hostDidConnect(destination)
         case let .failure(failure):
             hosts[destination] = nil
             for session in sessions {
-                lost[session] = destination
+                lost.insert(session)
                 messages[session] = RemotePaneText.withRetry(failure.message)
             }
         }
-        for session in woken {
+        for session in sessions {
             configuration.post(Self.wakeName(for: session))
         }
     }
@@ -461,7 +459,7 @@ final class RemoteHosts {
 
     private func forget(_ session: String) {
         created[session] = nil
-        lost[session] = nil
+        lost.remove(session)
         ended.remove(session)
         createRequested.remove(session)
         messages[session] = nil

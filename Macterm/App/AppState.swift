@@ -2018,6 +2018,8 @@ final class AppState {
         case activate
         case projectSelected
         case network
+        /// A login brought a host's link back (`.remoteHostDidConnect`).
+        case hostConnected
     }
 
     /// Let the active project's lost remote panes connect again: panes whose
@@ -2032,17 +2034,19 @@ final class AppState {
     /// bounded number of times per return — not polled. Active project
     /// only; other projects reconnect via `.projectSelected` when opened. A
     /// key in a lost pane connects at once, with no backoff.
-    func reconnectDroppedRemotePanes(trigger: ReconnectTrigger) {
+    /// `destination`: only the panes of this host (`.hostConnected`).
+    func reconnectDroppedRemotePanes(trigger: ReconnectTrigger, destination: String? = nil) {
         guard Preferences.shared.reconnectRemotePanes else { return }
         guard !AppTerminationState.isTerminating else { return }
         // A login may ask, and its sheet brings the app to the front. A wake
         // or a network change while the user is in another app waits for the
         // activation, which is a trigger too.
-        guard trigger == .activate || trigger == .projectSelected || NSApp.isActive else { return }
+        guard trigger == .activate || trigger == .projectSelected || trigger == .hostConnected || NSApp.isActive else { return }
         guard let projectID = activeProjectID, let ws = workspaces[projectID] else { return }
         let now = Date()
         var sessions: Set<String> = []
         for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) where pane.isRemote {
+            if let destination, pane.remoteDestination != destination { continue }
             guard pane.isDisconnected else {
                 reconnectPolicy.observeAlive(pane.id, now: now)
                 continue

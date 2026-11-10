@@ -671,8 +671,7 @@ final class GhosttyTerminalNSView: NSView {
             //
             // The client is the surface's command wrapper (`remoteClientArgv`),
             // so the command that libghostty resolves after it, login(1) and
-            // a shell, never runs: login(1) wrote the Mac's own "Last login"
-            // line at the top of every remote pane.
+            // a shell, never runs, and no local "Last login" line shows.
             //
             // Without the client (and in the unit-test host, which restores
             // the developer's panes, `ZmxBypass.unitTestHost`) the pane says
