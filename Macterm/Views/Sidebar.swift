@@ -1423,19 +1423,13 @@ private struct PinTabDropZone: View {
     var body: some View {
         ZStack {
             if isBandVisible {
+                // System glass or material, with no tint or stroke. The List
+                // draws no target here, because an empty ForEach has no row.
                 Label("Pin Tab", systemImage: "pin.fill")
                     .font(.callout.weight(.medium))
-                    .foregroundStyle(MactermTheme.accent)
                     .frame(maxWidth: .infinity)
                     .frame(height: 30)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(MactermTheme.accent.opacity(0.15))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .strokeBorder(MactermTheme.accent.opacity(0.5), lineWidth: 1)
-                            )
-                    )
+                    .glassPanelBackground(cornerRadius: 6)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
             }
