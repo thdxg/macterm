@@ -369,7 +369,7 @@ struct WorkspaceDropPreview: View {
     var body: some View {
         GeometryReader { geo in
             if let resolution {
-                RoundedRectangle(cornerRadius: 4)
+                Rectangle()
                     .fill(MactermTheme.accent.opacity(0.3))
                     .frame(
                         width: resolution.preview.width * geo.size.width,
