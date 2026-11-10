@@ -224,6 +224,11 @@ targets:
           # scripts/askpass-shim.sh).
           cp "$SRCROOT/scripts/askpass-shim.sh" "$SHIM_DIR/macterm-askpass"
           chmod +x "$SHIM_DIR/macterm-askpass"
+          # The scripts that the app runs on a host to check and install its
+          # server (RemoteServers, server/host/).
+          HOST_DIR="$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Resources/host"
+          mkdir -p "$HOST_DIR"
+          cp "$SRCROOT/server/host/attach.sh" "$SRCROOT/server/host/install.sh" "$HOST_DIR/"
           # The adaptive icon's renderer (AdaptiveIconRenderer). Contents/Helpers,
           # not Resources/bin: it is no command for a pane's PATH.
           HELPERS_DIR="$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Helpers"

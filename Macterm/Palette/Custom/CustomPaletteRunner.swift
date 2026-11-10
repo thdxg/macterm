@@ -288,7 +288,7 @@ enum CustomPaletteRequirements {
         default:
             String(
                 localized: """
-                This palette needs \(missing.dropLast().joined(separator: ", ")) and \(missing.last ?? ""), \
+                This palette needs \(missing.dropLast().joined(separator: ", ")), and \(missing.last ?? ""), \
                 which are not on your PATH.
                 """,
                 comment: "The first value is a list of program names with commas between them"
