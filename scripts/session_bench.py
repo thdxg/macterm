@@ -17,12 +17,23 @@ Arms (each is a program on a pty that this script drives):
   bare       /bin/cat on a pty in line mode: kernel echo only. The floor.
   v1, v2     /bin/cat in a local pane.
   ssh        `ssh -tt <host> /bin/cat`. The floor for a remote pane.
-  ssh-zmx    `ssh -tt <host> zmx attach <s> /bin/cat`. A remote pane of v1.
+  remote-v1  `ssh -tt <host> zmx attach <s> /bin/cat`: a remote pane of v1,
+             one ssh login for each pane.
+  remote-v2  `ssh -S <master> -tt <host> zmx connect <s> -- /bin/cat`: a
+             remote pane of v2, one channel over the host's one ssh
+             connection (SSHConnections, RemoteSpawn.sessionCommand).
+  relay      a channel of `ssh <host> zmx proxy`: every pane of the host on
+             one stream (relay.zig), as the app will reach a host in m3.
 
 Echo latency: write one key, time until the echo arrives, for --keys keys.
-Remote pane open: time from the start of `ssh … zmx attach` to the first
-echo after the session prints its ready marker. v1 makes a new ssh login for
-each remote pane.
+New remote pane: time from the start of the client's ssh to the first echo
+after the session prints its ready marker. v1 logs in for each pane; v2
+opens a channel over the connection that the run opened first, and the
+report gives that login on its own.
+Relay flood: one channel of the relay prints as fast as it can while the
+run times the keys of a second channel, channel 0's pings, and an interrupt
+of the flood until its prompt shows. These are what the relay's skip-ahead
+(relay.skip_ms, design/003 section 6) is for.
 Reattach: fill a session with --reattach-lines lines of 200 columns, detach,
 then time a new client until the echo of a marker line that is sent after the
 client takes the terminal. The echo comes after the replay.
@@ -63,6 +74,10 @@ import time
 import uuid
 
 from _harness import phys_footprint, runner_info, wait_for_load, wakeups
+
+# The protocol helpers of the server's own tests.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "server", "test"))
+from v2client import BYTES, CONTROL, MSG, frame, hello, pack, unpack  # noqa: E402
 
 COLUMNS = 200
 ROWS = 50
@@ -183,6 +198,121 @@ class PtyProgram:
         return bytes(self.output[-300:]).decode("utf-8", "replace")
 
 
+class RelayStream:
+    """The app's end of `zmx proxy`: channel 0 and the pane channels on one
+    stream. Each channel keeps only the tail of its output, so a flood costs
+    no memory."""
+
+    TAIL = 64 * 1024
+
+    def __init__(self, argv, env=None):
+        ours, theirs = socket.socketpair()
+        self.proc = subprocess.Popen(argv, stdin=theirs, stdout=theirs, env=env)
+        theirs.close()
+        self.sock = ours
+        self.buf = bytearray()
+        self.next_id = 1
+        self.control = []
+        # For each channel: the tail of its output, its total output bytes,
+        # and its messages.
+        self.tail = {}
+        self.received = {}
+        self.messages = {}
+        self.send_msg(CONTROL, hello())
+
+    def send(self, channel, kind, body):
+        self.sock.sendall(frame(channel, kind, body))
+
+    def send_msg(self, channel, value):
+        self.send(channel, MSG, pack(value))
+
+    def type(self, channel, data):
+        self.send(channel, BYTES, data)
+
+    def pump(self, timeout):
+        ready, _, _ = select.select([self.sock], [], [], timeout)
+        if not ready:
+            return
+        data = self.sock.recv(1 << 20)
+        if not data:
+            raise BenchError(f"the relay stream closed (proxy exit {self.proc.poll()})")
+        self.buf += data
+        i = 0
+        while len(self.buf) - i >= 9:
+            n, channel, kind = struct.unpack_from("<IIB", self.buf, i)
+            if len(self.buf) - i < 9 + n:
+                break
+            body = bytes(self.buf[i + 9:i + 9 + n])
+            i += 9 + n
+            if channel == CONTROL:
+                self.control.append(unpack(body)[0])
+            elif kind == MSG:
+                self.messages.setdefault(channel, []).append(unpack(body)[0])
+            else:
+                tail = self.tail.get(channel, b"") + body
+                self.tail[channel] = tail[-self.TAIL:]
+                self.received[channel] = self.received.get(channel, 0) + n
+        del self.buf[:i]
+
+    def wait(self, predicate, timeout, what):
+        deadline = time.monotonic() + timeout
+        while not predicate():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise BenchError(f"timed out after {timeout:.0f}s waiting for {what} on the relay")
+            self.pump(min(remaining, 0.05))
+        return time.monotonic()
+
+    def response(self, rid):
+        for value in self.control:
+            if isinstance(value, dict) and value.get("re") == rid:
+                return value
+        return None
+
+    def call(self, method, timeout=30, **args):
+        rid = self.next_id
+        self.next_id += 1
+        self.send_msg(CONTROL, {"id": rid, "m": method, "a": args})
+        self.wait(lambda: self.response(rid) is not None, timeout, f"a response to {method}")
+        response = self.response(rid)
+        if "ok" not in response:
+            raise BenchError(f"{method} failed: {response}")
+        return response["ok"]
+
+    def ping(self):
+        """The time of one round trip on channel 0, in ms."""
+        start = time.monotonic()
+        self.call("ping")
+        return (time.monotonic() - start) * 1000
+
+    def open(self, session):
+        channel = self.call("channel.open", session=session)["channel"]
+        self.send_msg(channel, {"t": "attach", "a": {"cols": COLUMNS, "rows": ROWS}})
+        return channel
+
+    def wait_output(self, channel, needle, timeout):
+        """Wait until needle is in the channel's output after the next byte.
+        Returns the time it arrived."""
+        start = self.received.get(channel, 0)
+
+        def arrived():
+            new = self.received.get(channel, 0) - start
+            return new > 0 and needle in self.tail.get(channel, b"")[-(new + len(needle) - 1):]
+
+        return self.wait(arrived, timeout, repr(needle))
+
+    def snapshots(self, channel):
+        return sum(1 for m in self.messages.get(channel, []) if m.get("t") == "snapshot.start")
+
+    def close(self):
+        self.sock.close()
+        try:
+            self.proc.wait(10)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.wait()
+
+
 def echo_latencies(program, keys, line_length=40):
     """Write `keys` keys one at a time; return each echo time in ms. Every
     line_length keys a newline ends the line (a canonical pty holds at most
@@ -201,6 +331,21 @@ def echo_latencies(program, keys, line_length=40):
             program.drain()
     program.write(b"\n")
     program.drain()
+    return samples
+
+
+def relay_echo_latencies(stream, channel, keys, line_length=40):
+    """echo_latencies for a channel of the relay."""
+    letters = b"abcdefghijklmnopqrstuvwxyz"
+    samples = []
+    for i in range(keys):
+        key = letters[i % len(letters):i % len(letters) + 1]
+        start = time.monotonic()
+        stream.type(channel, key)
+        samples.append((stream.wait_output(channel, key, 10) - start) * 1000)
+        if (i + 1) % line_length == 0:
+            stream.type(channel, b"\n")
+            stream.wait_output(channel, b"\n", 10)
     return samples
 
 
@@ -259,6 +404,10 @@ class Bench:
             os.environ, ZMX_DIR=self.zmx_dir, MACTERM_RUNTIME_DIR=self.runtime_dir,
             TERM="xterm-256color",
         )
+        # The host's runtime directory, also when the host is this machine.
+        self.host_runtime_dir = os.path.join(self.zmx_dir, "host")
+        self.control_path = os.path.join(self.zmx_dir, "cm")
+        self.master = None
         self.local_sessions = []
         self.remote_sessions = []
 
@@ -284,16 +433,67 @@ class Bench:
             return self.zmx_attach(name, command)
         return [self.args.zmx, "connect", name, *(["--", *command] if command else [])]
 
-    def ssh(self, remote_command):
-        return [
-            "ssh", "-tt", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
-            self.args.ssh_host, remote_command,
-        ]
+    def ssh(self, remote_command, master=False):
+        """A remote pane's ssh. With master, a channel over the run's one
+        connection, with the options of the app's (SSHConnections.ttyArguments):
+        it never logs in by itself."""
+        options = (
+            ["-S", self.control_path, "-o", "ProxyCommand=/usr/bin/false"] if master
+            else ["-o", "StrictHostKeyChecking=no"]
+        )
+        return ["ssh", "-tt", "-o", "BatchMode=yes", *options, self.args.ssh_host, remote_command]
 
     def remote_zmx(self, *words):
+        # The host's v2 server and sessions live in a runtime directory of
+        # this run, as the local ones do.
         return " ".join(
-            [f"ZMX_DIR={shlex.quote(self.zmx_dir)}", shlex.quote(self.args.zmx)]
+            [f"ZMX_DIR={shlex.quote(self.zmx_dir)}",
+             f"MACTERM_RUNTIME_DIR={shlex.quote(self.host_runtime_dir)}", shlex.quote(self.args.zmx)]
             + [shlex.quote(word) for word in words]
+        )
+
+    def remote_pane(self, layer, name, command):
+        """The client of a remote pane, which makes its session."""
+        if layer == "v1":
+            return self.ssh(self.remote_zmx("attach", name, *command))
+        return self.ssh(self.remote_zmx("connect", name, "--", *command), master=True)
+
+    def start_master(self):
+        """Open the host's one ssh connection, as SSHConnections does. Returns
+        the time of the login in ms."""
+        start = time.monotonic()
+        self.master = subprocess.Popen(
+            ["ssh", "-M", "-N", "-S", self.control_path, "-o", "BatchMode=yes",
+             "-o", "StrictHostKeyChecking=no", self.args.ssh_host],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        )
+        # ssh makes the control socket after the login.
+        deadline = start + 30
+        while not os.path.exists(self.control_path):
+            if self.master.poll() is not None:
+                raise BenchError(f"the ssh master exited: {self.master.stderr.read().decode()}")
+            if time.monotonic() > deadline:
+                raise BenchError("the ssh master did not log in in 30 s")
+            time.sleep(0.002)
+        return (time.monotonic() - start) * 1000
+
+    def stop_master(self):
+        if not self.master:
+            return
+        subprocess.run(["ssh", "-S", self.control_path, "-O", "exit", self.args.ssh_host],
+                       capture_output=True, timeout=10, check=False)
+        try:
+            self.master.wait(10)
+        except subprocess.TimeoutExpired:
+            self.master.kill()
+            self.master.wait()
+        self.master = None
+
+    def relay(self):
+        """A stream of `zmx proxy` on the host, over the host's connection."""
+        return RelayStream(
+            ["ssh", "-S", self.control_path, "-o", "BatchMode=yes",
+             "-o", "ProxyCommand=/usr/bin/false", self.args.ssh_host, self.remote_zmx("proxy")]
         )
 
     def gate(self):
@@ -312,20 +512,23 @@ class Bench:
         print(f"  {result}", flush=True)
         return result
 
-    def echo_pair(self):
+    def echo_pair(self, remote=False):
         """Echo latency of a v1 and a v2 pane, both open, the keys in rounds
-        that alternate between them."""
+        that alternate between them. Returns the arms by name: `v1` and `v2`,
+        or `remote-v1` and `remote-v2`."""
+        prefix = "remote-" if remote else ""
         rounds = self.args.rounds
         per_round = max(1, self.args.keys // rounds)
         gate = self.gate()
-        print(f"echo v1/v2: load {gate['load']}, {rounds} rounds of {per_round} keys", flush=True)
+        print(f"echo {prefix}v1/v2: load {gate['load']}, {rounds} rounds of {per_round} keys",
+              flush=True)
         command, marker = self.ready_cat()
         programs, samples = {}, {layer: [] for layer in LAYERS}
         try:
             for layer in LAYERS:
-                programs[layer] = PtyProgram(
-                    self.pane(layer, self.session(f"echo-{layer}"), command), self.env
-                )
+                name = self.session(f"{prefix}echo-{layer}", remote=remote)
+                argv = (self.remote_pane if remote else self.pane)(layer, name, command)
+                programs[layer] = PtyProgram(argv, self.env)
                 wait_ready(programs[layer], marker=marker)
             for i in range(rounds):
                 for layer in alternated(i):
@@ -335,30 +538,106 @@ class Bench:
                 program.close()
         results = {}
         for layer in LAYERS:
-            results[layer] = summarize(samples[layer])
-            results[layer]["load_gate"] = gate
-            print(f"  {layer}: {results[layer]}", flush=True)
+            result = summarize(samples[layer])
+            result["load_gate"] = gate
+            results[prefix + layer] = result
+            print(f"  {prefix}{layer}: {result}", flush=True)
         return results
 
-    def remote_pane_open(self):
-        """Time a new remote pane: ssh login, then zmx attach, until the
-        first echo."""
+    def remote_open_pair(self):
+        """Time new remote panes, until the first echo: v1 logs in for each,
+        v2 opens a channel over the connection. The two alternate."""
         gate = self.gate()
-        print(f"remote-pane-open: load {gate['load']}, {self.args.panes} panes", flush=True)
-        samples = []
+        print(f"remote-open v1/v2: load {gate['load']}, {self.args.panes} panes each", flush=True)
+        command, marker = self.ready_cat()
+        samples = {layer: [] for layer in LAYERS}
         for i in range(self.args.panes):
-            name = self.session(f"pane{i}", remote=True)
-            command, marker = self.ready_cat()
-            program = PtyProgram(self.ssh(self.remote_zmx("attach", name, *command)), self.env)
-            try:
-                first_echo = wait_ready(program, marker=marker)
-                samples.append((first_echo - program.started) * 1000)
-            finally:
-                program.close()
-        result = summarize(samples)
+            for layer in alternated(i):
+                name = self.session(f"open-{layer}-{i}", remote=True)
+                program = PtyProgram(self.remote_pane(layer, name, command), self.env)
+                try:
+                    first_echo = wait_ready(program, marker=marker)
+                    samples[layer].append((first_echo - program.started) * 1000)
+                finally:
+                    program.close()
+        results = {}
+        for layer in LAYERS:
+            result = summarize(samples[layer])
+            result["load_gate"] = gate
+            result["sum_ms"] = round(sum(samples[layer]), 3)
+            results[f"remote-open-{layer}"] = result
+            print(f"  remote-open-{layer}: {result}", flush=True)
+        return results
+
+    def relay_echo(self):
+        """Echo latency of one channel of the relay."""
+        gate = self.gate()
+        print(f"relay: load {gate['load']}, {self.args.keys} keys", flush=True)
+        command, marker = self.ready_cat()
+        stream = self.relay()
+        try:
+            name = self.session("relay-echo", remote=True)
+            stream.call("session.create", id=name, command=[word.encode() for word in command])
+            channel = stream.open(name)
+            stream.wait_output(channel, marker.encode(), 30)
+            result = summarize(relay_echo_latencies(stream, channel, self.args.keys))
+        finally:
+            stream.close()
         result["load_gate"] = gate
         print(f"  {result}", flush=True)
         return result
+
+    def relay_flood(self):
+        """While one channel prints as fast as it can: the keys of a second
+        channel, channel 0's pings, and the time from an interrupt of the
+        flood to its prompt. Returns the arms by name."""
+        gate = self.gate()
+        print(f"relay flood: load {gate['load']}, {self.args.floods} floods", flush=True)
+        stream = self.relay()
+        keys, pings, interrupts, skips, flood_bytes = [], [], [], [], []
+        try:
+            names = {}
+            for role in ("flood", "quiet"):
+                names[role] = self.session(f"relay-{role}", remote=True)
+                stream.call("session.create", id=names[role], command=[b"/bin/sh"])
+            flood, quiet = stream.open(names["flood"]), stream.open(names["quiet"])
+            stream.type(quiet, b"stty -echo; printf '%s-%s\\n' quiet ready\r")
+            stream.wait_output(quiet, b"quiet-ready", 30)
+            stream.type(flood, b"stty -echo; printf '%s-%s\\n' flood ready\r")
+            stream.wait_output(flood, b"flood-ready", 30)
+            line = "0123456789" * 19
+            for i in range(self.args.floods):
+                skipped, received = stream.snapshots(flood), stream.received.get(flood, 0)
+                stream.type(flood, f"while :; do printf '%s\\n' {line}; done\r".encode())
+                # Let the flood fill every buffer on the way.
+                stream.wait(lambda: stream.received.get(flood, 0) - received > 4 << 20, 60,
+                            "4 MiB of flood")
+                for k in range(self.args.flood_keys):
+                    pings.append(stream.ping())
+                    token = f"k{i}x{k}y"
+                    start = time.monotonic()
+                    stream.type(quiet, f"printf '%s-%s\\n' key {token}\r".encode())
+                    keys.append((stream.wait_output(quiet, f"key-{token}".encode(), 30) - start) * 1000)
+                start = time.monotonic()
+                stream.type(flood, b"\x03")
+                stream.type(flood, f"printf '%s-%s\\n' back {i}\r".encode())
+                interrupts.append((stream.wait_output(flood, f"back-{i}".encode(), 60) - start) * 1000)
+                skips.append(stream.snapshots(flood) - skipped)
+                flood_bytes.append(stream.received.get(flood, 0) - received)
+        finally:
+            stream.close()
+        results = {
+            "relay-flood-key": summarize(keys),
+            "relay-flood-ping": summarize(pings),
+            "relay-flood-interrupt": summarize(interrupts),
+        }
+        for result in results.values():
+            result["load_gate"] = gate
+        results["relay-flood-interrupt"]["skips"] = skips
+        results["relay-flood-interrupt"]["received_mb"] = [round(b / 1048576, 1) for b in flood_bytes]
+        for arm, result in results.items():
+            print(f"  {arm}: {result}", flush=True)
+        return results
 
     def fill(self, layer):
         """Make a session of the layer with --reattach-lines lines of output,
@@ -548,6 +827,7 @@ class Bench:
         # so every session that this run made is ended, local and remote.
         self.end_local_sessions()
         if self.remote_sessions:
+            # v1's sessions on the host.
             try:
                 subprocess.run(
                     ["ssh", "-o", "BatchMode=yes", self.args.ssh_host,
@@ -556,6 +836,20 @@ class Bench:
                 )
             except subprocess.TimeoutExpired:
                 pass
+        if self.master:
+            # v2's sessions and server on the host. The runtime directory is
+            # this run's, so all of them are ours.
+            try:
+                stream = self.relay()
+                try:
+                    for entry in stream.call("session.list")["sessions"]:
+                        stream.call("session.kill", id=entry["id"])
+                    stream.call("server.exit")
+                finally:
+                    stream.close()
+            except (BenchError, OSError) as exc:
+                print(f"warning: the host's v2 sessions may still run: {exc}", file=sys.stderr)
+            self.stop_master()
         shutil.rmtree(self.zmx_dir, ignore_errors=True)
 
 def ssh_version():
@@ -577,12 +871,11 @@ def cmd_run(args):
             arms["ssh"] = bench.echo_arm(
                 "ssh", bench.ssh(" ".join(shlex.quote(word) for word in command)), marker=marker
             )
-            arms["ssh-zmx"] = bench.echo_arm(
-                "ssh-zmx",
-                bench.ssh(bench.remote_zmx("attach", bench.session("echo", remote=True), *command)),
-                marker=marker,
-            )
-            arms["remote-pane-open"] = bench.remote_pane_open()
+            arms["remote-login"] = summarize([bench.start_master()])
+            arms.update(bench.echo_pair(remote=True))
+            arms.update(bench.remote_open_pair())
+            arms["relay"] = bench.relay_echo()
+            arms.update(bench.relay_flood())
         for layer, result in bench.reattach_pair().items():
             arms[f"reattach-{layer}"] = result
         # phys_footprint and the wakeup counts are read through libproc.
@@ -597,7 +890,7 @@ def cmd_run(args):
 
     version = subprocess.run([args.zmx, "version"], capture_output=True, text=True, check=False)
     payload = {
-        "schema": 2,
+        "schema": 3,
         "commit": os.environ.get("GITHUB_SHA") or subprocess.run(
             ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False
         ).stdout.strip() or "unknown",
@@ -620,8 +913,15 @@ ARM_LABELS = {
     "v1": "Echo, local pane, v1",
     "v2": "Echo, local pane, v2",
     "ssh": "Echo, ssh (floor)",
-    "ssh-zmx": "Echo, remote pane (ssh + zmx)",
-    "remote-pane-open": "New remote pane, to first echo",
+    "remote-v1": "Echo, remote pane, v1",
+    "remote-v2": "Echo, remote pane, v2",
+    "relay": "Echo, relay channel",
+    "remote-login": "Login of the host's connection (v2, one time)",
+    "remote-open-v1": "New remote pane, v1, to first echo",
+    "remote-open-v2": "New remote pane, v2, to first echo",
+    "relay-flood-key": "Relay flood: key of another channel",
+    "relay-flood-ping": "Relay flood: channel 0 ping",
+    "relay-flood-interrupt": "Relay flood: interrupt to prompt",
     "reattach-v1": "Reattach, v1, to first echo after replay",
     "reattach-v2": "Reattach, v2, to first echo after replay",
 }
@@ -631,14 +931,25 @@ def ratio(v1, v2):
     return f"{v2 / v1:.2f}" if v1 else "—"
 
 
-def pair_rows(arms):
-    """The v1/v2 pairs of local panes: (measurement, v1, v2, format)."""
+def pair_rows(arms, prefix=""):
+    """The v1/v2 pairs of local panes, or with prefix `remote-`, of remote
+    panes: (measurement, v1, v2, format)."""
     rows = []
-    if "v1" in arms and "v2" in arms:
+    v1, v2 = arms.get(prefix + "v1"), arms.get(prefix + "v2")
+    if v1 and v2:
         rows += [
-            ("Echo p50 (ms)", arms["v1"]["p50_ms"], arms["v2"]["p50_ms"], "{:.3f}"),
-            ("Echo p95 (ms)", arms["v1"]["p95_ms"], arms["v2"]["p95_ms"], "{:.3f}"),
+            ("Echo p50 (ms)", v1["p50_ms"], v2["p50_ms"], "{:.3f}"),
+            ("Echo p95 (ms)", v1["p95_ms"], v2["p95_ms"], "{:.3f}"),
         ]
+    if prefix:
+        v1, v2 = arms.get("remote-open-v1"), arms.get("remote-open-v2")
+        if v1 and v2:
+            rows.append(("New pane p50 (ms)", v1["p50_ms"], v2["p50_ms"], "{:.1f}"))
+            # v2 logs in one time, for the first pane.
+            login = arms.get("remote-login", {}).get("p50_ms", 0)
+            rows.append((f"Time to {v1['n']} new panes, login included (ms)", v1["sum_ms"],
+                         login + v2["sum_ms"], "{:.1f}"))
+        return rows
     if "reattach-v1" in arms and "reattach-v2" in arms:
         rows.append(("Reattach p50 (ms)", arms["reattach-v1"]["p50_ms"],
                      arms["reattach-v2"]["p50_ms"], "{:.1f}"))
@@ -666,10 +977,12 @@ def cmd_report(args):
         lines += [title, ""]
         arms = result["arms"]
 
-        pairs = pair_rows(arms)
-        if pairs:
+        for prefix, title in (("", "Local panes"), ("remote-", "Remote panes, over ssh")):
+            pairs = pair_rows(arms, prefix)
+            if not pairs:
+                continue
             lines += [
-                "Local panes, v1 and v2 in one run, alternated:",
+                f"{title}, v1 and v2 in one run, alternated:",
                 "",
                 "| Measurement | v1 | v2 | v2 / v1 |",
                 "|---|---:|---:|---:|",
@@ -710,6 +1023,15 @@ def cmd_report(args):
                     f"Reattach, {layer}, replays {reattach['lines']} lines of "
                     f"{reattach['columns']} columns: {reattach['replay_bytes'] / 1024:.0f} KiB.",
                 ]
+
+        flood = arms.get("relay-flood-interrupt")
+        if flood:
+            lines += [
+                "",
+                f"Relay flood: {len(flood['skips'])} floods; skips ahead in each: "
+                f"{', '.join(str(n) for n in flood['skips'])}; MB of flood received in each: "
+                f"{', '.join(str(n) for n in flood['received_mb'])}.",
+            ]
 
         idle = arms.get("idle")
         if idle:
@@ -755,7 +1077,10 @@ def main():
                      help="also measure the ssh arms against this host, which has zmx "
                           "at the same path as --zmx")
     run.add_argument("--network", help="a note on the network to the ssh host, for the report")
-    run.add_argument("--panes", type=int, default=5, help="new remote panes to time")
+    run.add_argument("--panes", type=int, default=5, help="new remote panes to time, in each layer")
+    run.add_argument("--floods", type=int, default=3, help="floods of the relay flood arm")
+    run.add_argument("--flood-keys", type=int, default=10,
+                     help="keys and pings to time during each flood")
     run.add_argument("--reattach-lines", type=int, default=10000,
                      help="lines of 200 columns in the reattached session")
     run.add_argument("--attaches", type=int, default=5, help="reattaches to time, in each layer")
