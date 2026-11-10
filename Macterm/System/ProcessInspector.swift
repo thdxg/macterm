@@ -34,9 +34,9 @@ enum ProcessInspector {
     private static func foregroundPID(forPane pane: Pane) -> pid_t? {
         // Remote panes (#104): the only local process is the ssh client — no
         // local pid ever describes what runs inside the pane. Every pid-based
-        // API returns nil/false; titles come from the remote pipeline
-        // (`RemoteForegroundResolver` / execution-gated OSC titles), and
-        // `runningCommand` answers from the probe's cached command line.
+        // API returns nil/false; titles come from the host's foreground
+        // reports and execution-gated OSC titles, and `runningCommand`
+        // answers from the latest report's command line.
         guard !pane.isRemote else { return nil }
         if let resolved = ZmxForegroundResolver.foregroundPID(sessionName: pane.sessionName) {
             return resolved

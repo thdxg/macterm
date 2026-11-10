@@ -3,12 +3,8 @@ import Foundation
 /// One observation of what holds a pane's foreground — the single value the
 /// naming and busyness policies read, identical for local and remote panes.
 ///
-/// Before this type, the two pipelines published bare `String?` names with
-/// different freshness semantics (local: recomputed every poll tick; remote:
-/// pushed by an ssh probe minutes-stale at worst) and consumers could not
-/// tell them apart — the busy-close guard had to reconstruct "was there ever
-/// a probe result?" from name nil-ness. A sample carries its provenance
-/// explicitly instead.
+/// A sample carries its provenance (local process table or the host's
+/// report), so a policy never has to guess where a name came from.
 ///
 /// Shell-ness is judged AT SAMPLING TIME by the origin that produced the
 /// observation, not at read time by the consumer: a policy reading
@@ -21,9 +17,7 @@ struct ForegroundSample: Equatable {
         /// the resolved foreground pid the observation came from (nil when
         /// the pane had no live surface/pid to inspect).
         case processTable(pid: pid_t?)
-        /// The per-host ssh probe (`RemoteForegroundResolver`).
-        case remoteProbe
-        /// A report the host's zmx pushed through the pane's own connection
+        /// A report the host's session pushed through the pane's own connection
         /// (`ZmxForegroundEvents`): current at the moment it arrived, in the
         /// order of the output, and it costs no connection of its own.
         case remoteEvent
@@ -61,40 +55,21 @@ enum ForegroundPolicy {
     /// `ghostty_surface_needs_confirm_quit`). A remote pane can't: its local
     /// process is the ssh client, a perpetually "running program", so the
     /// verdict derives from the remote-side signals instead — the OSC
-    /// 133/heartbeat execution state (catches a command mid-output before
-    /// any probe lands), else the probe sample (an idle shell is not worth a
-    /// dialog; anything else is). Only when NO probe observation has ever
-    /// landed (unreachable host, BatchMode auth failure, the registration
-    /// window) does it fall back to the conservative `surfaceBusy` reading —
-    /// never silently killing an unknown foreground.
-    ///
-    /// `remoteProbingEnabled` = `Preferences.backgroundSSHConnections`. Off,
-    /// only the execution state can warn: any probe sample is a frozen relic
-    /// from before the toggle flipped, and the conservative fallback would
-    /// warn on EVERY close forever (no probe can ever land) — the user chose
-    /// "don't warn" over "always warn" when they turned probing off. Local
-    /// panes are untouched: their signals cost no ssh connections.
-    ///
-    /// A sample the host pushed (`.remoteEvent`) counts whatever the toggle
-    /// says: it rides the pane's own connection, so it is never a relic and
-    /// never costs a prompt.
+    /// 133/heartbeat execution state (catches a command mid-output), else
+    /// the host's latest report (an idle shell is not worth a dialog;
+    /// anything else is). A pane with no report (a host with no server, or
+    /// before the first report) can only warn on the execution state: the
+    /// surface's reading would warn on every close.
     static func needsConfirmClose(
         sample: ForegroundSample?,
         executionState: TerminalExecutionState,
         isRemote: Bool,
         hasSurface: Bool,
-        remoteProbingEnabled: Bool = true,
         surfaceBusy: @autoclosure () -> Bool
     ) -> Bool {
         guard hasSurface else { return false }
         guard isRemote else { return surfaceBusy() }
-        if executionState == .running { return true }
-        if let sample, sample.origin == .remoteEvent, let name = sample.name, !name.isEmpty {
-            return !sample.isIdleShell
-        }
-        guard remoteProbingEnabled else { return false }
-        guard let sample, let name = sample.name, !name.isEmpty else { return surfaceBusy() }
-        return !sample.isIdleShell
+        return remoteNeedsConfirmClose(sample: sample, executionState: executionState) ?? false
     }
 
     /// The remote-side busy verdict alone, nil when no sample has ever

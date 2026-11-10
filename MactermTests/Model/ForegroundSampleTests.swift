@@ -6,7 +6,7 @@ struct ForegroundSampleTests {
     private func sample(
         name: String?,
         isIdleShell: Bool = false,
-        origin: ForegroundSample.Origin = .remoteProbe
+        origin: ForegroundSample.Origin = .remoteEvent
     ) -> ForegroundSample {
         ForegroundSample(name: name, isIdleShell: isIdleShell, origin: origin, sampledAt: Date())
     }
@@ -64,16 +64,16 @@ struct ForegroundSampleTests {
     }
 
     @Test
-    func remote_without_any_sample_falls_back_to_the_surface() {
-        // Never silently kill an unknown foreground: an unreachable host or
-        // the registration window leaves no observation, and the
-        // conservative ssh-is-busy surface reading stands in.
-        #expect(ForegroundPolicy.needsConfirmClose(
+    func remote_without_any_sample_warns_only_on_a_running_command() {
+        // A host with no server reports nothing, and the surface is the ssh
+        // client, which is always busy: its reading would warn on every
+        // close. Only the OSC 133 execution state can warn.
+        #expect(!ForegroundPolicy.needsConfirmClose(
             sample: nil, executionState: .idle, isRemote: true,
             hasSurface: true, surfaceBusy: true
         ))
-        #expect(!ForegroundPolicy.needsConfirmClose(
-            sample: nil, executionState: .idle, isRemote: true,
+        #expect(ForegroundPolicy.needsConfirmClose(
+            sample: nil, executionState: .running, isRemote: true,
             hasSurface: true, surfaceBusy: false
         ))
     }
@@ -89,57 +89,6 @@ struct ForegroundSampleTests {
             sample: sample(name: "exotic-shell", isIdleShell: true),
             executionState: .idle, isRemote: true,
             hasSurface: true, surfaceBusy: true
-        ))
-    }
-
-    // MARK: - The background-connections toggle
-
-    @Test
-    func a_sample_the_host_pushed_counts_whatever_the_toggle_says() {
-        // A pushed report rides the pane's own connection: never a relic,
-        // never a prompt, so it warns (or not) with probing off too.
-        #expect(ForegroundPolicy.needsConfirmClose(
-            sample: sample(name: "btop", isIdleShell: false, origin: .remoteEvent),
-            executionState: .idle, isRemote: true,
-            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: false
-        ))
-        #expect(!ForegroundPolicy.needsConfirmClose(
-            sample: sample(name: "zsh", isIdleShell: true, origin: .remoteEvent),
-            executionState: .idle, isRemote: true,
-            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: true
-        ))
-    }
-
-    @Test
-    func remote_with_probing_disabled_warns_only_on_running_execution() {
-        // Positive knowledge still warns: OSC 133 execution state rides the
-        // pane's own connection, so it costs nothing to trust.
-        #expect(ForegroundPolicy.needsConfirmClose(
-            sample: nil, executionState: .running, isRemote: true,
-            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: false
-        ))
-        // A sample is a frozen relic from before the toggle flipped — ignored.
-        #expect(!ForegroundPolicy.needsConfirmClose(
-            sample: sample(name: "btop", isIdleShell: false),
-            executionState: .idle, isRemote: true,
-            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: true
-        ))
-        // No conservative surface fallback: with probing off no observation
-        // can ever land, so "conservative" would mean warning on EVERY close
-        // forever — the user chose "don't warn" when they turned probing off.
-        #expect(!ForegroundPolicy.needsConfirmClose(
-            sample: nil, executionState: .idle, isRemote: true,
-            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: true
-        ))
-    }
-
-    @Test
-    func local_panes_ignore_the_probing_toggle() {
-        // Local signals cost no ssh connections; the toggle must not weaken
-        // libghostty's own verdict.
-        #expect(ForegroundPolicy.needsConfirmClose(
-            sample: nil, executionState: .idle, isRemote: false,
-            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: true
         ))
     }
 

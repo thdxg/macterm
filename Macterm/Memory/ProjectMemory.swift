@@ -32,16 +32,9 @@ final class ProjectMemory {
     /// before it prints its next prompt, and the extractor needs that prompt.
     @ObservationIgnored var screenReadDelay = Duration.milliseconds(400)
     @ObservationIgnored var gitReader: (String) async -> GitStatus? = { await ProjectGit.status(at: $0) }
-    /// The git state of a remote project, over one background ssh
-    /// connection (`ProjectGit.remoteStatus`).
+    /// The git state of a remote project, from the host's server over the
+    /// host's connection (`ProjectGit.remoteStatus`).
     @ObservationIgnored var remoteGitReader: (ProjectPath) async -> ProjectGit.RemoteResult = { await ProjectGit.remoteStatus($0) }
-    /// Whether a background ssh connection may be made at all (#272): the
-    /// kill switch of every background connection to a host.
-    @ObservationIgnored var remoteGitAllowed: () -> Bool = { Preferences.shared.backgroundSSHConnections }
-    /// The ssh destinations that refused the background login in this run
-    /// (`ProjectGit.RemoteResult.authRefused`). No git read goes to them
-    /// again, as the foreground probe suspends them too.
-    private(set) var refusedRemoteHosts: Set<String> = []
     @ObservationIgnored private var pendingGitReads: [UUID: Task<Void, Never>] = [:]
 
     /// How long a project is quiet after its last command before its
@@ -267,30 +260,11 @@ final class ProjectMemory {
 
     // MARK: - Git
 
-    /// Why the panel shows no git state for a project, or nil when a read
-    /// is possible.
-    enum GitUnavailability: Equatable {
-        /// Background ssh connections are off (Settings → General).
-        case backgroundSSHOff
-        /// The host refused the background login in this run.
-        case refused(host: String)
-    }
-
-    /// Whether a project's git state can be read now. A local project can
-    /// always be read. A remote project needs background ssh connections,
-    /// and a host that refused the login once is not asked again.
-    func gitUnavailability(for project: Project) -> GitUnavailability? {
-        guard case let .remote(user, host, _)? = ProjectPath.parse(project.path) else { return nil }
-        guard remoteGitAllowed() else { return .backgroundSSHOff }
-        let destination = RemoteSpawn.destination(user: user, host: host)
-        return refusedRemoteHosts.contains(destination) ? .refused(host: destination) : nil
-    }
-
     /// Read a project's git state again, after `delay`. A read that is
-    /// already waiting is replaced. A remote project is read over ssh
-    /// (`gitUnavailability` says when it is not).
+    /// already waiting is replaced. A remote project is read by the host's
+    /// server.
     func refreshGit(_ projectID: UUID, after delay: Duration = .zero) {
-        guard let project = projectLookup(projectID), gitUnavailability(for: project) == nil else { return }
+        guard let project = projectLookup(projectID) else { return }
         pendingGitReads[projectID]?.cancel()
         pendingGitReads[projectID] = Task { [weak self] in
             if delay > .zero { try? await Task.sleep(for: delay) }
@@ -333,21 +307,9 @@ final class ProjectMemory {
     }
 
     /// What a read leaves behind. An answer replaces the state. No answer
-    /// keeps the last one: a flaky link must not blank the panel. A refusal
-    /// suspends the host for the run.
+    /// keeps the last one: a flaky link must not blank the panel.
     private func apply(_ result: ProjectGit.RemoteResult, to project: Project) {
-        switch result {
-        case let .read(status):
-            git[project.id] = status
-        case .unreachable:
-            break
-        case .authRefused:
-            if case let .remote(user, host, _)? = ProjectPath.parse(project.path) {
-                let destination = RemoteSpawn.destination(user: user, host: host)
-                refusedRemoteHosts.insert(destination)
-                logger.info("git read auth refused for \(destination, privacy: .public); not asking again this run")
-            }
-        }
+        if case let .read(status) = result { git[project.id] = status }
     }
 
     /// The rows of the panel's Suggested section: the model's suggestions
@@ -387,9 +349,7 @@ final class ProjectMemory {
     /// button); otherwise the same records cost nothing.
     func writeSummary(_ projectID: UUID, force: Bool = false) async {
         guard summaryAllowed(), let project = projectLookup(projectID) else { return }
-        if gitUnavailability(for: project) == nil {
-            await apply(readGit(project), to: project)
-        }
+        await apply(readGit(project), to: project)
         guard !Task.isCancelled else { return }
         summarizer.refresh(
             projectID: projectID,

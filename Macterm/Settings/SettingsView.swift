@@ -577,7 +577,6 @@ private struct GeneralSettings: View {
     /// NOT `@AppStorage`, which binds to `UserDefaults.standard` — banned by the
     /// project, and it diverged from the `.onChange` write-through under test.
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
-    @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
     @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
     @State private var textFilePlacement: TextFilePlacement = Preferences.shared.textFilePlacement
     @State private var appLanguage: String? = Preferences.shared.appLanguage
@@ -730,14 +729,6 @@ private struct GeneralSettings: View {
             }
 
             Section {
-                Toggle(isOn: $backgroundSSHConnections) {
-                    Text("Background SSH connections")
-                    Text("Enable for live tab names, close warnings, and the Git state of remote projects.")
-                        .settingsDescription()
-                }
-                .onChange(of: backgroundSSHConnections) { _, v in
-                    Preferences.shared.backgroundSSHConnections = v
-                }
                 Toggle(isOn: $reconnectRemotePanes) {
                     Text("Reconnect panes after a dropped connection")
                     Text("Connects a disconnected pane to its session again when you wake the Mac or return to the app.")

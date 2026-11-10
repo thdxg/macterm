@@ -309,23 +309,14 @@ struct ProjectMemoryPanel: View {
 
     private var gitSection: some View {
         section(String(localized: "Git")) {
-            switch memory.gitUnavailability(for: project) {
-            case .backgroundSSHOff:
-                gitNote(
-                    String(localized: "Turn on Background SSH connections in Settings → General to read the Git state of a remote project.")
-                )
-            case let .refused(host):
-                gitNote(String(localized: "\(host) refused the background login, so Macterm does not read its Git state in this run."))
-            case nil:
-                if let git {
-                    gitDetails(git)
-                } else if memory.readingGit.contains(project.id) {
-                    ProgressView().controlSize(.small)
-                } else if project.isRemote {
-                    gitNote(String(localized: "This folder is not in a Git repository, or Git is not installed on the host."))
-                } else {
-                    gitNote(String(localized: "This folder is not in a Git repository, or Git is not installed."))
-                }
+            if let git {
+                gitDetails(git)
+            } else if memory.readingGit.contains(project.id) {
+                ProgressView().controlSize(.small)
+            } else if project.isRemote {
+                gitNote(String(localized: "This folder is not in a Git repository, or Git is not installed on the host."))
+            } else {
+                gitNote(String(localized: "This folder is not in a Git repository, or Git is not installed."))
             }
         }
     }

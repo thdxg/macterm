@@ -181,23 +181,14 @@ struct PaneTitleTests {
         #expect(pane.foregroundProcessName == "node")
     }
 
-    // MARK: - Remote panes (#104): execution-gated titles, probe-fed names
+    // MARK: - Remote panes (#104): execution-gated titles, names from the host's reports
 
-    private func makeRemotePane(probing: Bool = true) -> Pane {
-        let pane = Pane(projectPath: "devbox:~/dev/api", projectID: UUID())
-        pane.isRemoteProbingEnabled = { probing }
-        return pane
+    private func makeRemotePane() -> Pane {
+        Pane(projectPath: "devbox:~/dev/api", projectID: UUID())
     }
 
     private let claude = RemoteForeground(comm: "2.1.289", isIdle: false, command: "claude")
     private let zsh = RemoteForeground(comm: "-zsh", isIdle: true, isShell: true, command: "-zsh")
-
-    /// One probe round trip: it goes out (the resolver records every pane on
-    /// the host), then its answer lands.
-    private func probe(_ pane: Pane, answering foreground: RemoteForeground) {
-        pane.consumeRemoteProbeRequest()
-        pane.applyRemoteForeground(foreground)
-    }
 
     /// A Claude Code turn: typed, running with a progress title, ended.
     private func runTurn(_ pane: Pane, title: String = "◐ Terminal session icons") {
@@ -210,8 +201,7 @@ struct PaneTitleTests {
     @Test
     func remote_title_is_adopted_only_while_executing() {
         let pane = makeRemotePane()
-        // At the prompt: shell churn, discarded (the OSC 133 state is the
-        // provenance gate — there's no local pid to gate on).
+        // At the prompt with no report: nothing says a program holds the pty.
         pane.receiveRemoteReportedTitle("~/dev/api")
         #expect(pane.programTitle == nil)
 
@@ -224,259 +214,73 @@ struct PaneTitleTests {
     }
 
     @Test
-    func remote_title_expires_when_the_command_ends() {
-        // Kept, unconfirmed, until the probe the run end asks for: the sample
-        // can't say whether the program outlived its run.
+    func remote_title_expires_when_the_run_ends_at_the_shell() {
+        // The shell's report lands before the prompt that ends the run.
         let pane = makeRemotePane()
+        pane.applyRemoteForeground(claude)
         pane.recordUserInteraction()
         pane.markCommandRunning()
         pane.receiveRemoteReportedTitle("✳ remote session")
+        pane.applyRemoteForeground(zsh)
         pane.markCommandFinished()
-        #expect(pane.awaitsRemoteTitleConfirmation)
-        probe(pane, answering: zsh)
         #expect(pane.programTitle == nil)
     }
 
     @Test
-    func remote_title_outlives_a_run_the_sample_missed() {
-        // The agent started after the last probe, so the sample still says
-        // the shell when its turn ends; the probe the end requests decides.
+    func remote_title_outlives_a_turn_while_the_agent_holds_the_pty() {
+        // No flicker to the process name between turns.
         let pane = makeRemotePane()
-        probe(pane, answering: zsh)
-        runTurn(pane)
-        #expect(pane.programTitle == "◐ Terminal session icons")
-        probe(pane, answering: claude)
-        #expect(pane.programTitle == "◐ Terminal session icons")
-    }
-
-    @Test
-    func remote_idle_title_waits_for_a_probe_sent_after_it() {
-        // An agent idling between turns has no run state, so only a probe can
-        // say the title is a program's — and only one sent after it arrived.
-        let pane = makeRemotePane()
-        probe(pane, answering: claude)
-        pane.receiveRemoteReportedTitle("✳ Terminal session icons")
-        #expect(pane.programTitle == nil)
-        #expect(pane.awaitsRemoteTitleConfirmation)
-        probe(pane, answering: claude)
-        #expect(pane.programTitle == "✳ Terminal session icons")
-        #expect(!pane.awaitsRemoteTitleConfirmation)
-    }
-
-    @Test
-    func remote_idle_title_is_adopted_on_an_unchanged_answer() {
-        // The sample is republished only when it changes; the same answer
-        // again still confirms.
-        let pane = makeRemotePane()
-        probe(pane, answering: claude)
-        let sampledAt = pane.foregroundSample?.sampledAt
-        pane.receiveRemoteReportedTitle("✳ Terminal session icons")
-        probe(pane, answering: claude)
-        #expect(pane.programTitle == "✳ Terminal session icons")
-        #expect(pane.foregroundSample?.sampledAt == sampledAt)
-    }
-
-    @Test
-    func remote_probe_in_flight_before_the_title_cannot_confirm_it() {
-        let pane = makeRemotePane()
-        pane.consumeRemoteProbeRequest()
-        pane.receiveRemoteReportedTitle("✳ Terminal session icons")
         pane.applyRemoteForeground(claude)
-        #expect(pane.programTitle == nil)
-        #expect(pane.awaitsRemoteTitleConfirmation)
-        probe(pane, answering: claude)
-        #expect(pane.programTitle == "✳ Terminal session icons")
-    }
-
-    @Test
-    func remote_held_title_newest_wins() {
-        let pane = makeRemotePane()
-        probe(pane, answering: claude)
-        pane.receiveRemoteReportedTitle("✳ first")
-        pane.receiveRemoteReportedTitle("✳ second")
-        probe(pane, answering: claude)
-        #expect(pane.programTitle == "✳ second")
-    }
-
-    @Test
-    func remote_title_stays_up_through_a_turn_end_until_the_probe_confirms() {
-        // No flicker to the process name between turns: the run's title stays
-        // on screen, unconfirmed, until the probe the run end requests.
-        let pane = makeRemotePane()
-        probe(pane, answering: claude)
         runTurn(pane)
         #expect(pane.programTitle == "◐ Terminal session icons")
-        #expect(pane.awaitsRemoteTitleConfirmation)
         pane.receiveRemoteReportedTitle("✳ Terminal session icons")
-        #expect(pane.programTitle == "◐ Terminal session icons")
-        probe(pane, answering: claude)
         #expect(pane.programTitle == "✳ Terminal session icons")
     }
 
     @Test
-    func remote_prompt_title_after_a_run_is_never_shown() {
-        // The review's sequence (#473): the agent quits, its run ends while the
-        // last sample still says the agent, and the shell titles its prompt.
+    func remote_title_without_a_report_is_kept_only_for_its_run() {
+        // A host with no server (a plain shell) reports nothing: a title is
+        // shown while its run lasts, and nothing else is.
         let pane = makeRemotePane()
-        probe(pane, answering: claude)
         runTurn(pane)
-        pane.receiveRemoteReportedTitle("~/dev")
-        #expect(pane.programTitle != "~/dev")
-        probe(pane, answering: zsh)
         #expect(pane.programTitle == nil)
-        #expect(!pane.awaitsRemoteTitleConfirmation)
-        pane.receiveRemoteReportedTitle("~/dev")
-        probe(pane, answering: zsh)
+        pane.receiveRemoteReportedTitle("✳ Terminal session icons")
         #expect(pane.programTitle == nil)
     }
 
     @Test
-    func remote_exit_while_idle_needs_no_run_edge() {
-        // The agent quits between turns, so no run ends: the probe alone
-        // settles it, and the shell's title is never shown.
+    func remote_prompt_title_is_dropped_while_the_shell_holds_the_pty() {
         let pane = makeRemotePane()
-        probe(pane, answering: claude)
-        pane.receiveRemoteReportedTitle("✳ Terminal session icons")
-        probe(pane, answering: claude)
+        pane.applyRemoteForeground(zsh)
         pane.receiveRemoteReportedTitle("~/dev")
+        #expect(pane.programTitle == nil)
+    }
+
+    @Test
+    func remote_report_of_the_shell_clears_an_idle_title() {
+        // The agent quits between turns, so no run ends: the report alone
+        // settles it.
+        let pane = makeRemotePane()
+        pane.applyRemoteForeground(claude)
+        pane.receiveRemoteReportedTitle("✳ Terminal session icons")
         #expect(pane.programTitle == "✳ Terminal session icons")
-        probe(pane, answering: zsh)
+        pane.applyRemoteForeground(zsh)
+        #expect(pane.programTitle == nil)
+        pane.receiveRemoteReportedTitle("~/dev")
         #expect(pane.programTitle == nil)
     }
 
     @Test
     func remote_prompt_return_clears_the_title_at_once() {
-        // OSC 133;D is the host's shell owning its prompt: surer than a probe.
+        // OSC 133;D is the host's shell owning its prompt.
         let pane = makeRemotePane()
-        probe(pane, answering: claude)
-        runTurn(pane)
-        pane.notePromptReturned()
-        #expect(pane.programTitle == nil)
-        #expect(!pane.awaitsRemoteTitleConfirmation)
-        // A title after it is the prompt's, never held.
-        pane.receiveRemoteReportedTitle("~/dev")
-        #expect(!pane.awaitsRemoteTitleConfirmation)
-    }
-
-    @Test
-    func remote_prompt_return_after_the_title_drops_it() {
-        // A title hook that runs before ghostty's precmd titles first, then
-        // OSC 133;D lands.
-        let pane = makeRemotePane()
-        probe(pane, answering: claude)
-        pane.receiveRemoteReportedTitle("~/dev")
-        pane.notePromptReturned()
-        probe(pane, answering: claude)
-        #expect(pane.programTitle == nil)
-    }
-
-    @Test
-    func remote_title_without_probing_is_never_held() {
-        // Background SSH off: a sample from before it was turned off counts
-        // for nothing, the run end clears, and nothing is held.
-        let pane = makeRemotePane(probing: false)
         pane.applyRemoteForeground(claude)
         runTurn(pane)
+        pane.notePromptReturned()
         #expect(pane.programTitle == nil)
-        pane.receiveRemoteReportedTitle("✳ Terminal session icons")
+        // A title after it is the prompt's.
+        pane.receiveRemoteReportedTitle("~/dev")
         #expect(pane.programTitle == nil)
-        #expect(!pane.awaitsRemoteTitleConfirmation)
-    }
-
-    @Test
-    func remote_title_waiting_on_a_probe_goes_when_none_can_answer() {
-        let pane = makeRemotePane()
-        probe(pane, answering: claude)
-        runTurn(pane)
-        pane.abandonRemoteTitleConfirmation()
-        #expect(pane.programTitle == nil)
-        #expect(!pane.awaitsRemoteTitleConfirmation)
-    }
-
-    @Test
-    func remote_confirmed_title_survives_abandonment() {
-        // Abandoning takes only what still waits; a confirmed title stays.
-        let pane = makeRemotePane()
-        probe(pane, answering: claude)
-        pane.receiveRemoteReportedTitle("✳ Terminal session icons")
-        probe(pane, answering: claude)
-        pane.abandonRemoteTitleConfirmation()
-        #expect(pane.programTitle == "✳ Terminal session icons")
-    }
-
-    @Test
-    func remote_submission_drops_only_the_held_title() {
-        let pane = makeRemotePane()
-        probe(pane, answering: claude)
-        runTurn(pane)
-        pane.receiveRemoteReportedTitle("✳ Terminal session icons")
-        pane.recordCommandSubmission(hasContent: true)
-        probe(pane, answering: claude)
-        #expect(pane.programTitle == "◐ Terminal session icons")
-    }
-
-    @Test
-    func remote_teardown_drops_a_title_waiting_on_a_probe() {
-        let pane = makeRemotePane()
-        probe(pane, answering: claude)
-        runTurn(pane)
-        pane.destroySurface()
-        #expect(pane.programTitle == nil)
-        #expect(!pane.awaitsRemoteTitleConfirmation)
-    }
-
-    // MARK: Retry wake
-
-    /// Counts the poll wakes `pane` itself posts, while `body` runs and for
-    /// `settle` after.
-    private func retryWakes(of pane: Pane, settle: Duration = .milliseconds(300), _ body: () -> Void) async -> Int {
-        let wakes = LockedBox(0)
-        let observer = NotificationCenter.default.addObserver(
-            forName: .terminalPollEvent, object: pane, queue: .main
-        ) { _ in wakes.mutate { $0 += 1 } }
-        defer { NotificationCenter.default.removeObserver(observer) }
-        body()
-        try? await Task.sleep(for: settle)
-        return wakes.value
-    }
-
-    private func makeRetryingRemotePane() -> Pane {
-        let pane = Pane(projectPath: "devbox:~/dev/api", projectID: UUID(), remoteTitleRetryDelay: 0.01)
-        pane.isRemoteProbingEnabled = { true }
-        return pane
-    }
-
-    @Test
-    func remote_held_title_wakes_the_poll_a_bounded_number_of_times() async {
-        // With every window hidden the poll is paused, and the probe that
-        // would confirm the title may have been throttled: nothing else
-        // would send the next one.
-        let pane = makeRetryingRemotePane()
-        let wakes = await retryWakes(of: pane) {
-            pane.receiveRemoteReportedTitle("✳ Terminal session icons")
-        }
-        #expect(wakes == Pane.remoteTitleRetryLimit)
-    }
-
-    @Test
-    func remote_settled_title_stops_waking_the_poll() async {
-        let pane = makeRetryingRemotePane()
-        let wakes = await retryWakes(of: pane) {
-            pane.receiveRemoteReportedTitle("✳ Terminal session icons")
-            probe(pane, answering: claude)
-        }
-        #expect(pane.programTitle == "✳ Terminal session icons")
-        #expect(wakes == 0)
-    }
-
-    @Test
-    func remote_abandoned_title_stops_waking_the_poll() async {
-        let pane = makeRetryingRemotePane()
-        let wakes = await retryWakes(of: pane) {
-            pane.receiveRemoteReportedTitle("✳ Terminal session icons")
-            pane.abandonRemoteTitleConfirmation()
-        }
-        #expect(wakes == 0)
     }
 
     @Test
@@ -484,22 +288,18 @@ struct PaneTitleTests {
         // The host says the session's shell doesn't own the tty, but what
         // does is another shell: its prompt titles are churn.
         let pane = makeRemotePane()
-        let nested = RemoteForeground(comm: "zsh", isIdle: false, command: "zsh")
-        probe(pane, answering: nested)
+        pane.applyRemoteForeground(RemoteForeground(comm: "zsh", isIdle: false, command: "zsh"))
         pane.receiveRemoteReportedTitle("~/dev")
-        probe(pane, answering: nested)
         #expect(pane.programTitle == nil)
     }
 
     @Test
     func remote_multiplexer_is_a_program() {
-        // The probe never calls tmux a shell (Debian lists it in /etc/shells),
+        // The host never calls tmux a shell (Debian lists it in /etc/shells),
         // so its titles and its `run:` are a program's.
         let pane = makeRemotePane()
-        let tmux = RemoteForeground(comm: "tmux", isIdle: false, isShell: false, command: "tmux attach")
-        probe(pane, answering: tmux)
+        pane.applyRemoteForeground(RemoteForeground(comm: "tmux", isIdle: false, isShell: false, command: "tmux attach"))
         pane.receiveRemoteReportedTitle("build: make")
-        probe(pane, answering: tmux)
         #expect(pane.programTitle == "build: make")
         #expect(pane.remoteForegroundCommand == "tmux attach")
     }
@@ -509,10 +309,8 @@ struct PaneTitleTests {
         // `elvish` is in the host's /etc/shells and not the Mac's: the host's
         // verdict decides.
         let pane = makeRemotePane()
-        let elvish = RemoteForeground(comm: "elvish", isIdle: false, isShell: true, command: "elvish")
-        probe(pane, answering: elvish)
+        pane.applyRemoteForeground(RemoteForeground(comm: "elvish", isIdle: false, isShell: true, command: "elvish"))
         pane.receiveRemoteReportedTitle("~/dev")
-        probe(pane, answering: elvish)
         #expect(pane.programTitle == nil)
     }
 
@@ -523,12 +321,12 @@ struct PaneTitleTests {
     }
 
     @Test
-    func remote_foreground_name_comes_from_the_probe_and_keeps_basename() {
+    func remote_foreground_name_comes_from_the_report_and_keeps_basename() {
         let pane = makeRemotePane()
         // A macOS remote reports comm as a full path; keep the basename.
         pane.applyRemoteForegroundName("/usr/local/bin/btop")
         #expect(pane.displayTitle == "btop")
-        // A probe miss (nil) keeps the last-known name — no title flapping.
+        // No name (nil) keeps the last-known name — no title flapping.
         pane.applyRemoteForegroundName(nil)
         #expect(pane.displayTitle == "btop")
     }

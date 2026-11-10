@@ -1,7 +1,7 @@
 import Foundation
 
-/// Reads a project's git state for the memory panel: locally, or over ssh
-/// for a remote project (`remoteStatus`).
+/// Reads a project's git state for the memory panel: locally, or through
+/// the host's server for a remote project (`remoteStatus`).
 ///
 /// **Never the `/usr/bin/git` shim on a Mac without the Command Line Tools**:
 /// it opens the install dialog (see `GitWorktrees`). `executable` takes a git
@@ -23,16 +23,15 @@ import Foundation
 /// diff, and the diff of a commit is never read: its subject is in the
 /// digest already.
 ///
-/// A remote read is one ssh connection that runs the same six commands on
-/// the host (`RemoteSpawn.gitProbeArgv`), with the outputs separated by
-/// `recordSeparator`. It is a background connection like the foreground
-/// probe, so `Preferences.backgroundSSHConnections` gates it (#272), and a
-/// host that refuses the login is not asked again in this run
-/// (`RemoteResult.authRefused`, applied by `ProjectMemory`).
+/// A remote read is one `command.run` request to the host's server, over
+/// the host's one connection (`RemoteHosts.run`, 0058). It runs the same six
+/// commands on the host (`RemoteSpawn.gitProbeScript`), with the outputs
+/// separated by `recordSeparator`. It never asks for a login: with no
+/// connection up, nothing is read.
 enum ProjectGit {
     static let timeout: Duration = .seconds(5)
-    /// A remote read waits for the connection too (`opConnectTimeoutSeconds`).
-    static let remoteTimeout: Duration = .seconds(15)
+    /// The time limit of a remote read on the host.
+    static let remoteTimeout: Duration = .seconds(8)
     static let recentCommitCount = 5
     static let recentBranchCount = 6
     /// Between the six outputs of a remote read (ASCII record separator).
@@ -126,42 +125,40 @@ enum ProjectGit {
         /// The host answered: its git state, or nil when the directory is
         /// not in a repository or the host has no git.
         case read(GitStatus?)
-        /// No answer: the host is not reachable, or the read timed out.
-        /// What is known stays.
+        /// No answer: no connection or no server is up, or the read timed
+        /// out. What is known stays.
         case unreachable
-        /// The host refused the non-interactive login (#272). Under
-        /// `BatchMode` a refusal can only repeat, and on a Touch ID key
-        /// every attempt is a dialog, so the host is not asked again.
-        case authRefused
     }
 
-    /// The git state of a remote project's directory, over one ssh
-    /// connection. The ssh is the one on PATH, through `/usr/bin/env`, as
-    /// every background operation (see `ZmxClient.live`).
+    /// The git state of a remote project's directory, from the host's
+    /// server (`RemoteHosts.run`).
     static func remoteStatus(_ remote: ProjectPath) async -> RemoteResult {
-        guard let argv = RemoteSpawn.gitProbeArgv(remote: remote) else { return .unreachable }
-        guard let outcome = await ProcessRunner.run(
-            "/usr/bin/env", ["ssh"] + argv, environment: ProcessInfo.processInfo.environment, timeout: remoteTimeout
+        guard case let .remote(user, host, directory) = remote else { return .unreachable }
+        let result = await RemoteHosts.shared.run(
+            ["/bin/sh", "-c", RemoteSpawn.gitProbeScript(directory: directory)],
+            destination: RemoteSpawn.destination(user: user, host: host),
+            timeout: remoteTimeout
         )
-        else {
-            return .unreachable
-        }
-        switch outcome.status {
+        guard let result else { return .unreachable }
+        return remoteResult(code: result.code, output: String(decoding: result.output.bytes, as: UTF8.self))
+    }
+
+    /// What the script's exit means. Pure.
+    static func remoteResult(code: UInt8?, output: String) -> RemoteResult {
+        switch code {
         case 0:
-            return .read(parseRemoteOutput(outcome.stdout))
+            .read(parseRemoteOutput(output))
         case 2,
              3,
              4:
             // The script's own exits: no such directory, no git, not a repository.
-            return .read(nil)
-        case 255:
-            return RemoteProbeOutcome.classifyFailure(stderr: outcome.stderr) == .authRefused ? .authRefused : .unreachable
+            .read(nil)
         default:
-            return .unreachable
+            .unreachable
         }
     }
 
-    /// The six outputs of `RemoteSpawn.gitProbeArgv`, split at the record
+    /// The six outputs of `RemoteSpawn.gitProbeScript`, split at the record
     /// separator, through `GitStatusParser`. A reply with fewer parts has
     /// the rest as nil. The diff is last, so a separator inside it stays
     /// part of it.

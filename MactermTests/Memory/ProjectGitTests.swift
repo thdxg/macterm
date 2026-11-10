@@ -86,4 +86,16 @@ struct ProjectGitTests {
     func an_empty_reply_is_no_state() {
         #expect(ProjectGit.parseRemoteOutput("") == nil)
     }
+
+    @Test
+    func the_scripts_own_exits_are_no_state_and_any_other_end_keeps_the_last() {
+        // 2, 3 and 4: no folder, no git, no repository. A signal or another
+        // code is not an answer, so the panel keeps what it knew.
+        #expect(ProjectGit.remoteResult(code: 0, output: status) == .read(ProjectGit.parseRemoteOutput(status)))
+        for code: UInt8 in [2, 3, 4] {
+            #expect(ProjectGit.remoteResult(code: code, output: "") == .read(nil))
+        }
+        #expect(ProjectGit.remoteResult(code: 1, output: status) == .unreachable)
+        #expect(ProjectGit.remoteResult(code: nil, output: status) == .unreachable)
+    }
 }

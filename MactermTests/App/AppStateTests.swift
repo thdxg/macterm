@@ -2155,13 +2155,8 @@ struct AppStateTests {
     @Test
     func poll_settles_a_quiet_run_with_the_status_indicator_off() throws {
         let priorIndicator = Preferences.shared.showTabStatusIndicator
-        let priorSSH = Preferences.shared.backgroundSSHConnections
-        defer {
-            Preferences.shared.showTabStatusIndicator = priorIndicator
-            Preferences.shared.backgroundSSHConnections = priorSSH
-        }
+        defer { Preferences.shared.showTabStatusIndicator = priorIndicator }
         Preferences.shared.showTabStatusIndicator = false
-        Preferences.shared.backgroundSSHConnections = false
         let state = makeAppState()
         state.isAppActive = { false }
         let p = seedProject(state, name: "remote", path: "devbox:~/dev/api")
@@ -2187,7 +2182,6 @@ struct AppStateTests {
             isBundled: { true },
             killSession: { name in await killed.append(name) },
             killRemoteSession: { _, name, _ in await (remoteKilled ?? killed).append(name) },
-            remoteForegrounds: { _, _ in .unreachable },
             listSessions: { [] },
             endV1Sessions: { _ in true }
         )
@@ -2318,7 +2312,6 @@ struct AppStateTests {
             isBundled: { true },
             killSession: { _ in },
             killRemoteSession: { _, name, _ in await remoteKilled.append(name) },
-            remoteForegrounds: { _, _ in .unreachable },
             listSessions: { [] },
             endV1Sessions: { _ in true }
         )
@@ -2362,54 +2355,6 @@ struct AppStateTests {
         #expect(state.workspaces[p.id]?.tabs.allSatisfy { $0.splitRoot.findPane(id: pane.id) == nil } == true)
         await remoteKilled.settle(expecting: 1)
         #expect(await remoteKilled.names == [pane.sessionName])
-    }
-
-    // MARK: - Background ssh connections toggle (#272)
-
-    /// A ZmxClient whose foreground probe records each invocation. The kill
-    /// paths are irrelevant here; only the probe seam matters.
-    private func probeCountingZmx(into probes: KilledSessions) -> ZmxClient {
-        ZmxClient(
-            executableURL: { nil },
-            isBundled: { true },
-            killSession: { _ in },
-            killRemoteSession: { _, _, _ in },
-            remoteForegrounds: { _, _ in
-                await probes.append(UUID().uuidString)
-                return .unreachable
-            },
-            listSessions: { [] },
-            endV1Sessions: { _ in true }
-        )
-    }
-
-    @Test
-    func background_ssh_toggle_gates_every_remote_probe() async throws {
-        let prior = Preferences.shared.backgroundSSHConnections
-        defer { Preferences.shared.backgroundSSHConnections = prior }
-        let probes = KilledSessions()
-        let state = makeAppState()
-        state.zmx = probeCountingZmx(into: probes)
-        let p = seedProject(state, name: "remote", path: "devbox:~/dev/api")
-        let pane = try #require(state.workspaces[p.id]?.activeTab?.splitRoot.allPanes().first)
-        // Primed at init — the request that would bypass the resolver's
-        // per-host interval AND the window-visibility filter, so this test
-        // needs neither a visible window nor a 3s wait.
-        #expect(pane.remoteProbePending)
-
-        Preferences.shared.backgroundSSHConnections = false
-        state.refreshAllForegroundProcesses()
-        // The resolver consumes a pending request synchronously the moment it
-        // fires the host's probe, so a still-pending request proves the tick
-        // never reached the resolver — deterministic, no negative-wait.
-        #expect(pane.remoteProbePending)
-        #expect(await probes.names.isEmpty)
-
-        Preferences.shared.backgroundSSHConnections = true
-        state.refreshAllForegroundProcesses()
-        #expect(!pane.remoteProbePending)
-        await probes.settle(expecting: 1)
-        #expect(await probes.names.count == 1)
     }
 
     @Test
