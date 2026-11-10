@@ -22,16 +22,19 @@ struct ProjectMemoryDigest: Equatable {
     static let changedPathLimit = 12
 
     static let instructions = """
-    You tell a software developer what they were working on in a project, from the state of its Git \
+    You tell a software developer what they have been working on in a project, from the state of its Git \
     repository and a log of the commands that ran there. \
-    Write two or three sentences, at most 60 words, about the goal of the work. Read the goal from Git first: \
-    the current branch, the commits on it, the changed files, and the other recent branches. \
-    Use the commands only to support what Git shows. Do not retell the commands or their order. \
+    Write two or three sentences, at most 60 words, that summarize the work in your own words. \
+    Read the work from Git first: the commits on the current branch, and the changed files when the text lists them. \
+    On a main branch, say what the latest commits did. Do not list the commit subjects one by one. \
+    Mention a command only when it shows something about the work that Git does not show. \
+    Do not retell the commands or their order. \
+    Do not state a goal and do not write "The goal is". \
     Do not describe a failed command and do not suggest a next step: the panel shows these separately. \
-    Mention another branch only when it is part of the same work. \
+    Name a file only when the text lists it under Changed files. When the text has no Changed files, \
+    name no file and say nothing about changes, staged files or the working tree. \
     When there is no Git state, say what the commands show about the work. \
     Name only branches, commits, files and commands that are in the text; never guess a name or a change. \
-    Name a file only when the text lists it under Changed files; with no uncommitted changes, name no file. \
     Put commands, branches and file names in backticks. \
     Do not say how long ago things happened: the reader may see the text hours later. \
     Do not use headings, lists or tables. \
@@ -108,20 +111,21 @@ struct ProjectMemoryDigest: Equatable {
     /// See `key`.
     static func key(projectName: String, entries: [MemoryEntry], git: GitStatus?) -> String {
         let records = entries.suffix(recentCommandCount).map { "\($0.id.uuidString):\($0.outcome.rawValue)" }
-        let branches = git?.branches.map { "\($0.name)@\($0.hash)" } ?? []
         let branchCommits = git?.branchCommits.map { ["own"] + $0.map(\.hash) } ?? []
         let changedPaths = git?.changedPaths.prefix(changedPathLimit).map(\.self) ?? []
-        return ([projectName] + records + [git.map(gitLine) ?? "", git?.recentCommits.first?.hash ?? ""] + branches
-            + branchCommits + changedPaths).joined(separator: "|")
+        return ([projectName] + records + [git.map(gitLine) ?? "", git?.recentCommits.first?.hash ?? ""] + branchCommits
+            + changedPaths).joined(separator: "|")
     }
 
     /// The git state, then the latest commands, newest first, as lines.
-    /// The Git facts that show what the work is for come first: the
-    /// commits of the branch and the changed files.
+    /// The Git facts that show the work come first: the commits of the
+    /// branch and the changed files. The other branches are not in it: the
+    /// model wrote about them in place of the current branch.
     static func digest(entries: [MemoryEntry], git: GitStatus?, now: Date) -> String {
         var lines: [String] = []
         if let git {
-            lines.append("Git: " + gitLine(git))
+            let line = gitLine(git)
+            if !line.isEmpty { lines.append("Git: " + line) }
             if let branch = git.branch, let own = git.branchCommits, !git.isOnMainBranch {
                 // The latest commits of HEAD on a new branch are the main
                 // branch's history: the model took them for the work of the
@@ -136,14 +140,6 @@ struct ProjectMemoryDigest: Equatable {
                 var line = "Changed files: " + git.changedPaths.prefix(changedPathLimit).map { "`\($0)`" }.joined(separator: ", ")
                 if git.changedPaths.count > changedPathLimit { line += ", and \(git.changedPaths.count - changedPathLimit) more" }
                 lines.append(line)
-            }
-            let others = git.branches.filter { $0.name != git.branch }
-            if !others.isEmpty {
-                lines.append("Other branches with recent commits: " + others.map { branch in
-                    var part = "`\(branch.name)` (\(age(of: branch.lastCommit, now: now)): \"\(branch.subject)\""
-                    if branch.worktree != nil { part += ", checked out in another worktree" }
-                    return part + ")"
-                }.joined(separator: "; "))
             }
         }
         let recent = entries.suffix(recentCommandCount).reversed()
@@ -169,9 +165,9 @@ struct ProjectMemoryDigest: Equatable {
         }
         if git.ahead > 0 { parts.append("\(git.ahead) commits ahead of \(git.upstream ?? "upstream")") }
         if git.behind > 0 { parts.append("\(git.behind) commits behind \(git.upstream ?? "upstream")") }
-        if git.isClean {
-            parts.append("no uncommitted changes")
-        } else {
+        // A clean tree is not news: the model wrote "No changes are
+        // staged" about it.
+        if !git.isClean {
             var changes: [String] = []
             if git.staged > 0 { changes.append("\(git.staged) staged") }
             if git.unstaged > 0 { changes.append("\(git.unstaged) modified") }

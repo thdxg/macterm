@@ -41,7 +41,7 @@ struct ProjectMemoryDigestTests {
     }
 
     @Test
-    func other_branches_are_in_the_digest_and_its_key() throws {
+    func other_branches_are_not_in_the_digest_or_its_key() throws {
         var git = GitStatus(branch: "main")
         git.branches = [
             GitStatus.Branch(name: "main", hash: "a1", subject: "Add the Makefile", lastCommit: now.addingTimeInterval(-86400)),
@@ -54,13 +54,20 @@ struct ProjectMemoryDigestTests {
             ),
         ]
         let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: [], git: git, now: now))
-        #expect(digest.text.contains(
-            "Other branches with recent commits: `feature/tax` (2 hours ago: \"Apply tax\", checked out in another worktree)"
-        ))
-        #expect(!digest.text.contains("`main` ("))
+        // The model wrote about the other branches in place of the current one.
+        #expect(!digest.text.contains("feature/tax"))
+        #expect(!digest.text.contains("Apply tax"))
         var moved = git
         moved.branches[1].hash = "c3"
-        #expect(ProjectMemoryDigest(projectName: "x", entries: [], git: moved, now: now)?.key != digest.key)
+        #expect(ProjectMemoryDigest(projectName: "x", entries: [], git: moved, now: now)?.key == digest.key)
+    }
+
+    @Test
+    func a_clean_tree_is_not_in_the_digest() throws {
+        var git = GitStatus(branch: "main")
+        git.recentCommits = [GitStatus.Commit(hash: "m1", subject: "Release 2.0", date: now)]
+        let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: [], git: git, now: now))
+        #expect(digest.text == "Git: branch main\nLatest commits: \"Release 2.0\"")
     }
 
     @Test
@@ -224,6 +231,12 @@ struct ProjectMemoryDigestTests {
         var git = GitStatus()
         git.detachedAt = "abc1234"
         git.stashes = 1
-        #expect(ProjectMemoryDigest.gitLine(git) == "detached at abc1234; no uncommitted changes; 1 stashes")
+        #expect(ProjectMemoryDigest.gitLine(git) == "detached at abc1234; 1 stashes")
+    }
+
+    @Test
+    func a_git_state_with_nothing_to_say_has_no_git_line() throws {
+        let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: [], git: GitStatus(), now: now))
+        #expect(digest.text.isEmpty)
     }
 }
