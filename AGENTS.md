@@ -1169,7 +1169,7 @@ The site at `macterm.thdxg.dev` (landing page, docs, changelog, and the proxy of
 
 The site build checks out this repository at `main` and reads `docs/` and `assets/` from it.
 
-- **`website-dispatch.yml` starts the site build.** It sends a `repository_dispatch` (`macterm-content`) to `macterm/website` on a push to `main` that changes `docs/**` or `assets/**`, and on a release that a person publishes, edits or deletes. Events that `GITHUB_TOKEN` raises start no runs, so a release that a workflow publishes does not start a build. The dispatch needs the `WEBSITE_DISPATCH_TOKEN` secret (contents write on `macterm/website`).
+- **`website-dispatch.yml` starts the site build.** It sends a `repository_dispatch` (`macterm-content`) to `macterm/website` on a push to `main` that changes `docs/**` or `assets/**`, and on a release that a person publishes, edits or deletes. Events that `GITHUB_TOKEN` raises start no runs, so a release that a workflow publishes does not start a build. The dispatch uses a token of the org's `macterm-ci` GitHub App (org variable `MACTERM_APP_CLIENT_ID`, org secret `MACTERM_APP_PRIVATE_KEY`), for `macterm/website` only.
 - **`Docs / Site Build` runs the site build on a pull request that changes `docs/**` or `assets/**`**, against `macterm/website` at `main`. A page that breaks the build fails here, before it reaches `main`.
 
 ## Releasing
