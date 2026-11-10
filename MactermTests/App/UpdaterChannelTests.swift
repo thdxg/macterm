@@ -83,8 +83,11 @@ struct UpdaterChannelTests {
     /// — silently, since a feed that 404s surfaces nothing on a scheduled check.
     ///
     /// That is not hypothetical: this feed used to live on GitHub Pages, and
-    /// taking that site down stranded every install pinned to it. The three
-    /// files below cannot import each other, so this pins them together.
+    /// taking that site down stranded every install pinned to it. The files
+    /// below cannot import each other, so this pins them together. The site
+    /// itself (its `SITE_URL` and the Caddyfile's proxy of the feed) is in the
+    /// macterm/website repository, whose `check-feed.mjs` pins it to these
+    /// same files.
     @Test
     func the_update_feed_and_the_website_name_one_origin() throws {
         let root = repoRoot()
@@ -96,32 +99,17 @@ struct UpdaterChannelTests {
             contentsOf: root.appendingPathComponent("scripts/publish-appcast.sh"),
             encoding: .utf8
         )
-        let siteBuild = try String(
-            contentsOf: root.appendingPathComponent("website/build-docs.mjs"),
-            encoding: .utf8
-        )
 
         // The website's own canonical origin is the authority; the app fetches
         // from it and the publisher writes URLs against it.
         let siteURL = "https://macterm.thdxg.dev"
-        #expect(siteBuild.contains("const SITE_URL = \"\(siteURL)\";"))
         #expect(infoPlist.contains("<string>\(siteURL)/appcast.xml</string>"))
         #expect(publishScript.contains("SITE_URL=\"\(siteURL)\""))
 
-        // The notes URL keeps its `.html`, which website/Caddyfile exempts from
-        // the redirect that strips the extension everywhere else. Drop either
-        // half and every published <sparkle:releaseNotesLink> 301s to a path
-        // that does not exist on the branch.
-        let caddyfile = try String(
-            contentsOf: root.appendingPathComponent("website/Caddyfile"),
-            encoding: .utf8
-        )
+        // The notes URL keeps its `.html`, which the website's Caddyfile
+        // exempts from the redirect that strips the extension everywhere
+        // else. check-feed.mjs of macterm/website reads this line.
         #expect(publishScript.contains(#"NOTES_REL_PATH="notes/${TAG}.html""#))
-        #expect(caddyfile.contains("not path /notes/*"))
-        // ...and that the site proxies both paths at all, rather than serving
-        // them out of an image built long before the release that writes them.
-        #expect(caddyfile.contains("@updates path /appcast.xml /notes/*"))
-        #expect(caddyfile.contains("rewrite /thdxg/macterm/appcast{uri}"))
 
         // The branch behind that proxy is the store the publisher writes and
         // the tip workflow's "already published?" gate reads. All three name

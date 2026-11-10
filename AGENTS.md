@@ -224,7 +224,7 @@ A pane that asks for a password gets a native `NSPopover` at the cursor (`Passwo
 
 ### Copy mode (fork patches 0013 to 0018)
 
-Copy mode is a keyboard cursor over the scrollback, with the keys of Vim by default and the keys of Helix as a setting, over the selection model of Helix. The grammar for users is in `website/docs/pages/42-copy-mode.md`. The **terminal's selection is the cursor**: its end is the head that the motions move, its start is the anchor.
+Copy mode is a keyboard cursor over the scrollback, with the keys of Vim by default and the keys of Helix as a setting, over the selection model of Helix. The grammar for users is in `docs/42-copy-mode.md`. The **terminal's selection is the cursor**: its end is the head that the motions move, its start is the anchor.
 
 - **The primitives are fork patch 0013** (`.github/downstream/0013-selection-motions.patch` in thdxg/ghostty): the binding actions `start_selection`, `move_selection:<motion>`, `extend_selection:<motion>`, `collapse_selection`, `flip_selection`, `select_line` and `clear_selection`. The arithmetic is `Selection.move` and `Selection.expandToLines`, with tests in `Selection.zig`. The fork's `Test` workflow is off, so `build-ghosttykit.yml` runs `zig build test -Dtest-filter=Selection -Dtest-filter="parse:"` before each build. `adjust_selection` of upstream cannot serve: it needs a selection that the mouse made, it only grows it, and it skips blank cells.
 - **The drawn cursor is fork patch 0014** (`0014-selection-cursor.patch`): the binding action `selection_cursor:on|off` sets `Terminal.flags.selection_cursor`, and the render state (`render.zig`) then takes the head of the selection as the cursor cell instead of the program's cursor. That cursor is a steady block, shown even while the program hides its own, and a one-cell selection draws as that cursor alone, as in Helix. The program's cursor does not move, and hit tests and the IME point stay on it. `CopyModeController.enter` sends `on` after `start_selection`; `exit` sends `off` before `clear_selection`. `smooth-cursor` glides it between motions. The build's filter `"selection head"` runs its test.
@@ -243,7 +243,7 @@ Copy mode is a keyboard cursor over the scrollback, with the keys of Vim by defa
 
 ### Explain Output (Apple Intelligence)
 
-**Explain Output** explains the selection of a pane or, with none, the output of the last command, in a popover. Apple's on-device model writes it (FoundationModels). Nothing leaves the Mac. The grammar for users is in `website/docs/pages/43-explain-output.md`.
+**Explain Output** explains the selection of a pane or, with none, the output of the last command, in a popover. Apple's on-device model writes it (FoundationModels). Nothing leaves the Mac. The grammar for users is in `docs/43-explain-output.md`.
 
 - **`OnDeviceModel` is the only file that imports FoundationModels.** The model needs macOS 26, a Mac that supports Apple Intelligence, and Apple Intelligence turned on. `availability` is `.unsupported` (the command, the palette row and the menu item are not there), `.notReady` (the palette mutes the row and a keybind shows a toast, through `unavailableNotice`) or `.available`.
   - Each request has a new `LanguageModelSession`. A session keeps its transcript, and a transcript that grows fills the context window for good.
@@ -275,7 +275,7 @@ Copy mode is a keyboard cursor over the scrollback, with the keys of Vim by defa
 
 ### Project Insights (Settings → Intelligence)
 
-The user-facing name is **Project Insights** (the Settings section, the command Toggle Project Insights, the docs page `/docs/project-insights`, with a 301 from the old `/docs/project-memory` in the Caddyfile). The code, the preference keys (`macterm.memory.*`), the hotkey id `toggle_project_memory`, the `MactermKeybind` case, the storage folder `Memory/` and the DEBUG verb `project memory` keep the old name on purpose: each is stored or wired, and a rename would drop a user's keybind, a saved shortcut or their records. Each project keeps a log of the commands that finish in it. A floating glass panel on the trailing side of the window shows where the user left off, the project's Git state and the next commands to run. The code is in `Macterm/Memory/` and `Macterm/Views/ProjectMemoryPanel.swift`. The grammar for users is in `website/docs/pages/43b-project-insights.md`.
+The user-facing name is **Project Insights** (the Settings section, the command Toggle Project Insights, the docs page `/docs/project-insights`, with a 301 from the old `/docs/project-memory` in the Caddyfile of macterm/website). The code, the preference keys (`macterm.memory.*`), the hotkey id `toggle_project_memory`, the `MactermKeybind` case, the storage folder `Memory/` and the DEBUG verb `project memory` keep the old name on purpose: each is stored or wired, and a rename would drop a user's keybind, a saved shortcut or their records. Each project keeps a log of the commands that finish in it. A floating glass panel on the trailing side of the window shows where the user left off, the project's Git state and the next commands to run. The code is in `Macterm/Memory/` and `Macterm/Views/ProjectMemoryPanel.swift`. The grammar for users is in `docs/43b-project-insights.md`.
 
 - **macOS 26 and later only** (`ProjectMemory.isSupported`). Below it, nothing records, the command has no action, the menu item and the toolbar button are not there, and Settings lists no Intelligence pane (`SettingsPane.visible`). There is no fallback UI.
 - **It needs Apple Intelligence** (`ProjectMemory.modelAvailability`, `OnDeviceModel.availability`). While the model is `.notReady` or `.unsupported`, `ProjectMemory.isEnabled` is false, so nothing records and the command, the toolbar button, the panel and the intent are off. `Preferences.projectMemory` keeps the user's value, so the feature comes back when Apple Intelligence does. Settings → Intelligence disables the switch, dims it, shows it off, and adds the reason after its description in the same caption, with the text of the On-device model row. The value is observable and read again only when the app becomes active (`refreshModelAvailability`, observer in `attach`) and when Settings → Intelligence opens, because the user turns Apple Intelligence on in System Settings. A model download that finishes while Macterm is in front shows at the next activation. There is no summary toggle (`macterm.memory.summary` is a retired key).
@@ -371,7 +371,7 @@ These rules for the spawn script come from tests against a real host:
 
 ### Installing zmx on a host (#699)
 
-**Install zmx on Host…** puts the fork's zmx on the host of a remote project (`ZmxInstallSheet`, `RemoteZmxInstallFlow`, the pure rules in `RemoteZmxInstall.swift`). It is in the row menu of a remote project in Settings → Projects, and in the New Remote Project sheet, before the project exists. The grammar for users is in `website/docs/pages/70-remote-projects.md`.
+**Install zmx on Host…** puts the fork's zmx on the host of a remote project (`ZmxInstallSheet`, `RemoteZmxInstallFlow`, the pure rules in `RemoteZmxInstall.swift`). It is in the row menu of a remote project in Settings → Projects, and in the New Remote Project sheet, before the project exists. The grammar for users is in `docs/70-remote-projects.md`.
 
 - **The sheet checks first, and installs only on a click.** One ssh runs `RemoteSpawn.zmxHostCheckScript`: `uname -s`, `uname -m`, the zmx the project would run (`zmxPath`, else the first in PATH) and its `zmx version`. `ZmxHostTarget.detect` maps the host to a release asset (Linux x86_64 or aarch64, or the universal macOS build). `ZmxVersion.parse` reads the fork marker (`1.0.1+thdxg.<key>`, which `scripts/build-server.sh` stamps with `-Dversion`). `ZmxInstallVerdict.decide` says what the sheet offers: Install for a host with no zmx, Update for upstream zmx or another build, nothing for the bundled build or a host with no build.
 - **Every connection runs under a pty** (`TTYCommand`: `posix_openpt` and `posix_spawn` with `SETSID`, never `fork`). The background operations of a remote project use `BatchMode`, which turns every prompt into a refusal (#272). An install is a click, so ssh may ask: `SSHPrompt.detect` finds a password, passphrase or host-key question at the tail of the output, the sheet asks in a secure field or as yes/no, and the answer goes to the program's tty and nowhere else. A Touch ID key shows its own dialog. Background SSH off does not block it.
@@ -439,7 +439,7 @@ Pinned tabs belong to no project. The sidebar shows them above the projects. The
 
 ### Desktop widgets
 
-Desktop widgets are terminals on the desktop (`DesktopWidget`, `AppState+DesktopWidgets.swift`, `DesktopWidgetWindows`, Settings → Widgets). Each one is one pane. Its zmx session persists in the same way as the session of a pinned tab. A panel of our own draws it, in the shape of a system widget. The grammar for users is in `website/docs/pages/44-desktop-widgets.md`.
+Desktop widgets are terminals on the desktop (`DesktopWidget`, `AppState+DesktopWidgets.swift`, `DesktopWidgetWindows`, Settings → Widgets). Each one is one pane. Its zmx session persists in the same way as the session of a pinned tab. A panel of our own draws it, in the shape of a system widget. The grammar for users is in `docs/44-desktop-widgets.md`.
 
 - **A widget is not WidgetKit, and it cannot be.**
   - A WidgetKit widget is an archived SwiftUI snapshot that another process renders. It has no NSView and no text input. Its budget of refreshes is minutes.
@@ -551,7 +551,7 @@ Unlike Ghostty, Macterm does not declare scripts and executables. A script that 
 - A type is in the list because an extension has it: `TextFileDefaults.commonExtensions` and the extensions of the third plist entry. It keeps a type that conforms to `public.text` or that is dynamic (an extension that macOS does not know). It drops HTML, RTF and images (`excludedTypes`). The filter is why `.ts` stays out: macOS types it as MPEG-2 video.
 - `NSWorkspace.setDefaultApplication(at:toOpen:)` runs one type at a time, because Launch Services can ask the user to agree to a change.
 - The section compares the default app of each type by bundle identifier and reads it again on activation. When every type opens with Macterm, the button is gone and the caption says so.
-- The docs list every extension that the button changes (`website/docs/pages/20-configuration.md`, "Text file types"). `TextFileDefaultsTests` compares that table with `TextFileDefaults.extensions()`. A new extension in the plist or in `commonExtensions` therefore fails a test until the docs list it. Ghostty has no equivalent. Upstream declined the detection of `file:line` and a link that you can configure (discussions #11378 and #9546). This feature is therefore our own.
+- The docs list every extension that the button changes (`docs/20-configuration.md`, "Text file types"). `TextFileDefaultsTests` compares that table with `TextFileDefaults.extensions()`. A new extension in the plist or in `commonExtensions` therefore fails a test until the docs list it. Ghostty has no equivalent. Upstream declined the detection of `file:line` and a link that you can configure (discussions #11378 and #9546). This feature is therefore our own.
 
 - **A ⌘-click goes to the pane first** (`GhosttyTerminalNSView.onOpenLink`). This is only for the `.unknown` kind of the link regex. It is never for OSC 8 or for opens by a keybind.
   - `FileLink` splits `:line[:col]` off. The regex of libghostty keeps it, and `foo.swift:42` even parses as a URL scheme. `FileLink` resolves the path against the cwd of the real pane.
@@ -595,7 +595,7 @@ When you right-click the Dock tile, you see **New Window**, **New Tab**, **New P
 
 ### Adaptive icon
 
-On macOS 26 and later, the Dock icon and the app-switcher icon are `AppIcon.icon` repainted in the colors of the terminal theme, with real Liquid Glass (`Preferences.adaptiveIcon`, on by default, Settings → Appearance → App Icon). The grammar for users is in `website/docs/pages/46-finder-and-dock.md`. Four parts do the work: `AdaptiveIcon` (the pure rules), `AdaptiveIconController` (the triggers), `AdaptiveIconRenderer` (runs the helper) and `AppIconPresenter` (the one write).
+On macOS 26 and later, the Dock icon and the app-switcher icon are `AppIcon.icon` repainted in the colors of the terminal theme, with real Liquid Glass (`Preferences.adaptiveIcon`, on by default, Settings → Appearance → App Icon). The grammar for users is in `docs/46-finder-and-dock.md`. Four parts do the work: `AdaptiveIcon` (the pure rules), `AdaptiveIconController` (the triggers), `AdaptiveIconRenderer` (runs the helper) and `AppIconPresenter` (the one write).
 
 - **Only `macterm-icon-renderer` touches the private API, and it runs in a process of its own** (`IconRenderer/main.swift`, target `MactermIconRenderer`, `Contents/Helpers`). It calls Apple's private IconRendering and CoreUI frameworks, which draw every `.icon`.
   - CoreUI reads the icon's layer stack out of the app's own `Assets.car`. IconRendering's `makeIcon()` turns it into its `Icon` model. The helper replaces the fills and renders the icon.
@@ -633,7 +633,7 @@ On macOS 26 and later, the Dock icon and the app-switcher icon are `AppIcon.icon
 
 ### App Intents (Shortcuts, Spotlight)
 
-`Macterm/Intents/` has fourteen intents, plus the hidden Open Project below. They mirror the surface of Ghostty (`macos/Sources/Features/App Intents/`) in the model of Macterm. The intents for projects and tabs are **New Project**, **New Tab**, **Focus Project/Tab/Pane**, **Close Tab** and **Where Did I Leave Off** (Project Insights, see that section). The intents for panes are **Run Command in Pane**, **Send Key**, **Get Pane Contents** and **Get Pane Details**. The other intents are **Toggle Quick Terminal**, **Open Command Palette** and **Invoke Keybind**. The grammar for users is in `website/docs/pages/85-shortcuts.md`. `AppIntents.framework` is an SDK dependency in `project.yml`. The `appintentsmetadataprocessor` of the build writes `Contents/Resources/Metadata.appintents/extract.actionsdata`.
+`Macterm/Intents/` has fourteen intents, plus the hidden Open Project below. They mirror the surface of Ghostty (`macos/Sources/Features/App Intents/`) in the model of Macterm. The intents for projects and tabs are **New Project**, **New Tab**, **Focus Project/Tab/Pane**, **Close Tab** and **Where Did I Leave Off** (Project Insights, see that section). The intents for panes are **Run Command in Pane**, **Send Key**, **Get Pane Contents** and **Get Pane Details**. The other intents are **Toggle Quick Terminal**, **Open Command Palette** and **Invoke Keybind**. The grammar for users is in `docs/85-shortcuts.md`. `AppIntents.framework` is an SDK dependency in `project.yml`. The `appintentsmetadataprocessor` of the build writes `Contents/Resources/Metadata.appintents/extract.actionsdata`.
 
 - **Translate and delegate only**, as `ControlHandler` does. Resolve what an entity names. Then call the same `AppState` and `ProjectStore` methods that the UI calls. The own resolution of `ControlHandler` is deliberately *not* shared. It speaks selector strings (name, index from 1, UUID), but the identity of an entity is exact. `IntentTargets` therefore does lookups by UUID and by session, and the CLI is untouched.
 - **`MactermIntentHost`** is the only way for an intent to reach the app. The system makes the instances of intents, so you cannot hand anything in. `AppDelegate.installResponders` attaches it. The readiness waits on `AppState.performWhenRestored`. Running a shortcut *starts* the app, so `perform()` can arrive before the restore. The wait is a bounded sleep-poll (`readinessTimeout`). A launch that does not front a window may never install responders (#241), and a hang would wedge the shortcut with no error.
@@ -655,7 +655,7 @@ On macOS 26 and later, the Dock icon and the app-switcher icon are `AppIcon.icon
 
 ### Control CLI (`macterm`)
 
-A bundled CLI controls the app over `<App Support>/control.sock` (target `MactermCLI`, and `PRODUCT_MODULE_NAME` must stay `MactermCLI`). Xcode copies it to `Contents/Resources/bin/macterm`. Every pane gets it in `PATH`, together with `MACTERM_SOCKET` and `MACTERM_SESSION`. The full grammar is in `website/docs/pages/80-cli.md`.
+A bundled CLI controls the app over `<App Support>/control.sock` (target `MactermCLI`, and `PRODUCT_MODULE_NAME` must stay `MactermCLI`). Xcode copies it to `Contents/Resources/bin/macterm`. Every pane gets it in `PATH`, together with `MACTERM_SOCKET` and `MACTERM_SESSION`. The full grammar is in `docs/80-cli.md`.
 
 The verbs:
 
@@ -1020,7 +1020,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
       - **Macterm never types a local `run:` action**. The command rides in the env of the new pane (first surface build only). The surface puts `macterm palette exec <shell> <flags> --` after the wrapper of zmx, in front of the launch that ghostty resolved.
       - The runner runs the command through the shell of the user as `-i -l -c`. It is interactive, so exports that only `.zshrc` has count. It takes the terminal back with `tcsetpgrp`. zsh and bash leave it in their own process group. The login shell that we ran with exec then hung. Then it runs the launch with exec, untouched. Shell integration, `login(1)` and history are exactly the same as in a plain pane.
       - Macterm still types the `run:` of a remote project, because ssh carries no env.
-    - The grammar for users is in `website/docs/pages/47-extensions.md` (making and sharing an extension), `48-extension-palettes.md` (every key of a palette file) and `49-extension-examples.md`. `CustomPaletteFileTests` reads every palette file with a caption in the docs back through the validator. An example that stops reading therefore fails a test.
+    - The grammar for users is in `docs/47-extensions.md` (making and sharing an extension), `48-extension-palettes.md` (every key of a palette file) and `49-extension-examples.md`. `CustomPaletteFileTests` reads every palette file with a caption in the docs back through the validator. An example that stops reading therefore fails a test.
   - **`Scopes/`**
     - `PaletteScope` holds the alternate screens of the palette: a placeholder and its own sections. It also has `loading`, `failure`, `retry`, and a lifecycle `activate` and `deactivate`, for a screen whose listing takes time.
       - It is a class for each screen. Its `PaletteFrame` keeps it for as long as the frame is on `WindowState.paletteStack`.
@@ -1047,7 +1047,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
 - `IconRenderer/`: `macterm-icon-renderer`, the adaptive icon's helper (`main.swift`), and `PrivateInterfaces/` (the hand-written IconRendering interface, the CoreUI header, and the two link stubs).
 - `CLI/`: the `macterm` binary. `MactermCommand` (the ArgumentParser tree), `ControlClient`, `Output`, `SSHCommand`, `TutorCommand`, `SkillsCommand`, `WidgetCommand`, `PaletteCommand` (`palette list`, and the hidden runner `palette exec`), and `AskpassCommand` (the hidden `askpass`, and the debug-only `host`).
 - `scripts/`: `setup.sh`, `build-server.sh` (the server builds and their key), `build.sh`, `_lib.sh` (version mapping, update channel), `publish-appcast.sh` and `benchmark.py` with `_harness.py` (`MactermHarness`, shared with e2e). It also has `e2e.sh` with `e2e/` (the pytest suite), `ghosttykit-api-diff.sh`, `ghostty-shim.sh` and `record-demos/` (the demo clips of the website).
-- `website/` has the docs site (`docs/pages/*.md`) and the Caddyfile that serves the update feed.
+- `docs/` has the user docs, one Markdown page for each topic. The site that renders them is the `macterm/website` repository (see "The website").
 
 ## Tests
 
@@ -1123,7 +1123,7 @@ The script stops only the process that it started, and it kills its own zmx sess
 
 `scripts/record-demos/record-demos.sh` records the twelve clips that the landing page plays. It drives the **installed** app with synthetic keystrokes. For demos 8, 9 and 12, it also drives the pointer. Whatever runs it therefore needs Accessibility and Screen Recording. It also needs ffmpeg, and podman for demos 5 and 10 (it starts the podman machine itself).
 
-Masters land in `$MACTERM_DEMOS_OUT` (default `~/Desktop/macterm-demos`). Only `record-demos.sh web` writes into the repo. It encodes the finished clips again to 1400×792 with CRF 26, and a poster of the first frame, in `assets/demo/`. `website/public/assets` serves them as `/assets/demo/…`.
+Masters land in `$MACTERM_DEMOS_OUT` (default `~/Desktop/macterm-demos`). Only `record-demos.sh web` writes into the repo. It encodes the finished clips again to 1400×792 with CRF 26, and a poster of the first frame, in `assets/demo/`. The website build copies `assets/` to `public/assets`, so they are served as `/assets/demo/…`.
 
 The script has these rules. We learned each one with the real app:
 
@@ -1132,7 +1132,7 @@ The script has these rules. We learned each one with the real app:
 - **The tab switcher needs a HELD modifier**. The overlay lives exactly as long as the modifier of the recent-tab chord is down (`commitTabCycle` fires on the flags-changed event when the modifier drops). System Events cannot hold a modifier across statements. `hold.js` posts the key events at the level of CGEvent from osascript. The script reads the chord from `macterm.hotkey.recent_tab` at run time. It does not assume it.
 - **The script records the quick terminal with the window parked off screen, not closed**. The panel does not activate the app. With no window at all, Macterm cannot be the frontmost app. Every keystroke that is meant for the panel then lands in whatever app is in front. `qt_ready` refuses to type unless the panel is up *and* Macterm is frontmost. Finder renames files with stray keystrokes.
 - **`guard_repo` restores only the files that a demo opens** (`AGENTS.md`), in the checkout of the macterm *project* (`shown_repo`). This is the checkout in which its panes open files. It does not have to be the checkout that the script runs from. Helix saves automatically on loss of focus, so a keystroke that lands in an editor pane is written to disk. A blanket list reverts unrelated work as a side effect.
-- **Cleanup matches by path, never by name**. Demo 3 opens `~/dev/macterm/website/docs`. It removes only the project and the layout file that point there. If it removed "the project with the name website", it nearly took a project of the developer.
+- **Cleanup matches by path, never by name**. Demo 3 opens `~/dev/macterm/docs`. It removes only the project and the layout file that point there. If it removed "the project with the name website", it nearly took a project of the developer.
 - **Programs that interrupt themselves get an instruction not to**. opencode (demos 2 and 6) runs with `OPENCODE_DISABLE_AUTOUPDATE=1`. Without it, an update dialog lands over the TUI in the middle of a take.
 - **Demos 5 and 10 build their own host.**
   - It is a podman container with sshd, vim and zmx (compiled from source, because the fork ships only binaries for macOS). It is published on 127.0.0.1:2222. A marked `Host demo-box` block is put at the start of `~/.ssh/config` (`HostName localhost`, which is what the password prompt of ssh names).
@@ -1160,9 +1160,21 @@ The script has these rules. We learned each one with the real app:
   - Autofill wants Touch ID one time for each unlock. `pw_rehearse` spends it off camera on the prompt of a local script. Someone must be at the keyboard.
   - Macterm keeps its list of saved passwords in memory. A retake therefore first opens Settings → Password Manager (`vault_reload`), which reads the keychain again. The script removes the keychain entries of the demo afterwards.
 
+## The website
+
+The site at `macterm.thdxg.dev` (landing page, docs, changelog, and the proxy of the update feed) is the `macterm/website` repository. This repository keeps what the site renders and serves:
+
+- `docs/*.md`, the user docs. A feature and its docs page land in one PR here. `TextFileDefaultsTests`, `CustomPaletteFileTests` and `DocsLinkTests` read the pages.
+- `assets/`: the JSON schemas (the `$schema` URL of every project, widget, extension and palette file), the icons and the demo clips.
+
+The site build checks out this repository at `main` and reads `docs/` and `assets/` from it.
+
+- **`website-dispatch.yml` starts the site build.** It sends a `repository_dispatch` (`macterm-content`) to `macterm/website` on a push to `main` that changes `docs/**` or `assets/**`, and on a release that a person publishes, edits or deletes. Events that `GITHUB_TOKEN` raises start no runs, so a release that a workflow publishes does not start a build. The dispatch needs the `WEBSITE_DISPATCH_TOKEN` secret (contents write on `macterm/website`).
+- **`Docs / Site Build` runs the site build on a pull request that changes `docs/**` or `assets/**`**, against `macterm/website` at `main`. A page that breaks the build fails here, before it reaches `main`.
+
 ## Releasing
 
-Macterm updates itself with Sparkle. `SUFeedURL` is `https://macterm.thdxg.dev/appcast.xml`. `website/Caddyfile` serves it straight from the `appcast` branch, an orphan branch that is a store and not a site. `FEED_BRANCH` in `scripts/publish-appcast.sh`, the fetch in `release-tip.yml` and the proxy rewrite in the Caddyfile name it, and `UpdaterChannelTests` pins the three. A build that a pushed tag starts releases through `release.yml`. `release.yml`, `release-tip.yml` and `Test / Release Build` share one build recipe, `.github/actions/build-release`.
+Macterm updates itself with Sparkle. `SUFeedURL` is `https://macterm.thdxg.dev/appcast.xml`. The Caddyfile of the `macterm/website` repository serves it straight from the `appcast` branch, an orphan branch that is a store and not a site. `FEED_BRANCH` in `scripts/publish-appcast.sh`, the fetch in `release-tip.yml` and the proxy rewrite in the Caddyfile name it. `UpdaterChannelTests` pins the two files in this repository, and `check-feed.mjs` of macterm/website pins its Caddyfile and `SITE_URL` to them. A build that a pushed tag starts releases through `release.yml`. `release.yml`, `release-tip.yml` and `Test / Release Build` share one build recipe, `.github/actions/build-release`.
 
 Secrets:
 
@@ -1172,7 +1184,7 @@ Secrets:
 
 The release notes come from the generator of GitHub (`.github/release.yml`). A person chooses the version number. The `/release` skill walks through the ceremony. The recipe for the certificate is in the history of this file.
 
-- **The website's `/changelog` shows the notes of every stable release** (`website/releases.mjs`, rendered by `build-docs.mjs`). The GitHub release is the only copy of the notes. An edit there reaches the page at the next site build. `website.yml` starts that build on main for each release that a person publishes, edits or deletes. The page links `#123` and `@user` itself and drops HTML comments, so write the notes in the same Markdown as before.
+- **The website's `/changelog` shows the notes of every stable release** (`releases.mjs` of macterm/website, rendered by its `build-docs.mjs`). The GitHub release is the only copy of the notes. An edit there reaches the page at the next site build. `website-dispatch.yml` starts that build for each release that a person publishes, edits or deletes. The page links `#123` and `@user` itself and drops HTML comments, so write the notes in the same Markdown as before.
 
 - **There are three Sparkle channels and one feed**. A prerelease item carries `<sparkle:channel>beta|tip</sparkle:channel>`. Settings → Updates → Channel opts in (`Preferences.updateChannel`, the raw values are the wire names). A channel on an item that is not a prerelease is a hard error in `publish-appcast.sh`. Homebrew stays stable-only.
 - **Read the prerelease flag live** (the job `flag`, through `gh release view`). Never read it from `github.event.release.prerelease`. The payload is frozen at dispatch, and an edit does not fire the event again. Job outputs are strings. Compare with `== 'false'`.

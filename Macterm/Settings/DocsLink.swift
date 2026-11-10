@@ -6,7 +6,7 @@ import SwiftUI
 /// other settings — for whoever wants it.
 ///
 /// The raw value is the page slug, plus the heading's anchor when the section
-/// maps to one heading rather than a whole page. `website/build-docs.mjs`
+/// maps to one heading rather than a whole page. `build-docs.mjs` (macterm/website)
 /// derives an anchor from the heading text (lowercased, words joined by
 /// hyphens), so renaming a heading moves it; `DocsLinkTests` reads the pages
 /// back and fails until the case follows.

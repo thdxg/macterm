@@ -189,7 +189,7 @@ jobs:
       # Sparkle's `sign_update` produces an EdDSA signature for each DMG.
       # We then append a new <item> to the appcast on the `appcast` branch.
       # That branch is the STORE, not a website: macterm.thdxg.dev proxies it
-      # (website/Caddyfile), so the feed is live the moment this push lands
+      # (the Caddyfile of macterm/website), so the feed is live the moment this push lands
       # rather than waiting on a site rebuild. See scripts/publish-appcast.sh.
       #
       # BOTH stable and prerelease publish here now — one feed, two channels.
