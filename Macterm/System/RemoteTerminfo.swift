@@ -177,7 +177,11 @@ final class RemoteTerminfoInstaller {
             return false
         }
         guard let result = await RemoteHosts.shared.run(
-            RemoteTerminfo.installArgv(source: source), destination: destination, timeout: .seconds(20)
+            // Under the 10 s that the app waits for a reply
+            // (`LocalSessions.requestTimeout`), so a slow `tic` fails as a
+            // time-out on the host and is not logged as a failure that
+            // succeeded.
+            RemoteTerminfo.installArgv(source: source), destination: destination, timeout: .seconds(8)
         )
         else { return false }
         guard result.code == 0 else {

@@ -745,8 +745,8 @@ struct PaneTests {
     @Test
     func remoteCloseVerdict_is_nil_before_any_report() {
         // No report has ever landed (a host with no server, or before the
-        // first report) → no verdict; `needsConfirmClose` then warns only on
-        // a running command.
+        // first report) → no verdict; `needsConfirmClose` falls back to the
+        // conservative surface reading.
         let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         #expect(p.remoteNeedsConfirmClose == nil)
     }

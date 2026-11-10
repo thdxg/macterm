@@ -397,6 +397,14 @@ res = c.request("command.run", argv=[b"/bin/sh", b"-c", b"sleep 30 & sleep 30"],
 assert res["err"]["code"] == "timeout", res
 assert time.monotonic() - start < 5
 
+# A command that closes stdout and outlives the deadline still ends.
+res = c.request("command.run", argv=[b"/bin/sh", b"-c", b"exec >&-; sleep 30"], timeout_ms=300)
+assert res["err"]["code"] == "timeout", res
+
+# SIGPIPE has its default, not the server's SIG_IGN.
+r = c.call("command.run", argv=[b"/usr/bin/perl", b"-e", b"print $SIG{PIPE} // q(default)"])
+assert r["output"] == b"default", r
+
 for bad in (dict(argv=[b"sh"]), dict(argv=[]), dict(argv=[b"/bin/sh"], cwd=b"rel"), dict(argv=[b"/bin/sh"], timeout_ms=0)):
     res = c.request("command.run", **bad)
     assert res["err"]["code"] == "invalid_args", (bad, res)

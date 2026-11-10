@@ -1158,11 +1158,9 @@ final class Preferences {
         }
         // A host's background reads go through its server over the host's
         // one connection, and make no login (0058). The Background SSH
-        // connections switch is gone, so its key is dead.
-        if !defaults.bool(forKey: Keys.migrationRetiredBackgroundSSH) {
-            defaults.removeObject(forKey: "macterm.remote.backgroundSSHConnections")
-            defaults.set(true, forKey: Keys.migrationRetiredBackgroundSSH)
-        }
+        // connections switch is gone, so its key is dead. Removing it again
+        // costs nothing, so no flag guards it.
+        defaults.removeObject(forKey: "macterm.remote.backgroundSSHConnections")
     }
 
     /// Reads the two-layer config preference. The single-path key came from the
@@ -1287,7 +1285,6 @@ final class Preferences {
         static let migrationRetiredWidgetDefaultSize = "macterm.migration.retired_widget_default_size"
         static let migrationRetiredAutoNameTabs = "macterm.migration.retired_auto_name_tabs"
         static let migrationRetiredMemorySummary = "macterm.migration.retired_memory_summary"
-        static let migrationRetiredBackgroundSSH = "macterm.migration.retired_background_ssh"
     }
 }
 

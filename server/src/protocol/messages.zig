@@ -314,10 +314,10 @@ pub const ServerExit = struct {
 
 /// Runs a command on the server's machine to its end, and returns what it
 /// wrote to stdout. It is not a session: it has no pty, stdin and stderr are
-/// `/dev/null`, and it has the server's environment. The app reads the Git
-/// state of a remote project with it, over the host's one connection (0058).
-/// A client that may create a session may run a command in one, so this
-/// gives no new access.
+/// `/dev/null`, and it has the server's environment. The app's background
+/// reads of a host use it, over the host's one connection (0058). A client
+/// that may create a session may run a command in one, so this gives no new
+/// access.
 pub const CommandRun = struct {
     pub const name = "command.run";
     pub const since = 1;

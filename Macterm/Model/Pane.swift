@@ -281,8 +281,8 @@ final class Pane: Identifiable {
         // client — reading it would stomp the reported name, expire
         // remote OSC titles, and feed the execution tracker a perpetual
         // "ssh is running". Names come from the host's reports
-        // (`applyRemoteForeground`), titles from `receiveRemoteReportedTitle`, execution state from
-        // OSC 133 markers and activity heartbeats.
+        // (`applyRemoteForeground`), titles from `receiveRemoteReportedTitle`,
+        // execution state from OSC 133 markers and activity heartbeats.
         guard !isRemote else { return }
         // Resolved ONCE and reused below, including inside the argv0 closure —
         // re-resolving there could disagree with this frame's pid on a wrapped
@@ -945,6 +945,15 @@ final class Pane: Identifiable {
         view.onAdaptiveBackgroundChange = nil
         view.onOutputActivity = nil
         view.onUnknownAPC = nil
+        // A remote pane's report described the connection that goes now.
+        // The next connection's session reports again; until then nothing
+        // is known, so the close falls back to the surface's reading.
+        if isRemote {
+            foregroundSample = nil
+            remoteForegroundCommand = nil
+            remoteForegroundIsShell = false
+            lastAppliedRemoteForeground = nil
+        }
         view.onScrollbarUpdate = nil
         view.onLinkHover = nil
         view.onReadOnlyChange = nil

@@ -128,7 +128,11 @@ struct ProjectMemoryPanel: View {
                 }
             }
         }
-        gitSection
+        // A remote project that no read answered yet (no connection or no
+        // server up) has no Git section: the panel does not know why.
+        if !project.isRemote || memory.gitAnswered.contains(project.id) || memory.readingGit.contains(project.id) {
+            gitSection
+        }
         if !entries.isEmpty {
             section(String(localized: "Recent")) {
                 VStack(alignment: .leading, spacing: 8) {

@@ -64,16 +64,16 @@ struct ForegroundSampleTests {
     }
 
     @Test
-    func remote_without_any_sample_warns_only_on_a_running_command() {
-        // A host with no server reports nothing, and the surface is the ssh
-        // client, which is always busy: its reading would warn on every
-        // close. Only the OSC 133 execution state can warn.
-        #expect(!ForegroundPolicy.needsConfirmClose(
+    func remote_without_any_sample_falls_back_to_the_surface() {
+        // Never silently kill an unknown foreground: a host with no server
+        // reports nothing, and the conservative ssh-is-busy surface reading
+        // stands in.
+        #expect(ForegroundPolicy.needsConfirmClose(
             sample: nil, executionState: .idle, isRemote: true,
             hasSurface: true, surfaceBusy: true
         ))
-        #expect(ForegroundPolicy.needsConfirmClose(
-            sample: nil, executionState: .running, isRemote: true,
+        #expect(!ForegroundPolicy.needsConfirmClose(
+            sample: nil, executionState: .idle, isRemote: true,
             hasSurface: true, surfaceBusy: false
         ))
     }

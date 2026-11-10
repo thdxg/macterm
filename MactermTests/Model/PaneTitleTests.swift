@@ -284,6 +284,17 @@ struct PaneTitleTests {
     }
 
     @Test
+    func remote_prompt_return_after_the_title_drops_it() {
+        // A title hook that runs before ghostty's precmd titles first, then
+        // OSC 133;D lands.
+        let pane = makeRemotePane()
+        pane.applyRemoteForeground(claude)
+        pane.receiveRemoteReportedTitle("~/dev")
+        pane.notePromptReturned()
+        #expect(pane.programTitle == nil)
+    }
+
+    @Test
     func remote_title_from_a_nested_shell_is_discarded() {
         // The host says the session's shell doesn't own the tty, but what
         // does is another shell: its prompt titles are churn.

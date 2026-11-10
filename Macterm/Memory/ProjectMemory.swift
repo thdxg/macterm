@@ -26,6 +26,10 @@ final class ProjectMemory {
     private(set) var git: [UUID: GitStatus] = [:]
     /// The projects whose git state is being read.
     private(set) var readingGit: Set<UUID> = []
+    /// The projects for which a read answered, with a state or with "no
+    /// repository". A remote read that got no answer says nothing about
+    /// the folder.
+    private(set) var gitAnswered: Set<UUID> = []
 
     @ObservationIgnored var textSource: any CommandTextSource = ScreenCommandExtractor()
     /// How long after OSC 133;D the screen is read. The shell sends the mark
@@ -309,7 +313,9 @@ final class ProjectMemory {
     /// What a read leaves behind. An answer replaces the state. No answer
     /// keeps the last one: a flaky link must not blank the panel.
     private func apply(_ result: ProjectGit.RemoteResult, to project: Project) {
-        if case let .read(status) = result { git[project.id] = status }
+        guard case let .read(status) = result else { return }
+        git[project.id] = status
+        gitAnswered.insert(project.id)
     }
 
     /// The rows of the panel's Suggested section: the model's suggestions

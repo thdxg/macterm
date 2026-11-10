@@ -2,10 +2,10 @@
 //!
 //! One for each user and machine. It holds the registry of sessions and
 //! serves channel 0 to the GUI and the CLI: `session.create`, `list`,
-//! `info`, `kill`, `server.exit`, `ping`, and the `session.exit` event. It
-//! holds no pty. `command.run` runs a command to its end and returns its
-//! output, for the app's reads of a remote project (0058). On the Mac it is not on the byte path: a client attaches to
-//! a session's own socket. On a host, the app reaches every pane through one
+//! `info`, `kill`, `server.exit`, `ping`, `command.run` (a command run to
+//! its end, for the app's background reads of a host, 0058), and the
+//! `session.exit` event. It holds no pty. On the Mac it is not on the byte
+//! path: a client attaches to a session's own socket. On a host, the app reaches every pane through one
 //! stream (`macterm proxy`), and the server relays each pane on a channel of
 //! that stream (`channel.open`, `close`, `pause`, `resume`; `relay.zig`).
 //!
@@ -829,7 +829,7 @@ const Server = struct {
             r.timed_out = true;
             // The process group: a child of the command can hold stdout too.
             lib_posix.kill(-r.pid, lib_posix.SIG.KILL) catch {};
-            lib_posix.close(r.out_fd);
+            if (r.out_fd >= 0) lib_posix.close(r.out_fd);
             r.out_fd = -1;
         };
         s.finishRuns();
@@ -1231,8 +1231,16 @@ const Server = struct {
         try s.runs.append(s.gpa, r);
         errdefer _ = s.runs.pop();
 
+        // `main` ignores SIGPIPE, and that survives exec: the command gets
+        // the default, as a session's shell does (`daemonize.zig`).
+        const dfl: lib_posix.Sigaction = .{
+            .handler = .{ .handler = lib_posix.SIG.DFL },
+            .mask = lib_posix.sigemptyset(),
+            .flags = 0,
+        };
         const pid = try lib_posix.fork();
         if (pid == 0) {
+            lib_posix.sigaction(lib_posix.SIG.PIPE, &dfl, null);
             _ = std.c.setpgid(0, 0);
             lib_posix.dup2(pipe[1], lib_posix.STDOUT_FILENO) catch std.c._exit(127);
             if (cwd) |c| if (std.c.chdir(c) != 0) std.c._exit(126);
@@ -1653,6 +1661,14 @@ const Server = struct {
         while (i < s.peers.items.len) {
             const p = s.peers.items[i];
             if (p.dead) {
+                // Nobody waits for its commands: they end now, and free
+                // their places (`max_runs`).
+                for (s.runs.items) |r| if (r.peer == p.id and !r.timed_out) {
+                    r.timed_out = true;
+                    lib_posix.kill(-r.pid, lib_posix.SIG.KILL) catch {};
+                    if (r.out_fd >= 0) lib_posix.close(r.out_fd);
+                    r.out_fd = -1;
+                };
                 lib_posix.close(p.fd);
                 p.in.deinit(s.gpa);
                 p.out.deinit(s.gpa);

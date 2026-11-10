@@ -58,8 +58,9 @@ enum ForegroundPolicy {
     /// 133/heartbeat execution state (catches a command mid-output), else
     /// the host's latest report (an idle shell is not worth a dialog;
     /// anything else is). A pane with no report (a host with no server, or
-    /// before the first report) can only warn on the execution state: the
-    /// surface's reading would warn on every close.
+    /// before the first report) falls back to the surface's reading, which
+    /// for the ssh client is always busy: never silently kill an unknown
+    /// foreground.
     static func needsConfirmClose(
         sample: ForegroundSample?,
         executionState: TerminalExecutionState,
@@ -69,7 +70,7 @@ enum ForegroundPolicy {
     ) -> Bool {
         guard hasSurface else { return false }
         guard isRemote else { return surfaceBusy() }
-        return remoteNeedsConfirmClose(sample: sample, executionState: executionState) ?? false
+        return remoteNeedsConfirmClose(sample: sample, executionState: executionState) ?? surfaceBusy()
     }
 
     /// The remote-side busy verdict alone, nil when no sample has ever
