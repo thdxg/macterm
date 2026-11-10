@@ -3,7 +3,8 @@
 //! One for each user and machine. It holds the registry of sessions and
 //! serves channel 0 to the GUI and the CLI: `session.create`, `list`,
 //! `info`, `kill`, `server.exit`, `ping`, and the `session.exit` event. It
-//! holds no pty. On the Mac it is not on the byte path: a client attaches to
+//! holds no pty. `command.run` runs a command to its end and returns its
+//! output, for the app's reads of a remote project (0058). On the Mac it is not on the byte path: a client attaches to
 //! a session's own socket. On a host, the app reaches every pane through one
 //! stream (`macterm proxy`), and the server relays each pane on a channel of
 //! that stream (`channel.open`, `close`, `pause`, `resume`; `relay.zig`).
@@ -64,6 +65,14 @@ const max_channels = 256;
 /// that idle connections cannot take every place.
 const hello_ms = 5000;
 const frame_max = 1024 * 1024;
+
+/// The most stdout that `command.run` returns. The rest is read and dropped,
+/// so that the command does not stop on a full pipe.
+const run_output_max = 512 * 1024;
+/// The longest `command.run` that a client can ask for.
+const run_timeout_max_ms = 60_000;
+/// The most commands that run at one time.
+const max_runs = 16;
 
 /// The `server` command. Starts the server and returns once its socket
 /// accepts connections. `error.AlreadyRunning` when a server answers.
@@ -346,6 +355,25 @@ const Spawn = struct {
     waiters: std.ArrayList(Waiter) = .empty,
 };
 
+/// A `command.run` child. The reply goes when its stdout gave EOF and the
+/// child was reaped.
+const Run = struct {
+    pid: lib_posix.pid_t,
+    peer: u64,
+    re: u64,
+    /// The read end of the child's stdout. -1 after EOF.
+    out_fd: i32,
+    output: std.ArrayList(u8) = .empty,
+    truncated: bool = false,
+    deadline: i64,
+    timed_out: bool = false,
+    status: ?session.ExitStatus = null,
+
+    fn done(r: *const Run) bool {
+        return r.out_fd < 0 and r.status != null;
+    }
+};
+
 const Server = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
@@ -360,6 +388,7 @@ const Server = struct {
     peers: std.ArrayList(*Peer) = .empty,
     entries: std.ArrayList(*Entry) = .empty,
     spawns: std.ArrayList(*Spawn) = .empty,
+    runs: std.ArrayList(*Run) = .empty,
     /// `session.list` requests that wait until every session settled.
     list_waiters: std.ArrayList(Waiter) = .empty,
     exe_buf: [std.fs.max_path_bytes]u8 = undefined,
@@ -425,6 +454,8 @@ const Server = struct {
                 try chans.append(s.gpa, .{ .peer = p, .ch = ch });
                 try fds.append(s.gpa, .{ .fd = ch.fd, .events = events, .revents = 0 });
             };
+            const nruns = s.runs.items.len;
+            for (s.runs.items) |r| try fds.append(s.gpa, .{ .fd = r.out_fd, .events = lib_posix.POLL.IN, .revents = 0 });
 
             _ = try lib_posix.poll(fds.items, s.pollTimeout());
 
@@ -434,6 +465,7 @@ const Server = struct {
                     return;
                 };
                 s.reapSpawns();
+                s.reapRuns();
             }
             if (fds.items[0].revents & lib_posix.POLL.IN != 0) s.accept();
 
@@ -460,6 +492,9 @@ const Server = struct {
                 if (pfd.revents & lib_posix.POLL.OUT != 0) s.writeChannel(c.peer, c.ch);
                 if (c.ch.fd >= 0 and pfd.revents & lib_posix.POLL.IN == 0 and
                     pfd.revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) s.channelGone(c.peer, c.ch);
+            }
+            for (s.runs.items[0..nruns], fds.items[2 + npeers + nentries + chans.items.len ..][0..nruns]) |r, pfd| {
+                if (r.out_fd >= 0 and pfd.revents != 0) s.readRun(r);
             }
             s.timers();
             s.sweep();
@@ -505,6 +540,9 @@ const Server = struct {
             const d = sp.started_at + spawn_ms;
             next = @min(next orelse d, d);
         }
+        for (s.runs.items) |r| if (!r.timed_out) {
+            next = @min(next orelse r.deadline, r.deadline);
+        };
         for (s.peers.items) |p| if (!p.greeted) {
             const d = p.connected_at + hello_ms;
             next = @min(next orelse d, d);
@@ -530,7 +568,7 @@ const Server = struct {
     fn idleExpired(s: *Server) bool {
         // A refused session has no connection: see if it still runs.
         if (s.peers.items.len == 0 and s.spawns.items.len == 0) s.checkRefused();
-        const idle = s.peers.items.len == 0 and s.entries.items.len == 0 and s.spawns.items.len == 0;
+        const idle = s.peers.items.len == 0 and s.entries.items.len == 0 and s.spawns.items.len == 0 and s.runs.items.len == 0;
         if (!idle) {
             s.idle_since = null;
             return false;
@@ -574,6 +612,7 @@ const Server = struct {
             for (p.channels.items) |ch| if (ch.fd >= 0) lib_posix.close(ch.fd);
         }
         for (s.entries.items) |e| if (e.fd >= 0) lib_posix.close(e.fd);
+        for (s.runs.items) |r| lib_posix.kill(-r.pid, lib_posix.SIG.KILL) catch {};
     }
 
     // ── Sessions ────────────────────────────────────────────────────────────
@@ -785,6 +824,15 @@ const Server = struct {
             // Once: SIGCHLD reaps it, and the create fails.
             sp.started_at = -1;
         };
+        for (s.runs.items) |r| if (!r.timed_out and t >= r.deadline) {
+            std.log.warn("server: a command ran too long, SIGKILL", .{});
+            r.timed_out = true;
+            // The process group: a child of the command can hold stdout too.
+            lib_posix.kill(-r.pid, lib_posix.SIG.KILL) catch {};
+            lib_posix.close(r.out_fd);
+            r.out_fd = -1;
+        };
+        s.finishRuns();
         s.answerLists();
     }
 
@@ -881,8 +929,9 @@ const Server = struct {
         return @ptrCast(list.items.ptr);
     }
 
-    /// Reaps the `session` children that exited. The server has no other
-    /// children: a session process is their child, and it leaves.
+    /// Reaps the `session` children that exited. A session process is their
+    /// child, and it leaves. The server's only other children are the
+    /// commands of `command.run` (`reapRuns`).
     fn reapSpawns(s: *Server) void {
         var i: usize = 0;
         while (i < s.spawns.items.len) {
@@ -1106,6 +1155,7 @@ const Server = struct {
                 s.reply(p.id, re, m.ChannelResume, .{});
             },
             m.Ping => s.reply(p.id, re, m.Ping, .{}),
+            m.CommandRun => s.runCommand(p, re, args),
             else => s.replyError(p.id, re, "unknown_method", "The server has no such method."),
         }
     }
@@ -1136,6 +1186,122 @@ const Server = struct {
             return s.replyError(p.id, re, "start_failed", "The server cannot start a process.");
         };
         s.wait(&sp.waiters, waiter);
+    }
+
+    // ── Running a command ───────────────────────────────────────────────────
+
+    fn runCommand(s: *Server, p: *Peer, re: u64, args: m.CommandRun.Args) void {
+        if (args.argv.len == 0 or args.argv[0].bytes.len == 0 or args.argv[0].bytes[0] != '/')
+            return s.replyError(p.id, re, "invalid_args", "The program must be an absolute path.");
+        for (args.argv) |arg| if (std.mem.findScalar(u8, arg.bytes, 0) != null)
+            return s.replyError(p.id, re, "invalid_args", "A command argument cannot hold a NUL byte.");
+        if (args.cwd) |cwd| if (cwd.bytes.len == 0 or cwd.bytes[0] != '/' or std.mem.findScalar(u8, cwd.bytes, 0) != null)
+            return s.replyError(p.id, re, "invalid_args", "The folder must be an absolute path.");
+        if (args.timeout_ms == 0 or args.timeout_ms > run_timeout_max_ms)
+            return s.replyError(p.id, re, "invalid_args", "The time limit must be from 1 ms to 60 s.");
+        if (s.runs.items.len >= max_runs)
+            return s.replyError(p.id, re, "busy", "Too many commands run now.");
+        s.startRun(p.id, re, args) catch |err| {
+            std.log.warn("server: cannot run a command: {s}", .{@errorName(err)});
+            s.replyError(p.id, re, "start_failed", "The server cannot start a process.");
+        };
+    }
+
+    /// Forks the command in a process group of its own, with stdout on a
+    /// pipe. stdin and stderr are the server's `/dev/null` (`detachStdio`).
+    fn startRun(s: *Server, peer: u64, re: u64, args: m.CommandRun.Args) !void {
+        var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+        var argv: std.ArrayList(?[*:0]const u8) = .empty;
+        for (args.argv) |arg| try argv.append(arena, (try arena.dupeSentinel(u8, arg.bytes, 0)).ptr);
+        try argv.append(arena, null);
+        const cwd: ?[*:0]const u8 = if (args.cwd) |c| (try arena.dupeSentinel(u8, c.bytes, 0)).ptr else null;
+
+        // Only the read end is non-blocking: a command that writes to a
+        // non-blocking stdout fails on a full pipe.
+        const pipe = try lib_posix.pipe2(.{ .CLOEXEC = true });
+        errdefer lib_posix.close(pipe[0]);
+        errdefer lib_posix.close(pipe[1]);
+        const flags = try lib_posix.fcntl(pipe[0], lib_posix.F.GETFL, 0);
+        _ = try lib_posix.fcntl(pipe[0], lib_posix.F.SETFL, flags | lib_posix.O_NONBLOCK);
+        const r = try s.gpa.create(Run);
+        errdefer s.gpa.destroy(r);
+        r.* = .{ .pid = 0, .peer = peer, .re = re, .out_fd = pipe[0], .deadline = s.now() + args.timeout_ms };
+        try s.runs.append(s.gpa, r);
+        errdefer _ = s.runs.pop();
+
+        const pid = try lib_posix.fork();
+        if (pid == 0) {
+            _ = std.c.setpgid(0, 0);
+            lib_posix.dup2(pipe[1], lib_posix.STDOUT_FILENO) catch std.c._exit(127);
+            if (cwd) |c| if (std.c.chdir(c) != 0) std.c._exit(126);
+            _ = std.c.execve(argv.items[0].?, @ptrCast(argv.items.ptr), @ptrCast(std.c.environ));
+            std.c._exit(127);
+        }
+        lib_posix.close(pipe[1]);
+        r.pid = pid;
+        // The parent too, so that a SIGKILL at the deadline finds the group
+        // even before the child ran its own `setpgid`.
+        _ = std.c.setpgid(pid, pid);
+    }
+
+    /// Reads what the command wrote. Past `run_output_max` it reads and
+    /// drops, so that the command never blocks on a full pipe.
+    fn readRun(s: *Server, r: *Run) void {
+        var buf: [16 * 1024]u8 = undefined;
+        while (true) {
+            const n = lib_posix.read(r.out_fd, &buf) catch |err| switch (err) {
+                error.WouldBlock => return,
+                else => 0,
+            };
+            if (n == 0) {
+                lib_posix.close(r.out_fd);
+                r.out_fd = -1;
+                // `timers` answers it: the poll loop still walks `runs`.
+                return;
+            }
+            const room = run_output_max - r.output.items.len;
+            if (n > room) r.truncated = true;
+            r.output.appendSlice(s.gpa, buf[0..@min(n, room)]) catch {
+                r.truncated = true;
+            };
+        }
+    }
+
+    fn reapRuns(s: *Server) void {
+        for (s.runs.items) |r| {
+            if (r.status != null) continue;
+            const res = lib_posix.waitpid(r.pid, std.c.W.NOHANG);
+            if (res.pid == r.pid) r.status = session.ExitStatus.fromWait(res.status);
+        }
+    }
+
+    /// Answers and frees each command that ended. Only `timers` calls it,
+    /// after the poll loop walked `runs`.
+    fn finishRuns(s: *Server) void {
+        var i: usize = 0;
+        while (i < s.runs.items.len) {
+            const r = s.runs.items[i];
+            if (!r.done()) {
+                i += 1;
+                continue;
+            }
+            _ = s.runs.orderedRemove(i);
+            if (r.timed_out) {
+                s.replyError(r.peer, r.re, "timeout", "The command did not end in time.");
+            } else {
+                const st = r.status.?;
+                s.reply(r.peer, r.re, m.CommandRun, .{
+                    .output = .{ .bytes = r.output.items },
+                    .truncated = r.truncated,
+                    .code = st.code,
+                    .signal = st.signal,
+                });
+            }
+            r.output.deinit(s.gpa);
+            s.gpa.destroy(r);
+        }
     }
 
     fn kill(s: *Server, p: *Peer, re: u64, id: []const u8) void {
