@@ -51,6 +51,10 @@ struct ProjectMemoryAnswerTests {
             entry("git status", exit: 0, minutesAgo: 1),
         ]
         #expect(answer(entries) == "The last command, git status, succeeded 1 minute ago.")
+
+        // A failure before an hour with no command is not named either.
+        let paused = [entry("make test", exit: 1, minutesAgo: 180), entry("git status", exit: 0, minutesAgo: 60)]
+        #expect(answer(paused) == "The last command, git status, succeeded 1 hour ago.")
     }
 
     @Test

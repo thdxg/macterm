@@ -61,6 +61,30 @@ struct ProjectMemoryDigestTests {
     }
 
     @Test
+    func git_shows_work_with_commits_or_changed_files() {
+        var branch = GitStatus(branch: "feature/tax")
+        branch.mainRefs = ["refs/heads/main"]
+        branch.recentCommits = [GitStatus.Commit(hash: "a1", subject: "Release 2.0", date: now)]
+        branch.branchCommits = []
+        // The latest commits of a new branch are the main branch's history.
+        #expect(!ProjectMemoryDigest.gitShowsWork(branch))
+        branch.branchCommits = [GitStatus.Commit(hash: "b2", subject: "Apply tax", date: now)]
+        #expect(ProjectMemoryDigest.gitShowsWork(branch))
+
+        var changed = GitStatus(branch: "feature/tax")
+        changed.branchCommits = []
+        changed.mainRefs = ["refs/heads/main"]
+        changed.changedPaths = ["app.swift"]
+        #expect(ProjectMemoryDigest.gitShowsWork(changed))
+
+        var detached = GitStatus()
+        detached.detachedAt = "abc1234"
+        #expect(!ProjectMemoryDigest.gitShowsWork(detached))
+        detached.recentCommits = [GitStatus.Commit(hash: "abc1234", subject: "Fix", date: now)]
+        #expect(ProjectMemoryDigest.gitShowsWork(detached))
+    }
+
+    @Test
     func other_branches_are_not_in_the_digest_or_its_key() throws {
         var git = GitStatus(branch: "main")
         git.branches = [

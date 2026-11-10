@@ -480,6 +480,18 @@ struct ProjectMemoryTests {
     }
 
     @Test
+    func an_option_before_the_subcommand_keys_the_whole_command() {
+        // The words before the first option would be the program alone.
+        #expect(MemoryCommand.retryKey("python -m pytest") == "python -m pytest")
+        #expect(MemoryCommand.retryKey("git -C repo push") == "git -C repo push")
+        let entries = [
+            entry("python -m pytest", exit: 1, minutesAgo: 10),
+            entry("python -m http.server", exit: 0, minutesAgo: 5),
+        ]
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "python -m pytest")
+    }
+
+    @Test
     func a_success_of_another_subcommand_does_not_resolve_the_failure() {
         let entries = [
             entry("make test", exit: 2, minutesAgo: 10),
@@ -519,6 +531,29 @@ struct ProjectMemoryTests {
         let digest = ProjectMemoryDigest(projectName: "x", entries: entries, git: nil, now: now)
         #expect(digest?.text.contains("`git clean` failed") == false)
         #expect(digest?.text.contains("`make test` failed") == true)
+    }
+
+    @Test
+    func every_open_failure_stays_for_the_model() {
+        let entries = [
+            entry("make test", exit: 2, minutesAgo: 10),
+            entry("make lint", exit: 1, minutesAgo: 5),
+        ]
+        // The card shows the latest; the older one is still open.
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "make lint")
+        #expect(ProjectMemorySummary.withoutSettledFailures(entries).count == 2)
+        #expect(ProjectMemorySuggestions.candidates(entries: entries) == ["make lint", "make test"])
+    }
+
+    @Test
+    func a_failure_before_the_latest_pause_is_not_told_to_the_model() {
+        let entries = [
+            entry("make test", exit: 2, minutesAgo: 180),
+            entry("git status", exit: 0, minutesAgo: 60),
+        ]
+        let digest = ProjectMemoryDigest(projectName: "x", entries: entries, git: nil, now: now)
+        #expect(digest?.text.contains("make test") == false)
+        #expect(ProjectMemorySuggestions.candidates(entries: entries) == ["git status"])
     }
 
     // MARK: - Quick actions
