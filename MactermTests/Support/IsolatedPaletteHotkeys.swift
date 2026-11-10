@@ -5,9 +5,7 @@ extension PaletteHotkeys {
     private static var isolatedCount = 0
 
     /// A keybind table that no other test sees: its own defaults suite,
-    /// wiped when it is made, and no Carbon registration. Suites run in
-    /// parallel, so a test that used `PaletteHotkeys.shared` or
-    /// `Preferences.defaults` saw the writes of other suites.
+    /// wiped when it is made, and no Carbon registration.
     ///
     /// The suite names repeat in each run (a count, not a UUID), so a run
     /// leaves no new preference files behind.
