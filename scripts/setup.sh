@@ -81,9 +81,10 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # keybind action, no default chord). Macterm does not handle it yet, so a
 # binding of it does nothing. The tag renumbers OUTPUT_ACTIVITY (70 → 71)
 # and UNKNOWN_APC (71 → 72).
-# build-2026-11-09-91ba6a2: + downstream patch 0021 (thdxg/ghostty#44): the
-# `cursor-morph` key, a mode of `smooth-cursor`, stretches the gliding cursor
-# with its speed. Upstream through #15162. No C API change.
+# build-2026-11-10-53dbc59: + downstream patch 0021 (thdxg/ghostty#44, #45):
+# the `cursor-morph` key, a mode of `smooth-cursor`, makes a gliding block
+# cursor a comet, longer when it is faster. Other cursor shapes do not
+# change. Upstream through #15162. No C API change.
 GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-10-53dbc59}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
