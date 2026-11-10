@@ -114,16 +114,18 @@ enum MactermTheme {
         return Color(nsColor: app.unfocusedSplitFill.withAlphaComponent(app.unfocusedSplitDimOpacity))
     }
 
-    /// Scene-level light/dark scheme. Follows ONLY the resolved config theme,
-    /// never the transient adaptive tint: `.preferredColorScheme` applies to
-    /// every scene — including the Settings window — and flapping it at
-    /// runtime destabilizes SwiftUI's window management (the closed Settings
-    /// window reopens on app activation, and the WindowGroup window loses the
-    /// cached identity that gates every hotkey). In-window chrome adapts
-    /// through `nsBg`/`nsFg` instead, which are window-scoped.
+    /// Scene-level light/dark scheme: `GhosttyApp.windowScheme`, from the
+    /// user's `window-theme` and the `set_window_theme` override. It never
+    /// follows the adaptive tint. `.preferredColorScheme` applies to every
+    /// scene, also the Settings window. A scheme that flaps at runtime
+    /// breaks SwiftUI's window management: the closed Settings window opens
+    /// again on app activation, and the WindowGroup window loses the cached
+    /// identity that gates every hotkey. A config reload, a system switch
+    /// and the action change it one time each. In-window chrome adapts
+    /// through `nsBg`/`nsFg`, which are window-scoped.
     @MainActor
     static var colorScheme: ColorScheme {
-        GhosttyApp.shared.backgroundColor.prefersDarkForeground ? .light : .dark
+        GhosttyApp.shared.windowScheme == .dark ? .dark : .light
     }
 
     @MainActor

@@ -97,4 +97,60 @@ struct ProjectMemoryStoreTests {
         reader.prepare(project)
         #expect(reader.loadedEntries(for: project).map(\.command) == ["make"])
     }
+
+    @Test
+    func the_count_is_zero_with_no_records() {
+        let store = ProjectMemoryStore(directory: makeDirectory())
+        store.prepareAll()
+        #expect(store.recordedCommandCount == 0)
+    }
+
+    @Test
+    func the_count_adds_the_entries_of_every_project_on_disk() {
+        let directory = makeDirectory()
+        let writer = ProjectMemoryStore(directory: directory)
+        writer.append(entry("make"), to: UUID())
+        let second = UUID()
+        writer.append(entry("git status"), to: second)
+        writer.append(entry("swift test"), to: second)
+        writer.flush()
+
+        let reader = ProjectMemoryStore(directory: directory)
+        #expect(reader.recordedCommandCount == 0)
+        reader.prepareAll()
+        #expect(reader.recordedCommandCount == 3)
+        reader.append(entry("ls"), to: second)
+        #expect(reader.recordedCommandCount == 4)
+    }
+
+    @Test
+    func the_count_is_zero_after_forget_all() {
+        let directory = makeDirectory()
+        let store = ProjectMemoryStore(directory: directory)
+        store.append(entry("make"), to: UUID())
+        store.append(entry("make test"), to: UUID())
+        store.flush()
+        #expect(store.recordedCommandCount == 2)
+
+        store.forgetAll()
+
+        #expect(store.recordedCommandCount == 0)
+        let reread = ProjectMemoryStore(directory: directory)
+        reread.prepareAll()
+        #expect(reread.recordedCommandCount == 0)
+    }
+
+    @Test
+    func the_count_skips_files_that_do_not_decode_and_other_files() throws {
+        let directory = makeDirectory()
+        let writer = ProjectMemoryStore(directory: directory)
+        writer.append(entry("make"), to: UUID())
+        writer.flush()
+        try Data("not json".utf8).write(to: writer.fileURL(for: UUID()))
+        try Data("notes".utf8).write(to: directory.appendingPathComponent("notes.txt"))
+
+        let reader = ProjectMemoryStore(directory: directory)
+        reader.prepareAll()
+        #expect(reader.recordedCommandCount == 1)
+    }
 }

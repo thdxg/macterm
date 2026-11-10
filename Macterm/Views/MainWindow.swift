@@ -204,8 +204,9 @@ struct MainWindow: View {
                 ToolbarItem(placement: .primaryAction) {
                     UpdateAvailableToolbarButton()
                 }
-                // Only while Project Insights is on (Settings → Intelligence).
-                if ProjectMemory.isEnabled {
+                // Only while Project Insights is on (Settings → Intelligence)
+                // and the button is not hidden (Settings → Appearance → Toolbar).
+                if ProjectMemory.isEnabled, preferences.showProjectInsightsButton {
                     ToolbarItem(placement: .primaryAction) {
                         // Filled while the panel is up, as a toggle's state.
                         Button(
@@ -1334,6 +1335,7 @@ private struct WindowStyler: NSViewRepresentable {
             guard let window = view.window else { return }
             window.titleVisibility = hide ? .hidden : .visible
             WindowAppearance.syncTitleBarHidden(window: window)
+            WindowAppearance.syncTitleAppearance(window: window)
             context.coordinator.syncInitialSidebarVisibility(window: window)
         }
     }

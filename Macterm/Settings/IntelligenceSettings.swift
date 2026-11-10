@@ -20,10 +20,11 @@ struct IntelligenceSettings: View {
                         .settingsCaption()
                 }
                 .disabled(!modelIsAvailable)
-                HStack {
-                    Text("Recorded commands")
-                    Spacer()
-                    Button("Forget All…", role: .destructive) { isConfirmingForgetAll = true }
+                LabeledContent("Recorded commands") {
+                    HStack {
+                        Text(recordedCommands)
+                        Button("Forget All…", role: .destructive) { isConfirmingForgetAll = true }
+                    }
                 }
             } header: {
                 DocsSectionHeader("Project Insights", docs: .projectInsights)
@@ -41,7 +42,10 @@ struct IntelligenceSettings: View {
         // Macterm also reads it again on each activation
         // (`ProjectMemory.attach`): the user turns Apple Intelligence on in
         // System Settings.
-        .onAppear { ProjectMemory.shared.refreshModelAvailability() }
+        .onAppear {
+            ProjectMemory.shared.refreshModelAvailability()
+            ProjectMemory.shared.store.prepareAll()
+        }
         .confirmationDialog("Forget the insights of all projects?", isPresented: $isConfirmingForgetAll) {
             Button("Forget All", role: .destructive) { ProjectMemory.shared.forgetAll() }
         } message: {
@@ -76,6 +80,20 @@ struct IntelligenceSettings: View {
             defaultValue: "\(description) \(modelStatus).",
             comment: "The description of Project Insights, then the reason that it is not available."
         )
+    }
+
+    /// The count of the recorded commands that Macterm can read, also
+    /// while Project Insights is off: older records stay on disk.
+    private var recordedCommands: String {
+        let count = ProjectMemory.shared.store.recordedCommandCount
+        guard count > 0 else {
+            return String(
+                localized: "settings.intelligence.recordedCommands.none",
+                defaultValue: "None",
+                comment: "Macterm has recorded no commands."
+            )
+        }
+        return String(localized: "\(count) commands", comment: "The number of commands that Project Insights recorded.")
     }
 
     private var modelStatus: String {

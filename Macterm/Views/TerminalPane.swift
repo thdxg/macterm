@@ -5,6 +5,7 @@ struct TerminalPane: View {
     let pane: Pane
     let focused: Bool
     let isZoomed: Bool
+    let isSplit: Bool
     /// Dimmed because another pane drives this session's size (#345).
     var isNonLeaderMirror = false
     let onFocus: () -> Void
@@ -41,6 +42,7 @@ struct TerminalPane: View {
                 pane: pane,
                 focused: focused,
                 isZoomed: isZoomed,
+                isSplit: isSplit,
                 isNonLeaderMirror: isNonLeaderMirror,
                 // Read here (not just passed through) so the observation
                 // dependency registers: an orphaned-with-no-host bump must
@@ -158,6 +160,7 @@ private struct TerminalSurface: NSViewRepresentable {
     let pane: Pane
     let focused: Bool
     let isZoomed: Bool
+    let isSplit: Bool
     /// Another pane drives this session's pty size (#345), so this surface's
     /// frame is laid out for foreign geometry.
     let isNonLeaderMirror: Bool
@@ -298,127 +301,20 @@ private struct TerminalSurface: NSViewRepresentable {
         _ = host
     }
 
+    /// The callbacks that need this window's inputs. The pane connects the
+    /// rest when it makes the view (`Pane.connectViewCallbacks`), so they
+    /// work before any window draws it.
     private func configure(_ view: GhosttyTerminalNSView) {
         view.onFocus = onFocus
-        view.onInteraction = { [weak pane] in
-            pane?.recordUserInteraction()
-        }
-        // Typed input is what zmx moves leadership on, local or remote; the
-        // NSView has no back-reference to its Pane, so this is where the pane
-        // gets attached to the report (see `.terminalUserInput`).
-        view.onUserInput = { [weak pane] in
-            guard let pane else { return }
-            NotificationCenter.default.post(name: .terminalUserInput, object: pane.id)
-        }
-        view.onSurfaceSized = { [weak pane] in
-            guard let pane else { return }
-            NotificationCenter.default.post(name: .terminalSurfaceSized, object: pane.id)
-        }
-        // Order matters: `onInteraction` clears the tracker's in-place start
-        // arming that `onCommandSubmitted` sets, and the view calls them in
-        // that order. See `GhosttyTerminalNSView.onCommandSubmitted`.
-        view.onCommandSubmitted = { [weak pane, weak view] hasContent in
-            guard let pane else { return }
-            // Before the tracker leaves the prompt: memory captures the line
-            // only while the shell is at its prompt. A mirror sees the same
-            // shell; the real pane records for both.
-            if !pane.isMirror { ProjectMemory.shared.commandSubmitted(pane: pane, view: view) }
-            pane.recordCommandSubmission(hasContent: hasContent)
-        }
-        view.canCarryCommandInput = { [weak pane] in pane?.allowsInPlaceOutputStart ?? false }
-        // The surface half of the passthrough gate. The key responders decline
-        // the event first; without this, `isAppShortcut` would still swallow it
-        // here. Both consult `KeybindPassthrough` so they can't disagree.
-        view.yieldsToProgram = { [weak pane] event in
-            guard let pane else { return false }
-            return KeybindPassthrough.yields(event: event, pane: pane)
-        }
         view.onProcessExit = onProcessExit
         view.onSplitRequest = onSplitRequest
         view.onZoomRequest = onZoomRequest
         view.isZoomed = isZoomed
-        // Each OSC title is a command-boundary signal that re-reads the
-        // foreground process, and — when a real program (not the shell) holds
-        // the foreground — becomes the pane's display title.
-        view.onTitleChange = { [weak pane] title in pane?.receiveReportedTitle(title) }
+        view.isSplit = isSplit
         view.isFocused = focused
         view.rendersForeignGeometry = isNonLeaderMirror
-
-        view.copyMode.onLabelChange = { [weak pane] label in pane?.copyModeLabel = label }
-
-        view.onSearchStart = { [weak pane, weak view] needle in
-            guard let pane else { return }
-            // Cmd+F toggles: if the search bar is already open, a second
-            // start_search closes it (and returns focus to the terminal),
-            // mirroring the close button rather than re-opening.
-            if pane.searchState.isVisible {
-                guard let view else { return }
-                view.endSearch()
-                // Closing the search bar is a reshape — route focus through
-                // FocusRestoration, not a bare makeFirstResponder (see onClose).
-                FocusRestoration.restoreFocus(to: pane.id, finder: { [weak pane] in pane }, in: view.window)
-                return
-            }
-            if let needle, !needle.isEmpty { pane.searchState.needle = needle }
-            pane.searchState.isVisible = true
-            pane.searchState.startPublishing { [weak pane, weak view] q in
-                view?.sendSearchQuery(q)
-                // The tick scan must run against the needle the core actually
-                // searched, not the live (possibly newer) field text.
-                pane?.scrollView?.noteSearchNeedle(q)
-            }
-            if !pane.searchState.needle.isEmpty { pane.searchState.pushNeedle() }
-        }
-        view.onSearchEnd = { [weak pane] in
-            guard let pane else { return }
-            pane.searchState.stopPublishing()
-            pane.searchState.isVisible = false
-            pane.searchState.needle = ""
-            pane.searchState.total = nil
-            pane.searchState.selected = nil
-            pane.scrollView?.clearSearchTicks()
-        }
-        view.onSearchTotal = { [weak pane] total in
-            guard let pane else { return }
-            pane.searchState.total = total
-            if total == nil {
-                pane.scrollView?.clearSearchTicks()
-            } else {
-                pane.scrollView?.refreshSearchTicks()
-            }
-        }
-        view.onSearchSelected = { [weak pane] sel in
-            pane?.searchState.selected = sel
-            pane?.scrollView?.setSearchSelected(sel)
-        }
-        view.onDesktopNotification = { [weak pane, weak view] title, body in
-            guard let pane else { return }
-            guard !(NSApp.isActive && view?.isFocused == true) else { return }
-            NotificationHandler.shared.post(pane: pane, title: title, body: body)
-        }
-        // Unconditional, unlike the notification above: whether the user is
-        // looking is decided centrally by `AppState` (which acknowledges a
-        // bell in the active tab of the active app on the spot), so the pane's
-        // tab and the badge can never disagree about what counts as seen.
-        view.onBell = { [weak pane] in pane?.ringBell() }
-        view.onProgressStarted = { [weak pane] in
-            pane?.refreshForegroundProcess()
-            pane?.markCommandRunning()
-        }
-        view.onProgressFinished = { [weak pane] failed in
-            // Only a live run can end. The REMOVE a program sends after its
-            // ERROR finds the pane already `.done` and leaves the red dot up.
-            guard let pane, pane.executionState == .running else { return }
-            pane.refreshForegroundProcess()
-            pane.markProgressFinished(failed: failed)
-            onCommandFinished()
-        }
-        view.onLinkHover = { [weak pane] url in
-            pane?.hoverURL = url
-        }
-        view.onReadOnlyChange = { [weak pane] isReadOnly in
-            pane?.isReadOnly = isReadOnly
-        }
+        // A run ended: the window acknowledges it if the user looks at the pane.
+        view.onRunEnded = onCommandFinished
         view.onOpenLink = { [weak appState, weak projectStore, weak pane] text in
             // The quick terminal's and desktop widgets' hosting views carry
             // no environment, and their clicks need the app's state too.
@@ -427,11 +323,6 @@ private struct TerminalSurface: NSViewRepresentable {
             let projects = (projectStore ?? delegate?.projectStore)?.projects ?? []
             return state.openClickedLink(text, in: pane, projects: projects)
         }
-        view.onTerminalRender = { [weak view] in
-            guard let view else { return }
-            AdaptiveTerminalChrome.shared.terminalDidRender(view)
-        }
-        view.titleProvider = { [weak pane] in pane?.displayTitle }
         view.onPromptTitle = { [weak appState, weak pane] in
             guard let pane else { return }
             appState?.renameTab(containing: pane.id, projectID: pane.projectID)
@@ -440,90 +331,9 @@ private struct TerminalSurface: NSViewRepresentable {
             guard let pane else { return }
             appState?.setTabTitle(containing: pane.id, projectID: pane.projectID, title: title)
         }
-        view.onOutputActivity = { [weak pane, weak view] total in
-            if let view {
-                AdaptiveTerminalChrome.shared.terminalDidOutput(view)
-                // A prompt is output: re-read the tty now rather than at the
-                // next idle poll, so the bubble is up before the user types.
-                PasswordPromptMonitor.shared.viewDidOutput(view)
-            }
-            guard let pane else { return }
-            // The single activity source. Output heartbeats fire from the pty
-            // IO path regardless of occlusion, so they also reach background
-            // tabs, and they carry the row total so the tracker can tell
-            // growth from an in-place redraw. Always refresh foreground/raw
-            // state first: a running canonical command can switch to a raw TUI
-            // while normal polling is paused behind a fully occluded window.
-            // The heartbeat is throttled to ~2 Hz, and the tracker preserves
-            // foreground/progress authority until that raw transition occurs.
-            pane.refreshForegroundProcess()
-            pane.markOutputActivity(totalRows: total)
-        }
-        view.onUnknownAPC = { [weak pane] payload in
-            pane?.receiveUnknownAPC(payload)
-        }
-        view.onBackgroundColorChange = { [weak view] color in
-            guard let view else { return }
-            AdaptiveTerminalChrome.shared.terminalBackgroundDidChange(color, in: view)
-        }
         view.onAdaptiveBackgroundChange = { color in
             let resolved = color?.usingColorSpace(.sRGB)?.cgColor
             onAdaptiveBackgroundChange(resolved)
-        }
-        view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs, command in
-            guard let pane else { return }
-            // A command boundary is exactly when the pane's identity changes —
-            // the program that just exited (claude, hx) is gone and the shell
-            // owns the foreground again. Refresh from the process table HERE
-            // rather than waiting for the next poll tick: the adaptive poll
-            // slows to 2s when the app is inactive and stops entirely once no
-            // window is visible, which is why a finished agent's icon and name
-            // used to linger until the user clicked or typed.
-            // `notePromptReturned` feeds the naming gate.
-            pane.notePromptReturned()
-            pane.refreshForegroundProcess()
-            // The remote analogue of the refresh above: the local process
-            // table only knows the ssh client, so `refreshForegroundProcess`
-            // is a no-op for a remote pane — instead request an immediate
-            // host probe (bypassing the resolver's throttle) so the finished
-            // program's name doesn't linger until the next scheduled probe
-            // or user interaction.
-            pane.noteRemoteCommandBoundary()
-            // Project memory: off unless the user turned it on, macOS 26+. A
-            // mirror parses the same OSC 133;D; only the real pane records.
-            if !pane.isMirror {
-                ProjectMemory.shared.commandFinished(
-                    pane: pane, view: view, exitCode: exitCode, durationNs: durationNs, reportedCommand: command
-                )
-            }
-            pane.markCommandFinished()
-            onCommandFinished()
-            guard !(NSApp.isActive && view?.isFocused == true) else { return }
-            let durationSec = Double(durationNs) / 1_000_000_000
-            let duration = Self.formatDuration(durationSec)
-            let body = if exitCode < 0 {
-                String(localized: "Completed in \(duration)")
-            } else {
-                String(localized: "Exited with code \(Int(exitCode)) (\(duration))")
-            }
-            NotificationHandler.shared.post(pane: pane, title: String(localized: "Command Finished"), body: body)
-        }
-    }
-
-    private static func formatDuration(_ seconds: Double) -> String {
-        if seconds < 60 {
-            let value = String(format: "%.1f", seconds)
-            return String(localized: "\(value)s", comment: "A duration in seconds, as in 4.2s")
-        } else if seconds < 3600 {
-            let rounded = Int(seconds.rounded())
-            let mins = rounded / 60
-            let secs = rounded % 60
-            return String(localized: "\(mins)m \(secs)s", comment: "A duration in minutes and seconds, as in 3m 20s")
-        } else {
-            let rounded = Int(seconds.rounded())
-            let hours = rounded / 3600
-            let mins = (rounded % 3600) / 60
-            return String(localized: "\(hours)h \(mins)m", comment: "A duration in hours and minutes, as in 2h 5m")
         }
     }
 }
