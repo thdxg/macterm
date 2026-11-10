@@ -926,15 +926,15 @@ struct SidebarContent: View {
                 }
             }
         }
-        Button("Pin Tab") {
-            appState.pinTab(tab.id, fromProject: project.id)
-        }
         if project.id != ScratchTabs.projectID {
             // Out of the project, shells intact (#665). The tab keeps its own
             // working directory; only its row moves below the projects.
             Button("Move to Scratch Tabs") {
                 appState.moveTabToScratchTabs(tab.id, from: project.id)
             }
+        }
+        Button("Pin Tab") {
+            appState.pinTab(tab.id, fromProject: project.id)
         }
         Divider()
         Button("Close Tab", role: .destructive) {
@@ -1423,19 +1423,13 @@ private struct PinTabDropZone: View {
     var body: some View {
         ZStack {
             if isBandVisible {
+                // System glass or material, with no tint or stroke. The List
+                // draws no target here, because an empty ForEach has no row.
                 Label("Pin Tab", systemImage: "pin.fill")
                     .font(.callout.weight(.medium))
-                    .foregroundStyle(MactermTheme.accent)
                     .frame(maxWidth: .infinity)
                     .frame(height: 30)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(MactermTheme.accent.opacity(0.15))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .strokeBorder(MactermTheme.accent.opacity(0.5), lineWidth: 1)
-                            )
-                    )
+                    .glassPanelBackground(cornerRadius: 6)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
             }

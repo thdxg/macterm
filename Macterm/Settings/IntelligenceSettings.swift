@@ -12,6 +12,10 @@ struct IntelligenceSettings: View {
     var body: some View {
         Form {
             Section {
+                header
+            }
+
+            Section {
                 Group {
                     Toggle(isOn: projectInsights) {
                         Text("Enable Project Insights").dimsWhenDisabled()
@@ -27,15 +31,13 @@ struct IntelligenceSettings: View {
                     }
                 }
             } header: {
-                DocsSectionHeader("Project Insights", docs: .projectInsights)
+                Text("Project Insights")
             }
 
             Section("Apple Intelligence") {
                 LabeledContent("On-device model") {
                     Text(modelStatus)
                 }
-                Text("Every feature that uses a model uses Apple's on-device model. Nothing leaves this Mac.")
-                    .settingsCaption()
             }
         }
         .formStyle(.grouped)
@@ -51,6 +53,43 @@ struct IntelligenceSettings: View {
         } message: {
             Text("Macterm deletes every command that it recorded. You cannot undo this.")
         }
+    }
+
+    /// The block at the top of the pane, in the shape of the one at the top
+    /// of a System Settings pane: the symbol, the pane's name, and what every
+    /// feature below has in common, with a link to the docs. The sections
+    /// below do not say it again. It links the Project Insights page, the
+    /// only feature in the pane, so that section has no docs button of its
+    /// own.
+    private var header: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "apple.intelligence")
+                .font(.system(size: 26))
+                .frame(width: 32, height: 32)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(localized: "Intelligence", comment: "Settings pane"))
+                Text(headerCaption)
+                    .settingsCaption()
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// The caption, then the docs link as its own phrase, as System Settings
+    /// ends its block with "Learn more…".
+    private var headerCaption: AttributedString {
+        var caption = AttributedString(String(
+            localized: "These features need Apple Intelligence. Apple's on-device model does all the work, so nothing leaves this Mac."
+        ))
+        var link = AttributedString(String(localized: "Learn more…"))
+        link.link = DocsSection.projectInsights.url
+        // Chinese puts no space after a full-width full stop.
+        if let last = caption.characters.last, !"。！？".contains(last) {
+            caption.append(AttributedString(" "))
+        }
+        caption.append(link)
+        return caption
     }
 
     /// Project Insights needs Apple Intelligence. Without it the toggle is

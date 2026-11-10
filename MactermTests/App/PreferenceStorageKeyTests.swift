@@ -68,6 +68,7 @@ struct PreferenceStorageKeyTests {
         let names = [
             Preferences.Keys.autoTiling.name, Preferences.Keys.smoothScrolling.name,
             Preferences.Keys.snapScrollToRow.name,
+            Preferences.Keys.smoothCursor.name, Preferences.Keys.cursorMorph.name,
             Preferences.Keys.windowOpacity.name, Preferences.Keys.sidebarWidth.name,
             Preferences.Keys.quickTerminalWidth.name, Preferences.Keys.quickTerminalHeight.name,
             Preferences.Keys.activeProjectID.name, Preferences.Keys.updateChannel.name,
