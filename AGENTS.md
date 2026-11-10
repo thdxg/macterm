@@ -1245,7 +1245,10 @@ The GUI text is in three String Catalogs: `Macterm/Localizable.xcstrings` (the a
 - **Use native SwiftUI and AppKit components only**. Accept a native limitation. Do not mimic the behavior.
 - All colors come from `MactermTheme`. Fixed system colors are allowed only for identity labels (`ProjectColor`, `AgentIcon.brandColor`).
 - Put APIs that exist only on Tahoe behind `#available(macOS 26.0, *)`. For controls, also use `WindowAppearance.glassSupported`.
-- Settings text: section headers are Title Case. Controls are in sentence case. Buttons are Title Case. Descriptions use `.settingsCaption()`. `AppCommand` titles are Title Case.
+- Settings text: section headers are Title Case. Controls are in sentence case. Buttons are Title Case. `AppCommand` titles are Title Case.
+- Settings captions are of two kinds, as in System Settings:
+  - A **description** explains one control. It is the second `Text` of the control's label (`Toggle(isOn:) { Text("Title"); Text("…").settingsDescription() }`), which a grouped form draws under the title, with no divider. `settingsDescription()` sets only the color, so the text dims with a disabled control. A row with no native subtitle (a slider, a custom `HStack` row) puts the text in a `VStack` with `.settingsSecondaryText()`.
+  - A **footnote** is about the whole section. It is a row of its own, the last row of the section (`.settingsSecondaryText()`, which a status line in a pane also uses).
 - **Controls on a row that a hover reveals change values, not the structure of the view. Never use `.onHover`.**
   - The new-tab button of `SidebarProjectHeader` is one `isRevealed` Bool. It drives padding, opacity and hit testing. An `if/else` in the label of a `List` row tears the row down and corrupts the reuse of `NSTableView`.
   - Hover comes from an `NSTrackingArea` (`RowHoverTracker`, `.activeInActiveApp`). We retired `.onHover` three times, because of lag and exits that leaked.

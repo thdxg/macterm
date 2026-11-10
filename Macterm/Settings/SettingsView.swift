@@ -396,17 +396,17 @@ private enum SettingsWindowChrome {
 
 // MARK: - Shared styling
 
-/// Caption text is plain `Text`, which ignores the `isEnabled` environment
+/// Secondary text is plain `Text`, which ignores the `isEnabled` environment
 /// that makes native controls draw themselves dimmed inside `.disabled(_:)`
-/// scopes — so a caption under a disabled control stayed full-strength while
-/// the control above it faded. Reading `\.isEnabled` here (the same value the
-/// built-in controls consult) lets every caption follow its group's state.
-private struct SettingsCaption: ViewModifier {
+/// scopes — so a description under a disabled control stayed full-strength
+/// while the control faded. Reading `\.isEnabled` here (the same value the
+/// built-in controls consult) lets the text follow its group's state. It sets
+/// the color only: in a control's label, the grouped form gives the font.
+private struct SettingsDescription: ViewModifier {
     @Environment(\.isEnabled) private var isEnabled
 
     func body(content: Content) -> some View {
         content
-            .font(.system(size: 11))
             .foregroundStyle(isEnabled ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
     }
 }
@@ -427,11 +427,18 @@ private struct DimsWhenDisabled: ViewModifier {
 }
 
 extension View {
-    /// The one style for a control's explanatory line. Every pane's
-    /// descriptions went through this by hand before (one had drifted to
-    /// `.footnote`), so it lives in a modifier now.
-    func settingsCaption() -> some View {
-        modifier(SettingsCaption())
+    /// The description of one control, as System Settings draws it: the
+    /// second `Text` of the control's label, which a grouped form shows under
+    /// the title. It sets the color only; the form gives the font.
+    func settingsDescription() -> some View {
+        modifier(SettingsDescription())
+    }
+
+    /// Secondary text in a row that Macterm lays out itself: a section's
+    /// footnote, the description in a row with no native subtitle, a status
+    /// line. The font of a native subtitle, and its dimmed color.
+    func settingsSecondaryText() -> some View {
+        font(.subheadline).settingsDescription()
     }
 
     /// Fades primary text to match a disabled control — see `DimsWhenDisabled`.
@@ -471,25 +478,34 @@ private struct SettingsSlider: View {
     let range: ClosedRange<Double>
     var step: Double?
     let display: (Double) -> String
+    /// The slider's description. A slider row has no native subtitle, so it
+    /// goes under the row in the same style.
+    var description: String?
 
     @State private var host = HostWindow()
 
     var body: some View {
         // The `Slider` dims itself inside a `.disabled(_:)` scope, but the
         // flanking `Text`s are not controls and wouldn't follow on their own.
-        HStack {
-            Text(label)
-                .frame(width: Self.labelWidth, alignment: .leading)
-                .dimsWhenDisabled()
-            if let step {
-                Slider(value: $value, in: range, step: step, onEditingChanged: editingChanged)
-            } else {
-                Slider(value: $value, in: range, onEditingChanged: editingChanged)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(label)
+                    .frame(width: Self.labelWidth, alignment: .leading)
+                    .dimsWhenDisabled()
+                if let step {
+                    Slider(value: $value, in: range, step: step, onEditingChanged: editingChanged)
+                } else {
+                    Slider(value: $value, in: range, onEditingChanged: editingChanged)
+                }
+                Text(display(value))
+                    .monospacedDigit()
+                    .frame(width: Self.valueWidth, alignment: .trailing)
+                    .dimsWhenDisabled()
             }
-            Text(display(value))
-                .monospacedDigit()
-                .frame(width: Self.valueWidth, alignment: .trailing)
-                .dimsWhenDisabled()
+            if let description {
+                Text(description)
+                    .settingsSecondaryText()
+            }
         }
         .background(HostWindowReader(host: host))
     }
@@ -655,7 +671,7 @@ private struct GeneralSettings: View {
 
                 HStack {
                     Text("Macterm loads the files from top to bottom. A later file overrides an earlier file.")
-                        .settingsCaption()
+                        .settingsSecondaryText()
                     Spacer()
                     Button("Reload") {
                         commitGhosttyConfig()
@@ -681,12 +697,14 @@ private struct GeneralSettings: View {
             }
 
             Section("Layout") {
-                Toggle("Auto-tile panes", isOn: $autoTilingEnabled)
-                    .onChange(of: autoTilingEnabled) { _, v in
-                        Preferences.shared.autoTilingEnabled = v
-                    }
-                Text("Gives all panes the same size when you split or close a pane.")
-                    .settingsCaption()
+                Toggle(isOn: $autoTilingEnabled) {
+                    Text("Auto-tile panes")
+                    Text("Gives all panes the same size when you split or close a pane.")
+                        .settingsDescription()
+                }
+                .onChange(of: autoTilingEnabled) { _, v in
+                    Preferences.shared.autoTilingEnabled = v
+                }
             }
 
             Section {
@@ -700,7 +718,7 @@ private struct GeneralSettings: View {
                 }
                 HStack {
                     Text(textFileDefaultsCaption)
-                        .settingsCaption()
+                        .settingsSecondaryText()
                     Spacer()
                     if !textFileTypesNotOpenedHere.isEmpty {
                         Button("Set Macterm as Default App…") { isConfirmingTextFileDefaults = true }
@@ -712,18 +730,22 @@ private struct GeneralSettings: View {
             }
 
             Section {
-                Toggle("Background SSH connections", isOn: $backgroundSSHConnections)
-                    .onChange(of: backgroundSSHConnections) { _, v in
-                        Preferences.shared.backgroundSSHConnections = v
-                    }
-                Text("Enable for live tab names, close warnings, and the Git state of remote projects.")
-                    .settingsCaption()
-                Toggle("Reconnect panes after a dropped connection", isOn: $reconnectRemotePanes)
-                    .onChange(of: reconnectRemotePanes) { _, v in
-                        Preferences.shared.reconnectRemotePanes = v
-                    }
-                Text("Connects a disconnected pane to its session again when you wake the Mac or return to the app.")
-                    .settingsCaption()
+                Toggle(isOn: $backgroundSSHConnections) {
+                    Text("Background SSH connections")
+                    Text("Enable for live tab names, close warnings, and the Git state of remote projects.")
+                        .settingsDescription()
+                }
+                .onChange(of: backgroundSSHConnections) { _, v in
+                    Preferences.shared.backgroundSSHConnections = v
+                }
+                Toggle(isOn: $reconnectRemotePanes) {
+                    Text("Reconnect panes after a dropped connection")
+                    Text("Connects a disconnected pane to its session again when you wake the Mac or return to the app.")
+                        .settingsDescription()
+                }
+                .onChange(of: reconnectRemotePanes) { _, v in
+                    Preferences.shared.reconnectRemotePanes = v
+                }
             } header: {
                 DocsSectionHeader("Remote Projects", docs: .remoteProjects)
             }
@@ -1074,7 +1096,7 @@ private struct GhosttyDefaultLocationRow: View {
                     .help(file.searchedPath)
                 if let resolved = file.resolvedPath, resolved != file.searchedPath {
                     Text("Resolves to \((resolved as NSString).abbreviatingWithTildeInPath)")
-                        .settingsCaption()
+                        .settingsSecondaryText()
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .help(resolved)
@@ -1084,7 +1106,7 @@ private struct GhosttyDefaultLocationRow: View {
             Spacer(minLength: 8)
 
             Text("Ghostty default")
-                .settingsCaption()
+                .settingsSecondaryText()
                 .fixedSize()
         }
         .padding(.vertical, 2)
@@ -1196,7 +1218,7 @@ private struct FullDiskAccessBanner: View {
                     macOS asks for each folder when a terminal command reads Documents, Downloads, \
                     or other protected places. One Full Disk Access grant covers all of them.
                     """)
-                    .settingsCaption()
+                    .settingsSecondaryText()
                     if let url = FullDiskAccess.settingsURL {
                         Button("Open System Settings…") {
                             NSWorkspace.shared.open(url)
@@ -1227,7 +1249,7 @@ private struct NotificationPermissionBanner: View {
                     Text("Macterm has no notification permission")
                         .font(.system(size: 13, weight: .semibold))
                     Text("Your Ghostty config asks for notifications.")
-                        .settingsCaption()
+                        .settingsSecondaryText()
                     if let url = NotificationHandler.settingsURL {
                         Button("Open System Settings…") {
                             NSWorkspace.shared.open(url)
@@ -1322,32 +1344,32 @@ private struct AppearanceSettings: View {
                     value: $backgroundBlurRadius,
                     range: 0 ... 100,
                     step: nil,
-                    display: { "\(Int($0.rounded()))%" }
+                    display: { "\(Int($0.rounded()))%" },
+                    description: blurDescription
                 )
                 .onChange(of: backgroundBlurRadius) { _, v in
                     Preferences.shared.windowBlurRadius = Int(v.rounded())
                 }
                 .disabled(backgroundOpacity >= 0.999 || liquidGlass)
 
-                if let blurFootnote {
-                    Text(blurFootnote)
-                        .settingsCaption()
+                Toggle(isOn: $adaptiveTerminalChrome) {
+                    Text("Adaptive background")
+                    Text("The background matches the color of each full-screen program.")
+                        .settingsDescription()
                 }
-
-                Toggle("Adaptive background", isOn: $adaptiveTerminalChrome)
-                    .onChange(of: adaptiveTerminalChrome) { _, enabled in
-                        Preferences.shared.adaptiveTerminalChromeEnabled = enabled
-                    }
-                Text("The background matches the color of each full-screen program.")
-                    .settingsCaption()
+                .onChange(of: adaptiveTerminalChrome) { _, enabled in
+                    Preferences.shared.adaptiveTerminalChromeEnabled = enabled
+                }
             }
 
             // The icon is Liquid Glass, which only macOS 26 and later draw.
             if AdaptiveIcon.systemDrawsGlassIcons {
                 Section("App Icon") {
-                    Toggle("Adaptive icon", isOn: $preferences.adaptiveIcon)
-                    Text("The Dock icon shows the colors of your terminal theme.")
-                        .settingsCaption()
+                    Toggle(isOn: $preferences.adaptiveIcon) {
+                        Text("Adaptive icon")
+                        Text("The Dock icon shows the colors of your terminal theme.")
+                            .settingsDescription()
+                    }
                 }
             }
 
@@ -1403,12 +1425,14 @@ private struct AppearanceSettings: View {
                         Preferences.shared.showAgentIcons = v
                     }
 
-                Toggle("Show tab status indicator", isOn: $showTabStatusIndicator)
-                    .onChange(of: showTabStatusIndicator) { _, v in
-                        Preferences.shared.showTabStatusIndicator = v
-                    }
-                Text("Shows a spinner while a command runs. Shows a dot when the command ends.")
-                    .settingsCaption()
+                Toggle(isOn: $showTabStatusIndicator) {
+                    Text("Show tab status indicator")
+                    Text("Shows a spinner while a command runs. Shows a dot when the command ends.")
+                        .settingsDescription()
+                }
+                .onChange(of: showTabStatusIndicator) { _, v in
+                    Preferences.shared.showTabStatusIndicator = v
+                }
 
                 Group {
                     Toggle(isOn: $showSpinnerOverAgentIcons) {
@@ -1500,7 +1524,7 @@ private struct AppearanceSettings: View {
         )
     }
 
-    private var blurFootnote: String? {
+    private var blurDescription: String? {
         if backgroundOpacity >= 0.999 {
             return WindowAppearance.glassSupported
                 ? String(localized: "Blur and Liquid Glass work only when opacity is below 100%.")
@@ -1561,12 +1585,12 @@ private struct AnimationsSettings: View {
                 Group {
                     Toggle(isOn: $snapScrollToRow) {
                         Text("Snap to whole row").dimsWhenDisabled()
+                        Text("Scrolling moves one whole row at a time. Each row slides into place.")
+                            .settingsDescription()
                     }
                     .onChange(of: snapScrollToRow) { _, v in
                         Preferences.shared.snapScrollToRow = v
                     }
-                    Text("Scrolling moves one whole row at a time. Each row slides into place.")
-                        .settingsCaption()
                 }
                 .disabled(!smoothScrolling)
                 .padding(.leading, 16)
@@ -1575,32 +1599,36 @@ private struct AnimationsSettings: View {
             }
 
             Section {
-                Toggle("Smooth cursor", isOn: $smoothCursor)
-                    .onChange(of: smoothCursor) { _, v in
-                        Preferences.shared.smoothCursor = v
-                    }
-                Text("The cursor glides between positions. It does not jump.")
-                    .settingsCaption()
+                Toggle(isOn: $smoothCursor) {
+                    Text("Smooth cursor")
+                    Text("The cursor glides between positions. It does not jump.")
+                        .settingsDescription()
+                }
+                .onChange(of: smoothCursor) { _, v in
+                    Preferences.shared.smoothCursor = v
+                }
 
                 Group {
                     Toggle(isOn: $cursorMorph) {
                         Text("Morph cursor while moving").dimsWhenDisabled()
+                        Text("A block cursor becomes a comet while it moves. A faster move makes a longer comet.")
+                            .settingsDescription()
                     }
                     .onChange(of: cursorMorph) { _, v in
                         Preferences.shared.cursorMorph = v
                     }
-                    Text("A block cursor becomes a comet while it moves. A faster move makes a longer comet.")
-                        .settingsCaption()
                 }
                 .disabled(!smoothCursor)
                 .padding(.leading, 16)
 
-                Toggle("Cursor trail", isOn: $cursorTrail)
-                    .onChange(of: cursorTrail) { _, v in
-                        Preferences.shared.cursorTrail = v
-                    }
-                Text("A fading streak follows the cursor on larger moves.")
-                    .settingsCaption()
+                Toggle(isOn: $cursorTrail) {
+                    Text("Cursor trail")
+                    Text("A fading streak follows the cursor on larger moves.")
+                        .settingsDescription()
+                }
+                .onChange(of: cursorTrail) { _, v in
+                    Preferences.shared.cursorTrail = v
+                }
             } header: {
                 DocsSectionHeader("Cursor", docs: .animations)
             }
@@ -1639,14 +1667,15 @@ private struct QuickTerminalSettings: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent(
-                    "Shortcut",
-                    value: HotkeyRegistry.displayString(
+                LabeledContent {
+                    Text(HotkeyRegistry.displayString(
                         for: HotkeyRegistry.selectedShortcutString(for: .toggleQuickTerminal)
-                    )
-                )
-                Text("Works when Macterm is not the active app.")
-                    .settingsCaption()
+                    ))
+                } label: {
+                    Text("Shortcut")
+                    Text("Works when Macterm is not the active app.")
+                        .settingsDescription()
+                }
             } header: {
                 DocsSectionHeader("Quick Terminal", docs: .quickTerminal)
             }
@@ -2023,7 +2052,6 @@ private struct KeymapSettings: View {
     private var copyModeSection: some View {
         Section {
             Picker(
-                "Keymap",
                 selection: Binding(
                     get: { Preferences.shared.copyModeKeymap },
                     set: { Preferences.shared.copyModeKeymap = $0 }
@@ -2032,9 +2060,11 @@ private struct KeymapSettings: View {
                 ForEach(CopyModeKeymap.allCases) { keymap in
                     Text(keymap.displayName).tag(keymap)
                 }
+            } label: {
+                Text("Keymap")
+                Text("The keys that move the cursor and select text in copy mode. A change applies the next time the mode starts.")
+                    .settingsDescription()
             }
-            Text("The keys that move the cursor and select text in copy mode. A change applies the next time the mode starts.")
-                .settingsCaption()
         } header: {
             DocsSectionHeader("Copy Mode", docs: .copyMode)
         }
@@ -2043,15 +2073,16 @@ private struct KeymapSettings: View {
     private var passthroughSection: some View {
         Section {
             TextField(
-                "Programs",
                 text: Binding(
                     get: { Preferences.shared.passthroughPrograms },
                     set: { Preferences.shared.passthroughPrograms = $0 }
                 ),
                 prompt: Text(verbatim: "nvim, hx")
-            )
-            Text("A keybind with Pass to TUI selected goes to these programs. The action does not run. Separate the names with commas.")
-                .settingsCaption()
+            ) {
+                Text("Programs")
+                Text("A keybind with Pass to TUI selected goes to these programs. The action does not run. Separate the names with commas.")
+                    .settingsDescription()
+            }
         } header: {
             DocsSectionHeader("Passthrough Programs", docs: .keybinds)
         }
@@ -2530,17 +2561,18 @@ private struct UpdatesSettings: View {
             // are visible to any check, including a manual "Check for Updates
             // Now".
             Section {
-                Picker("Update channel", selection: $updateChannel) {
+                Picker(selection: $updateChannel) {
                     ForEach(UpdateChannel.allCases) { option in
                         Text(option.displayName).tag(option.rawValue)
                     }
+                } label: {
+                    Text("Update channel")
+                    Text((UpdateChannel(rawValue: updateChannel) ?? .stable).summary)
+                        .settingsDescription()
                 }
                 .onChange(of: updateChannel) { _, v in
                     updater.updateChannel = UpdateChannel(rawValue: v) ?? .stable
                 }
-
-                Text((UpdateChannel(rawValue: updateChannel) ?? .stable).summary)
-                    .settingsCaption()
             } header: {
                 Text("Channel")
             }
