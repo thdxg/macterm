@@ -118,13 +118,17 @@ final class CustomPaletteStore {
     /// edit to one is seen as an edit to a palette is.
     private var iconFiles: [URL] = []
 
-    init(extensionsURL: URL) {
+    /// The keybind table that learns the palette ids at each load.
+    private let hotkeys: PaletteHotkeys
+
+    init(extensionsURL: URL, hotkeys: PaletteHotkeys = .shared) {
         self.extensionsURL = extensionsURL
+        self.hotkeys = hotkeys
         reload()
     }
 
-    convenience init(configDirectoryURL: URL) {
-        self.init(extensionsURL: configDirectoryURL.appendingPathComponent("extensions", isDirectory: true))
+    convenience init(configDirectoryURL: URL, hotkeys: PaletteHotkeys = .shared) {
+        self.init(extensionsURL: configDirectoryURL.appendingPathComponent("extensions", isDirectory: true), hotkeys: hotkeys)
     }
 
     func entry(id: String) -> Entry? {
@@ -202,7 +206,7 @@ final class CustomPaletteStore {
         for url in iconFiles {
             fingerprint[Self.iconKey(url)] = Self.modificationDate(url)
         }
-        PaletteHotkeys.shared.paletteIDs = entries.map(\.id)
+        hotkeys.paletteIDs = entries.map(\.id)
     }
 
     /// A palette file read and validated, or kept with the error that

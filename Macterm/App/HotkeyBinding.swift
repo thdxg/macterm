@@ -22,38 +22,40 @@ enum HotkeyBinding: Hashable, Comparable {
         lhs.id < rhs.id
     }
 
+    /// `palettes` is the table that a palette's chord and flags come from.
+    /// Only a test gives another one.
     @MainActor
-    var selectedShortcut: HotkeyShortcut? {
+    func selectedShortcut(palettes: PaletteHotkeys = .shared) -> HotkeyShortcut? {
         switch self {
         case let .action(action): HotkeyRegistry.selectedShortcut(for: action)
-        case let .palette(paletteID): PaletteHotkeys.shared.shortcut(paletteID: paletteID)
+        case let .palette(paletteID): palettes.shortcut(paletteID: paletteID)
         }
     }
 
     @MainActor
-    var passesThroughToPrograms: Bool {
+    func passesThroughToPrograms(palettes: PaletteHotkeys = .shared) -> Bool {
         switch self {
         case let .action(action): HotkeyRegistry.passesThroughToPrograms(for: action)
-        case let .palette(paletteID): PaletteHotkeys.shared.passesThrough(paletteID: paletteID)
+        case let .palette(paletteID): palettes.passesThrough(paletteID: paletteID)
         }
     }
 
     @MainActor
-    func matches(_ event: NSEvent) -> Bool {
-        selectedShortcut?.matches(event) == true
+    func matches(_ event: NSEvent, palettes: PaletteHotkeys = .shared) -> Bool {
+        selectedShortcut(palettes: palettes)?.matches(event) == true
     }
 
     /// Every binding flagged global: the actions, then the palettes.
     @MainActor
-    static var globalBindings: [HotkeyBinding] {
+    static func globalBindings(palettes: PaletteHotkeys = .shared) -> [HotkeyBinding] {
         HotkeyRegistry.globalActions().map(HotkeyBinding.action)
-            + PaletteHotkeys.shared.globalPaletteIDs().map(HotkeyBinding.palette)
+            + palettes.globalPaletteIDs().map(HotkeyBinding.palette)
     }
 
     /// Every binding flagged to pass through to programs.
     @MainActor
-    static var passthroughBindings: [HotkeyBinding] {
+    static func passthroughBindings(palettes: PaletteHotkeys = .shared) -> [HotkeyBinding] {
         HotkeyRegistry.passthroughActions().map(HotkeyBinding.action)
-            + PaletteHotkeys.shared.passthroughPaletteIDs().map(HotkeyBinding.palette)
+            + palettes.passthroughPaletteIDs().map(HotkeyBinding.palette)
     }
 }
