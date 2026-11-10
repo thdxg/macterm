@@ -1,8 +1,7 @@
 """Shared harness for scripted, hermetic Macterm instances.
 
-Extracted from benchmark.py so the resource benchmark and the e2e suite
-(scripts/e2e/) launch and drive the app through one code path. The recipe — every
-piece of it earned against real CI runners:
+The e2e suite (scripts/e2e/) launches and drives the app through it. The
+recipe — every piece of it earned against real CI runners:
 
 - Launch via LaunchServices (`open -n --env…`), never by exec'ing the binary:
   launch-time activation counts as user intent, so the app actually becomes
@@ -44,7 +43,7 @@ NOTIFY_PREFIX = "com.thdxg.macterm.bench."
 
 class HarnessError(Exception):
     """A scripted-app operation failed. Callers decide whether that's a fatal
-    CLI error (benchmark: dump diagnostics + sys.exit) or a test failure."""
+    CLI error or a test failure."""
 
 
 def sh(args, **kwargs):
@@ -52,7 +51,7 @@ def sh(args, **kwargs):
 
 
 def notify(command):
-    """Post a Darwin notification to every listening benchmark-mode instance."""
+    """Post a Darwin notification to every instance that runs with MACTERM_BENCHMARK=1."""
     sh(["notifyutil", "-p", NOTIFY_PREFIX + command])
 
 

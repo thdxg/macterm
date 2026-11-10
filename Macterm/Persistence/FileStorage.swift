@@ -6,8 +6,8 @@ enum FileStorage {
     }
 
     static func appSupportDirectory() -> URL {
-        // The benchmark harness (scripts/benchmark.py) points this at a
-        // throwaway directory so a benchmark run can't read or pollute the
+        // The scripted harness (scripts/_harness.py) points this at a
+        // throwaway directory so a scripted run can't read or pollute the
         // real app data. An env override is required because
         // `.applicationSupportDirectory` resolves via the user record, not
         // `$HOME` — a temp `$HOME` doesn't isolate it.

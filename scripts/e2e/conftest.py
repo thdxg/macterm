@@ -2,7 +2,7 @@
 
 The suite drives a real, GUI Macterm.app: launched hermetically (throwaway
 $HOME, isolated app data + zmx namespace, Darwin-notification control — see
-scripts/_harness.py, shared with the benchmark) and asserted against through
+scripts/_harness.py) and asserted against through
 the bundled `macterm` CLI, whose `pane dump`/`pane inspect`/`pane list` read
 libghostty's own live state. `mise run e2e` builds the Debug app and runs
 this; `pytest scripts/e2e --app <path>` targets an already-built app.
