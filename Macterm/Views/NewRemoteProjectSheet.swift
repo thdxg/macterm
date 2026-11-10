@@ -65,7 +65,7 @@ struct NewRemoteProjectSheet: View {
             Each pane is a persistent zmx session on the host, over ssh. zmx must be installed there: \
             Install zmx on Host puts Macterm's build in ~/.local/bin on the host. \
             If Macterm cannot find a zmx, set an absolute path, for example ~/bin/zmx or /usr/local/bin/zmx. \
-            Port, identity and ControlMaster come from ~/.ssh/config.
+            Port, identity, and ControlMaster come from ~/.ssh/config.
             """)
             .font(.caption)
             .foregroundStyle(.secondary)

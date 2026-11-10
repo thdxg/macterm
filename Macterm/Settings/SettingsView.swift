@@ -716,7 +716,7 @@ private struct GeneralSettings: View {
                     .onChange(of: backgroundSSHConnections) { _, v in
                         Preferences.shared.backgroundSSHConnections = v
                     }
-                Text("Enable for live tab names, close warnings and the Git state of remote projects.")
+                Text("Enable for live tab names, close warnings, and the Git state of remote projects.")
                     .settingsCaption()
                 Toggle("Reconnect panes after a dropped connection", isOn: $reconnectRemotePanes)
                     .onChange(of: reconnectRemotePanes) { _, v in
@@ -788,7 +788,7 @@ private struct GeneralSettings: View {
         } message: {
             Text("""
             Finder opens \(textFileTypesNotOpenedHere.count) more text file types with Macterm. \
-            To change a type back, select a file in Finder, choose File → Get Info and change Open with.
+            To change a type back, select a file in Finder, choose File → Get Info, and change Open with.
             """)
         }
     }
@@ -1193,7 +1193,7 @@ private struct FullDiskAccessBanner: View {
                     Text("Full Disk Access is off")
                         .font(.system(size: 13, weight: .semibold))
                     Text("""
-                    macOS asks for each folder when a terminal command reads Documents, Downloads \
+                    macOS asks for each folder when a terminal command reads Documents, Downloads, \
                     or other protected places. One Full Disk Access grant covers all of them.
                     """)
                     .settingsCaption()
