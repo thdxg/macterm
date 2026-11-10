@@ -105,10 +105,6 @@ jobs:
           restore-keys: |
             server-zig-${{ runner.os }}-${{ runner.arch }}-${{ steps.zig.outputs.version }}-
 
-      - name: Delete a File from the Restored Cache (temporary)
-        if: steps.zig-cache.outputs.cache-matched-key != ''
-        run: find "$ZIG_LOCAL_CACHE_DIR/o" -name symbols-unigen -type f -print -delete
-
       - name: Fetch the Zig Packages
         if: steps.changes.outputs.server == 'true'
         run: ../scripts/server-zig.sh fetch
