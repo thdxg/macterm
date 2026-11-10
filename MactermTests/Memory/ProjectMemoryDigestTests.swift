@@ -192,11 +192,12 @@ struct ProjectMemoryDigestTests {
     }
 
     @Test
-    func the_instructions_put_git_first_and_cover_a_project_with_no_git_state() {
+    func the_instructions_put_git_first_and_cover_a_project_with_no_git_work() {
         #expect(ProjectMemoryDigest.instructions.contains("Read the work from Git first"))
         #expect(ProjectMemoryDigest.instructions.contains("Do not state a goal"))
-        #expect(ProjectMemoryDigest.instructions.contains("Do not retell the commands"))
-        #expect(ProjectMemoryDigest.instructions.contains("When there is no Git state"))
+        // The summary reads the commands only without Git work
+        // (`summaryText`), so the instructions name that case.
+        #expect(ProjectMemoryDigest.instructions.contains("When the text has no commits and no changed files"))
         #expect(ProjectMemoryDigest.instructions.contains("The diff is uncommitted work: never call it commits."))
     }
 
