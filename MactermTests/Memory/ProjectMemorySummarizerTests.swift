@@ -191,6 +191,30 @@ struct ProjectMemorySummarizerTests {
     }
 
     @Test
+    func a_secret_in_a_hunk_reaches_the_model_but_not_the_summary() async throws {
+        let secret = "ghp_abcdefghijklmnopqrstuvwxyz0123"
+        var git = GitStatus(branch: "main", unstaged: 1, changedPaths: ["deploy.sh"])
+        git.diff = [GitStatus.FileDiff(path: "deploy.sh", lines: ["@@ -1 +1 @@", "+export GITHUB_TOKEN=\(secret)"])]
+        let digest = try #require(ProjectMemoryDigest(projectName: "acme", entries: [], git: git, now: now))
+        let model = FakeModel()
+        model.reply = "You set `GITHUB_TOKEN=\(secret)` in `deploy.sh`."
+        model.suggestions = [OnDeviceModel.Suggestion(command: "git diff", reason: "Check \(secret) before a commit.")]
+        let storage = FakeStorage()
+        let summarizer = makeSummarizer(model, storage: storage)
+        let project = UUID()
+
+        summarizer.refresh(projectID: project, digest: digest)
+        try await wait(for: summarizer, project, phase: .done)
+        #expect(model.prompts.first?.contains(secret) == true)
+        let state = summarizer.state(for: project)
+        #expect(state.text == "You set `GITHUB_TOKEN=\(MemoryRedaction.mask)` in `deploy.sh`.")
+        #expect(state.suggestions.allSatisfy { !$0.reason.contains(secret) })
+        let stored = try #require(storage.stored[project])
+        #expect(!stored.text.contains(secret))
+        #expect(stored.suggestions?.allSatisfy { !$0.reason.contains(secret) } == true)
+    }
+
+    @Test
     func a_failed_suggestion_request_keeps_the_text() async throws {
         let model = FakeModel()
         model.suggestionsFail = true

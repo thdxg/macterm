@@ -270,16 +270,13 @@ struct ProjectMemoryDigestTests {
     }
 
     @Test
-    func a_secret_in_a_diff_hunk_never_reaches_the_digest() throws {
-        let git = changed(fileDiff("config.yml", "api_key: abcdefghijklmnopqrstuvwxyz")
-            + fileDiff("deploy.sh", "export DEPLOY_TOKEN=plain-text-token")
-            + fileDiff(".env", "SECRET_THING=from-env-file"))
+    func code_in_a_hunk_reaches_the_digest_unmasked_and_secret_files_do_not() throws {
+        let git = changed(fileDiff("Upload.swift", "let token: String")
+            + fileDiff(".env", "SECRET_THING=from-env-file")
+            + fileDiff("deploy/app.env", "SECRET_THING=from-env-file"))
         let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: [], git: git, now: now))
-        for secret in ["abcdefghijklmnopqrstuvwxyz", "plain-text-token", "from-env-file"] {
-            #expect(!digest.text.contains(secret))
-            #expect(!digest.prompt.contains(secret))
-        }
-        #expect(digest.text.contains("File `config.yml`:"))
+        #expect(digest.text.contains("+let token: String"))
+        #expect(!digest.text.contains("from-env-file"))
         #expect(!digest.text.contains("File `.env`"))
     }
 

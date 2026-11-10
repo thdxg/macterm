@@ -29,6 +29,7 @@ struct ProjectMemoryDigest: Equatable {
     Read the work from Git first: the commits on the current branch, and the changed files when the text lists them. \
     When the text has a diff of the uncommitted changes, say what those changes do in the code, not only which files changed. \
     The diff is uncommitted work: never call it commits. \
+    Never write a key, token, password or other secret value, also when the diff has one. \
     On a main branch, say what the latest commits did. Do not list the commit subjects one by one. \
     Mention a command only when it shows something about the work that Git does not show. \
     Do not retell the commands or their order. \

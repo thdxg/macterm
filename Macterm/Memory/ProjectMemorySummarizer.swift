@@ -114,7 +114,7 @@ final class ProjectMemorySummarizer {
                     guard !Task.isCancelled else { return }
                     states[projectID] = State(
                         phase: .streaming,
-                        text: partial,
+                        text: Self.redacted(partial),
                         key: digest.key,
                         suggestions: states[projectID]?.suggestions ?? []
                     )
@@ -128,7 +128,8 @@ final class ProjectMemorySummarizer {
                 }
                 // The suggestions, after the text: a second request. A failure
                 // here keeps the text; the panel then shows its own rows.
-                let suggestions = await (try? suggester(ProjectMemoryDigest.suggestionInstructions, digest.suggestionPrompt)) ?? []
+                let suggestions = await ((try? suggester(ProjectMemoryDigest.suggestionInstructions, digest.suggestionPrompt)) ?? [])
+                    .map { OnDeviceModel.Suggestion(command: $0.command, reason: Self.redacted($0.reason)) }
                 guard !Task.isCancelled else { return }
                 states[projectID] = State(phase: .done, text: text, key: digest.key, suggestions: suggestions)
                 storeSummary(projectID, StoredSummary(
@@ -145,6 +146,13 @@ final class ProjectMemorySummarizer {
                 states[projectID] = State(phase: .failed, text: "", key: digest.key)
             }
         }
+    }
+
+    /// The model's text, and the reason of each suggestion, with every secret
+    /// masked (`MemoryRedaction`), before it is shown or stored. The diff in
+    /// the prompts is not redacted, so a secret in it could reach a reply.
+    static func redacted(_ text: String) -> String {
+        MemoryRedaction.redact(text)
     }
 
     /// Stop a run for a project whose panel went away. The stored summary

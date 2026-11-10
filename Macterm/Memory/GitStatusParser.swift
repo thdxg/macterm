@@ -34,7 +34,7 @@ struct GitStatus: Equatable {
     /// The paths with changes of any kind, in the order of `git status`.
     var changedPaths: [String] = []
 
-    /// One file of the uncommitted diff, with its lines redacted.
+    /// One file of the uncommitted diff.
     struct FileDiff: Equatable {
         var path: String
         /// The hunks: `@@` headers, context, `-` and `+` lines.
@@ -244,14 +244,13 @@ enum GitStatusParser {
 
     /// The longest line of a diff that is kept. A longer line is generated
     /// text, minified code or encoded data, which says little about the
-    /// work and can hide a secret: its file is left out. The redaction also
-    /// costs time with the square of a word's length: one word of 32,000
-    /// characters took 217 s.
+    /// work and can hide a secret: its file is left out.
     static let diffLineLimit = 500
 
     /// The file names whose diff is never read (`fnmatch` on the name, with
     /// no case): lockfiles, which are generated and long, and the files
-    /// that hold secrets by convention. `ProjectGit.diffArguments` gives
+    /// that hold secrets by convention: they say little about the code, and
+    /// they are where a secret in the summary would come from. `ProjectGit.diffArguments` gives
     /// them to git as exclude pathspecs, so git does not send them, and
     /// `parseDiff` leaves them out again.
     static let leftOutNames = [
@@ -273,8 +272,10 @@ enum GitStatusParser {
     static let deletedFileLine = "(the file is deleted)"
 
     /// `git diff HEAD` with `a/` and `b/` prefixes, one entry for each file
-    /// with hunks; a deleted file has `deletedFileLine` alone. Every line
-    /// goes through `MemoryRedaction`. A binary file, a file that
+    /// with hunks; a deleted file has `deletedFileLine` alone. The lines are
+    /// not redacted: the diff goes only to the on-device model and is not
+    /// stored, and a mask turned code such as `token: String` into noise.
+    /// The summary is redacted instead (`ProjectMemorySummarizer`). A binary file, a file that
     /// `isLeftOutOfDiff`, a file with a private key or a line past
     /// `diffLineLimit`, a file that would pass `diffCharacterLimit`, and the
     /// last file of a read that `diffByteLimit` cut are left out whole.
@@ -285,11 +286,9 @@ enum GitStatusParser {
         var kept = 0
         for section in sections {
             guard let file = fileDiff(section) else { continue }
-            // The size before redaction: the redaction of a file that is
-            // left out would cost time for nothing.
             let size = file.lines.reduce(0) { $0 + $1.count + 1 }
             guard kept + size <= diffCharacterLimit else { continue }
-            files.append(GitStatus.FileDiff(path: file.path, lines: file.lines.map { MemoryRedaction.redact(String($0)) }))
+            files.append(GitStatus.FileDiff(path: file.path, lines: file.lines.map(String.init)))
             kept += size
         }
         return files
@@ -314,8 +313,8 @@ enum GitStatusParser {
         return sections
     }
 
-    /// The path and the hunk lines of one file, not redacted yet. nil for a
-    /// file that is left out.
+    /// The path and the hunk lines of one file. nil for a file that is left
+    /// out.
     private static func fileDiff(_ section: [Substring]) -> (path: String, lines: [Substring])? {
         var oldPath: String?
         var newPath: String?

@@ -74,11 +74,7 @@ enum MemoryRedaction {
     private static let shellWordValue = #"(?:\\.|"(?:\\.|[^"\\])*"|'[^']*'|`[^`]*`|\$\([^()]*\)"#
         + #"|\)(?![\s;&|<>)]|$)|[^\s;&|<>)"'`\\]|["'`\\]\S*)+"#
 
-    /// Output also has `name: value` (YAML, JSON, a diff of a config file).
-    /// Not for commands: `git push origin token:main` is no secret.
-    private static let textRules = [
-        Rule(#"(\b"# + secretName + #"["']?\s*:\s*)"# + textValue, "$1" + mask),
-    ] + rules(value: textValue)
+    private static let textRules = rules(value: textValue)
     private static let commandRules = rules(value: shellWordValue)
 
     private static func rules(value: String) -> [Rule] {

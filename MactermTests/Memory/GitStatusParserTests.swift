@@ -180,7 +180,7 @@ struct GitStatusParserTests {
     }
 
     @Test
-    func a_secret_in_a_hunk_is_masked_and_secret_files_are_left_out() {
+    func secret_files_are_left_out_and_the_other_hunks_stay_as_they_are() {
         let diff = """
         diff --git a/config.yml b/config.yml
         --- a/config.yml
@@ -223,11 +223,9 @@ struct GitStatusParserTests {
         """
         let files = GitStatusParser.parseDiff(diff)
         #expect(files.map(\.path) == ["config.yml"])
-        let text = files[0].lines.joined(separator: "\n")
-        for secret in ["hunter2", "abc123", "s3cr3t"] {
-            #expect(!text.contains(secret))
-        }
-        #expect(text.contains("db_password: \(MemoryRedaction.mask)"))
+        // The diff goes only to the on-device model, so its lines are not
+        // masked; the summary is (`ProjectMemorySummarizer.redacted`).
+        #expect(files[0].lines == ["@@ -1 +1,3 @@", "+db_password: hunter2", "+API_TOKEN=abc123", "+\"client_secret\": \"s3cr3t\","])
     }
 
     @Test
