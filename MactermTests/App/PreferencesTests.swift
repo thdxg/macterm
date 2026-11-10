@@ -52,6 +52,18 @@ struct PreferencesTests {
     }
 
     @Test
+    func project_insights_button_defaults_on_and_round_trips() {
+        let prior = Preferences.shared.showProjectInsightsButton
+        defer { Preferences.shared.showProjectInsightsButton = prior }
+
+        // Fresh (wiped) test suite → the toolbar shows the button.
+        #expect(Preferences.shared.showProjectInsightsButton)
+
+        Preferences.shared.showProjectInsightsButton = false
+        #expect(Preferences.defaults.object(forKey: Preferences.Keys.showProjectInsightsButton.name) as? Bool == false)
+    }
+
+    @Test
     func project_new_tab_button_defaults_on_and_round_trips() {
         let prior = Preferences.shared.showProjectNewTabButton
         defer { Preferences.shared.showProjectNewTabButton = prior }

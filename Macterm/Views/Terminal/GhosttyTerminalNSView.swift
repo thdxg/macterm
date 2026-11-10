@@ -154,57 +154,16 @@ final class GhosttyTerminalNSView: NSView {
     /// `ghostty_surface_new`. Retained here and freed in `destroySurface`.
     nonisolated(unsafe) private var configCStrings: [UnsafeMutablePointer<CChar>] = []
 
-    /// The most recent title the surface reported (OSC 0/2 / `SET_TITLE`).
-    /// Remembered so re-wiring `onTitleChange` (when SwiftUI's `configure`
-    /// adopts a warmed surface) replays the latest title once — the surface
-    /// may have reported it before the callback was wired.
-    private var lastReportedTitle: String?
-
-    /// The title already delivered to a callback. The replay in `onTitleChange`'s
-    /// didSet fires ONLY when a title arrived while no callback was wired
-    /// (`lastReportedTitle != lastDeliveredTitle`) — a genuine catch-up. Without
-    /// this, `TerminalSurface.configure` re-assigning the callback on every
-    /// `updateNSView` (focus flips, divider drags) replayed the title each time,
-    /// re-running `receiveReportedTitle` → sysctl + foreground refresh +
-    /// `.terminalPollEvent`, pinning the adaptive poll in its 250ms burst.
-    private var lastDeliveredTitle: String?
-
     /// Fires on each OSC title with the reported string. Whether the string
     /// is *used* for naming is the pane's call (`Pane.receiveReportedTitle`
     /// gates on the foreground process); every arrival also marks a command
     /// boundary that drives a foreground-process refresh.
-    var onTitleChange: ((String) -> Void)? {
-        didSet {
-            // Replay ASYNC: this setter runs inside TerminalSurface.configure,
-            // i.e. mid SwiftUI view update. A synchronous replay runs a full
-            // foreground refresh whose republishing re-invalidates SwiftUI
-            // from inside its own render transaction — with per-refresh state
-            // flaps that loop never settles (observed twice as a ~90%-CPU
-            // frozen app). Deferring one runloop turn breaks the cycle.
-            //
-            // Replay only when there's a title the current callback hasn't
-            // received yet — not on every re-wire (see `lastDeliveredTitle`).
-            guard let title = lastReportedTitle, title != lastDeliveredTitle,
-                  let callback = onTitleChange
-            else { return }
-            lastDeliveredTitle = title
-            DispatchQueue.main.async { callback(title) }
-        }
-    }
+    var onTitleChange: ((String) -> Void)?
 
     /// Deliver a title reported by libghostty (OSC 0/2 / `SET_TITLE`).
     /// Called by `GhosttyCallbacks`.
     func surfaceDidReportTitle(_ title: String) {
-        lastReportedTitle = title
-        // Only mark it delivered if a callback actually received it — otherwise
-        // a title that arrives before a callback is wired would be recorded as
-        // delivered and the catch-up replay in `onTitleChange`'s didSet would
-        // never fire for it. (Unreachable today, since the callback is wired at
-        // configure time before titles flow, but keeps the two fields honest.)
-        if let onTitleChange {
-            lastDeliveredTitle = title
-            onTitleChange(title)
-        }
+        onTitleChange?(title)
     }
 
     func surfaceDidReportProgress(_ report: TerminalProgressReport) {
@@ -450,6 +409,10 @@ final class GhosttyTerminalNSView: NSView {
     /// A progress report ended the run (`TerminalProgressReport`). The Bool is
     /// whether it failed: true for ERROR, false for REMOVE and PAUSE.
     var onProgressFinished: ((Bool) -> Void)?
+    /// A run ended (`onCommandFinished` or `onProgressFinished`), after the
+    /// pane recorded it. The window that draws the pane sets it, to
+    /// acknowledge the run when the user looks at the pane.
+    var onRunEnded: (() -> Void)?
     var onTerminalRender: (() -> Void)?
     var onBackgroundColorChange: ((NSColor) -> Void)?
     var onAdaptiveBackgroundChange: ((NSColor?) -> Void)?
@@ -1037,12 +1000,12 @@ final class GhosttyTerminalNSView: NSView {
         syncColorScheme()
     }
 
-    /// Push the split-resolution scheme into libghostty — keyed off the
-    /// tracked system scheme, never this view's `effectiveAppearance`, which
-    /// our own preferredColorScheme pins (issue #144).
+    /// Push the app's scheme into libghostty — `GhosttyApp.windowScheme`,
+    /// never this view's `effectiveAppearance`, which our own
+    /// preferredColorScheme pins (issue #144).
     func syncColorScheme() {
         guard let surface else { return }
-        let isDark = GhosttyApp.shared.systemScheme == .dark
+        let isDark = GhosttyApp.shared.windowScheme == .dark
         ghostty_surface_set_color_scheme(surface, isDark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
     }
 

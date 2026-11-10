@@ -961,10 +961,8 @@ final class Pane: Identifiable {
     /// foreground pid when that process is a non-shell program, nil otherwise.
     func receiveReportedTitle(_ title: String, programPID: pid_t?) {
         // A title arrival is a command boundary — wake the adaptive poll so
-        // the other panes' names catch up too. Deferred: this path also runs
-        // from the `onTitleChange` replay inside `TerminalSurface.configure`,
-        // i.e. mid view-update — posting (and polling) synchronously there
-        // re-invalidates SwiftUI from within its own render transaction.
+        // the other panes' names catch up too. Deferred one turn, so the poll
+        // never runs inside the caller's own work.
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
         }
@@ -1026,6 +1024,7 @@ final class Pane: Identifiable {
         )
         hasBuiltSurface = true
         view.owningPane = self
+        connectViewCallbacks(view)
         MactermPaneEntity.annotate(view, for: self)
         _nsView = view
         return view
@@ -1146,6 +1145,7 @@ final class Pane: Identifiable {
         view.onCommandFinished = nil
         view.onProgressStarted = nil
         view.onProgressFinished = nil
+        view.onRunEnded = nil
         view.onTerminalRender = nil
         view.onBackgroundColorChange = nil
         view.onAdaptiveBackgroundChange = nil

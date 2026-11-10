@@ -448,7 +448,7 @@ struct RemoteSpawnTests {
     // MARK: - Git probe
 
     @Test
-    func git_probe_runs_the_four_reads_in_one_connection() throws {
+    func git_probe_runs_the_five_reads_in_one_connection() throws {
         let argv = try #require(RemoteSpawn.gitProbeArgv(remote: remote))
         #expect(argv.contains("BatchMode=yes"))
         #expect(argv.contains("devbox"))
@@ -464,7 +464,10 @@ struct RemoteSpawnTests {
         #expect(script.contains("for-each-ref refs/heads --sort=-committerdate --count=6"))
         #expect(script.contains("worktree list --porcelain"))
         #expect(script.contains("GIT_OPTIONAL_LOCKS=0"))
-        #expect(script.components(separatedBy: "printf \"\\036\"").count == 4)
+        #expect(script.contains("{ " + ProjectGit.branchLogScript(git: "git -c core.fsmonitor=false -c core.quotePath=false --no-pager")))
+        // A detached HEAD has no branch log, and that is not a failure.
+        #expect(script.hasSuffix("; } 2>/dev/null; exit 0"))
+        #expect(script.components(separatedBy: "printf \"\\036\"").count == 5)
         // A git on the host's PATH only; profiles are never sourced.
         #expect(!script.contains("profile"))
     }

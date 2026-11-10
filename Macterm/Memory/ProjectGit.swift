@@ -12,7 +12,12 @@ import Foundation
 /// takes the index lock from the user's own git, and turns the fsmonitor
 /// off: a daemon that it starts could hold the output pipe open.
 ///
-/// A remote read is one ssh connection that runs the same four commands on
+/// A fifth read, `branchLogScript`, lists the commits of the current
+/// branch that the main branch does not have. The latest commits of HEAD
+/// cannot tell them apart: on a new branch they are mostly the main
+/// branch's own history, and the summary named that as the user's work.
+///
+/// A remote read is one ssh connection that runs the same five commands on
 /// the host (`RemoteSpawn.gitProbeArgv`), with the outputs separated by
 /// `recordSeparator`. It is a background connection like the foreground
 /// probe, so `Preferences.backgroundSSHConnections` gates it (#272), and a
@@ -24,7 +29,7 @@ enum ProjectGit {
     static let remoteTimeout: Duration = .seconds(15)
     static let recentCommitCount = 5
     static let recentBranchCount = 6
-    /// Between the four outputs of a remote read (ASCII record separator).
+    /// Between the five outputs of a remote read (ASCII record separator).
     static let recordSeparator: Character = "\u{1E}"
 
     /// The git state of the repository at `path`, or nil when it is not in
@@ -40,12 +45,42 @@ enum ProjectGit {
             "--format=%(refname:short)\u{1F}%(objectname:short)\u{1F}%(committerdate:unix)\u{1F}%(subject)",
         ], in: path)
         let worktreesOutput = await run(git, ["worktree", "list", "--porcelain"], in: path)
+        let branchLogOutput = await runBranchLog(git, in: path)
         return GitStatusParser.status(
             statusOutput: statusOutput,
             logOutput: logOutput,
             branchesOutput: branchesOutput,
-            worktreesOutput: worktreesOutput
+            worktreesOutput: worktreesOutput,
+            branchLogOutput: branchLogOutput
         )
+    }
+
+    /// The refs that can be the main branch: the default branch of each
+    /// remote (`origin/HEAD`, which the read resolves to the branch it
+    /// names), and `main` or `master`, local or on a remote. A `*` here does
+    /// not match a `/`.
+    static let mainRefPatterns = [
+        "refs/remotes/*/HEAD", "refs/heads/main", "refs/heads/master", "refs/remotes/*/main", "refs/remotes/*/master",
+    ]
+
+    /// The fifth read, as a POSIX sh script, the same for a local and a
+    /// remote project. `git` is the command that runs git. It prints the
+    /// main refs that exist, one on each line, then the commits of the
+    /// current branch that none of them has (merges left out: a merge of
+    /// the main branch into the branch is not its work), then `end`.
+    /// Without a branch, a main ref or a successful log, there is no `end`,
+    /// and `GitStatusParser.parseBranchLog` reads that as unknown: with no
+    /// main ref, every commit of HEAD would read as the branch's own.
+    /// A ref name has no space and no glob character (`git
+    /// check-ref-format`), so `$m` splits into the refs.
+    static func branchLogScript(git: String) -> String {
+        let refFormat = "%(if)%(symref)%(then)%(symref)%(else)%(refname)%(end)"
+        let patterns = mainRefPatterns.map { "\"\($0)\"" }.joined(separator: " ")
+        return "b=$(\(git) symbolic-ref --short -q HEAD) && "
+            + "m=$(\(git) for-each-ref \"--format=\(refFormat)\" \(patterns)) && [ -n \"$m\" ] && "
+            + "printf \"%s\\n\" \"$m\" && "
+            + "\(git) log -\(recentCommitCount) --no-merges --format=%h%x1f%s%x1f%ct \"refs/heads/$b\" --not $m -- && "
+            + "echo end"
     }
 
     // MARK: - Remote
@@ -90,7 +125,7 @@ enum ProjectGit {
         }
     }
 
-    /// The four outputs of `RemoteSpawn.gitProbeArgv`, split at the record
+    /// The five outputs of `RemoteSpawn.gitProbeArgv`, split at the record
     /// separator, through `GitStatusParser`. A reply with fewer parts has
     /// the rest as nil.
     static func parseRemoteOutput(_ output: String) -> GitStatus? {
@@ -103,7 +138,8 @@ enum ProjectGit {
             statusOutput: statusOutput,
             logOutput: parts.count > 1 ? parts[1] : nil,
             branchesOutput: parts.count > 2 ? parts[2] : nil,
-            worktreesOutput: parts.count > 3 ? parts[3] : nil
+            worktreesOutput: parts.count > 3 ? parts[3] : nil,
+            branchLogOutput: parts.count > 4 ? parts[4] : nil
         )
     }
 
@@ -143,14 +179,28 @@ enum ProjectGit {
         return path.isEmpty ? nil : path
     }
 
+    /// The options of every git run. `core.quotePath=false` keeps a path
+    /// with non-ASCII letters as it is, not C-quoted.
+    static let gitOptions = ["-c", "core.fsmonitor=false", "-c", "core.quotePath=false", "--no-pager"]
+
     /// stdout of `git -C path args`, or nil on a failure or a timeout.
     private static func run(_ git: String, _ args: [String], in path: String) async -> String? {
+        await runChecked(git, ["-C", path] + gitOptions + args)
+    }
+
+    /// `branchLogScript` under `/bin/sh`. The git and the path go in as
+    /// arguments, so neither is quoted into the script.
+    private static func runBranchLog(_ git: String, in path: String) async -> String? {
+        let command = (["\"$1\" -C \"$2\""] + gitOptions).joined(separator: " ")
+        return await runChecked("/bin/sh", ["-c", branchLogScript(git: command), "sh", git, path])
+    }
+
+    private static func runChecked(_ executable: String, _ args: [String]) async -> String? {
         var environment = ProcessInfo.processInfo.environment
         environment["GIT_OPTIONAL_LOCKS"] = "0"
         environment["GIT_TERMINAL_PROMPT"] = "0"
-        guard let outcome = await ProcessRunner.run(
-            git, ["-C", path, "-c", "core.fsmonitor=false", "--no-pager"] + args, environment: environment, timeout: timeout
-        ), outcome.status == 0
+        guard let outcome = await ProcessRunner.run(executable, args, environment: environment, timeout: timeout),
+              outcome.status == 0
         else { return nil }
         return outcome.stdout
     }
