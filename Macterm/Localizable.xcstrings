@@ -2617,6 +2617,23 @@
         }
       }
     },
+    "Continue Without Server" : {
+      "comment" : "The button that closes the server install sheet with no install.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서버 없이 계속"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不使用服务器继续"
+          }
+        }
+      }
+    },
     "Copy" : {
       "comment" : "Command palette: the Option action of an extension row that copies text",
       "localizations" : {
@@ -11970,23 +11987,6 @@
         }
       }
     },
-    "With the server, your sessions on this host keep running when you quit Macterm or the connection stops. Macterm puts the server (%@) in ~/.local/share/macterm. The server runs while you have sessions on this host. Without it, your shells end when the connection stops." : {
-      "comment" : "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is.",
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "서버가 있으면 Macterm을 종료하거나 연결이 끊겨도 이 호스트의 세션이 계속 실행됩니다. Macterm은 서버(%@)를 ~/.local/share/macterm에 넣습니다. 서버는 이 호스트에 세션이 있는 동안 실행됩니다. 서버가 없으면 연결이 끊길 때 셸이 종료됩니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "有了服务器，即使你退出 Macterm 或连接中断，此主机上的会话也会继续运行。Macterm 会把服务器（%@）放到 ~/.local/share/macterm。只要此主机上有会话，服务器就会运行。没有服务器，连接中断时你的 shell 会结束。"
-          }
-        }
-      }
-    },
     "Working Directory" : {
       "localizations" : {
         "ko" : {
@@ -12134,6 +12134,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的 %@ 副本与 Macterm 仓库中的版本不同。你的副本将移到废纸篓。"
+          }
+        }
+      }
+    },
+    "Your sessions on this host keep running when you quit Macterm or the connection stops. Macterm puts the server (%@) in ~/.local/share/macterm." : {
+      "comment" : "The text of the sheet before the first install of the Macterm server on a remote host. The path stays as it is.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm을 종료하거나 연결이 끊겨도 이 호스트의 세션이 계속 실행됩니다. Macterm은 서버(%@)를 ~/.local/share/macterm에 넣습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即使你退出 Macterm 或连接中断，此主机上的会话也会继续运行。Macterm 会把服务器（%@）放到 ~/.local/share/macterm。"
           }
         }
       }
