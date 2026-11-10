@@ -7,11 +7,16 @@ struct ProjectMemorySummary: Equatable {
     var lastActivity: Date?
     /// The last command that has text.
     var lastCommand: MemoryEntry?
-    /// The latest run of a command that failed, with no later success of the
-    /// same command: the thing the user probably still has to fix.
+    /// A failure that is still the thing to fix
+    /// (`unresolvedFailure(in:)`), or nil.
     var unresolvedFailure: MemoryEntry?
     /// The number of commands recorded.
     var commandCount: Int
+
+    /// A pause this long between two commands ends a working stretch. A
+    /// shorter gap is often time in an editor, where no command runs, so it
+    /// is not a break: a failure is still the thing to fix after it.
+    static let stretchBreak: TimeInterval = 3600
 
     init(entries: [MemoryEntry]) {
         lastActivity = entries.last?.finishedAt
@@ -20,11 +25,21 @@ struct ProjectMemorySummary: Equatable {
         unresolvedFailure = Self.unresolvedFailure(in: entries)
     }
 
+    /// The latest failed command that is still the thing to fix: no later
+    /// command with the same `MemoryCommand.retryKey` succeeded (a retry
+    /// with options added, as `git clean` then `git clean -f`, fixes it),
+    /// and no pause of `stretchBreak` or more came after it. A failure
+    /// before the latest pause belongs to earlier work, and the user has
+    /// moved on. The panel's card, the digest of the model and the answer
+    /// of Where Did I Leave Off all read this one rule.
     static func unresolvedFailure(in entries: [MemoryEntry]) -> MemoryEntry? {
         var succeeded: Set<String> = []
+        var later: MemoryEntry?
         for entry in entries.reversed() {
+            defer { later = entry }
+            if let later, later.startedAt.timeIntervalSince(entry.finishedAt) >= stretchBreak { return nil }
             guard let command = entry.command else { continue }
-            let key = MemoryCommand.normalized(command)
+            let key = MemoryCommand.retryKey(command)
             switch entry.outcome {
             case .success:
                 succeeded.insert(key)
@@ -35,6 +50,14 @@ struct ProjectMemorySummary: Equatable {
             }
         }
         return nil
+    }
+
+    /// `entries` without the failures that `unresolvedFailure(in:)` does not
+    /// show. The model reads these: told about a failure that a retry
+    /// fixed, it suggested the failed command again.
+    static func withoutSettledFailures(_ entries: [MemoryEntry]) -> [MemoryEntry] {
+        let unresolved = unresolvedFailure(in: entries)?.id
+        return entries.filter { $0.outcome != .failure || $0.id == unresolved }
     }
 }
 
@@ -70,6 +93,14 @@ enum MemoryCommand {
     /// as one.
     static func normalized(_ command: String) -> String {
         command.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// The words of `command` before its first option: the program and
+    /// its subcommand. `git clean` and `git clean -f` have one key, so a
+    /// retry with options added counts as the same command; `make test` and
+    /// `make lint` do not.
+    static func retryKey(_ command: String) -> String {
+        command.split(whereSeparator: \.isWhitespace).prefix { !$0.hasPrefix("-") }.joined(separator: " ")
     }
 
     /// Whether redaction replaced a secret in `command`.

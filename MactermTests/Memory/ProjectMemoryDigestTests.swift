@@ -41,6 +41,26 @@ struct ProjectMemoryDigestTests {
     }
 
     @Test
+    func the_summary_reads_the_commands_only_when_git_shows_no_work() throws {
+        let entries = [entry("git pull", exit: 0, minutesAgo: 30), entry("git status", exit: 0, minutesAgo: 29)]
+        var git = GitStatus(branch: "main")
+        git.recentCommits = [GitStatus.Commit(hash: "abc1234", subject: "Add checkout", date: now)]
+        let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: entries, git: git, now: now))
+        // The Recent list shows the commands. With them in the prompt, the
+        // model wrote that `git pull` and `git status` succeeded.
+        #expect(digest.summaryText == "Git: branch main\nLatest commits: \"Add checkout\"")
+        #expect(!digest.prompt.contains("git pull"))
+        #expect(digest.suggestionPrompt.contains("`git pull` succeeded"))
+
+        // Without Git work, the commands are all the summary has.
+        for git in [nil, GitStatus(branch: "main")] {
+            let bare = try #require(ProjectMemoryDigest(projectName: "x", entries: entries, git: git, now: now))
+            #expect(bare.summaryText == bare.text)
+            #expect(bare.prompt.contains("`git pull` succeeded"))
+        }
+    }
+
+    @Test
     func other_branches_are_not_in_the_digest_or_its_key() throws {
         var git = GitStatus(branch: "main")
         git.branches = [
