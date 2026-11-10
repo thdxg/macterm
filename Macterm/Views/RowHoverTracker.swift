@@ -31,6 +31,22 @@ struct RowHoverTracker: NSViewRepresentable {
         var onHoverChanged: ((Bool) -> Void)?
         private var isInside = false
 
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            // A view that does not clip to its bounds (the default since the
+            // macOS 14 SDK) has a visible rect as large as the visible part
+            // of its ancestors. The self-heal and the `.inVisibleRect` area
+            // read that rect, so without the clip each layout pass revealed
+            // the control of every row while the pointer was anywhere in
+            // the list (the Keymaps clear badges after a recording).
+            clipsToBounds = true
+        }
+
+        @available(*, unavailable)
+        required init?(coder _: NSCoder) {
+            fatalError("init(coder:) is not supported")
+        }
+
         /// Transparent to the mouse: the row beneath owns every click, drag,
         /// scroll and right-click. Tracking-area enter/exit is dispatched by
         /// geometry and is unaffected by this.
@@ -79,8 +95,11 @@ struct RowHoverTracker: NSViewRepresentable {
         /// inferred from the last event we happened to receive.
         private var pointerIsInside: Bool {
             guard let window, NSApp.isActive else { return false }
-            let inWindow = window.mouseLocationOutsideOfEventStream
-            return visibleRect.contains(convert(inWindow, from: nil))
+            return contains(windowPoint: window.mouseLocationOutsideOfEventStream)
+        }
+
+        func contains(windowPoint: NSPoint) -> Bool {
+            visibleRect.contains(convert(windowPoint, from: nil))
         }
 
         private func report(_ inside: Bool) {
