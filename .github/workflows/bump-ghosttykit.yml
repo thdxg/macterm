@@ -1,6 +1,6 @@
 name: Bump GhosttyKit
 
-# GhosttyKit is pinned to one thdxg/ghostty release (GHOSTTYKIT_TAG in
+# GhosttyKit is pinned to one macterm/ghostty release (GHOSTTYKIT_TAG in
 # scripts/setup.sh) so a Macterm build can't silently pick up whatever
 # libghostty landed that morning. A pin needs a way back off it, or it rots:
 # this opens the PR, weekly, and CI is the gate.
@@ -40,7 +40,7 @@ jobs:
       # since nothing triggers on a push to a non-main branch.
       #
       # GH_PAT exists for this workflow ALONE — nothing else here needs a PAT.
-      # `thdxg/ghostty` is public, so setup.sh's release downloads work under
+      # `macterm/ghostty` is public, so setup.sh's release downloads work under
       # GITHUB_TOKEN in every other workflow (release.yml's build job included);
       # the only other PAT in the repo is HOMEBREW_TAP_PAT, for writing the tap.
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -74,9 +74,9 @@ jobs:
             echo "error: could not parse GHOSTTYKIT_TAG out of scripts/setup.sh" >&2
             exit 1
           fi
-          LATEST=$(gh release list --repo thdxg/ghostty --limit 1 --json tagName -q '.[0].tagName')
+          LATEST=$(gh release list --repo macterm/ghostty --limit 1 --json tagName -q '.[0].tagName')
           if [[ -z "$LATEST" ]]; then
-            echo "error: could not resolve the latest thdxg/ghostty release" >&2
+            echo "error: could not resolve the latest macterm/ghostty release" >&2
             exit 1
           fi
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
@@ -119,7 +119,7 @@ jobs:
           hdr() {  # hdr <tag> <dest-dir>
             mkdir -p "$2"
             gh release download "$1" --pattern 'GhosttyKit.xcframework.tar.gz' \
-              --repo thdxg/ghostty --dir "$2"
+              --repo macterm/ghostty --dir "$2"
             tar xzf "$2/GhosttyKit.xcframework.tar.gz" -C "$2"
           }
           hdr "$CURRENT" old
@@ -176,7 +176,7 @@ jobs:
 
           git add scripts/setup.sh
           git commit -m "chore(deps): bump GhosttyKit to ${LATEST}" \
-                     -m "Moves the pinned thdxg/ghostty release from ${CURRENT} to ${LATEST}. Opened by .github/workflows/bump-ghosttykit.yml."
+                     -m "Moves the pinned macterm/ghostty release from ${CURRENT} to ${LATEST}. Opened by .github/workflows/bump-ghosttykit.yml."
           # --force, because anything that fails AFTER this push leaves the branch
           # on the remote and wedges every later run: the next one rebuilds the
           # same one-line change as a new commit (new timestamp, new SHA) on the
@@ -191,11 +191,11 @@ jobs:
           # YAML block scalar is indentation-fragile, and markdown turns a stray
           # indent into a code block.
           {
-            echo "Moves the pinned \`thdxg/ghostty\` release (\`GHOSTTYKIT_TAG\` in \`scripts/setup.sh\`) from \`${CURRENT}\` to \`${LATEST}\`."
+            echo "Moves the pinned \`macterm/ghostty\` release (\`GHOSTTYKIT_TAG\` in \`scripts/setup.sh\`) from \`${CURRENT}\` to \`${LATEST}\`."
             echo
             echo "**CI on this PR is the gate.** Editing \`scripts/setup.sh\` changes the GhosttyKit cache key, so this run downloads the new pin from scratch and exercises it through Unit, End-to-end, and the benchmark — rather than a release being the first thing to try it."
             echo
-            echo "Compare upstream: [\`${CURRENT}...${LATEST}\`](https://github.com/thdxg/ghostty/compare/${CURRENT}...${LATEST})"
+            echo "Compare upstream: [\`${CURRENT}...${LATEST}\`](https://github.com/macterm/ghostty/compare/${CURRENT}...${LATEST})"
             echo
             echo "---"
             echo

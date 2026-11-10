@@ -192,7 +192,7 @@ struct ZmxRelease: Codable, Equatable {
     /// Where GitHub serves the asset: the `server-prebuilt` release, which CI
     /// fills for every build key on `main`.
     func downloadURL(for target: ZmxHostTarget) -> URL? {
-        URL(string: "https://github.com/thdxg/macterm/releases/download/server-prebuilt/\(assetName(for: target))")
+        URL(string: "https://github.com/macterm/macterm/releases/download/server-prebuilt/\(assetName(for: target))")
     }
 }
 

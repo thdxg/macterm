@@ -115,11 +115,11 @@ struct PaletteRegistryTests {
     func every_build_reads_the_extensions_on_main() {
         #expect(PaletteRegistry().ref == "main", "not tied to the app's version")
         #expect(PaletteRegistry.treeURL(ref: "main").absoluteString
-            == "https://api.github.com/repos/thdxg/macterm/git/trees/main:extensions?recursive=1")
+            == "https://api.github.com/repos/macterm/macterm/git/trees/main:extensions?recursive=1")
         #expect(PaletteRegistry.fileURL(ref: "main", id: "git", path: "palettes/git.yaml").absoluteString
-            == "https://raw.githubusercontent.com/thdxg/macterm/main/extensions/git/palettes/git.yaml")
+            == "https://raw.githubusercontent.com/macterm/macterm/main/extensions/git/palettes/git.yaml")
         #expect(PaletteRegistry.folderURL(ref: "main", id: "git").absoluteString
-            == "https://github.com/thdxg/macterm/tree/main/extensions/git")
+            == "https://github.com/macterm/macterm/tree/main/extensions/git")
     }
 
     @Test
@@ -515,7 +515,7 @@ struct PaletteRegistryTests {
         let folder = try await registry.install(entry, into: store)
 
         let installed = try #require(store.installedExtension(id: "kubernetes"))
-        #expect(installed.source == ExtensionSource(repository: "thdxg/macterm", ref: "main", files: entry.shas))
+        #expect(installed.source == ExtensionSource(repository: "macterm/macterm", ref: "main", files: entry.shas))
         #expect(installed.files == entry.shas, "what Install wrote is what the tree reported")
         #expect(!installed.isModified)
         #expect(ExtensionGalleryItem.installed(installed, registry: entry).update == nil, "the same as the repository")

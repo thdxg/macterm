@@ -1,6 +1,6 @@
 # How this fork differs from upstream zmx
 
-This folder is the session daemon of [Macterm](https://github.com/thdxg/macterm).
+This folder is the session daemon of [Macterm](https://github.com/macterm/macterm).
 It came from the fork `thdxg/zmx` (main at `2d98540`). The history of the fork
 stays in that repository, which is archived. It no longer syncs with [upstream zmx](https://github.com/neurosnap/zmx).
 

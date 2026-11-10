@@ -169,7 +169,7 @@ struct RemoteZmxInstallTests {
         #expect(release.sha256(for: .linuxAarch64) == nil)
         #expect(release.sha256(for: .macOS) == nil)
         #expect(release.downloadURL(for: .linuxAarch64)?.absoluteString
-            == "https://github.com/thdxg/macterm/releases/download/server-prebuilt/macterm-69675ad0a3327175-aarch64-linux.tar.gz")
+            == "https://github.com/macterm/macterm/releases/download/server-prebuilt/macterm-69675ad0a3327175-aarch64-linux.tar.gz")
     }
 
     @Test

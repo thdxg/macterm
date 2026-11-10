@@ -29,7 +29,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // carries it. Git ignores it.
 export const RELEASES_FILE = join(here, "docs", "releases.json");
 
-export const REPO = "thdxg/macterm";
+export const REPO = "macterm/macterm";
 
 // Returns the stable releases, newest first, with only the fields the page
 // needs. Throws when GitHub does not answer, because a changelog that silently

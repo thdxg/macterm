@@ -505,7 +505,7 @@ const smoothPane = (pane, home, endless, drift = 0) => {
   const dlBtns = document.querySelectorAll("[data-download-latest]");
   if (!starWraps.length && !dlWraps.length && !dlBtns.length) return;
 
-  const REPO = "thdxg/macterm";
+  const REPO = "macterm/macterm";
   const API = "https://api.github.com";
   const CACHE_PREFIX = "macterm:gh:";
   const CACHE_TTL_MS = 60 * 60 * 1000;

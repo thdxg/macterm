@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FORK_REPO="thdxg/ghostty"
+FORK_REPO="macterm/ghostty"
 XCFRAMEWORK_DIR="GhosttyKit.xcframework"
-# The pinned thdxg/ghostty release supplying BOTH GhosttyKit and the bundled
+# The pinned macterm/ghostty release supplying BOTH GhosttyKit and the bundled
 # ghostty resources (one release, two assets).
 #
-# This used to track `latest`, and thdxg/ghostty publishes a build-YYYY-MM-DD
+# This used to track `latest`, and macterm/ghostty publishes a build-YYYY-MM-DD
 # release EVERY day — so every Macterm build, tagged releases included, silently
 # picked up whatever libghostty landed that morning. Two builds of the same
 # Macterm commit could ship different terminal cores, and a release could carry
@@ -18,17 +18,17 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # build-2026-09-26: upstream 2026-09-26 + downstream patches 0001–0006. Upstream
 # began its own smooth scrolling with RenderState overscan (ghostty-org/ghostty
 # #14400, #14404), and 0005 now captures the rows a shifted grid reveals through
-# it rather than through a row layout of its own (thdxg/ghostty#16); frames and
+# it rather than through a row layout of its own (macterm/ghostty#16); frames and
 # hit tests were A/B'd pixel-identical against build-2026-09-25. Upstream also
 # added GHOSTTY_ACTION_RESIZE_WINDOW (CSI 8 t, behind its off-by-default
 # `vt-window-resize-allowed`), which Macterm doesn't handle, so the key does
 # nothing here yet; the tag renumbers OUTPUT_ACTIVITY. Re-cut onto
-# thdxg/ghostty#17: the partly revealed scrollback row at the top of a shifted
+# macterm/ghostty#17: the partly revealed scrollback row at the top of a shifted
 # grid (the old prompt line after a clear) is selectable instead of clamping a
 # press to the row below it.
 # build-2026-10-07: upstream through #14576 + downstream patches 0001–0010.
 # 0008 (smooth cursor) and 0009 (cursor trail) moved both cursor effects into
-# the renderer (#493). Re-cut at 22:20Z onto thdxg/ghostty#21, patch 0010: the
+# the renderer (#493). Re-cut at 22:20Z onto macterm/ghostty#21, patch 0010: the
 # IO thread applies a surface resize once a frame (16 ms) has passed since the
 # last one it applied, instead of parking every resize behind upstream's fixed
 # 25 ms timer, with the floor rising to the last reflow's own cost. That is
@@ -43,37 +43,37 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # Macterm/Resources/terminfo && mise run setup` once. CI's download cache
 # hashes this file, so a bump here also refreshes it.
 # build-2026-10-19-72ae9d4: same upstream as build-2026-10-13 + downstream
-# patch 0013 (thdxg/ghostty#25): the selection motions of copy mode —
+# patch 0013 (macterm/ghostty#25): the selection motions of copy mode —
 # start_selection, move_selection:<motion>, extend_selection:<motion>,
 # collapse_selection, flip_selection, select_line, clear_selection. No C API
 # change. The fork's build now runs `zig build test` on the patches first.
 # build-2026-10-19-c767c9f: upstream c7cbc9bfd (the sync had stopped at
-# 2026-10-13, thdxg/ghostty#28) with the same 13 patches. It brings in upstream
+# 2026-10-13, macterm/ghostty#28) with the same 13 patches. It brings in upstream
 # ff779564c6: an ED2 (Ctrl+L) at a prompt with blank rows below it moves the
 # screen into the scrollback again, not only when the prompt is on the last
 # row. C API: ghostty_surface_paste_text is new. Nothing else changed.
-# build-2026-10-19-2684fe9: + downstream patch 0014 (thdxg/ghostty#29): the
+# build-2026-10-19-2684fe9: + downstream patch 0014 (macterm/ghostty#29): the
 # `selection_cursor:on|off` action draws the cursor on the head of the
 # selection, for copy mode. No C API change.
-# build-2026-10-20-0787827: downstream patch 0013 changed (thdxg/ghostty#30):
+# build-2026-10-20-0787827: downstream patch 0013 changed (macterm/ghostty#30):
 # a repeated word_next moves on, as `w` does in Helix. Before, it stopped on
 # the blank before the next word. No C API change.
-# build-2026-10-21-475091c: + downstream patch 0015 (thdxg/ghostty#31): the
+# build-2026-10-21-475091c: + downstream patch 0015 (macterm/ghostty#31): the
 # selection primitives of the Vim keymap of copy mode —
 # `move_selection:next_word_start`, `select_line_bounds` and
 # `selection_rectangle:on|off`. No C API change.
-# build-2026-10-21-b8d644c: + downstream patch 0016 (thdxg/ghostty#32): a
+# build-2026-10-21-b8d644c: + downstream patch 0016 (macterm/ghostty#32): a
 # plain click moves the cursor of copy mode to the cell under the pointer,
 # instead of clearing the selection. No C API change.
-# build-2026-10-21-731a782: + downstream patch 0017 (thdxg/ghostty#33, #34): the
+# build-2026-10-21-731a782: + downstream patch 0017 (macterm/ghostty#33, #34): the
 # `select_word:next|end|prev` action selects what a Helix word motion moves
 # over, as Helix does, and the word motions of move_selection and
 # extend_selection stop where the cursor of Helix stops. No C API change.
 # build-2026-10-21-a72ef69: upstream 521cf2c5d (the sync had stopped at
-# 2026-10-19 on patch 0001, thdxg/ghostty#35) with the same 17 patches.
+# 2026-10-19 on patch 0001, macterm/ghostty#35) with the same 17 patches.
 # Upstream builds with Zig 0.17 now, so the fork's build follows
-# build.zig.zon (thdxg/ghostty#36, #37). See the API review in the PR.
-# build-2026-10-21-f4d117c: + downstream patch 0018 (thdxg/ghostty#38): a
+# build.zig.zon (macterm/ghostty#36, #37). See the API review in the PR.
+# build-2026-10-21-f4d117c: + downstream patch 0018 (macterm/ghostty#38): a
 # page motion of copy mode eases the viewport under smooth-scroll, as a
 # region scroll of Helix does. No C API change.
 # build-2026-11-09-f159ca9: upstream through #15151 with the same 20 patches.
@@ -123,7 +123,7 @@ has_output_activity_action() {
   return 1
 }
 
-# Fork-drift warning (macterm#168). The thdxg/ghostty fork ships prebuilt
+# Fork-drift warning (macterm#168). The macterm/ghostty fork ships prebuilt
 # GhosttyKit; a past sync-upstream bug silently reverted ~190 upstream files to
 # stale versions while looking current, shipping an old libghostty that
 # resurfaced macterm#112. The fork's `sync-upstream.yml` is now revert-proof and
@@ -169,7 +169,7 @@ warn_if_ghosttykit_stale() {
     echo "         $GHOSTTY_TAG) to a newer $FORK_REPO release, then run setup again." >&2
     echo "         The weekly bump-ghosttykit.yml workflow normally opens that PR." >&2
     echo "         If you see this warning, check if those runs fail." >&2
-    echo "         If the fork itself is old, check the Assert No Drift workflow of thdxg/ghostty." >&2
+    echo "         If the fork itself is old, check the Assert No Drift workflow of macterm/ghostty." >&2
     echo "" >&2
   fi
 }
@@ -199,7 +199,7 @@ to_epoch() {
 #      main and on pull requests from this repository uploads.
 #   4. Build with Zig.
 # Every tarball is checked against its .sha256 before it is used.
-SERVER_REPO="thdxg/macterm"
+SERVER_REPO="macterm/macterm"
 SERVER_RELEASE="server-prebuilt"
 SERVER_DIR="Macterm/Resources/zmx"
 SERVER_STAMP=".server-key"
@@ -389,7 +389,7 @@ if $need_xcframework; then
   tar xzf "$staging/GhosttyKit.xcframework.tar.gz" -C "$staging"
   if ! has_output_activity_action "$staging/$XCFRAMEWORK_DIR"; then
     echo "Error: GhosttyKit from $GHOSTTY_TAG has no GHOSTTY_ACTION_OUTPUT_ACTIVITY" >&2
-    echo "The thdxg/ghostty output-activity downstream patch must have a release first." >&2
+    echo "The macterm/ghostty output-activity downstream patch must have a release first." >&2
     echo "" >&2
     echo "Note: Macterm needs this ABI since the change for reliable activity detection" >&2
     echo "(see the GhosttyKit note in AGENTS.md). A checkout from BEFORE that" >&2

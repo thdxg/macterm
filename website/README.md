@@ -83,7 +83,7 @@ The site also serves the Sparkle feed: `/appcast.xml` and `/notes/<tag>.html`. T
 
 ## Container image
 
-`.github/workflows/website.yml` builds the image with podman for `linux/arm64` on each push to `main` that changes `website/` or `assets/`, and publishes it to `ghcr.io/thdxg/macterm/website`. A pull request builds the image but does not push it. Flux deploys the timestamp tag. The workflow explains the tag format.
+`.github/workflows/website.yml` builds the image with podman for `linux/arm64` on each push to `main` that changes `website/` or `assets/`, and publishes it to `ghcr.io/macterm/macterm/website`. A pull request builds the image but does not push it. Flux deploys the timestamp tag. The workflow explains the tag format.
 
 To build the image on your Mac, use podman, not `docker build`. The context is the repo root, because `public/assets` is a symlink out of `website/`. Docker does not read the root `.containerignore`, so it would send the whole repo.
 

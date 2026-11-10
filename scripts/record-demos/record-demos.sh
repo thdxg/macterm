@@ -1651,7 +1651,7 @@ drive12() {
 demo12() {  # copy mode scrolls up a long traceback, and Explain Output explains its cause
   say "demo 12 — copy mode and Explain Output"
   [ "$(strings /Applications/Macterm.app/Contents/MacOS/Macterm 2>/dev/null | grep -c 'Explain Selection')" -gt 0 ] \
-    || die "installed Macterm ($(app_version)) has no Explain Output; demo 12 needs a build with thdxg/macterm#622"
+    || die "installed Macterm ($(app_version)) has no Explain Output; demo 12 needs a build with macterm/macterm#622"
   local model; model="$(model_status)"
   [ "$model" = available ] || die "Apple Intelligence cannot explain output on this Mac now ($model)"
   local keymap chord
