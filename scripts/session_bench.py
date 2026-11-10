@@ -23,7 +23,7 @@ Arms (each is a program on a pty that this script drives):
              remote pane of v2, one channel over the host's one ssh
              connection (SSHConnections, RemoteSpawn.sessionCommand).
   relay      a channel of `ssh <host> zmx proxy`: every pane of the host on
-             one stream (relay.zig), as the app will reach a host in m3.
+             one stream (relay.zig), as the app will reach a host's panes.
 
 Echo latency: write one key, time until the echo arrives, for --keys keys.
 New remote pane: time from the start of the client's ssh to the first echo
@@ -77,7 +77,7 @@ from _harness import phys_footprint, runner_info, wait_for_load, wakeups
 
 # The protocol helpers of the server's own tests.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "server", "test"))
-from v2client import BYTES, CONTROL, MSG, frame, hello, pack, unpack  # noqa: E402
+from v2client import CONTROL, MSG, RelayClient, unpack  # noqa: E402
 
 COLUMNS = 200
 ROWS = 50
@@ -198,41 +198,22 @@ class PtyProgram:
         return bytes(self.output[-300:]).decode("utf-8", "replace")
 
 
-class RelayStream:
-    """The app's end of `zmx proxy`: channel 0 and the pane channels on one
-    stream. Each channel keeps only the tail of its output, so a flood costs
-    no memory."""
+class RelayStream(RelayClient):
+    """The app's end of `zmx proxy` (v2client.RelayClient), with these
+    changes for a benchmark: each channel keeps only the tail of its output,
+    so a flood costs no memory, and every wait has a monotonic deadline."""
 
     TAIL = 64 * 1024
 
-    def __init__(self, argv, env=None):
-        ours, theirs = socket.socketpair()
-        self.proc = subprocess.Popen(argv, stdin=theirs, stdout=theirs, env=env)
-        theirs.close()
-        self.sock = ours
-        self.buf = bytearray()
-        self.next_id = 1
-        self.control = []
-        # For each channel: the tail of its output, its total output bytes,
-        # and its messages.
-        self.tail = {}
-        self.received = {}
-        self.messages = {}
-        self.send_msg(CONTROL, hello())
+    def __init__(self, argv):
+        # Before the hello that RelayClient's init sends.
+        self.tail, self.received, self.messages_of = {}, {}, {}
+        super().__init__(argv=argv)
 
-    def send(self, channel, kind, body):
-        self.sock.sendall(frame(channel, kind, body))
-
-    def send_msg(self, channel, value):
-        self.send(channel, MSG, pack(value))
-
-    def type(self, channel, data):
-        self.send(channel, BYTES, data)
-
-    def pump(self, timeout):
+    def pump(self, timeout=0.05):
         ready, _, _ = select.select([self.sock], [], [], timeout)
         if not ready:
-            return
+            return False
         data = self.sock.recv(1 << 20)
         if not data:
             raise BenchError(f"the relay stream closed (proxy exit {self.proc.poll()})")
@@ -247,34 +228,30 @@ class RelayStream:
             if channel == CONTROL:
                 self.control.append(unpack(body)[0])
             elif kind == MSG:
-                self.messages.setdefault(channel, []).append(unpack(body)[0])
+                self.messages_of.setdefault(channel, []).append(unpack(body)[0])
             else:
-                tail = self.tail.get(channel, b"") + body
-                self.tail[channel] = tail[-self.TAIL:]
+                self.tail[channel] = (self.tail.get(channel, b"") + body)[-self.TAIL:]
                 self.received[channel] = self.received.get(channel, 0) + n
         del self.buf[:i]
+        return True
 
-    def wait(self, predicate, timeout, what):
+    def wait(self, pred, timeout=10, what="condition"):
         deadline = time.monotonic() + timeout
-        while not predicate():
+        while not pred():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise BenchError(f"timed out after {timeout:.0f}s waiting for {what} on the relay")
             self.pump(min(remaining, 0.05))
         return time.monotonic()
 
-    def response(self, rid):
-        for value in self.control:
-            if isinstance(value, dict) and value.get("re") == rid:
-                return value
-        return None
+    def drain(self, quiet=0.2, limit=5.0):
+        """Read until the stream is quiet for `quiet` seconds."""
+        deadline = time.monotonic() + limit
+        while time.monotonic() < deadline and self.pump(quiet):
+            pass
 
     def call(self, method, timeout=30, **args):
-        rid = self.next_id
-        self.next_id += 1
-        self.send_msg(CONTROL, {"id": rid, "m": method, "a": args})
-        self.wait(lambda: self.response(rid) is not None, timeout, f"a response to {method}")
-        response = self.response(rid)
+        response = self.request(method, timeout, **args)
         if "ok" not in response:
             raise BenchError(f"{method} failed: {response}")
         return response["ok"]
@@ -286,13 +263,11 @@ class RelayStream:
         return (time.monotonic() - start) * 1000
 
     def open(self, session):
-        channel = self.call("channel.open", session=session)["channel"]
-        self.send_msg(channel, {"t": "attach", "a": {"cols": COLUMNS, "rows": ROWS}})
-        return channel
+        return super().open(session, cols=COLUMNS, rows=ROWS)
 
-    def wait_output(self, channel, needle, timeout):
-        """Wait until needle is in the channel's output after the next byte.
-        Returns the time it arrived."""
+    def wait_output(self, channel, needle, timeout=10):
+        """Wait until needle is in the channel's output that comes from now
+        on. Returns the time it arrived."""
         start = self.received.get(channel, 0)
 
         def arrived():
@@ -302,7 +277,7 @@ class RelayStream:
         return self.wait(arrived, timeout, repr(needle))
 
     def snapshots(self, channel):
-        return sum(1 for m in self.messages.get(channel, []) if m.get("t") == "snapshot.start")
+        return sum(1 for m in self.messages_of.get(channel, []) if m.get("t") == "snapshot.start")
 
     def close(self):
         self.sock.close()
@@ -341,11 +316,12 @@ def relay_echo_latencies(stream, channel, keys, line_length=40):
     for i in range(keys):
         key = letters[i % len(letters):i % len(letters) + 1]
         start = time.monotonic()
-        stream.type(channel, key)
+        stream.type(channel, key.decode())
         samples.append((stream.wait_output(channel, key, 10) - start) * 1000)
         if (i + 1) % line_length == 0:
-            stream.type(channel, b"\n")
-            stream.wait_output(channel, b"\n", 10)
+            # cat prints the line back, with the letter of the next key.
+            stream.type(channel, "\n")
+            stream.drain()
     return samples
 
 
@@ -594,21 +570,22 @@ class Bench:
         gate = self.gate()
         print(f"relay flood: load {gate['load']}, {self.args.floods} floods", flush=True)
         stream = self.relay()
-        keys, pings, interrupts, skips, flood_bytes = [], [], [], [], []
+        keys, pings, interrupts, skips, flood_bytes, flood_seconds = [], [], [], [], [], []
         try:
             names = {}
             for role in ("flood", "quiet"):
                 names[role] = self.session(f"relay-{role}", remote=True)
                 stream.call("session.create", id=names[role], command=[b"/bin/sh"])
             flood, quiet = stream.open(names["flood"]), stream.open(names["quiet"])
-            stream.type(quiet, b"stty -echo; printf '%s-%s\\n' quiet ready\r")
+            stream.type(quiet, "stty -echo; printf '%s-%s\\n' quiet ready\r")
             stream.wait_output(quiet, b"quiet-ready", 30)
-            stream.type(flood, b"stty -echo; printf '%s-%s\\n' flood ready\r")
+            stream.type(flood, "stty -echo; printf '%s-%s\\n' flood ready\r")
             stream.wait_output(flood, b"flood-ready", 30)
             line = "0123456789" * 19
             for i in range(self.args.floods):
                 skipped, received = stream.snapshots(flood), stream.received.get(flood, 0)
-                stream.type(flood, f"while :; do printf '%s\\n' {line}; done\r".encode())
+                started = time.monotonic()
+                stream.type(flood, f"while :; do printf '%s\\n' {line}; done\r")
                 # Let the flood fill every buffer on the way.
                 stream.wait(lambda: stream.received.get(flood, 0) - received > 4 << 20, 60,
                             "4 MiB of flood")
@@ -616,12 +593,15 @@ class Bench:
                     pings.append(stream.ping())
                     token = f"k{i}x{k}y"
                     start = time.monotonic()
-                    stream.type(quiet, f"printf '%s-%s\\n' key {token}\r".encode())
+                    stream.type(quiet, f"printf '%s-%s\\n' key {token}\r")
                     keys.append((stream.wait_output(quiet, f"key-{token}".encode(), 30) - start) * 1000)
                 start = time.monotonic()
-                stream.type(flood, b"\x03")
-                stream.type(flood, f"printf '%s-%s\\n' back {i}\r".encode())
+                flood_seconds.append(start - started)
+                stream.type(flood, "\x03")
+                stream.type(flood, f"printf '%s-%s\\n' back {i}\r")
                 interrupts.append((stream.wait_output(flood, f"back-{i}".encode(), 60) - start) * 1000)
+                # A skip ahead comes as a snapshot: let one that is on its way land.
+                stream.drain()
                 skips.append(stream.snapshots(flood) - skipped)
                 flood_bytes.append(stream.received.get(flood, 0) - received)
         finally:
@@ -634,7 +614,11 @@ class Bench:
         for result in results.values():
             result["load_gate"] = gate
         results["relay-flood-interrupt"]["skips"] = skips
-        results["relay-flood-interrupt"]["received_mb"] = [round(b / 1048576, 1) for b in flood_bytes]
+        # What the client got until the interrupt. With no skip, this is
+        # the link's rate.
+        results["relay-flood-interrupt"]["received_mb_per_s"] = [
+            round(b / 1048576 / t, 1) for b, t in zip(flood_bytes, flood_seconds)
+        ]
         for arm, result in results.items():
             print(f"  {arm}: {result}", flush=True)
         return results
@@ -847,8 +831,14 @@ class Bench:
                     stream.call("server.exit")
                 finally:
                     stream.close()
-            except (BenchError, OSError) as exc:
-                print(f"warning: the host's v2 sessions may still run: {exc}", file=sys.stderr)
+            except (BenchError, OSError):
+                # No relay: end the server and sessions by the run's nonce,
+                # which the argv of each holds.
+                subprocess.run(
+                    ["ssh", "-o", "BatchMode=yes", self.args.ssh_host,
+                     f"pkill -TERM -f {shlex.quote(self.nonce)}"],
+                    capture_output=True, timeout=60, check=False,
+                )
             self.stop_master()
         shutil.rmtree(self.zmx_dir, ignore_errors=True)
 
@@ -872,8 +862,10 @@ def cmd_run(args):
                 "ssh", bench.ssh(" ".join(shlex.quote(word) for word in command)), marker=marker
             )
             arms["remote-login"] = summarize([bench.start_master()])
-            arms.update(bench.echo_pair(remote=True))
+            # First, so that v2's first new pane starts the host's server, as
+            # the first pane on a host does.
             arms.update(bench.remote_open_pair())
+            arms.update(bench.echo_pair(remote=True))
             arms["relay"] = bench.relay_echo()
             arms.update(bench.relay_flood())
         for layer, result in bench.reattach_pair().items():
@@ -1029,8 +1021,9 @@ def cmd_report(args):
             lines += [
                 "",
                 f"Relay flood: {len(flood['skips'])} floods; skips ahead in each: "
-                f"{', '.join(str(n) for n in flood['skips'])}; MB of flood received in each: "
-                f"{', '.join(str(n) for n in flood['received_mb'])}.",
+                f"{', '.join(str(n) for n in flood['skips'])}; MB/s that the client got in each: "
+                f"{', '.join(str(n) for n in flood['received_mb_per_s'])}. A flood with no skip "
+                "was not faster than the link.",
             ]
 
         idle = arms.get("idle")
