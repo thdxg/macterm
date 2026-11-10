@@ -1684,11 +1684,6 @@ final class AppState {
     /// workspaces. Each pane only republishes (and triggers a tab re-render)
     /// when its name actually changes, so this is cheap when nothing's moving.
     func refreshAllForegroundProcesses() {
-        // Shell/raw-mode detection (KERN_PROCARGS2 + open/tcgetattr per pane)
-        // and the quiet-settle only matter when the status indicator is shown;
-        // skip them in icon mode so the default poll stays as cheap as before
-        // this feature.
-        let trackExecution = Preferences.shared.showTabStatusIndicator
         var didAcknowledgeCompletion = false
         var sawBusyPane = false
         var activeRemotePanes: [Pane] = []
@@ -1716,15 +1711,13 @@ final class AppState {
                             activeRemotePanes.append(pane)
                         }
                     } else {
-                        pane.refreshForegroundProcess(trackExecution: trackExecution)
+                        pane.refreshForegroundProcess()
                     }
                     // An activity-sourced run whose output has been quiet past
                     // the window settles to `.done`. The output heartbeat is
                     // occlusion-independent, so silence is meaningful whether or
                     // not the pane is on screen — no occlusion special-casing.
-                    if trackExecution {
-                        pane.settleTerminalActivityIfQuiet()
-                    }
+                    pane.settleTerminalActivityIfQuiet()
                     if pane.executionState == .running { sawBusyPane = true }
                     didAcknowledgeCompletion = acknowledgeFinishedCommandIfActive(
                         paneID: pane.id,
@@ -2093,9 +2086,9 @@ final class AppState {
     /// `destroySurface` nils `onProcessExit` first (so the dead surface can't
     /// race a `requestClosePane` at us mid-rebuild) and retires the old
     /// NSView; the reattach tick then makes `TerminalSurface.updateNSView`
-    /// run `ensureScrollView` → `attach` → `configure` (reinstalling the
-    /// callbacks the destroy just nil'd) → `createSurface`, which re-dials
-    /// ssh against the same persisted session name.
+    /// run `ensureScrollView` (a new view, with the pane's callbacks) →
+    /// `attach` → `configure` (the window's callbacks) → `createSurface`,
+    /// which re-dials ssh against the same persisted session name.
     private func reconnectSurface(of pane: Pane) {
         pane.destroySurface()
         pane.requestSurfaceReattach()

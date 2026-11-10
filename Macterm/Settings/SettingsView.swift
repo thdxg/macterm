@@ -1779,12 +1779,16 @@ private struct KeymapSettings: View {
     /// differently than a Text and a Button), and because the spacer pins
     /// everything after it to the trailing edge, one extra child or one wider
     /// trailing view shifts that row's columns out of line with the others.
-    /// Don't add a control to a row without giving it a box here.
+    /// Don't add a control to a row without giving it a box here. Put a glyph
+    /// that comes and goes before the spacer, next to the title.
     private static let columnGap: CGFloat = 8
     private static let keybindColumn: CGFloat = 140
-    private static let menuColumn: CGFloat = 24
-    private static let warningColumn: CGFloat = 16
-    private static let trailingColumn: CGFloat = menuColumn + warningColumn
+    /// Narrower than the menu button (21 pt, with 4 pt of its own space at
+    /// the right of the image). SwiftUI does not compress the button: it
+    /// centers it on the box, so the image ends 1 pt inside the row's
+    /// trailing inset (measured). A box of 24 pt left about 5 pt of space
+    /// there, and a button sized to 16 pt moves the image 3 pt to the left.
+    private static let menuColumn: CGFloat = 16
     /// How far the rows of a category sit in from its header row.
     private static let groupIndent: CGFloat = 16
 
@@ -2161,9 +2165,10 @@ private struct KeymapSettings: View {
     }
 
     /// One row of the table: the title (with a glyph for each flag that is
-    /// on, since the flags themselves live in the menu), the keybind button,
-    /// the row's menu, and the conflict slot. Action rows and palette rows
-    /// both come through here, so their columns cannot drift apart.
+    /// on, since the flags themselves live in the menu, and a warning glyph
+    /// for a conflict), the keybind button, and the row's menu. Action rows
+    /// and palette rows both come through here, so their columns cannot
+    /// drift apart.
     @ViewBuilder
     private func keymapRow(
         title: String,
@@ -2181,6 +2186,12 @@ private struct KeymapSettings: View {
             HStack(spacing: Self.columnGap) {
                 Text(title)
                 flagGlyphs(global: global.wrappedValue, passthrough: passthrough.wrappedValue)
+                // Before the spacer, so a conflict moves no column of its row.
+                if !partners.isEmpty {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(context.warning)
+                }
                 Spacer(minLength: 0)
 
                 KeybindButton(
@@ -2195,35 +2206,19 @@ private struct KeymapSettings: View {
                 )
                 .frame(width: Self.keybindColumn)
 
-                // The menu and the warning in ONE box of `trailingColumn`,
-                // spaced zero: as two siblings they added an extra
-                // inter-child gap and the menu's own intrinsic width, which
-                // pushed that row's keybind column out of line.
-                HStack(spacing: 0) {
-                    KeymapRowMenu(
-                        global: global,
-                        // The quick terminal is global by construction —
-                        // shown ticked so the row tells the truth, disabled
-                        // because there is nothing to decide.
-                        globalLocked: isAlwaysGlobal,
-                        passthrough: passthrough,
-                        // An unmapped row has no chord to make global or pass
-                        // through, and a live item that does nothing reads as
-                        // broken.
-                        hasKeybind: !isUnmapped
-                    )
-                    .frame(width: Self.menuColumn)
-
-                    // Space is always reserved: shown conditionally, a
-                    // conflict would shift that row's columns out of line
-                    // with every other row — in exactly the row asking to be
-                    // read closely.
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(context.warning)
-                        .opacity(partners.isEmpty ? 0 : 1)
-                        .frame(width: Self.warningColumn)
-                }
-                .frame(width: Self.trailingColumn)
+                KeymapRowMenu(
+                    global: global,
+                    // The quick terminal is global by construction — shown
+                    // ticked so the row tells the truth, disabled because
+                    // there is nothing to decide.
+                    globalLocked: isAlwaysGlobal,
+                    passthrough: passthrough,
+                    // An unmapped row has no chord to make global or pass
+                    // through, and a live item that does nothing reads as
+                    // broken.
+                    hasKeybind: !isUnmapped
+                )
+                .frame(width: Self.menuColumn)
             }
 
             if !partners.isEmpty {

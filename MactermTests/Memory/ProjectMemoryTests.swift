@@ -343,8 +343,14 @@ struct ProjectMemoryTests {
         try await Task.sleep(for: .milliseconds(80))
         #expect(runs == 1)
 
-        // A commit moved a branch: news.
-        git.branches = [GitStatus.Branch(name: "main", hash: "abc1234", subject: "Fix", lastCommit: now, worktree: nil)]
+        // A commit on another branch: not in the summary, so not news.
+        git.branches = [GitStatus.Branch(name: "feature", hash: "abc1234", subject: "Fix", lastCommit: now, worktree: nil)]
+        memory.refreshGit(project.id)
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(runs == 1)
+
+        // A commit on the current branch: news.
+        git.recentCommits = [GitStatus.Commit(hash: "def5678", subject: "Fix", date: now)]
         memory.refreshGit(project.id)
         let deadline = Date().addingTimeInterval(5)
         while runs < 2, Date() < deadline {

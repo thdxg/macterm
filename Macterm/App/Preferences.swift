@@ -377,7 +377,8 @@ final class Preferences {
 
     /// Show a status badge over each tab icon: a spinner while a command is
     /// running (replacing the icon) and a small status dot when a command has
-    /// finished and awaits attention. Off = pure icons, no status tracking.
+    /// finished and awaits attention. Off = pure icons. The tracking runs
+    /// either way: `pane list` reports the state (#705).
     var showTabStatusIndicator: Bool {
         didSet { Keys.showTabStatusIndicator.write(showTabStatusIndicator, to: defaults) }
     }

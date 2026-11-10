@@ -22,6 +22,17 @@ struct GitStatus: Equatable {
     var stashes = 0
     /// Newest first.
     var recentCommits: [Commit] = []
+    /// The commits on the current branch that the main branch does not
+    /// have (`ProjectGit.branchLogScript`), newest first. Empty on a branch
+    /// with no work of its own yet, and on the main branch itself. nil when
+    /// it is not known: a detached HEAD, a repository with no main branch,
+    /// or a read that failed.
+    var branchCommits: [Commit]?
+    /// The refs of the main branch that exist (`ProjectGit.mainRefPatterns`,
+    /// with `origin/HEAD` resolved to its branch). Empty when not known.
+    var mainRefs: [String] = []
+    /// The paths with changes of any kind, in the order of `git status`.
+    var changedPaths: [String] = []
 
     /// A local branch, with the worktree that has it checked out.
     struct Branch: Equatable {
@@ -36,6 +47,13 @@ struct GitStatus: Equatable {
     /// The local branches with the latest commits, newest first, at most
     /// `ProjectGit.recentBranchCount`. The current branch is among them.
     var branches: [Branch] = []
+
+    /// The current branch is a main branch: a main ref names it. A
+    /// `develop` that `origin/HEAD` names is one.
+    var isOnMainBranch: Bool {
+        guard let branch else { return false }
+        return mainRefs.contains { $0 == "refs/heads/\(branch)" || ($0.hasPrefix("refs/remotes/") && $0.hasSuffix("/\(branch)")) }
+    }
 
     /// Files with changes of any kind.
     var changedFiles: Int { staged + unstaged + untracked + conflicted }
@@ -62,15 +80,29 @@ enum GitStatusParser {
                 let xy = Array(fields[1])
                 if xy[0] != "." { status.staged += 1 }
                 if xy[1] != "." { status.unstaged += 1 }
+                // The path is after 8 fields, or after 9 for a rename, whose
+                // old path follows a tab.
+                if let path = field(line, after: line.first == "1" ? 8 : 9) {
+                    status.changedPaths.append(String(path.prefix { $0 != "\t" }))
+                }
             case "u":
                 status.conflicted += 1
+                if let path = field(line, after: 10) { status.changedPaths.append(String(path)) }
             case "?":
                 status.untracked += 1
+                status.changedPaths.append(String(line.dropFirst(2)))
             default:
                 continue
             }
         }
         return status
+    }
+
+    /// The rest of `line` after `count` space-separated fields: a path,
+    /// which can have spaces of its own.
+    private static func field(_ line: Substring, after count: Int) -> Substring? {
+        let fields = line.split(separator: " ", maxSplits: count, omittingEmptySubsequences: false)
+        return fields.count == count + 1 ? fields[count] : nil
     }
 
     private static func parseHeader(_ header: Substring, into status: inout GitStatus) {
@@ -110,6 +142,22 @@ enum GitStatusParser {
         }
     }
 
+    /// The output of `ProjectGit.branchLogScript`: the main refs, then the
+    /// commits, then `end`. nil without the `end`: the read did not finish,
+    /// and an empty list would claim that the branch has no work.
+    static func parseBranchLog(_ text: String) -> (mainRefs: [String], commits: [GitStatus.Commit])? {
+        var lines = text.split(separator: "\n").map(String.init)
+        guard lines.last == "end" else { return nil }
+        lines.removeLast()
+        // `origin/HEAD` resolves to a ref that the list may have already.
+        var mainRefs: [String] = []
+        for line in lines where line.hasPrefix("refs/") && !mainRefs.contains(line) {
+            mainRefs.append(line)
+        }
+        guard !mainRefs.isEmpty else { return nil }
+        return (mainRefs, parseLog(lines.filter { !$0.hasPrefix("refs/") }.joined(separator: "\n")))
+    }
+
     /// `git for-each-ref refs/heads --sort=-committerdate
     /// --format=%(refname:short)%1f%(objectname:short)%1f%(committerdate:unix)%1f%(subject)`.
     static func parseBranches(_ text: String) -> [GitStatus.Branch] {
@@ -147,11 +195,16 @@ enum GitStatusParser {
         statusOutput: String,
         logOutput: String?,
         branchesOutput: String? = nil,
-        worktreesOutput: String? = nil
+        worktreesOutput: String? = nil,
+        branchLogOutput: String? = nil
     ) -> GitStatus {
         var status = parseStatus(statusOutput)
         if status.branch != nil { status.detachedAt = nil }
         status.recentCommits = logOutput.map(parseLog) ?? []
+        if status.branch != nil, let branchLog = branchLogOutput.flatMap(parseBranchLog) {
+            status.mainRefs = branchLog.mainRefs
+            status.branchCommits = branchLog.commits
+        }
         let worktrees = worktreesOutput.map(parseWorktrees) ?? [:]
         status.branches = (branchesOutput.map(parseBranches) ?? []).map { branch in
             var branch = branch

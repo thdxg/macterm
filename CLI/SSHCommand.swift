@@ -157,7 +157,7 @@ struct SSHCommand: ParsableCommand {
         )
     }
 
-    /// Pipe the source to a remote `tic -x -` over a throwaway ControlMaster
+    /// Pipe the source to a remote `tic -x -o ~/.terminfo -` over a throwaway ControlMaster
     /// (see `SSHWrapper.installArgv`). Interactive on purpose: this is the
     /// user's first connection, so auth prompts reach them via the tty.
     private func installTerminfo(source: Data) -> Bool {
