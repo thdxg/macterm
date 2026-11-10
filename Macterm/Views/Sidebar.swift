@@ -1423,9 +1423,8 @@ private struct PinTabDropZone: View {
     var body: some View {
         ZStack {
             if isBandVisible {
-                // The system's own surface, with no fill or stroke of ours:
-                // the List cannot draw this target, because an empty ForEach
-                // has no row for its insertion line.
+                // System glass or material, with no tint or stroke. The List
+                // draws no target here, because an empty ForEach has no row.
                 Label("Pin Tab", systemImage: "pin.fill")
                     .font(.callout.weight(.medium))
                     .frame(maxWidth: .infinity)
