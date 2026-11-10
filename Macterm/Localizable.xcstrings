@@ -3185,22 +3185,6 @@
         }
       }
     },
-    "Every feature that uses a model uses Apple's on-device model. Nothing leaves this Mac." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "모델을 사용하는 모든 기능은 Apple의 온디바이스 모델을 사용합니다. 아무것도 이 Mac을 떠나지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "所有使用模型的功能都使用 Apple 的设备端模型。任何内容都不会离开这台 Mac。"
-          }
-        }
-      }
-    },
     "Every time" : {
       "localizations" : {
         "ko" : {
@@ -4723,6 +4707,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "布局"
+          }
+        }
+      }
+    },
+    "Learn more…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "더 알아보기…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进一步了解…"
           }
         }
       }
@@ -10967,6 +10967,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有可解释的输出。"
+          }
+        }
+      }
+    },
+    "These features need Apple Intelligence. Apple's on-device model does all the work, so nothing leaves this Mac." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기능에는 Apple Intelligence가 필요합니다. Apple의 온디바이스 모델이 모든 작업을 처리하므로 아무것도 이 Mac을 떠나지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些功能需要 Apple 智能。Apple 的设备端模型完成所有工作，因此任何内容都不会离开这台 Mac。"
           }
         }
       }

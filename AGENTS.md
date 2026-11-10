@@ -1000,7 +1000,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
     - Installed extensions come first, and each group is in order of name or of search rank. A menu next to the search field filters the grid to **All**, **Installed** or **Not Installed** (`ExtensionGalleryItem.Filter`).
     - The built-in screens are not extensions, and they have no card. There is no switch for on and off. To remove an extension, uninstall it.
   - `PasswordsSettings`.
-  - `IntelligenceSettings` (Settings → Intelligence, macOS 26 and later): the switch of Project Insights (disabled without Apple Intelligence), and the status of Apple's on-device model.
+  - `IntelligenceSettings` (Settings → Intelligence, macOS 26 and later): a header block in the shape of a System Settings pane's (the features need Apple Intelligence, nothing leaves the Mac, a link to the docs), the switch of Project Insights (disabled without Apple Intelligence), and the status of Apple's on-device model. The header block says those facts one time: the sections below do not repeat them.
 - `Macterm/Server/`: the app's client of the local server and of a host's server. `LocalServer` (start, reuse, replace), `ServerConnection` (handshake, requests, events) and `RemoteServers` (check, consent, install and replace on a host).
 - `Macterm/Protocol/`: the v2 protocol. `MessagePack`, `ProtocolFrame`, `ProtocolControl`, and the generated `MactermProtocol`.
 - `Macterm/Control/`: `ControlProtocol` (shared with the CLI), `ControlSocketServer`, `ControlHandler`, and `AgentSkills/` (the text of `macterm skills`, shared with the CLI).
