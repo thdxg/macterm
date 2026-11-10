@@ -292,6 +292,7 @@ final class SSHLoginPrompts {
             box.addSubview(label)
             alert.accessoryView = box
         }
+        alert.layout()
 
         guard let window = Self.terminalWindow() else {
             NSApp.activate()
