@@ -42,7 +42,7 @@ Macterm has its own defaults for a few keys. Macterm loads them before your conf
 | `macos-secure-input-indication` | `false`. The password bubble marks a password prompt instead. |
 | `background-opacity-cells` | `true`. The backgrounds that a program paints follow the window opacity. |
 
-The full list is `defaults` in [`MactermConfig.swift`](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift).
+The full list is `defaults` in [`MactermConfig.swift`](https://github.com/macterm/macterm/blob/main/Macterm/Config/MactermConfig.swift).
 
 ## Keys Macterm overrides
 

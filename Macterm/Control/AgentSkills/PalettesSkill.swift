@@ -34,7 +34,7 @@ extension AgentSkills {
 
         ```yaml
         # ~/.config/macterm/extensions/kubernetes/extension.yaml
-        # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
+        # yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/extension.schema.json
         name: Kubernetes
         description: Browse the namespaces and pods of a cluster
         icon: shippingbox                      # an SF Symbol name; optional
@@ -50,7 +50,7 @@ extension AgentSkills {
 
         ```yaml
         # ~/.config/macterm/extensions/kubernetes/palettes/kubernetes.yaml
-        # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
+        # yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/palette.schema.json
         name: Kubernetes
         description: Namespaces, pods and their logs
         requires: [kubectl]
@@ -157,7 +157,7 @@ extension AgentSkills {
         - The reference for users is https://macterm.thdxg.dev/docs/extension-palettes. Git, Docker
           and SSH examples are in https://macterm.thdxg.dev/docs/extensions and
           https://macterm.thdxg.dev/docs/extension-examples. The extensions in
-          https://github.com/thdxg/macterm/tree/main/extensions are complete examples too.
+          https://github.com/macterm/macterm/tree/main/extensions are complete examples too.
 
         \#(currencyNote(for: "macterm-palettes"))
         """#

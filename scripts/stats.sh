@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="thdxg/macterm"
+REPO="macterm/macterm"
 
 releases_json=$(gh api --paginate "repos/${REPO}/releases")
 

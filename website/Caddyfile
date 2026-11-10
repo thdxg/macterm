@@ -96,7 +96,7 @@
 		header >Cache-Control "public, max-age=900"
 
 		reverse_proxy https://raw.githubusercontent.com {
-			rewrite /thdxg/macterm/appcast{uri}
+			rewrite /macterm/macterm/appcast{uri}
 			header_up Host raw.githubusercontent.com
 
 			# Where the bytes come from is not part of the contract with Sparkle,

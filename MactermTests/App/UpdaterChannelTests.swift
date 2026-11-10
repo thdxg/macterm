@@ -121,7 +121,7 @@ struct UpdaterChannelTests {
         // ...and that the site proxies both paths at all, rather than serving
         // them out of an image built long before the release that writes them.
         #expect(caddyfile.contains("@updates path /appcast.xml /notes/*"))
-        #expect(caddyfile.contains("rewrite /thdxg/macterm/appcast{uri}"))
+        #expect(caddyfile.contains("rewrite /macterm/macterm/appcast{uri}"))
 
         // The branch behind that proxy is the store the publisher writes and
         // the tip workflow's "already published?" gate reads. All three name
