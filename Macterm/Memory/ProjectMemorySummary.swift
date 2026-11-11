@@ -18,6 +18,12 @@ struct ProjectMemorySummary: Equatable {
     /// is not a break: a failure is still the thing to fix after it.
     static let stretchBreak: TimeInterval = 3600
 
+    /// The panel's "No commands recorded yet" line shows only for a project
+    /// with neither a command nor Git state.
+    static func showsNoCommandsLine(hasCommands: Bool, hasGitState: Bool) -> Bool {
+        !hasCommands && !hasGitState
+    }
+
     init(entries: [MemoryEntry]) {
         lastActivity = entries.last?.finishedAt
         lastCommand = entries.last { $0.command != nil }
