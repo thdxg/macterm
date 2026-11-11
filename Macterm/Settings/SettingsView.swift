@@ -1356,6 +1356,12 @@ private struct AppearanceSettings: View {
                 .onChange(of: adaptiveTerminalChrome) { _, enabled in
                     Preferences.shared.adaptiveTerminalChromeEnabled = enabled
                 }
+
+                Toggle(isOn: $preferences.showOutdatedSessionBadge) {
+                    Text("Show outdated session badge")
+                    Text("A pane shows a badge when its session runs from an older Macterm version.")
+                        .settingsDescription()
+                }
             }
 
             // The icon is Liquid Glass, which only macOS 26 and later draw.

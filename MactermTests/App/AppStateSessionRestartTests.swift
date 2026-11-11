@@ -106,10 +106,48 @@ struct AppStateSessionRestartTests {
 
         state.requestRestartSessions(tabID: tab.id, projectID: project.id)
 
-        #expect(state.pendingDialog?.kind == .restartSessions(tabID: tab.id, projectID: project.id))
+        #expect(state.pendingDialog?.kind == .restartSessions(tabID: tab.id, projectID: project.id, paneID: nil))
         #expect(tab.splitRoot.allPanes().first?.id == old.id)
 
         state.confirmPendingDialog()
         #expect(tab.splitRoot.allPanes().first?.id != old.id)
+    }
+
+    @Test
+    func a_pane_shows_the_badge_only_while_its_session_is_older_and_the_switch_is_on() throws {
+        let prior = Preferences.shared.showOutdatedSessionBadge
+        defer { Preferences.shared.showOutdatedSessionBadge = prior }
+        let state = makeState()
+        let project = Project(name: "p", path: "/tmp", sortOrder: 0)
+        state.selectProject(project)
+        let tab = try #require(state.workspaces[project.id]?.activeTab)
+        let pane = try #require(tab.splitRoot.allPanes().first)
+        Preferences.shared.showOutdatedSessionBadge = true
+        #expect(!state.showsOutdatedSessionBadge(pane))
+        state.outdatedSessions = [pane.sessionName]
+        #expect(state.showsOutdatedSessionBadge(pane))
+        Preferences.shared.showOutdatedSessionBadge = false
+        #expect(!state.showsOutdatedSessionBadge(pane))
+    }
+
+    @Test
+    func the_badge_click_restarts_only_that_pane() async throws {
+        let killed = Killed()
+        let state = makeState(killed: killed)
+        state.paneNeedsConfirmClose = { _ in false }
+        let project = Project(name: "p", path: "/tmp", sortOrder: 0)
+        state.selectProject(project)
+        state.splitPane(direction: .horizontal, projectID: project.id, projects: [project])
+        let tab = try #require(state.workspaces[project.id]?.activeTab)
+        let panes = tab.splitRoot.allPanes()
+        state.outdatedSessions = Set(panes.map(\.sessionName))
+
+        state.requestRestartSession(of: panes[0])
+
+        let after = tab.splitRoot.allPanes()
+        #expect(!after.contains { $0.id == panes[0].id })
+        #expect(after.contains { $0.id == panes[1].id })
+        await killed.settle(expecting: 1)
+        #expect(await killed.names == [panes[0].sessionName])
     }
 }

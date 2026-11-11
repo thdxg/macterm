@@ -14,6 +14,8 @@ struct TerminalPane: View {
     let onAdaptiveBackgroundChange: (CGColor?) -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
     let onZoomRequest: () -> Void
+    @Environment(AppState.self)
+    private var appState: AppState?
 
     var body: some View {
         // The search bar sits above the terminal surface in a VStack, so showing
@@ -90,6 +92,19 @@ struct TerminalPane: View {
                             help: String(localized: "Leave copy mode")
                         ) { [weak pane] in
                             pane?.nsView?.copyMode.exit()
+                        }
+                    }
+                    // Outdated-session pill: the session runs from an older
+                    // Macterm version. A click restarts it, and asks first
+                    // when a program runs.
+                    if let appState, appState.showsOutdatedSessionBadge(pane) {
+                        ModePill(
+                            title: String(localized: "Outdated"),
+                            systemImage: "arrow.triangle.2.circlepath",
+                            help: String(localized: "Some panes in this tab are from an outdated Macterm version")
+                        ) { [weak appState, weak pane] in
+                            guard let appState, let pane else { return }
+                            appState.requestRestartSession(of: pane)
                         }
                     }
                     if isZoomed {

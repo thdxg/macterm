@@ -683,6 +683,22 @@
         }
       }
     },
+    "A pane shows a badge when its session runs from an older Macterm version." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션이 이전 Macterm 버전으로 실행 중이면 패널에 배지가 표시됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话运行于旧版 Macterm 时，窗格会显示徽章。"
+          }
+        }
+      }
+    },
     "A pane there has a running program. Close it in %@ instead." : {
       "localizations" : {
         "ko" : {
@@ -779,6 +795,22 @@
         }
       }
     },
+    "A process is still running in this session. Restarting the session ends it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 세션에서 프로세스가 아직 실행 중입니다. 세션을 다시 시작하면 종료됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此会话中仍有进程在运行。重启会话会结束该进程。"
+          }
+        }
+      }
+    },
     "A process is still running in this tab. Closing the tab ends it." : {
       "localizations" : {
         "ko" : {
@@ -791,22 +823,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此标签页中仍有进程正在运行。关闭标签页会结束该进程。"
-          }
-        }
-      }
-    },
-    "A process is still running in this tab. Restarting the session ends it." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 탭에서 프로세스가 아직 실행 중입니다. 세션을 다시 시작하면 종료됩니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此标签页中仍有进程在运行。重启会话会结束该进程。"
           }
         }
       }
@@ -6759,6 +6775,22 @@
         }
       }
     },
+    "Outdated" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 버전"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧版本"
+          }
+        }
+      }
+    },
     "Output is not JSON: %@" : {
       "localizations" : {
         "ko" : {
@@ -8423,22 +8455,6 @@
         }
       }
     },
-    "Runs an older version" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이전 버전으로 실행 중"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "运行旧版本"
-          }
-        }
-      }
-    },
     "Save" : {
       "localizations" : {
         "ko" : {
@@ -9359,6 +9375,22 @@
         }
       }
     },
+    "Show outdated session badge" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 버전 세션 배지 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示旧版会话徽章"
+          }
+        }
+      }
+    },
     "Show spinner over agent icons" : {
       "localizations" : {
         "ko" : {
@@ -9580,6 +9612,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按整行对齐"
+          }
+        }
+      }
+    },
+    "Some panes in this tab are from an outdated Macterm version" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 탭의 일부 패널은 이전 Macterm 버전에서 실행 중입니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此标签页中的部分窗格来自旧版 Macterm"
           }
         }
       }
@@ -10767,22 +10815,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此面板的文件已不存在"
-          }
-        }
-      }
-    },
-    "This tab runs an older version. Restart Session to update it." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 탭은 이전 버전으로 실행 중입니다. 세션을 다시 시작하여 업데이트하세요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此标签页运行的是旧版本。重启会话即可更新。"
           }
         }
       }

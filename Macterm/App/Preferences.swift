@@ -640,6 +640,12 @@ final class Preferences {
         didSet { Keys.showProjectInsightsButton.write(showProjectInsightsButton, to: defaults) }
     }
 
+    /// Whether a pane shows the badge for a session of an older build
+    /// (`SessionBuild`). It hides only the badge: Restart Session still works.
+    var showOutdatedSessionBadge: Bool {
+        didSet { Keys.showOutdatedSessionBadge.write(showOutdatedSessionBadge, to: defaults) }
+    }
+
     /// The keys of copy mode: Helix or Vim. `CopyModeController.enter` reads
     /// it, so a change applies to the next time the mode starts.
     var copyModeKeymap: CopyModeKeymap {
@@ -1066,6 +1072,7 @@ final class Preferences {
         tabSwitcherVisibility = Keys.tabSwitcherVisibility.read(defaults)
         tabSwitcherPosition = Keys.tabSwitcherPosition.read(defaults)
         showProjectInsightsButton = Keys.showProjectInsightsButton.read(defaults)
+        showOutdatedSessionBadge = Keys.showOutdatedSessionBadge.read(defaults)
         copyModeKeymap = Keys.copyModeKeymap.read(defaults)
         Self.runOneTimeMigrations(defaults: defaults)
     }
@@ -1265,6 +1272,7 @@ final class Preferences {
         )
         static let tabSwitcherPosition = PreferenceStorageKey("macterm.toolbar.tabSwitcherPosition", default: TabSwitcherPosition.trailing)
         static let showProjectInsightsButton = PreferenceStorageKey("macterm.toolbar.showProjectInsightsButton", default: true)
+        static let showOutdatedSessionBadge = PreferenceStorageKey("macterm.panes.showOutdatedSessionBadge", default: true)
         static let copyModeKeymap = PreferenceStorageKey("macterm.copyMode.keymap", default: CopyModeKeymap.vim)
 
         static let loadsDefaultGhosttyConfigFiles = "macterm.ghostty.loadsDefaultConfigFiles"
