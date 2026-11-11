@@ -21,7 +21,7 @@ This page shows how to make an extension and how to share it. The [palette refer
 Make the folder `~/.config/macterm/extensions/git/`. Put an `extension.yaml` file in it, which gives the name and the description of the extension:
 
 ```yaml title="~/.config/macterm/extensions/git/extension.yaml"
-# yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/extension.schema.json
+# yaml-language-server: $schema=https://macterm.thdxg.dev/schemas/extension.schema.json
 name: Git
 description: Switch to, log or diff the branches of the project
 icon: arrow.triangle.branch
@@ -30,7 +30,7 @@ icon: arrow.triangle.branch
 Then put the palette in `palettes/`:
 
 ```yaml title="~/.config/macterm/extensions/git/palettes/git.yaml"
-# yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/palette.schema.json
+# yaml-language-server: $schema=https://macterm.thdxg.dev/schemas/palette.schema.json
 name: Git
 description: The current project's branches
 root: branches
@@ -112,4 +112,4 @@ Macterm has a skill that teaches coding agents this format. Print it with this c
 macterm skills macterm-palettes
 ```
 
-See [skills for coding agents](/docs/cli#skills-for-coding-agents). The schema is at [`assets/palette.schema.json`](https://raw.githubusercontent.com/macterm/macterm/main/assets/palette.schema.json) for editors that understand `yaml-language-server`. The comment at the top of the first example points an editor to it.
+See [skills for coding agents](/docs/cli#skills-for-coding-agents). The schema is at [`assets/palette.schema.json`](https://macterm.thdxg.dev/schemas/palette.schema.json) for editors that understand `yaml-language-server`. The comment at the top of the first example points an editor to it.

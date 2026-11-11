@@ -48,7 +48,7 @@ extension ProjectFile {
     /// schema, so a saved file gets completion/validation in editors with no
     /// per-user setup. Hand-authored files can add the same line.
     static let schemaModeline =
-        "# yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/project.schema.json"
+        "# yaml-language-server: $schema=https://macterm.thdxg.dev/schemas/project.schema.json"
 
     static func parse(yaml: String) throws -> ProjectFile {
         do {

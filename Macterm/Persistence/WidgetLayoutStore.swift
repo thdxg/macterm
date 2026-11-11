@@ -51,7 +51,7 @@ struct WidgetLayoutFile: Codable, Equatable {
     var widgets: [WidgetDeclaration]?
 
     static let schemaModeline =
-        "# yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/widgets.schema.json"
+        "# yaml-language-server: $schema=https://macterm.thdxg.dev/schemas/widgets.schema.json"
 
     static func parse(yaml: String) throws -> WidgetLayoutFile {
         do {

@@ -1127,7 +1127,7 @@ The script stops only the process that it started, and it kills its own zmx sess
 
 `scripts/record-demos/record-demos.sh` records the twelve clips that the landing page plays. It drives the **installed** app with synthetic keystrokes. For demos 8, 9 and 12, it also drives the pointer. Whatever runs it therefore needs Accessibility and Screen Recording. It also needs ffmpeg, and podman for demos 5 and 10 (it starts the podman machine itself).
 
-Masters land in `$MACTERM_DEMOS_OUT` (default `~/Desktop/macterm-demos`). Only `record-demos.sh web` writes into the repo. It encodes the finished clips again to 1400×792 with CRF 26, and a poster of the first frame, in `assets/demo/`. The website build copies `assets/` to `public/assets`, so they are served as `/assets/demo/…`.
+Masters land in `$MACTERM_DEMOS_OUT` (default `~/Desktop/macterm-demos`). Only `record-demos.sh web` writes outside the masters, and it writes into a checkout of `macterm/website` (`MACTERM_WEBSITE_DIR`, default `../website` next to this repository). It encodes the finished clips again to 1400×792 with CRF 26, and a poster of the first frame, in `assets/demo/` of the website. The website build copies them to `public/assets`, so they are served as `/assets/demo/…`. Commit them in the website repository.
 
 The script has these rules. We learned each one with the real app:
 
@@ -1169,7 +1169,9 @@ The script has these rules. We learned each one with the real app:
 The site at `macterm.thdxg.dev` (landing page, docs, changelog, and the proxy of the update feed) is the `macterm/website` repository. This repository keeps what the site renders and serves:
 
 - `docs/*.md`, the user docs. A feature and its docs page land in one PR here. `TextFileDefaultsTests`, `CustomPaletteFileTests` and `DocsLinkTests` read the pages.
-- `assets/`: the JSON schemas (the `$schema` URL of every project, widget, extension and palette file), the icons and the demo clips.
+- `assets/`: the JSON schemas and the icons. The demo clips are in `macterm/website`.
+  - **The schemas are served at `https://macterm.thdxg.dev/schemas/<name>.schema.json`.** That is the `$id`, and the `$schema` line that the app writes. The website build copies the files from here, so this folder stays their one source and the unit tests keep reading it.
+  - **The old address `https://raw.githubusercontent.com/macterm/macterm/main/assets/<name>.schema.json` must keep answering.** Files that users and the extensions of the repository wrote name it. Never delete or rename a schema file here. The extensions keep the old line, because a change to a file of an extension makes each installed copy look outdated.
 
 The site build checks out this repository at `main` and reads `docs/` and `assets/` from it.
 
