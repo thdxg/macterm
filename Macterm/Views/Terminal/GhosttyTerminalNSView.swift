@@ -383,6 +383,14 @@ final class GhosttyTerminalNSView: NSView {
         $0.appendingPathComponent("bin/macterm").path
     }.flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
 
+    /// The command wrapper of a remote pane's surface: the client, with the
+    /// command that libghostty resolved after `--`, which the client takes
+    /// and does not run. nil without a client, and in the unit-test host.
+    static func remoteClientArgv(client: String?, bypass: ZmxBypass? = ZmxClient.liveBypass) -> [String]? {
+        guard let client, bypass != .unitTestHost else { return nil }
+        return [client, "remote-pane", "--"]
+    }
+
     /// A remote pane with no client: one line, then a wait for the close.
     static let noRemoteClientCommand =
         "/bin/sh -c 'echo \"macterm: this build cannot connect remote panes\"; exec cat >/dev/null'"
@@ -663,14 +671,18 @@ final class GhosttyTerminalNSView: NSView {
             // session runs the remote user's login shell. Logins go to a
             // sheet (`SSHLoginPrompts`), never to the pane.
             //
+            // The client is the surface's command wrapper (`remoteClientArgv`),
+            // so the command that libghostty resolves after it, login(1) and
+            // a shell, never runs, and no local "Last login" line shows.
+            //
             // Without the client (and in the unit-test host, which restores
             // the developer's panes, `ZmxBypass.unitTestHost`) the pane says
             // so and waits. Fail closed: never a local shell in a remote
             // project, and never an exit, which would end the session.
-            if let client = Self.remotePaneClientPath, ZmxClient.liveBypass != .unitTestHost {
-                config.command = cString("\(RemoteSpawn.shellQuote(client)) remote-pane")
-            } else {
+            if Self.remoteClientArgv(client: Self.remotePaneClientPath) == nil {
                 config.command = cString(Self.noRemoteClientCommand)
+            } else {
+                config.disable_shell_integration = true
             }
         } else {
             // Canonicalize before libghostty sees it: the string is exported
@@ -711,7 +723,7 @@ final class GhosttyTerminalNSView: NSView {
         // budget) → no wrapper, a plain unpersisted shell.
         // The argv element buffers come from `cString` (freed in
         // destroySurface); the pointer array is bound around the spawn below.
-        var wrapper = remoteSpec != nil ? [] : ZmxAttach.wrapperArgv(
+        var wrapper = remoteSpec != nil ? Self.remoteClientArgv(client: Self.remotePaneClientPath) ?? [] : ZmxAttach.wrapperArgv(
             executablePath: ZmxClient.live.executableURL()?.path,
             sessionID: sessionName
         )
@@ -749,7 +761,7 @@ final class GhosttyTerminalNSView: NSView {
                 envVars.append(ghostty_env_var_s(key: k, value: v))
             }
         }
-        if !wrapperArgv.isEmpty, let dir = ZmxSocketBudget.socketDir() {
+        if remoteSpec == nil, !wrapperArgv.isEmpty, let dir = ZmxSocketBudget.socketDir() {
             // Pin the runtime dir for `zmx connect`, so that it finds the
             // server and the sessions where the app's `LocalSessions` looks
             // and where the budget probe measured.

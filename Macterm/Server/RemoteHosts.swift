@@ -21,8 +21,11 @@ enum RemotePaneAnswer: Equatable {
     /// Wait for the wake notification or a key. `message` goes into the pane
     /// first.
     case wait(message: String?)
-    /// Run this ssh on the pane's tty. `clear`: clear the screen and the
-    /// scrollback first, because the session sends its own on attach.
+    /// Run this ssh on the pane's tty, after `message`. `clear`: clear the
+    /// screen and the scrollback first: an attach replays the session's
+    /// own, and a new session or a plain shell starts on an empty pane. No
+    /// line of Macterm's from before (a failure, "the session ended") stays
+    /// above it.
     case run(arguments: [String], clear: Bool, message: String?)
     /// The pane's session is gone (the host restarted). Ask for Return.
     case ended(message: String)
@@ -69,6 +72,12 @@ final class RemoteHosts {
         var key: String?
         /// Posts a Darwin notification.
         var post: (String) -> Void = { notify_post($0) }
+        /// A host's link came back: the reconnect sweep, with its backoff
+        /// and its setting, lets the other lost panes of the host attach.
+        var hostDidConnect: @MainActor (String) -> Void = {
+            NotificationCenter.default.post(name: .remoteHostDidConnect, object: $0)
+        }
+
         var declines: DeclineStore
         /// How long a session that the app told a client to make counts as
         /// made (`created`).
@@ -159,13 +168,17 @@ final class RemoteHosts {
         switch event {
         case .ask:
             if lost.contains(session) {
-                mark(panes, lost: true)
-                return .wait(message: messages.removeValue(forKey: session))
+                let message = messages.removeValue(forKey: session)
+                mark(panes, lost: true, message: message != nil)
+                return .wait(message: message)
             }
             if ended.contains(session) { return .ended(message: RemotePaneText.ended(host: target.host)) }
         case .lost:
             logger.info("remote pane: session=\(session, privacy: .public) host=\(target.destination, privacy: .public) lost")
             lost.insert(session)
+            for pane in panes {
+                pane.remoteLinkDidStop()
+            }
             mark(panes, lost: true)
             // The next connect checks the connection again.
             drop(target.destination)
@@ -268,8 +281,7 @@ final class RemoteHosts {
         var directory: String
 
         init?(_ pane: Pane) {
-            guard case let .remote(user, host, directory) = pane.remoteSpec else { return nil }
-            let destination = RemoteSpawn.destination(user: user, host: host)
+            guard case let .remote(_, host, directory) = pane.remoteSpec, let destination = pane.remoteDestination else { return nil }
             guard SSHConnections.isValidDestination(destination) else { return nil }
             self.destination = destination
             self.host = host
@@ -293,7 +305,7 @@ final class RemoteHosts {
                 arguments: connections.ttyArguments(
                     route, destination, RemoteSpawn.plainShellCommand(directory: target.directory)
                 ),
-                clear: false,
+                clear: true,
                 message: RemotePaneText.plainShell(host: target.host)
             )
         case let .ready(route, link):
@@ -323,7 +335,7 @@ final class RemoteHosts {
             guard failures < 2 else {
                 listFailures[destination] = nil
                 lost.insert(session)
-                mark(panes, lost: true)
+                mark(panes, lost: true, message: true)
                 return .wait(message: RemotePaneText.withRetry(RemotePaneText.serverSilent(host: target.host)))
             }
             return await resolve(session, panes: panes, target: target)
@@ -364,7 +376,7 @@ final class RemoteHosts {
                 configuration.post(Self.wakeName(for: session))
             }
             let command = RemoteSpawn.sessionCommand(key: key, sessionName: session, create: directory)
-            return .run(arguments: connections.ttyArguments(route, destination, command), clear: false, message: nil)
+            return .run(arguments: connections.ttyArguments(route, destination, command), clear: true, message: nil)
         case .ended:
             logger.info("remote pane: session=\(session, privacy: .public) ended on \(destination, privacy: .public)")
             ended.insert(session)
@@ -454,6 +466,9 @@ final class RemoteHosts {
         switch result {
         case let .success(host):
             hosts[destination] = host
+            // One login serves every pane of the host. The sweep owns when a
+            // lost pane connects again, so this never loops.
+            configuration.hostDidConnect(destination)
             if case .ready = host { configuration.linkReady(destination) }
         case let .failure(failure):
             hosts[destination] = nil
@@ -492,9 +507,14 @@ final class RemoteHosts {
         }
     }
 
-    private func mark(_ panes: [Pane], lost: Bool) {
-        for pane in panes where pane.isRemoteLinkLost != lost {
-            pane.isRemoteLinkLost = lost
+    /// `message`: the pane shows a line of Macterm's now. A line stays on
+    /// the screen until the next attach clears it, so only a link that
+    /// comes back or stops again (an attach ran in between) unsets it.
+    private func mark(_ panes: [Pane], lost: Bool, message: Bool = false) {
+        for pane in panes {
+            if pane.isRemoteLinkLost != lost { pane.isRemoteLinkLost = lost }
+            let shows = lost && (message || pane.showsRemoteLinkMessage)
+            if pane.showsRemoteLinkMessage != shows { pane.showsRemoteLinkMessage = shows }
         }
     }
 

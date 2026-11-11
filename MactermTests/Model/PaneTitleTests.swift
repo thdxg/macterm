@@ -190,6 +190,23 @@ struct PaneTitleTests {
     private let claude = RemoteForeground(comm: "2.1.289", isIdle: false, command: "claude")
     private let zsh = RemoteForeground(comm: "-zsh", isIdle: true, isShell: true, command: "-zsh")
 
+    @Test
+    func a_title_in_the_replay_of_an_attach_never_names_the_pane() {
+        // After a restart, `top` holds the pty and the replay carries the
+        // shell's last title from before `top` started.
+        let pane = makeRemotePane()
+        pane.receiveUnknownAPC("zmx;foreground;0;0;top;top")
+        pane.receiveUnknownAPC(ZmxForegroundEvents.snapshotStart)
+        pane.receiveReportedTitle("dev@box: ~/work")
+        #expect(pane.programTitle == nil)
+        pane.receiveUnknownAPC(ZmxForegroundEvents.snapshotEnd)
+        #expect(pane.programTitle == nil)
+        #expect(pane.foregroundProcessName == "top")
+        // A title after the replay is new output, and counts.
+        pane.receiveReportedTitle("top - load")
+        #expect(pane.programTitle == "top - load")
+    }
+
     /// A Claude Code turn: typed, running with a progress title, ended.
     private func runTurn(_ pane: Pane, title: String = "◐ Terminal session icons") {
         pane.recordUserInteraction()

@@ -51,7 +51,7 @@ You can also type `devbox:~/dev/api` in the command palette (<kbd>⌘P</kbd>) an
 | Restart your Mac, or the network drops | The sessions keep running. The panes that lost the connection connect again. |
 | The host restarts | The sessions on the host end. Each pane says so. Press Return to start a new shell in the same folder. |
 
-A pane that lost its connection keeps its last screen, dimmed. Macterm connects it again when the Mac wakes, when the network changes, when you return to the app, and when you select the project. Press a key in the pane to connect at once. To connect only when you press a key, turn off **Settings → General → Remote Projects → Reconnect panes after a dropped connection**.
+A pane that lost its connection keeps its last screen, blurred and dimmed. Macterm connects it again when the Mac wakes, when the network changes, when you return to the app, when you select the project, and when you log in to its host from another pane. Press a key in the pane to connect at once. To connect only when you press a key, turn off **Settings → General → Remote Projects → Reconnect panes after a dropped connection**.
 
 When a connection fails, the pane says why, for example `No host is named devbox.` or `devbox does not answer.` Press a key to try again.
 

@@ -230,6 +230,15 @@ struct GhosttyTerminalNSViewTests {
     func commandQ_onACyrillicKey_isGhosttysQuitOnceItCarriesItsText() throws {
         #expect(try defaultKeybindsClaimCommand(keyCode: 12, unshifted: "\u{0439}", text: "q"))
     }
+
+    @Test
+    func a_remote_pane_runs_the_client_as_its_command_wrapper() {
+        // The command that libghostty resolves (login(1), a shell) goes
+        // after `--`, and the client does not run it.
+        #expect(GhosttyTerminalNSView.remoteClientArgv(client: "/bin/macterm", bypass: nil) == ["/bin/macterm", "remote-pane", "--"])
+        #expect(GhosttyTerminalNSView.remoteClientArgv(client: "/bin/macterm", bypass: .unitTestHost) == nil)
+        #expect(GhosttyTerminalNSView.remoteClientArgv(client: nil, bypass: nil) == nil)
+    }
 }
 
 struct LeadershipClaimReadinessTests {

@@ -9,6 +9,10 @@ extension Notification.Name {
     /// poll: tab switch, OSC title, user interaction, execution-state
     /// transition. Observed by `AppState.notePollEvent()`.
     static let terminalPollEvent = Notification.Name("MactermTerminalPollEvent")
+    /// A remote host's link came back after a login (`object` is the
+    /// destination, `RemoteHosts`). The other lost panes of that host can
+    /// attach with no login: `AppState.reconnectDroppedRemotePanes`.
+    static let remoteHostDidConnect = Notification.Name("MactermRemoteHostDidConnect")
     /// The user typed into a pane (`object` is the pane's id). Posted for keys
     /// that reach the pty — what zmx's `isUserInput` will hand leadership on —
     /// so `AppState` can record the pane as its session's leader (#345).

@@ -406,6 +406,15 @@ struct ControlRemotePane: Codable, Equatable {
     var clear: Bool?
     /// A line for the pane, before the action.
     var message: String?
+
+    /// `message` as the client writes it into the pane: on a new line when
+    /// the cursor is not at the start of one (an ssh leaves it after the
+    /// prompt), and each line ends with CR LF, because the tty can be raw
+    /// after an ssh. Pure.
+    static func paneText(_ message: String, atLineStart: Bool) -> String {
+        let body = message.replacingOccurrences(of: "\n", with: "\r\n") + "\r\n"
+        return atLineStart ? body : "\r\n" + body
+    }
 }
 
 /// The server that answers on a host (debug-only `host.server`).
