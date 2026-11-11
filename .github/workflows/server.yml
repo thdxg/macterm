@@ -12,7 +12,7 @@ name: Server
 # its unexpanded name, which never matches the required name.
 #
 # macOS runs on macos-15: zig cannot link with Xcode 26.4 or later
-# (zig#31658), and the xcode-27 image has nothing older.
+# (zig#31658), and the macOS 27 runner has nothing older.
 
 on:
   pull_request:
