@@ -374,18 +374,18 @@ final class GhosttyTerminalNSView: NSView {
     /// pane's program runs behind the daemon's pty, not this view's, and this
     /// view has no back-reference to its pane. See `KeybindPassthrough`.
     var yieldsToProgram: ((NSEvent) -> Bool)?
+    /// The bundled CLI that a remote pane's surface runs (`macterm
+    /// remote-pane`). nil without a bundled CLI: the pane gets a plain local
+    /// shell.
+    static let remotePaneClientPath: String? = Bundle.main.resourceURL.map {
+        $0.appendingPathComponent("bin/macterm").path
+    }.flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
+
+    /// A remote pane with no client: one line, then a wait for the close.
+    static let noRemoteClientCommand =
+        "/bin/sh -c 'echo \"macterm: this build cannot connect remote panes\"; exec cat >/dev/null'"
+
     var onProcessExit: (() -> Void)?
-    /// A key reached this surface after its child had exited: the key that
-    /// libghostty's "Process exited. Press any key to close the terminal."
-    /// asks for. libghostty answers it with one more `close_surface`, and
-    /// `AppState.handleProcessExit` reads this flag to tell that close from
-    /// the one the exit itself fired. The first close of a remote pane asks
-    /// the host whether the session survived, and keeps the pane when the
-    /// host cannot answer (#281). Without this flag the key re-ran that
-    /// probe, and a pane whose host refuses us (`Permission denied`) could
-    /// never close by key. Both key paths set it (`keyDown`, and `sendKey`
-    /// for `pane key`). A view gets one surface, so it never resets.
-    var exitAcknowledgedByKey = false
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
     var onZoomRequest: (() -> Void)?
     var isZoomed: Bool = false
@@ -652,19 +652,23 @@ final class GhosttyTerminalNSView: NSView {
         }
 
         if let remoteSpec {
-            // Remote pane (#104): the surface command IS the ssh client —
-            // `ssh -t host 'cd dir && exec zmx attach <name>'`. Persistence
-            // lives in the remote daemon; the local process is disposable, so
-            // no zmx wrapper, no ZMX_DIR pin, no local working directory
-            // (ghostty defaults to home; the cd happens on the remote). The
-            // declared `shell:` doesn't apply either — the remote session
-            // spawns the remote user's login shell. Interactive auth works
-            // because there's no BatchMode: prompts render in the pane, and
-            // any connect failure surfaces on ghostty's abnormal-exit screen.
-            if let sshCommand = RemoteSpawn.paneCommand(
-                remote: remoteSpec, sessionName: sessionName, zmxPath: remoteZmxPath
-            ) {
-                config.command = cString(sshCommand)
+            // Remote pane (#104, 0057): the surface runs the bundled
+            // `macterm remote-pane`, which asks the app for the ssh of this
+            // pane's session (`RemoteHosts`) and runs it over the host's one
+            // connection. Persistence lives in the host's server; the local
+            // process is disposable, so no zmx wrapper and no local working
+            // directory. The declared `shell:` doesn't apply either: the host
+            // session runs the remote user's login shell. Logins go to a
+            // sheet (`SSHLoginPrompts`), never to the pane.
+            //
+            // Without the client (and in the unit-test host, which restores
+            // the developer's panes, `ZmxBypass.unitTestHost`) the pane says
+            // so and waits. Fail closed: never a local shell in a remote
+            // project, and never an exit, which would end the session.
+            if let client = Self.remotePaneClientPath, ZmxClient.liveBypass != .unitTestHost {
+                config.command = cString("\(RemoteSpawn.shellQuote(client)) remote-pane")
+            } else {
+                config.command = cString(Self.noRemoteClientCommand)
             }
             // Teach the host our terminfo entry, if the user asked for it, so a
             // later session's `remoteTermPreamble` settles on xterm-ghostty
@@ -1233,7 +1237,6 @@ final class GhosttyTerminalNSView: NSView {
         guard let surface else { super.keyDown(with: event)
             return
         }
-        if processExited { exitAcknowledgedByKey = true }
         // Escape closes the Explain popover, which never keeps key.
         if madeExplainPopover?.closesOnEscape(event) == true { return }
         // A Return or Escape the password bubble answers is consumed here and
@@ -2191,7 +2194,6 @@ extension GhosttyTerminalNSView {
         // The same gate as `keyDown`, so `pane key` drives copy mode the way
         // the keyboard does (the e2e suite has no keyboard).
         if copyMode.isActive, copyMode.handle(CopyModeKey(keyCode: keyCode, flags: flags)) { return true }
-        if processExited { exitAcknowledgedByKey = true }
         onInteraction?()
         PasswordPromptMonitor.shared.viewDidSendKey(self, keyCode: keyCode, mods: flags)
         if TerminalCommandSubmission.clearsInputEvidence(

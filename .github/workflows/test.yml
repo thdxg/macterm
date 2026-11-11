@@ -145,7 +145,7 @@ jobs:
       # against.
       #
       # A PINNED RELEASE IS NOT IMMUTABLE — that's what makes the framework hash
-      # load-bearing rather than belt-and-braces. thdxg/ghostty replaced
+      # load-bearing rather than belt-and-braces. macterm/ghostty replaced
       # build-2026-08-02's assets at 08:32Z, hours after CI had cached the
       # earlier bytes under that same tag. The GhosttyKit key rolls weekly with
       # no restore-keys, so when the ISO week turned over the next run

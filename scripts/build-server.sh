@@ -98,8 +98,8 @@ build() {
   key="$(server_key)"
   upstream="$(sed -n 's/^ *\.version = "\(.*\)",$/\1/p' "$ROOT/server/build.zig.zon")"
   [[ -n "$upstream" ]] || { echo "error: no version in server/build.zig.zon" >&2; exit 1; }
-  # `zmx version` names the build. The installer compares the part after the
-  # marker with the key in zmx-release.json (ZmxVersion.forkTag).
+  # `zmx version` names the build. The app compares the part after the marker
+  # with the key of its own server (ZmxVersion.forkTag).
   version="${upstream}+thdxg.${key}"
 
   mkdir -p "$out"

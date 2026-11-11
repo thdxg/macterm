@@ -8,6 +8,24 @@ struct SSHConnectionsTests {
     // MARK: - ControlPath
 
     @Test
+    func a_pane_is_a_tty_channel_over_the_connection_that_never_logs_in() {
+        let connections = SSHConnections(configuration: .init(
+            options: ["-F", "/tmp/config"], controlDirectory: URL(fileURLWithPath: NSTemporaryDirectory())
+        ))
+        let route = SSHConnections.Route(controlPath: "/tmp/Macterm Debug/cm/abc", isUsersOwn: false)
+        let argv = connections.ttyArguments(route, "deploy@10.0.0.5", "sh -c 'x'")
+        #expect(argv == [
+            "/usr/bin/env", "ssh", "-F", "/tmp/config",
+            "-S", "/tmp/Macterm Debug/cm/abc",
+            "-o", "ControlMaster=no",
+            "-o", "BatchMode=yes",
+            "-o", "ProxyCommand=/usr/bin/false",
+            "-o", "RemoteCommand=none",
+            "-q", "-t", "--", "deploy@10.0.0.5", "sh -c 'x'",
+        ])
+    }
+
+    @Test
     func the_user_control_path_comes_from_ssh_G() {
         let output = """
         user bob
@@ -205,6 +223,15 @@ struct SSHConnectionsTests {
         #expect(SSHLoginPrompts.link(in: "see https:// now") == nil)
         #expect(SSHLoginPrompts.link(in: "Open <https://example.test/y>.")?.absoluteString == "https://example.test/y")
         #expect(SSHLoginPrompts.link(in: "(https://example.test/z)")?.absoluteString == "https://example.test/z")
+    }
+
+    @Test
+    func a_notice_puts_its_link_on_a_line_of_its_own() {
+        #expect(SSHLoginPrompts.noticeText("To authenticate, visit: https://example.test/x")
+            == "To authenticate, visit:\nhttps://example.test/x")
+        #expect(SSHLoginPrompts.noticeText("Open <https://example.test/y> now.") == "Open\n<https://example.test/y> now.")
+        #expect(SSHLoginPrompts.noticeText("https://example.test/z") == "https://example.test/z")
+        #expect(SSHLoginPrompts.noticeText("Waiting for the host") == "Waiting for the host")
     }
 
     @Test(.timeLimit(.minutes(1)))

@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/extension.schema.json
 name: Kubernetes
 description: "Browse the namespaces, pods, deployments and services of a cluster"
 icon: icon.png

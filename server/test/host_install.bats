@@ -4,7 +4,9 @@
 # machine, as the app sends them: `sh -c '<script>' macterm <args>` as the
 # ssh command, joined into one line. Two builds of the server, with the build keys aaaa1111 and
 # bbbb2222, stand for two app versions. The app's half (the consent, the
-# replace) is in MactermTests/System/RemoteServerInstallerTests.swift.
+# replace) is in MactermTests/Server/RemoteServersTests.swift. The last test
+# runs remote panes as the app does (0057, RemoteHosts): each pane is an ssh
+# channel over one master.
 
 load test_helper
 
@@ -43,7 +45,7 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 UsePAM no
 PidFile $T/sshd.pid
-SetEnv HOME=$HOST_HOME MACTERM_RUNTIME_DIR=$MACTERM_RUNTIME_DIR
+SetEnv HOME=$HOST_HOME MACTERM_RUNTIME_DIR=$MACTERM_RUNTIME_DIR SHELL=/bin/sh
 EOF
   cat >"$T/ssh_config" <<EOF
 Host box
@@ -69,6 +71,7 @@ EOF
 
 teardown() {
   local sock pid
+  [[ -S "$T/cm" ]] && ssh -F "$T/ssh_config" -S "$T/cm" -O exit box 2>/dev/null || true
   if [[ -S "$MACTERM_RUNTIME_DIR/.server" ]]; then
     pid=$(python3 "$BATS_TEST_DIRNAME/v2client.py" server-pid 2>/dev/null) && kill -KILL "$pid" 2>/dev/null || true
   fi
@@ -239,4 +242,71 @@ PY
   NOISE="echo hello from an rc file;" relay $A <<'PY'
 assert c.control[0]["build"] == "1.0.1+thdxg.aaaa1111", c.control[0]
 PY
+}
+
+# A remote pane's command (RemoteSpawn.sessionCommand) for the session $1:
+# the host server's own client of the session. "create" makes a missing
+# session in the home folder; an attach never makes one.
+pane_command() {
+  local s="ZMX_FOREGROUND_EVENTS=1; export ZMX_FOREGROUND_EVENTS; b=\"\$HOME/.local/share/macterm/bin/macterm-$A\"; [ -x \"\$b\" ] || exit 255; "
+  if [[ "${2:-}" == create ]]; then
+    s+="cd; \"\$b\" connect \"$1\" --; "
+  else
+    s+="\"\$b\" connect \"$1\"; "
+  fi
+  s+="s=\$?; [ \"\$s\" -ne 255 ] || s=254; exit \"\$s\""
+  printf "sh -c '%s'" "$s"
+}
+
+@test "host: panes over one connection cost one login, report the foreground and attach again after a drop" {
+  install_build $A pane-id
+  local before
+  before=$(grep -c 'Accepted publickey' "$T/sshd.log")
+  ssh -F "$T/ssh_config" -M -N -f -S "$T/cm" -o ControlPersist=yes box
+  ONE="$(pane_command one create)" TWO="$(pane_command two create)" AGAIN="$(pane_command one)" python3 - <<'PY'
+import os, subprocess
+from ptyrun import Pty
+T = os.environ["T"]
+ssh = ["ssh", "-F", T + "/ssh_config", "-S", T + "/cm"]
+
+def pane(command):
+    # SSHConnections.ttyArguments: never a login of its own.
+    return Pty(["/usr/bin/env"] + ssh + ["-o", "ControlMaster=no", "-o", "BatchMode=yes",
+               "-o", "ProxyCommand=/usr/bin/false", "-q", "-t", "box", command])
+
+one = pane(os.environ["ONE"])
+two = pane(os.environ["TWO"])
+for p, name in ((one, "one"), (two, "two")):
+    p.type("printf 'ready-%s\\n' " + name + "\n")
+    p.wait_output("ready-" + name)
+
+# The host pushes the session's foreground into the pane's output: the
+# report ends with the program's command line.
+one.type("sleep 60\n")
+one.wait_output("sleep 60\x1b\\")
+
+# The connection drops: each channel's ssh exits 255, and the sessions stay.
+subprocess.run(ssh + ["-O", "exit", "box"], check=True, capture_output=True)
+assert one.wait_exit() == 255, one.status
+assert two.wait_exit() == 255, two.status
+
+# A new connection: the pane attaches to its session, which replays its screen.
+subprocess.run(ssh + ["-M", "-N", "-f", "-o", "ControlPersist=yes", "box"], check=True)
+again = pane(os.environ["AGAIN"])
+again.wait_output("ready-one")
+again.wait_output("sleep 60")
+
+# A shell that exits 255 is not a lost connection: the pane gets 254.
+again.type("\x03exit 255\n")
+assert again.wait_exit() == 254, again.status
+PY
+  # One login for the two panes, and one after the drop.
+  [ "$(grep -c 'Accepted publickey' "$T/sshd.log")" -eq $((before + 2)) ]
+}
+
+@test "host: an attach to a session that is not there makes none" {
+  install_build $A pane-id
+  run ssh -F "$T/ssh_config" -tt box "$(pane_command gone)" </dev/null
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'no session "gone"'* ]]
 }

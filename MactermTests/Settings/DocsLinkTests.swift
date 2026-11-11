@@ -4,14 +4,14 @@ import Testing
 
 /// Every Settings help button must land on a heading that exists. The pages
 /// are read from the source tree and their anchors derived the way
-/// `website/build-docs.mjs` derives them, so renaming a heading fails here
+/// `build-docs.mjs` of the macterm/website repository derives them, so renaming a heading fails here
 /// rather than leaving a button that opens the top of a page.
 struct DocsLinkTests {
     private static let pagesDirectory = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent() // Settings
         .deletingLastPathComponent() // MactermTests
         .deletingLastPathComponent() // repo root
-        .appendingPathComponent("website/docs/pages")
+        .appendingPathComponent("docs")
 
     /// `slugifyHeading` in build-docs.mjs.
     private static func anchor(for heading: String) -> String {

@@ -21,19 +21,9 @@ struct NewRemoteProjectSheet: View {
     private var host = ""
     @State
     private var directory = "~"
-    @State
-    private var zmxPath = ""
-    /// The zmx install sheet, over this one, for the host typed above.
-    @State
-    private var zmxInstall: ZmxInstallRequest?
 
     private var composedPath: String? {
         ProjectPath.composeRemote(host: host, directory: directory)
-    }
-
-    private var trimmedZmxPath: String? {
-        let t = zmxPath.trimmingCharacters(in: .whitespaces)
-        return t.isEmpty ? nil : t
     }
 
     /// A typed name a sentinel workspace reserves: refused here like every
@@ -52,7 +42,6 @@ struct NewRemoteProjectSheet: View {
                 TextField("Name", text: $name, prompt: Text(verbatim: host.isEmpty ? "devbox" : host))
                 TextField("Host", text: $host, prompt: Text("[user@]host or ssh alias"))
                 TextField("Directory", text: $directory, prompt: Text(verbatim: "~/dev/api"))
-                TextField("zmx path (optional)", text: $zmxPath, prompt: Text("find it in PATH"))
             }
             .textFieldStyle(.roundedBorder)
             if let reservedNameMessage {
@@ -62,20 +51,14 @@ struct NewRemoteProjectSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text("""
-            Each pane is a persistent zmx session on the host, over ssh. zmx must be installed there: \
-            Install zmx on Host puts Macterm's build in ~/.local/bin on the host. \
-            If Macterm cannot find a zmx, set an absolute path, for example ~/bin/zmx or /usr/local/bin/zmx. \
+            Each pane is a session on the host, over one ssh connection. \
+            At the first connection, Macterm asks to install its server on the host. \
             Port, identity, and ControlMaster come from ~/.ssh/config.
             """)
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button("Install zmx on Host…") {
-                    guard let path = composedPath else { return }
-                    zmxInstall = ZmxInstallRequest(path: path, projectID: nil, zmxPath: trimmedZmxPath)
-                }
-                .disabled(composedPath == nil)
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
@@ -86,11 +69,6 @@ struct NewRemoteProjectSheet: View {
         }
         .padding(20)
         .frame(width: 380)
-        .sheet(item: $zmxInstall) { request in
-            // No project yet: an install that lands beside another zmx sets
-            // the path field, so the project is created with it.
-            ZmxInstallSheet(request: request) { installed in zmxPath = installed }
-        }
     }
 
     private func add() {
@@ -100,8 +78,7 @@ struct NewRemoteProjectSheet: View {
         // host:dir here adds a distinct project rather than reusing the last.
         let project = projectStore.create(
             name: trimmedName.isEmpty ? host.trimmingCharacters(in: .whitespaces) : trimmedName,
-            path: path,
-            zmxPath: trimmedZmxPath
+            path: path
         )
         appState.selectProject(project)
         dismiss()

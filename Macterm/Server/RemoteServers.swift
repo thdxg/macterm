@@ -35,8 +35,7 @@ private let logger = Logger(subsystem: appBundleID, category: "RemoteServers")
 /// (`~/.local/share/macterm/host-id`), not the machine's own id: a container
 /// or a minimal host has no `/etc/machine-id`. A host with no file asks.
 ///
-/// Nothing in the app calls it yet, except the DEBUG verb `host server`:
-/// remote panes stay on v1's path until the remote cut-over.
+/// `RemoteHosts` keeps one link for each host, for the remote panes.
 @MainActor
 final class RemoteServers {
     struct Configuration {
@@ -77,6 +76,9 @@ final class RemoteServers {
         /// The bundle has no host scripts or no server build key.
         case notBundled
         case declined
+        /// No server of this build on the host, and the caller asked for no
+        /// install.
+        case notInstalled
         case noWritableHome
         case unsupported(system: String, machine: String)
         /// The bundle has no build for the host.
@@ -94,6 +96,7 @@ final class RemoteServers {
             switch self {
             case .notBundled: "this build of Macterm has no server for hosts"
             case .declined: "the install of the server was declined"
+            case .notInstalled: "the host has no server of this build"
             case .noWritableHome: "the home folder on the host is not writable"
             case let .unsupported(system, machine): "Macterm has no server for \(system) \(machine)"
             case let .noBuild(target): "this build of Macterm has no server for \(target)"
@@ -143,18 +146,20 @@ final class RemoteServers {
 
     /// A connection to the server on `destination`, after the login, the
     /// install and the replace that it needs. Connects to one host go one
-    /// at a time, so that two never install at once.
-    func connect(_ destination: String) async throws -> Link {
+    /// at a time, so that two never install at once. With `login` false it
+    /// uses only a connection that is up; with `install` false a host with
+    /// no server of this build throws `notInstalled`, and nobody is asked.
+    func connect(_ destination: String, login: Bool = true, install: Bool = true) async throws -> Link {
         while let busy = connecting[destination] {
             _ = try? await busy.value
         }
-        let task = Task { try await self.open(destination) }
+        let task = Task { try await self.open(destination, login: login, install: install) }
         connecting[destination] = task
         defer { connecting[destination] = nil }
         return try await task.value
     }
 
-    private func open(_ destination: String) async throws -> Link {
+    private func open(_ destination: String, login: Bool, install mayInstall: Bool) async throws -> Link {
         guard let key = configuration.builds.key, let command = configuration.scripts?.attachCommand(key: key)
         else { throw Failure.notBundled }
         var commands = 0
@@ -162,7 +167,7 @@ final class RemoteServers {
         var replaced = false
         while true {
             commands += 1
-            switch try await attach(destination, command: command) {
+            switch try await attach(destination, command: command, login: login) {
             case let .connected(connection, process):
                 let link = Link(connection: connection, process: process, installed: installed, commands: commands)
                 let hello = connection.serverHello
@@ -194,6 +199,7 @@ final class RemoteServers {
                     throw Failure.unsupported(system: system, machine: machine)
                 case let .missing(host):
                     guard !installed else { throw Failure.installFailed("the server is not there after the install") }
+                    guard mayInstall else { throw Failure.notInstalled }
                     try await install(destination, key: key, host: host)
                     commands += 1
                     installed = true
@@ -231,7 +237,7 @@ final class RemoteServers {
         case ended(status: Int32, stderr: String)
     }
 
-    private func attach(_ destination: String, command: String) async throws -> Attempt {
+    private func attach(_ destination: String, command: String, login: Bool) async throws -> Attempt {
         var pair: [Int32] = [-1, -1]
         guard socketpair(AF_UNIX, SOCK_STREAM, 0, &pair) == 0 else {
             throw Failure.attachFailed(String(cString: strerror(errno)))
@@ -247,7 +253,7 @@ final class RemoteServers {
         let process: Process
         let stderr: CollectedPipe
         do {
-            (process, stderr) = try await connections.start(destination, command, stdio: theirs)
+            (process, stderr) = try await connections.start(destination, command, stdio: theirs, login: login)
         } catch {
             Darwin.close(ours)
             try? theirs.close()
@@ -518,10 +524,29 @@ actor ServerBuilds {
     }
 
     static var bundled: ServerBuilds {
-        ServerBuilds(
-            key: ZmxRelease.bundled?.tag,
-            directory: Bundle.main.resourceURL?.appendingPathComponent("server", isDirectory: true)
-        )
+        ServerBuilds(key: bundledKey, directory: bundledDirectory)
+    }
+
+    private static var bundledDirectory: URL? {
+        Bundle.main.resourceURL?.appendingPathComponent("server", isDirectory: true)
+    }
+
+    /// The build key of the bundled server, from the name of its macOS file
+    /// (`macterm-<key>-universal-macos.gz`): `scripts/embed-zmx.sh` names the
+    /// files for the key, and `scripts/build.sh` refuses a bundle whose files
+    /// are not the build of the tree. nil with no file, or with two.
+    nonisolated static let bundledKey: String? = bundledDirectory.flatMap { directory in
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        return key(in: names)
+    }
+
+    /// The key in the one `macterm-<key>-universal-macos.gz` of `names`.
+    nonisolated static func key(in names: [String]) -> String? {
+        let prefix = "macterm-", suffix = "-\(ZmxHostTarget.macOS.rawValue).gz"
+        let keys = names.filter { $0.hasPrefix(prefix) && $0.hasSuffix(suffix) }
+            .map { String($0.dropFirst(prefix.count).dropLast(suffix.count)) }
+            .filter(HostScripts.isWord)
+        return keys.count == 1 ? keys[0] : nil
     }
 
     func build(for target: ZmxHostTarget) async -> ServerBuild? {

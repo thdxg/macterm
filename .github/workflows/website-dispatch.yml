@@ -1,0 +1,50 @@
+name: Website Dispatch
+
+# The site (macterm/website) renders docs/ and serves assets/ of this
+# repository, and its changelog shows the release notes. This workflow tells it
+# to build again when one of them changes. The site's own workflow checks out
+# this repository at main, so the build always reads what main has.
+#
+# Events that GITHUB_TOKEN raises start no runs, so only a person's action on a
+# release fires this: publishing a release, editing its notes, promoting a
+# beta. That is every change to the notes that matters.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "assets/**"
+  release:
+    types: [published, edited, deleted]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  dispatch:
+    name: Start a Site Build
+    runs-on: ubuntu-latest
+    steps:
+      # GITHUB_TOKEN cannot reach another repository. This is a token of the
+      # org's macterm-ci GitHub App, for macterm/website only, with contents
+      # write (what a repository_dispatch needs). It expires after an hour.
+      - name: App Token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MACTERM_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MACTERM_APP_PRIVATE_KEY }}
+          repositories: website
+          permission-contents: write
+
+      - name: Send repository_dispatch
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REASON: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          gh api repos/macterm/website/dispatches \
+            -f event_type=macterm-content \
+            -f "client_payload[reason]=$REASON" \
+            -f "client_payload[sha]=$SHA"

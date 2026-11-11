@@ -21,7 +21,7 @@ This page shows how to make an extension and how to share it. The [palette refer
 Make the folder `~/.config/macterm/extensions/git/`. Put an `extension.yaml` file in it, which gives the name and the description of the extension:
 
 ```yaml title="~/.config/macterm/extensions/git/extension.yaml"
-# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/extension.schema.json
 name: Git
 description: Switch to, log or diff the branches of the project
 icon: arrow.triangle.branch
@@ -30,7 +30,7 @@ icon: arrow.triangle.branch
 Then put the palette in `palettes/`:
 
 ```yaml title="~/.config/macterm/extensions/git/palettes/git.yaml"
-# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/palette.schema.json
 name: Git
 description: The current project's branches
 root: branches
@@ -83,7 +83,7 @@ If the file is missing or has a different size, Macterm shows the default icon. 
 
 ## Sharing an extension
 
-Anyone can install the extensions in **Settings → Extensions**. They are folders in [`extensions/`](https://github.com/thdxg/macterm/tree/main/extensions) in the Macterm repository. Each folder has `extension.yaml` (its name, description and authors), a `README.md`, and its palettes in `palettes/`. An extension can have as many palettes as it needs. Each palette has its own name and description. An installed extension is in `~/.config/macterm/extensions/<id>/`. Its commands find the other files of the folder through `$MACTERM_EXTENSION_DIR`. An example is a script that is too long for the YAML. In the CLI, its palettes have the names `<extension>/<file>`. They never clash with a palette file of your own.
+Anyone can install the extensions in **Settings → Extensions**. They are folders in [`extensions/`](https://github.com/macterm/macterm/tree/main/extensions) in the Macterm repository. Each folder has `extension.yaml` (its name, description and authors), a `README.md`, and its palettes in `palettes/`. An extension can have as many palettes as it needs. Each palette has its own name and description. An installed extension is in `~/.config/macterm/extensions/<id>/`. Its commands find the other files of the folder through `$MACTERM_EXTENSION_DIR`. An example is a script that is too long for the YAML. In the CLI, its palettes have the names `<extension>/<file>`. They never clash with a palette file of your own.
 
 ### Updates
 
@@ -102,7 +102,7 @@ An update moves the old folder to the Trash. To undo an update, put the old fold
 
 An extension can include screenshots for its README and for its card in Settings → Extensions. The card shows them in the order of the README, then the others by name. Put the main screen first. **Capture Palette** takes them at the one size that the repository accepts. It frames the command palette in the same way each time. Bind it in Settings → Keymaps and press it while the palette is open on the screen that you want. If you run it from the menu or from the palette, it captures the first screen of the palette. The first time, macOS asks if Macterm can record the screen. If the Screen Recording switch for Macterm is already on and macOS asks again, the switch belongs to a build with a different signature. Remove Macterm from the list, then try again. An update keeps the permission.
 
-To add your extension, open a pull request with the folder. You do not need to clone the whole repository. [The README of the folder](https://github.com/thdxg/macterm/blob/main/extensions/README.md) says how to do it. It also says what an extension needs: POSIX commands, a `requires:`, and a `when:` where the extension cannot always work. Macterm reads every extension there with its validator before the extension merges.
+To add your extension, open a pull request with the folder. You do not need to clone the whole repository. [The README of the folder](https://github.com/macterm/macterm/blob/main/extensions/README.md) says how to do it. It also says what an extension needs: POSIX commands, a `requires:`, and a `when:` where the extension cannot always work. Macterm reads every extension there with its validator before the extension merges.
 
 ## Writing one with a coding agent
 
@@ -112,4 +112,4 @@ Macterm has a skill that teaches coding agents this format. Print it with this c
 macterm skills macterm-palettes
 ```
 
-See [skills for coding agents](/docs/cli#skills-for-coding-agents). The schema is at [`assets/palette.schema.json`](https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json) for editors that understand `yaml-language-server`. The comment at the top of the first example points an editor to it.
+See [skills for coding agents](/docs/cli#skills-for-coding-agents). The schema is at [`assets/palette.schema.json`](https://raw.githubusercontent.com/macterm/macterm/main/assets/palette.schema.json) for editors that understand `yaml-language-server`. The comment at the top of the first example points an editor to it.
