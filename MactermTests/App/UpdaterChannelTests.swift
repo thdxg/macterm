@@ -111,7 +111,7 @@ struct UpdaterChannelTests {
         // else. check-feed.mjs of macterm/website reads this line.
         #expect(publishScript.contains(#"NOTES_REL_PATH="notes/${TAG}.html""#))
 
-        // The branch behind that proxy is the store the publisher writes and
+        // The repository behind that proxy is the store the publisher writes and
         // the tip workflow's "already published?" gate reads. All three name
         // it by hand, so a rename on one side either publishes into a branch
         // nobody serves or gates against one nobody writes.
@@ -119,8 +119,9 @@ struct UpdaterChannelTests {
             contentsOf: root.appendingPathComponent(".github/workflows/release-tip.yml"),
             encoding: .utf8
         )
-        #expect(publishScript.contains(#"FEED_BRANCH="appcast""#))
-        #expect(tipWorkflow.contains("git fetch --depth=1 origin appcast"))
+        #expect(publishScript.contains(#"FEED_REPOSITORY="macterm/appcast""#))
+        #expect(publishScript.contains(#"FEED_BRANCH="main""#))
+        #expect(tipWorkflow.contains("git fetch --depth=1 https://github.com/macterm/appcast.git main"))
     }
 
     /// `publish-appcast.sh` no longer hardcodes a channel name — it interpolates

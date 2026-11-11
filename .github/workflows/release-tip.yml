@@ -264,7 +264,7 @@ jobs:
       # an equal version and keeps the OLD edSignature and length. Every tip
       # follower's update then fails Sparkle's signature check.
       #
-      # Read from the appcast BRANCH, not the served feed: that is what
+      # Read from the macterm/appcast repository (public), not the served feed: that is what
       # publish-appcast.sh itself reads and writes, and the CDNs in front of the
       # site can serve a stale copy. A version missing from it (the upload
       # landed but the branch push failed) is republished in full, which is
@@ -276,9 +276,9 @@ jobs:
         run: |
           source scripts/_lib.sh
           COMPARISON="$(sparkle_comparison_version "$VERSION")"
-          if ! git fetch --depth=1 origin appcast; then
+          if ! git fetch --depth=1 https://github.com/macterm/appcast.git main; then
             echo "published=false" >> "$GITHUB_OUTPUT"
-            echo "No appcast branch to read; building."
+            echo "No appcast to read; building."
           elif git show FETCH_HEAD:appcast.xml 2>/dev/null \
             | grep -qF "<sparkle:version>${COMPARISON}</sparkle:version>"; then
             echo "published=true" >> "$GITHUB_OUTPUT"
@@ -434,7 +434,9 @@ jobs:
         with:
           client-id: ${{ vars.MACTERM_APP_CLIENT_ID }}
           private-key: ${{ secrets.MACTERM_APP_PRIVATE_KEY }}
-          repositories: macterm
+          repositories: |
+            macterm
+            appcast
           permission-contents: write
 
       # LAST, on purpose: the DMG is already on the release, so the feed can
