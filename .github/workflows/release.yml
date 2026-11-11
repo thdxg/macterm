@@ -216,21 +216,12 @@ jobs:
       - name: Publish appcast
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
-          # The app token: the push to `appcast` is then a push of the app,
-          # and the commit author is the app's bot user.
+          # The app pushes, and its bot user is the commit author.
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           VERSION: ${{ steps.release.outputs.version }}
           TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          BOT="${APP_SLUG}[bot]"
-          BOT_ID=$(gh api "/users/${BOT}" --jq .id) || {
-            echo "error: could not read the user id of ${BOT}" >&2
-            exit 1
-          }
-          export GIT_AUTHOR_BOT_NAME="$BOT"
-          export GIT_AUTHOR_BOT_EMAIL="${BOT_ID}+${BOT}@users.noreply.github.com"
-          scripts/publish-appcast.sh dmgs
+        run: scripts/publish-appcast.sh dmgs
 
   bump-cask:
     needs: [flag, release]

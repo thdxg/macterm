@@ -21,8 +21,9 @@
 #   GITHUB_REPOSITORY      — provided by GitHub Actions (owner/repo)
 #
 # Optional env:
-#   GIT_AUTHOR_BOT_NAME,   — the commit identity. Default: github-actions[bot].
-#   GIT_AUTHOR_BOT_EMAIL     The workflows set the bot user of the app.
+#   APP_SLUG               — slug of the GitHub App that owns GH_TOKEN. The
+#                            commit author is its bot user. Default:
+#                            github-actions[bot].
 #   PRERELEASE             — "true" for a prerelease. Required for any channel.
 #   CHANNEL                — Sparkle channel name for the new items. Empty =
 #                            the default channel (visible to everyone).
@@ -194,8 +195,18 @@ cd "$WORKDIR"
 
 # Set the bot identity PER-CLONE (not --global): run locally, a --global config
 # would silently overwrite the maintainer's own git identity.
-git config user.name "${GIT_AUTHOR_BOT_NAME:-github-actions[bot]}"
-git config user.email "${GIT_AUTHOR_BOT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+if [[ -n "${APP_SLUG:-}" ]]; then
+  BOT="${APP_SLUG}[bot]"
+  BOT_ID=$(GH_TOKEN="$GH_TOKEN" gh api "/users/${BOT}" --jq .id) || {
+    echo "error: could not read the user id of ${BOT}" >&2
+    exit 1
+  }
+else
+  BOT="github-actions[bot]"
+  BOT_ID=41898282
+fi
+git config user.name "$BOT"
+git config user.email "${BOT_ID}+${BOT}@users.noreply.github.com"
 
 # Seed the appcast header on first publication.
 if [[ ! -f appcast.xml ]]; then
