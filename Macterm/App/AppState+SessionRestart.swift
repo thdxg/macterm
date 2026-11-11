@@ -11,7 +11,7 @@ private let logger = Logger(subsystem: appBundleID, category: "AppState+SessionR
 extension AppState {
     /// The panes of `tab` whose session runs an older build.
     func outdatedPanes(in tab: TerminalTab) -> [Pane] {
-        tab.splitRoot.allPanes().filter { outdatedSessions.contains($0.sessionName) }
+        tab.splitRoot.allPanes().filter { !$0.isRemote && outdatedSessions.contains($0.sessionName) }
     }
 
     /// Whether a session of `tab` runs an older build. The sidebar badge.
@@ -45,13 +45,22 @@ extension AppState {
         guard let tab = workspaces[projectID]?.tabs.first(where: { $0.id == tabID }) else { return }
         let olds = outdatedPanes(in: tab)
         guard !olds.isEmpty else { return }
+        // Panes that show one session (a `pane mirror` pair) get one new
+        // session, shown by the same number of panes.
         var replacements: [UUID: Pane] = [:]
+        var fresh: [String: Pane] = [:]
         for old in olds {
-            replacements[old.id] = Pane(
-                projectPath: old.liveLocalWorkingDirectory() ?? old.projectPath,
-                projectID: old.projectID,
-                sessionSlug: old.sessionSlug
-            )
+            if let owner = fresh[old.sessionName] {
+                replacements[old.id] = Pane(mirroring: owner)
+            } else {
+                let pane = Pane(
+                    projectPath: old.liveLocalWorkingDirectory() ?? old.projectPath,
+                    projectID: old.projectID,
+                    sessionSlug: old.sessionSlug
+                )
+                fresh[old.sessionName] = pane
+                replacements[old.id] = pane
+            }
         }
         tab.splitRoot = tab.splitRoot.replacing(replacements)
         if let focused = tab.focusedPaneID, let new = replacements[focused] { tab.focusedPaneID = new.id }
@@ -59,11 +68,15 @@ extension AppState {
         logger.info("restarting \(olds.count, privacy: .public) older session(s)")
         for old in olds {
             old.destroySurface()
-            old.killPersistentSession(using: zmx)
             outdatedSessions.remove(old.sessionName)
         }
+        for name in Set(olds.map(\.sessionName)) {
+            olds.first { $0.sessionName == name }?.killPersistentSession(using: zmx)
+        }
         pruneSessionLeaders()
-        warmStaggered(Array(replacements.values))
+        for pane in replacements.values {
+            warmIfUnrendered(pane, in: tab)
+        }
         saveWorkspaces()
     }
 }

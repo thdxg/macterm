@@ -1956,7 +1956,7 @@ final class AppState {
     /// incubator's oversized grid. An ordered-out owner's SwiftUI tree still
     /// mounts new children (covered by the hidden-window E2E). Zoom is different:
     /// the recursive split view does not mount the hidden child at all.
-    private func warmIfUnrendered(_ pane: Pane, in tab: TerminalTab) {
+    func warmIfUnrendered(_ pane: Pane, in tab: TerminalTab) {
         let hiddenByZoom = tab.zoomedPaneID.map { $0 != pane.id } ?? false
         if hiddenByZoom || ownerWindow(of: tab, in: pane.projectID) == nil {
             warmPane(pane)
