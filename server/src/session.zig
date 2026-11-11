@@ -1003,9 +1003,11 @@ const Session = struct {
     }
 
     /// The current title, cwd, progress, status and program status, for a
-    /// client that just greeted. The foreground goes at its `attach`, when
-    /// it asks for it.
+    /// client that just greeted or lost its queue. The foreground goes only
+    /// to a client that asked for it at its `attach`.
     fn sendCurrent(s: *Session, c: *Client) void {
+        if (c.wants_foreground) s.checkForeground(c);
+
         var list: std.ArrayList(events.Event) = .empty;
         defer list.deinit(s.gpa);
         defer for (list.items) |e| if (e == .program) events.freeProgram(s.gpa, e.program);

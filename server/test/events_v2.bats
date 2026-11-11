@@ -164,6 +164,15 @@ b.wait_msg("foreground")
 b.type("sleep 30\r")
 b.wait(lambda: b"sleep" in b.messages("foreground")[-1]["a"]["comm"], what="the sleep foreground")
 assert a.messages("foreground") == [], a.messages("foreground")
+# A refresh drops the queue: the client that asked gets the foreground
+# again, and the other client still gets none.
+count = len(b.messages("foreground"))
+b.pane("refresh")
+b.wait_msg("foreground", count=count + 1)
+ends = len(a.messages("snapshot.end"))
+a.pane("refresh")
+a.wait_msg("snapshot.end", count=ends + 1)
+assert a.messages("foreground") == [], a.messages("foreground")
 PY
 }
 
