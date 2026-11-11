@@ -964,8 +964,15 @@ LIMITS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session_
 LIMIT_RUNS = 20
 
 
+# A difference below the floor passes whatever the limit says: a user cannot
+# feel it (Ethan, 2026-11-10). Typing and reopen times are in ms, memory in
+# MB. Wakeups have no floor.
+FLOOR_MS = 1.0
+FLOOR_MB = 2.0
+
+
 def gate_values(arms):
-    """The measurements that the gate compares, by name: (v1, v2, kind).
+    """The measurements that the gate compares, by name: (v1, v2, kind, floor).
     A `ratio` compares v2 / v1. A `difference` compares v2 - v1, for a value
     that v1 can have at 0 (idle wakeups, which are per pane)."""
     values = {}
@@ -973,20 +980,20 @@ def gate_values(arms):
         v1, v2 = arms.get(prefix + "v1"), arms.get(prefix + "v2")
         if v1 and v2:
             for p in ("p50", "p95"):
-                values[f"{where} echo {p}"] = (v1[f"{p}_ms"], v2[f"{p}_ms"], "ratio")
+                values[f"{where} echo {p}"] = (v1[f"{p}_ms"], v2[f"{p}_ms"], "ratio", FLOOR_MS)
     v1, v2 = arms.get("remote-open-v1"), arms.get("remote-open-v2")
     if v1 and v2:
-        values["New remote pane p50"] = (v1["p50_ms"], v2["p50_ms"], "ratio")
+        values["New remote pane p50"] = (v1["p50_ms"], v2["p50_ms"], "ratio", FLOOR_MS)
     v1, v2 = arms.get("reattach-v1"), arms.get("reattach-v2")
     if v1 and v2:
-        values["Reattach p50"] = (v1["p50_ms"], v2["p50_ms"], "ratio")
+        values["Reattach p50"] = (v1["p50_ms"], v2["p50_ms"], "ratio", FLOOR_MS)
     for size, layers in (arms.get("idle") or {}).get("panes", {}).items():
         def total(layer, key):
             return layers[layer][f"session_{key}"] + layers[layer][f"client_{key}"]
-        values[f"Memory, idle panes: {size}"] = (total("v1", "mb"), total("v2", "mb"), "ratio")
+        values[f"Memory, idle panes: {size}"] = (total("v1", "mb"), total("v2", "mb"), "ratio", FLOOR_MB)
         values[f"Wakeups/s per pane, idle panes: {size}"] = (
             total("v1", "wakeups_per_s") / int(size), total("v2", "wakeups_per_s") / int(size),
-            "difference",
+            "difference", 0,
         )
     return values
 
@@ -1021,7 +1028,7 @@ def cmd_limits(args):
         entries = {}
         for name in sorted(names):
             kind = gate_values(results[0]["arms"])[name][2]
-            stats = [gate_statistic(*gate_values(r["arms"])[name]) for r in results]
+            stats = [gate_statistic(*gate_values(r["arms"])[name][:3]) for r in results]
             median = statistics.median(stats)
             noise = max(abs(s - median) for s in stats)
             entries[name] = {
@@ -1066,18 +1073,24 @@ def cmd_check(args):
                 lines.append(f"| {name} | — | — | — | {entry['limit']:.3f} | Fail: not measured |")
                 failed = True
                 continue
-            v1, v2, kind = values[name]
+            v1, v2, kind, floor = values[name]
             stat = gate_statistic(v1, v2, kind)
-            ok = stat <= entry["limit"]
-            failed |= not ok
+            if stat <= entry["limit"]:
+                verdict = "Pass"
+            elif v2 - v1 < floor:
+                verdict = f"Pass: under the floor of {floor:g}"
+            else:
+                verdict = "Fail"
+                failed = True
             lines.append(
-                f"| {name} | {v1:.3f} | {v2:.3f} | {stat:.3f} | {entry['limit']:.3f} "
-                f"| {'Pass' if ok else 'Fail'} |"
+                f"| {name} | {v1:.3f} | {v2:.3f} | {stat:.3f} | {entry['limit']:.3f} | {verdict} |"
             )
         lines.append("")
     lines.append(
         "_A limit is no change (a ratio of 1, a difference of 0) plus the largest "
-        f"spread of the statistic in the runs of {os.path.basename(args.limits)}._"
+        f"spread of the statistic in the runs of {os.path.basename(args.limits)}. "
+        f"A slower or larger v2 also passes when the difference is under {FLOOR_MS:g} ms "
+        f"(typing, reopen) or {FLOOR_MB:g} MB (memory)._"
     )
     print("\n".join(lines))
     if failed:
