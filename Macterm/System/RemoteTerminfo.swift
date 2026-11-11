@@ -29,17 +29,17 @@ private let logger = Logger(subsystem: appBundleID, category: "RemoteTerminfo")
 /// remote panes have a different shape (the pane command IS the surface
 /// command, with no shell wrapper in front of it):
 /// - **Off the critical path.** Ghostty's install is synchronous inside the
-///   `ssh` wrapper, riding the pane's own connection via `ControlMaster`,
-///   because it *is* the connection being established. Ours is a separate
-///   `BatchMode` op fired and forgotten: a host with no `tic`, a read-only
-///   terminfo dir, or interactive-only auth then costs the pane nothing. It
-///   can't, and must never, delay or fail a pane spawn — the host-side
-///   `COLORTERM` export already guarantees truecolor without it.
+///   `ssh` wrapper. Ours is a `command.run` request to the host's server
+///   (`RemoteHosts.run`, 0058), sent when the host's link is ready and then
+///   forgotten: a host with no `tic` or a read-only terminfo dir costs the
+///   panes nothing. It can't, and must never, delay or fail a pane spawn —
+///   the host-side `COLORTERM` export already guarantees truecolor without
+///   it. It opens no connection and asks for no login.
 /// - **The result is not cached to disk.** `remoteTermPreamble` asks the host
 ///   what it has at attach time rather than trusting a record of what we once
 ///   installed, so there is no cache to fall out of sync with reality. The
 ///   in-memory `attempted` set exists only to keep one app run from re-writing
-///   the same host's terminfo on every pane spawn.
+///   the same host's terminfo on every connect.
 ///
 /// Gated on the user's own `ssh-terminfo` shell-integration flag, which
 /// ghostty ships OFF — installing files on someone's server is not something
@@ -76,46 +76,27 @@ enum RemoteTerminfo {
         return env
     }
 
-    /// argv (for `/usr/bin/ssh`) compiling the piped source on the remote.
-    /// The same non-interactive profile as `RemoteSpawn.foregroundProbeArgv` — `BatchMode`
-    /// so it can never hang on an auth prompt, `ConnectTimeout` so a dead host
-    /// can't wedge the task — and `sh -c`-wrapped like every remote command so
-    /// any login shell delivers it intact.
+    /// argv (for the host's `command.run`) that compiles `source` on the
+    /// host. The source is `$1`, an argument and not stdin, because
+    /// `command.run` gives the command no stdin; it is about 4 KB, far under
+    /// the size limit of one argument.
     ///
-    /// The script is `SSHWrapper.installCommand` in its verbose form, after
-    /// the PATH preamble: `tic -x -o ~/.terminfo -` compiles from stdin into the
-    /// user's own `~/.terminfo`, needing no privileges, and `infocmp` checks
-    /// that the entry resolves. `-o` keeps a `tic` that runs as root out of
-    /// the system database. Stderr stays, because `run` logs it on a
-    /// failure. nil for a local path.
-    static func installArgv(remote: ProjectPath) -> [String]? {
-        guard case let .remote(user, host, _) = remote else { return nil }
-        let script = RemoteSpawn.assertSingleQuoteFree(
-            RemoteSpawn.remoteEnvPreamble + SSHWrapper.installCommand(verbose: true),
-            onViolation: .failNonZero
-        )
-        return [
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=\(RemoteSpawn.opConnectTimeoutSeconds)",
-            RemoteSpawn.destination(user: user, host: host),
-            "\(RemoteSpawn.remoteShell) \(RemoteSpawn.shellQuote(script))",
-        ]
-    }
-
-    /// The destination key an install is deduped by: the same `user@host` the
-    /// ssh commands target, so two projects on one host share one install and
-    /// the same host reached as two different users doesn't.
-    ///
-    /// Deliberately NOT the project's directory — terminfo is per host+user,
-    /// not per project. nil for a local path.
-    static func destinationKey(remote: ProjectPath) -> String? {
-        guard case let .remote(user, host, _) = remote else { return nil }
-        return RemoteSpawn.destination(user: user, host: host)
+    /// The command is `SSHWrapper.installCommand` in its verbose form, after
+    /// the PATH preamble: `tic -x -o ~/.terminfo -` compiles from stdin into
+    /// the user's own `~/.terminfo`, needing no privileges, and `infocmp`
+    /// checks that the entry resolves. `-o` keeps a `tic` that runs as root
+    /// out of the system database. Its stderr goes into the output, which
+    /// the installer logs on a failure.
+    static func installArgv(source: String) -> [String] {
+        let script = RemoteSpawn.remoteEnvPreamble
+            + "printf \"%s\" \"$1\" | { \(SSHWrapper.installCommand(verbose: true)); } 2>&1"
+        return ["/bin/sh", "-c", script, "sh", source]
     }
 }
 
-/// Drives `RemoteTerminfo` at remote-pane spawn: at most one install attempt
-/// per destination per app run, fired and forgotten.
+/// Drives `RemoteTerminfo` when a host's link is ready (`RemoteHosts`): at
+/// most one install attempt per destination per app run, fired and
+/// forgotten.
 ///
 /// Every seam is injected so the gate and the dedupe are testable without a
 /// host or a subprocess; `shared` wires the real ones.
@@ -134,14 +115,14 @@ final class RemoteTerminfoInstaller {
             )
         },
         terminfoDirectory: { GhosttyApp.shared.bundledTerminfoDirectory },
-        install: { remote, terminfoDirectory in
-            await RemoteTerminfoInstaller.runInstall(remote: remote, terminfoDirectory: terminfoDirectory)
+        install: { destination, terminfoDirectory in
+            await RemoteTerminfoInstaller.runInstall(destination: destination, terminfoDirectory: terminfoDirectory)
         }
     )
 
     private let isEnabled: () -> Bool
     private let terminfoDirectory: () -> String?
-    private let install: (ProjectPath, String) async -> Bool
+    private let install: (String, String) async -> Bool
 
     /// Destinations already attempted this run — the whole reason a cache
     /// exists here. It is NOT a record of what is installed: `remoteTermPreamble`
@@ -153,127 +134,90 @@ final class RemoteTerminfoInstaller {
     init(
         isEnabled: @escaping () -> Bool,
         terminfoDirectory: @escaping () -> String?,
-        install: @escaping (ProjectPath, String) async -> Bool
+        install: @escaping (String, String) async -> Bool
     ) {
         self.isEnabled = isEnabled
         self.terminfoDirectory = terminfoDirectory
         self.install = install
     }
 
-    /// Make sure `remote` has our terminfo entry, for the benefit of the *next*
-    /// session on that host — the pane being spawned right now already has its
-    /// TERM settled by the time this finishes.
+    /// Make sure `destination` (`user@host`: terminfo is per host and user,
+    /// so two projects on one host share one install) has our terminfo
+    /// entry, for the benefit of the *next* session on that host.
     ///
     /// Returns immediately and never throws: this must not delay or fail a pane
     /// spawn under any circumstances, because `remoteColorPreamble` already
-    /// guarantees truecolor without it. A host with no `tic`, a read-only
-    /// terminfo dir, or interactive-only auth (this op is `BatchMode`, so it
-    /// cannot answer a prompt) simply logs and stays on `xterm-256color`.
-    func ensureInstalled(remote: ProjectPath) {
-        guard let key = RemoteTerminfo.destinationKey(remote: remote) else { return }
+    /// guarantees truecolor without it. A host with no `tic` or a read-only
+    /// terminfo dir simply logs and stays on `xterm-256color`.
+    func ensureInstalled(destination: String) {
         guard isEnabled() else { return }
         guard let terminfoDirectory = terminfoDirectory() else {
             logger.debug("skipping terminfo install: no bundled terminfo dir resolved")
             return
         }
-        // Insert BEFORE awaiting so simultaneous pane spawns on one host make a
-        // single attempt. A failure deliberately stays recorded: retrying on
-        // every spawn would mean an ssh connection per pane to a host that has
-        // already told us no. The next launch tries again.
-        guard attempted.insert(key).inserted else { return }
+        // Insert BEFORE awaiting so two connects to one host make a single
+        // attempt. A failure deliberately stays recorded: retrying on every
+        // connect would ask a host that has already told us no. The next
+        // launch tries again.
+        guard attempted.insert(destination).inserted else { return }
         Task { [install] in
-            let ok = await install(remote, terminfoDirectory)
-            logger.info("terminfo install for \(key, privacy: .public): \(ok ? "ok" : "failed", privacy: .public)")
+            let ok = await install(destination, terminfoDirectory)
+            logger.info("terminfo install for \(destination, privacy: .public): \(ok ? "ok" : "failed", privacy: .public)")
         }
     }
 
-    /// `infocmp -x xterm-ghostty` (against our bundled DB) piped to a remote
-    /// `tic -x -o ~/.terminfo -`. nonisolated: process I/O has no business on the main actor.
-    ///
-    /// The source is ~4KB — far under the ~64KB pipe buffer — so writing it to
-    /// ssh's stdin in one shot cannot block, and neither side needs the
-    /// continuous draining a large transfer would (the trap `ZmxClient.runZmx`
-    /// documents). Both stages are watchdogged anyway: `BatchMode` +
-    /// `ConnectTimeout` bound the connect, and a terminate-on-deadline bounds
-    /// everything after it, so a wedged host can't leave a process behind.
-    nonisolated private static func runInstall(
-        remote: ProjectPath, terminfoDirectory: String
-    ) async -> Bool {
-        guard let installArgv = RemoteTerminfo.installArgv(remote: remote) else { return false }
-        guard let source = run(
-            executable: RemoteTerminfo.infocmpPath,
-            arguments: RemoteTerminfo.sourceArgv(),
-            environment: RemoteTerminfo.sourceEnvironment(terminfoDirectory: terminfoDirectory),
-            captureStdout: true
-        ), !source.isEmpty
+    /// `infocmp -x xterm-ghostty` (against our bundled DB), compiled on the
+    /// host by its server. nonisolated: process I/O has no business on the
+    /// main actor.
+    nonisolated private static func runInstall(destination: String, terminfoDirectory: String) async -> Bool {
+        guard let data = readSource(terminfoDirectory: terminfoDirectory),
+              let source = String(data: data, encoding: .utf8), !source.isEmpty
         else {
             logger.warning("infocmp produced no source for \(RemoteTerminfo.entryName, privacy: .public)")
             return false
         }
-        return run(
-            // PATH-resolved ssh via env, matching the pane's own resolution
-            // and ZmxClient's remote ops (see the note in ZmxClient.live).
-            executable: "/usr/bin/env", arguments: ["ssh"] + installArgv, environment: nil, stdin: source
-        ) != nil
+        guard let result = await RemoteHosts.shared.run(
+            // Under the 10 s that the app waits for a reply
+            // (`LocalSessions.requestTimeout`), so a slow `tic` fails as a
+            // time-out on the host and is not logged as a failure that
+            // succeeded.
+            RemoteTerminfo.installArgv(source: source), destination: destination, timeout: .seconds(8)
+        )
+        else { return false }
+        guard result.code == 0 else {
+            // The host's text, without its control characters.
+            let detail = HostCheck.clean(String(decoding: result.output.bytes, as: UTF8.self))
+            logger.warning("tic on \(destination, privacy: .public) failed: \(detail, privacy: .public)")
+            return false
+        }
+        return true
     }
 
-    /// Run a process to completion, returning captured stdout on success and
-    /// nil on any failure (spawn error, watchdog kill, non-zero exit).
-    nonisolated private static func run(
-        executable: String,
-        arguments: [String],
-        environment: [String: String]?,
-        captureStdout: Bool = false,
-        stdin: Data? = nil
-    ) -> Data? {
+    /// `infocmp`'s output, or nil on any failure (spawn error, watchdog
+    /// kill, non-zero exit).
+    nonisolated private static func readSource(terminfoDirectory: String) -> Data? {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
-        if let environment { process.environment = environment }
-
-        let stdoutPipe = captureStdout ? Pipe() : nil
-        process.standardOutput = stdoutPipe ?? FileHandle.nullDevice
-        // Captured, not discarded: it's the only description of WHY an install
-        // failed (no `tic`, unwritable terminfo dir, ssh auth refusing to
-        // prompt under BatchMode), and this runs where the user can't see it.
-        // Logged only on failure — a successful `tic` still chatters, e.g.
-        // "older tic versions may treat the description field as an alias".
-        let stderrPipe = Pipe()
-        process.standardError = stderrPipe
-        let stdinPipe = stdin != nil ? Pipe() : nil
-        if let stdinPipe { process.standardInput = stdinPipe }
-
+        process.executableURL = URL(fileURLWithPath: RemoteTerminfo.infocmpPath)
+        process.arguments = RemoteTerminfo.sourceArgv()
+        process.environment = RemoteTerminfo.sourceEnvironment(terminfoDirectory: terminfoDirectory)
+        let stdoutPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = FileHandle.nullDevice
         do {
             try process.run()
         } catch {
-            logger.warning("\(executable, privacy: .public) failed to spawn: \(error, privacy: .public)")
+            logger.warning("infocmp failed to spawn: \(error, privacy: .public)")
             return nil
         }
-
-        // Bound the whole run: ssh's ConnectTimeout covers only the connect,
-        // not a stalled transfer afterwards.
         let watchdog = DispatchWorkItem { if process.isRunning { process.terminate() } }
         DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(20), execute: watchdog)
         defer { watchdog.cancel() }
-
-        if let stdinPipe, let stdin {
-            try? stdinPipe.fileHandleForWriting.write(contentsOf: stdin)
-            try? stdinPipe.fileHandleForWriting.close()
-        }
-        // Read before waiting: a child that fills the pipe while we wait for it
-        // to exit would deadlock. Safe here only because the payload is small
-        // and bounded either way by the watchdog.
-        let out = stdoutPipe.flatMap { try? $0.fileHandleForReading.readToEnd() }
-        let err = try? stderrPipe.fileHandleForReading.readToEnd()
+        // Read before waiting: a child that fills the pipe while we wait for
+        // it to exit would deadlock. The entry is about 4 KB.
+        let out = try? stdoutPipe.fileHandleForReading.readToEnd()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
-            let detail = err.flatMap { String(data: $0, encoding: .utf8) }?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            // Assembled first, then logged as one interpolation: an
-            // `OSLogMessage` can't be built by concatenating literals.
-            let tool = (executable as NSString).lastPathComponent
-            let message = "\(tool) exited \(process.terminationStatus): \(detail)"
-            logger.warning("\(message, privacy: .public)")
+            logger.warning("infocmp exited \(process.terminationStatus, privacy: .public)")
             return nil
         }
         return out ?? Data()

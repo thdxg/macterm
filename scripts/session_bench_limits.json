@@ -1,0 +1,106 @@
+{
+  "runs": {
+    "Darwin": {
+      "count": 20,
+      "commits": [
+        "0f92cad831dcecb60fd60ab4358457400cd02cb6"
+      ],
+      "images": [
+        "20261104.0514.1"
+      ]
+    },
+    "Linux": {
+      "count": 20,
+      "commits": [
+        "0f92cad831dcecb60fd60ab4358457400cd02cb6"
+      ],
+      "images": [
+        "20261101.186.1"
+      ]
+    }
+  },
+  "systems": {
+    "Darwin": {
+      "Local echo p50": {
+        "kind": "ratio",
+        "median": 1.022,
+        "noise": 0.395,
+        "limit": 1.395
+      },
+      "Local echo p95": {
+        "kind": "ratio",
+        "median": 1.096,
+        "noise": 0.777,
+        "limit": 1.777
+      },
+      "Memory, idle panes: 1": {
+        "kind": "ratio",
+        "median": 1.228,
+        "noise": 0.055,
+        "limit": 1.055
+      },
+      "Memory, idle panes: 9": {
+        "kind": "ratio",
+        "median": 1.016,
+        "noise": 0.012,
+        "limit": 1.012
+      },
+      "Reattach p50": {
+        "kind": "ratio",
+        "median": 0.536,
+        "noise": 0.139,
+        "limit": 1.139
+      },
+      "Wakeups/s per pane, idle panes: 1": {
+        "kind": "difference",
+        "median": 0.0,
+        "noise": 0.0,
+        "limit": 0.0
+      },
+      "Wakeups/s per pane, idle panes: 9": {
+        "kind": "difference",
+        "median": 0.0,
+        "noise": 0.0,
+        "limit": 0.0
+      }
+    },
+    "Linux": {
+      "Local echo p50": {
+        "kind": "ratio",
+        "median": 1.027,
+        "noise": 0.036,
+        "limit": 1.036
+      },
+      "Local echo p95": {
+        "kind": "ratio",
+        "median": 1.021,
+        "noise": 0.12,
+        "limit": 1.12
+      },
+      "New remote pane p50": {
+        "kind": "ratio",
+        "median": 0.232,
+        "noise": 0.003,
+        "limit": 1.003
+      },
+      "Reattach p50": {
+        "kind": "ratio",
+        "median": 0.895,
+        "noise": 0.057,
+        "limit": 1.057
+      },
+      "Remote echo p50": {
+        "kind": "ratio",
+        "median": 0.997,
+        "noise": 0.058,
+        "limit": 1.058
+      },
+      "Remote echo p95": {
+        "kind": "ratio",
+        "median": 0.996,
+        "noise": 0.057,
+        "limit": 1.057
+      }
+    }
+  }
+}

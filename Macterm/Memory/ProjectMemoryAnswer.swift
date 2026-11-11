@@ -7,8 +7,8 @@ import Foundation
 /// after a quiet period) is the answer when there is one. A command that
 /// finished after the summary was written is not in it, so the latest
 /// command follows the summary then. Without a summary, the facts alone
-/// answer: the latest command with its result, and a command that failed
-/// and did not succeed since (`ProjectMemorySummary.unresolvedFailure`).
+/// answer: the latest command with its result, and the failure that the
+/// panel shows (`ProjectMemorySummary.unresolvedFailure`).
 ///
 /// The text is spoken, so it has no Markdown: the backticks that the model
 /// puts around commands are dropped. The summary never says how long ago

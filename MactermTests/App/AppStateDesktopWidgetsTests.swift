@@ -42,7 +42,6 @@ struct AppStateDesktopWidgetsTests {
             isBundled: { true },
             killSession: { name in await killed.append(name) },
             killRemoteSession: { _, name, _ in await killed.append(name) },
-            remoteForegrounds: { _, _ in .unreachable },
             listSessions: { [] },
             endV1Sessions: { _ in true }
         )

@@ -40,7 +40,7 @@ The panel has these sections:
 
 | Section | What it shows |
 | --- | --- |
-| **Summary** | A short paragraph that says where you left off (see [Summary](#summary)). If the latest run of a command failed and you did not run it again with success, the panel shows that command, its exit code and the last lines of its output. |
+| **Summary** | A short paragraph that says where you left off (see [Summary](#summary)). If a command failed and you did not fix it, the panel shows that command, its exit code and the last lines of its output. A later success of the same command, also with other options (`git clean -f` after `git clean`), fixes it. A failure before a pause of an hour or more with no command is not shown. |
 | **Suggested** | Up to five commands to run next. The model chooses them from the commands that ran in this project and a few Git commands, with a reason for each. It never makes up a command: a suggestion that is not a command of this project, or `git status`, `git pull`, `git fetch`, `git diff`, `git log` or `git stash list`, is dropped. It suggests a command only for a cause that it sees, such as a failed run or the Git state, never because the command ran recently. When it has nothing to suggest, the panel shows no Suggested section. |
 | **Git** | The branches with the latest commits, the current one highlighted. Click a branch to go to it in the current pane: Macterm types `cd` to the worktree that has the branch checked out, or `git switch` for a branch with no worktree. The pane must be at a prompt. |
 | **Recent** | The latest commands. Click one to run it again. |
@@ -49,15 +49,15 @@ A command that you click runs in a new split next to the focused pane. Macterm t
 
 ## Summary
 
-A paragraph at the top of the **Summary** section says what you were working on. Apple's on-device model writes it from the Git state first (the commits of the current branch, or the latest commits on a main branch, the changed files and, when you have uncommitted changes, what changed in them), and from the recorded commands second. Nothing leaves your Mac.
+A paragraph at the top of the **Summary** section says what you were working on. Apple's on-device model writes it from the Git state first (the commits of the current branch, or the latest commits on a main branch, the changed files and, when you have uncommitted changes, what changed in them). The model reads the recorded commands only when Git shows no commits and no changed files, because the **Recent** list already shows them. Nothing leaves your Mac.
 
 When a tracked file has uncommitted changes, the model also reads the diff of the staged and unstaged changes, so that the summary can say what you changed and not only which files. Macterm leaves out binary files, lockfiles, `.env` files, key files, files and folders with "secret" or "credential" in the name, files with a private key, and files with very long lines, such as minified code. The diff goes only to the on-device model, and Macterm does not keep it. The model is told not to write a secret, and Macterm replaces secrets in the summary with `•••`, with the same filter as for the output of a command (see [What Macterm records](#what-macterm-records)). This filter cannot find every secret. A long diff is cut a whole file at a time. Macterm does not read the diff of a commit or of a file that Git does not track.
 
-Macterm writes the summary ten minutes after the last command in a project, panel or no panel, so that a panel you open after a break shows it at once. It does not write it while you work: a command that finishes only starts the ten minutes again. A change in the Git state that the summary has not seen, such as a commit from another terminal, starts the ten minutes too. A project with no command yet gets a summary of its Git state alone: the branch in use, its commits and its changes. Macterm keeps the summary with the records, so it is there after you start Macterm again. To write it now, click the reload button in the header of the **Summary** section. While the model writes, the panel shows **Summarizing…** until the first words arrive, and the facts below it do not wait.
+Macterm writes the summary ten minutes after the last command in a project, panel or no panel, so that a panel you open after a break shows it at once. It does not write it while you work: a command that finishes only starts the ten minutes again. A change in the Git state that the summary has not seen, such as a commit from another terminal, starts the ten minutes too. A project with no summary yet gets one as soon as Macterm reads its Git state, with no wait: the branch in use, its commits and its changes. Macterm keeps the summary with the records, so it is there after you start Macterm again. To write it now, click the reload button in the header of the **Summary** section. While the model writes, the panel shows **Summarizing…** until the first words arrive, and the facts below it do not wait.
 
 ## Ask Siri or Shortcuts
 
-The action **Where Did I Leave Off** returns the same answer as text, for a project that you select. Say "Where did I leave off in Macterm" to Siri, or add the action to a shortcut. The text is the summary when Macterm wrote one, then the commands that finished after it. Without a summary, it is the latest command and its result, and a command that failed and did not succeed since. The action never writes a summary. See [Shortcuts](/docs/shortcuts).
+The action **Where Did I Leave Off** returns the same answer as text, for a project that you select. Say "Where did I leave off in Macterm" to Siri, or add the action to a shortcut. The text is the summary when Macterm wrote one, then the commands that finished after it. Without a summary, it is the latest command and its result, and a failed command that the panel shows. The action never writes a summary. See [Shortcuts](/docs/shortcuts).
 
 ## What Macterm records
 
@@ -76,8 +76,8 @@ Each project keeps its 500 latest commands, in `~/Library/Application Support/Ma
 
 Macterm reads the Git state of a local project when the panel shows it, and again as soon as the repository changes, for example when you switch branches in a pane, in your editor or in another terminal. It also reads it after a command finishes while a panel shows the project, when Macterm becomes the active app, and every 15 seconds while the panel shows and Macterm is active. Macterm does not fetch from the remote, so the number of commits behind the upstream changes only after a fetch, for example when you click **Pull**. Macterm uses the Git of Homebrew, or the Git of the Xcode Command Line Tools. If neither is installed, the panel shows no Git state. Macterm never opens the install dialog of the Command Line Tools.
 
-For a remote project, Macterm reads the Git state on the host, over one ssh connection in the background, with the same reads. This needs **Background SSH connections** in **Settings → General → Remote Projects**: each read is a connection, and on a key that asks for Touch ID each connection is a dialog. If a host refuses the background login, Macterm does not ask it again until you start Macterm again, and the panel says so. A branch row types `cd` to the worktree on the host, or `git switch`, into the current pane, as for a local project.
+For a remote project, Macterm's server on the host reads the Git state, with the same reads. The reads use the connection of the host's panes, so they need no login. When no pane of the host is connected, the panel keeps the last state that it read. A branch row types `cd` to the worktree on the host, or `git switch`, into the current pane, as for a local project.
 
-## Forget the records
+## When you remove a project
 
-To forget all projects, open **Settings → Intelligence**, then click **Forget All…**. When you remove a project, Macterm deletes its records too.
+When you remove a project, Macterm deletes its records too.

@@ -7,11 +7,16 @@ struct ProjectMemorySummary: Equatable {
     var lastActivity: Date?
     /// The last command that has text.
     var lastCommand: MemoryEntry?
-    /// The latest run of a command that failed, with no later success of the
-    /// same command: the thing the user probably still has to fix.
+    /// A failure that is still the thing to fix
+    /// (`unresolvedFailure(in:)`), or nil.
     var unresolvedFailure: MemoryEntry?
     /// The number of commands recorded.
     var commandCount: Int
+
+    /// A pause this long between two commands ends a working stretch. A
+    /// shorter gap is often time in an editor, where no command runs, so it
+    /// is not a break: a failure is still the thing to fix after it.
+    static let stretchBreak: TimeInterval = 3600
 
     init(entries: [MemoryEntry]) {
         lastActivity = entries.last?.finishedAt
@@ -20,21 +25,43 @@ struct ProjectMemorySummary: Equatable {
         unresolvedFailure = Self.unresolvedFailure(in: entries)
     }
 
+    /// The latest open failure (`openFailures(in:)`): what the panel's
+    /// card shows. The digest of the model, the suggestion candidates and
+    /// the answer of Where Did I Leave Off read the same rule.
     static func unresolvedFailure(in entries: [MemoryEntry]) -> MemoryEntry? {
+        let open = openFailures(in: entries)
+        return entries.last { open.contains($0.id) }
+    }
+
+    /// The failures that are still the thing to fix: no later command with
+    /// the same `MemoryCommand.retryKey` succeeded (a retry with options
+    /// added, as `git clean` then `git clean -f`, fixes it), and no pause
+    /// of `stretchBreak` or more came after it. A failure before the latest
+    /// pause belongs to earlier work.
+    static func openFailures(in entries: [MemoryEntry]) -> Set<UUID> {
         var succeeded: Set<String> = []
+        var open: Set<UUID> = []
+        var later: MemoryEntry?
         for entry in entries.reversed() {
+            defer { later = entry }
+            if let later, later.startedAt.timeIntervalSince(entry.finishedAt) >= stretchBreak { break }
             guard let command = entry.command else { continue }
-            let key = MemoryCommand.normalized(command)
+            let key = MemoryCommand.retryKey(command)
             switch entry.outcome {
-            case .success:
-                succeeded.insert(key)
-            case .failure:
-                if !succeeded.contains(key) { return entry }
-            case .unknown:
-                continue
+            case .success: succeeded.insert(key)
+            case .failure: if !succeeded.contains(key) { open.insert(entry.id) }
+            case .unknown: continue
             }
         }
-        return nil
+        return open
+    }
+
+    /// `entries` without the failures that are not open. The model reads
+    /// these: told about a failure that a retry fixed, it suggested the
+    /// failed command again.
+    static func withoutSettledFailures(_ entries: [MemoryEntry]) -> [MemoryEntry] {
+        let open = openFailures(in: entries)
+        return entries.filter { $0.outcome != .failure || open.contains($0.id) }
     }
 }
 
@@ -70,6 +97,17 @@ enum MemoryCommand {
     /// as one.
     static func normalized(_ command: String) -> String {
         command.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// What a retry of `command` keeps: the words before its first option,
+    /// when there are at least two (`git clean -f` and `git clean` have one
+    /// key; `make test` and `make lint` do not). With fewer, an option comes
+    /// before the subcommand (`python -m pytest`, `git -C repo push`), so
+    /// the words do not name it: the key is the whole command.
+    static func retryKey(_ command: String) -> String {
+        let words = command.split(whereSeparator: \.isWhitespace)
+        let head = words.prefix { !$0.hasPrefix("-") }
+        return (head.count >= 2 ? head : words[...]).joined(separator: " ")
     }
 
     /// Whether redaction replaced a secret in `command`.

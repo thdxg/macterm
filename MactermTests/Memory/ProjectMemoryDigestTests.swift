@@ -41,6 +41,50 @@ struct ProjectMemoryDigestTests {
     }
 
     @Test
+    func the_summary_reads_the_commands_only_when_git_shows_no_work() throws {
+        let entries = [entry("git pull", exit: 0, minutesAgo: 30), entry("git status", exit: 0, minutesAgo: 29)]
+        var git = GitStatus(branch: "main")
+        git.recentCommits = [GitStatus.Commit(hash: "abc1234", subject: "Add checkout", date: now)]
+        let digest = try #require(ProjectMemoryDigest(projectName: "x", entries: entries, git: git, now: now))
+        // The Recent list shows the commands. With them in the prompt, the
+        // model wrote that `git pull` and `git status` succeeded.
+        #expect(digest.summaryText == "Git: branch main\nLatest commits: \"Add checkout\"")
+        #expect(!digest.prompt.contains("git pull"))
+        #expect(digest.suggestionPrompt.contains("`git pull` succeeded"))
+
+        // Without Git work, the commands are all the summary has.
+        for git in [nil, GitStatus(branch: "main")] {
+            let bare = try #require(ProjectMemoryDigest(projectName: "x", entries: entries, git: git, now: now))
+            #expect(bare.summaryText == bare.text)
+            #expect(bare.prompt.contains("`git pull` succeeded"))
+        }
+    }
+
+    @Test
+    func git_shows_work_with_commits_or_changed_files() {
+        var branch = GitStatus(branch: "feature/tax")
+        branch.mainRefs = ["refs/heads/main"]
+        branch.recentCommits = [GitStatus.Commit(hash: "a1", subject: "Release 2.0", date: now)]
+        branch.branchCommits = []
+        // The latest commits of a new branch are the main branch's history.
+        #expect(!ProjectMemoryDigest.gitShowsWork(branch))
+        branch.branchCommits = [GitStatus.Commit(hash: "b2", subject: "Apply tax", date: now)]
+        #expect(ProjectMemoryDigest.gitShowsWork(branch))
+
+        var changed = GitStatus(branch: "feature/tax")
+        changed.branchCommits = []
+        changed.mainRefs = ["refs/heads/main"]
+        changed.changedPaths = ["app.swift"]
+        #expect(ProjectMemoryDigest.gitShowsWork(changed))
+
+        var detached = GitStatus()
+        detached.detachedAt = "abc1234"
+        #expect(!ProjectMemoryDigest.gitShowsWork(detached))
+        detached.recentCommits = [GitStatus.Commit(hash: "abc1234", subject: "Fix", date: now)]
+        #expect(ProjectMemoryDigest.gitShowsWork(detached))
+    }
+
+    @Test
     func other_branches_are_not_in_the_digest_or_its_key() throws {
         var git = GitStatus(branch: "main")
         git.branches = [
@@ -172,11 +216,12 @@ struct ProjectMemoryDigestTests {
     }
 
     @Test
-    func the_instructions_put_git_first_and_cover_a_project_with_no_git_state() {
+    func the_instructions_put_git_first_and_cover_a_project_with_no_git_work() {
         #expect(ProjectMemoryDigest.instructions.contains("Read the work from Git first"))
         #expect(ProjectMemoryDigest.instructions.contains("Do not state a goal"))
-        #expect(ProjectMemoryDigest.instructions.contains("Do not retell the commands"))
-        #expect(ProjectMemoryDigest.instructions.contains("When there is no Git state"))
+        // The summary reads the commands only without Git work
+        // (`summaryText`), so the instructions name that case.
+        #expect(ProjectMemoryDigest.instructions.contains("When the text has no commits and no changed files"))
         #expect(ProjectMemoryDigest.instructions.contains("The diff is uncommitted work: never call it commits."))
     }
 

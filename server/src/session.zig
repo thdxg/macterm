@@ -276,6 +276,8 @@ const Client = struct {
     greeted: bool = false,
     /// It sent `attach`: it gets the pane's output.
     attached: bool = false,
+    /// Its `attach` asked for `foreground` messages.
+    wants_foreground: bool = false,
     /// Its output was dropped. It gets a snapshot when it can take data.
     behind: bool = false,
     /// Close it when its queue is empty (after a refusal).
@@ -698,6 +700,10 @@ const Session = struct {
             const a = try m.decodePane(m.Attach, arena, msg);
             const size = paneSize(a.cols, a.rows, a.xpixel, a.ypixel) orelse return;
             s.attach(c, size);
+            if (a.foreground and !c.wants_foreground) {
+                c.wants_foreground = true;
+                s.checkForeground(c);
+            }
         } else if (std.mem.eql(u8, msg.t, m.Resize.name)) {
             // Only a client that shows the pane has a size that counts.
             if (!c.attached) return;
@@ -904,26 +910,21 @@ const Session = struct {
         return std.Io.Timestamp.now(s.io, .awake).toMilliseconds();
     }
 
-    /// Until the next held event is due, and at most the foreground poll
-    /// interval while a client listens: a program that takes the pty and
-    /// prints nothing is still reported (zmx 0010).
     fn pollTimeout(s: *const Session) i32 {
-        var timeout: i32 = if (foreground.supported and s.hasGreeted()) foreground.poll_interval_ms else -1;
-        if (s.watch.deadline()) |due| {
-            const wait: i32 = @intCast(std.math.clamp(due - s.nowMs(), 0, std.math.maxInt(i32)));
-            timeout = if (timeout < 0) wait else @min(timeout, wait);
-        }
-        return timeout;
+        return pollTimeoutFor(foreground.supported and s.hasForegroundClient(), s.watch.deadline(), s.nowMs());
     }
 
-    fn hasGreeted(s: *const Session) bool {
-        for (s.clients.items) |c| if (c.greeted and !c.dead) return true;
+    /// A live client asked for `foreground` messages. With none, the
+    /// session reads no foreground and an idle session never wakes.
+    fn hasForegroundClient(s: *const Session) bool {
+        for (s.clients.items) |c| if (c.wants_foreground and !c.dead) return true;
         return false;
     }
 
     /// Reads the pty's foreground process group and, when it changed, sends
-    /// `foreground` to every client. One ioctl when nothing changed. With no
-    /// client, nothing is read: a client that greets reads it then.
+    /// `foreground` to every client that asked for it. One ioctl when nothing
+    /// changed. With no such client, nothing is read: a client that asks
+    /// reads it then.
     ///
     /// The leader is also read again once in `poll_interval_ms` with no
     /// change of group: the group changes before its child `exec`s the
@@ -934,7 +935,7 @@ const Session = struct {
     /// gets it when nothing changed. No message is kept to send later, so a
     /// client never gets a name that went stale.
     fn checkForeground(s: *Session, new_client: ?*Client) void {
-        if (!foreground.supported or s.pty_closed or !s.hasGreeted()) return;
+        if (!foreground.supported or s.pty_closed or !s.hasForegroundClient()) return;
         var pgrp: lib_posix.pid_t = 0;
         if (cross.ioctl(s.pty_fd, cross.TIOCGPGRP, &pgrp) != 0 or pgrp <= 0) return;
         const now = s.nowMs();
@@ -967,7 +968,7 @@ const Session = struct {
         const hash = hasher.final();
         if (hash != s.foreground_hash) {
             s.foreground_hash = hash;
-            s.broadcastPane(m.Foreground, msg, true);
+            s.broadcastForeground(msg);
         } else if (new_client) |c| s.sendPane(c, m.Foreground, msg);
     }
 
@@ -1001,10 +1002,11 @@ const Session = struct {
         }
     }
 
-    /// The current title, cwd, foreground, progress, status and program
-    /// status, for a client that just greeted.
+    /// The current title, cwd, progress, status and program status, for a
+    /// client that just greeted or lost its queue. The foreground goes only
+    /// to a client that asked for it at its `attach`.
     fn sendCurrent(s: *Session, c: *Client) void {
-        s.checkForeground(c);
+        if (c.wants_foreground) s.checkForeground(c);
 
         var list: std.ArrayList(events.Event) = .empty;
         defer list.deinit(s.gpa);
@@ -1036,6 +1038,21 @@ const Session = struct {
         }
     }
 
+    /// As `broadcastPane`, to the clients that asked for `foreground`.
+    fn broadcastForeground(s: *Session, msg: m.Foreground) void {
+        var out: std.Io.Writer.Allocating = .init(s.gpa);
+        defer out.deinit();
+        m.encodePane(&out.writer, m.Foreground, msg) catch return;
+        for (s.clients.items) |c| {
+            if (!c.wants_foreground or c.dead or c.behind) continue;
+            c.out.append(s.gpa, m.pane_channel, .msg, out.written(), true) catch {
+                s.dropClient(c);
+                continue;
+            };
+            s.checkHardCap(c);
+        }
+    }
+
     fn checkHardCap(s: *Session, c: *Client) void {
         if (c.out.len() <= client_hard_cap) return;
         std.log.warn("session {s}: client fd={d} does not read, closed", .{ s.name, c.fd });
@@ -1053,6 +1070,19 @@ fn sequenceEnd(data: []const u8, from: usize) usize {
         i = j + 1;
     }
     return data.len;
+}
+
+/// Until the next held event is due, and at most the foreground poll
+/// interval while a client wants foreground reports: a program that takes
+/// the pty and prints nothing is still reported (zmx 0010). With neither,
+/// -1: the session sleeps until a fd is ready.
+fn pollTimeoutFor(foreground_client: bool, deadline: ?i64, now: i64) i32 {
+    var timeout: i32 = if (foreground_client) foreground.poll_interval_ms else -1;
+    if (deadline) |due| {
+        const wait: i32 = @intCast(std.math.clamp(due - now, 0, std.math.maxInt(i32)));
+        timeout = if (timeout < 0) wait else @min(timeout, wait);
+    }
+    return timeout;
 }
 
 /// A size from a client, cut to `max_cells`. Null for a size of 0.
@@ -1163,4 +1193,15 @@ test "a pane size is cut to the limit, and 0 is ignored" {
     try testing.expectEqual(max_cells, big.cols);
     try testing.expectEqual(max_cells, big.rows);
     try testing.expectEqual(80, paneSize(80, 24, 0, 0).?.cols);
+}
+
+test "a session polls the foreground only for a client that wants it" {
+    // Only clients that did not ask, and no held event: no timeout.
+    try std.testing.expectEqual(@as(i32, -1), pollTimeoutFor(false, null, 1000));
+    try std.testing.expectEqual(@as(i32, foreground.poll_interval_ms), pollTimeoutFor(true, null, 1000));
+    // A held event is due first, or after the poll interval.
+    try std.testing.expectEqual(@as(i32, 16), pollTimeoutFor(false, 1016, 1000));
+    try std.testing.expectEqual(@as(i32, 16), pollTimeoutFor(true, 1016, 1000));
+    try std.testing.expectEqual(@as(i32, foreground.poll_interval_ms), pollTimeoutFor(true, 1000 + 10_000, 1000));
+    try std.testing.expectEqual(@as(i32, 0), pollTimeoutFor(false, 900, 1000));
 }

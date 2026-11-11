@@ -26,22 +26,19 @@ final class ProjectMemory {
     private(set) var git: [UUID: GitStatus] = [:]
     /// The projects whose git state is being read.
     private(set) var readingGit: Set<UUID> = []
+    /// The projects for which a read answered, with a state or with "no
+    /// repository". A remote read that got no answer says nothing about
+    /// the folder.
+    private(set) var gitAnswered: Set<UUID> = []
 
     @ObservationIgnored var textSource: any CommandTextSource = ScreenCommandExtractor()
     /// How long after OSC 133;D the screen is read. The shell sends the mark
     /// before it prints its next prompt, and the extractor needs that prompt.
     @ObservationIgnored var screenReadDelay = Duration.milliseconds(400)
     @ObservationIgnored var gitReader: (String) async -> GitStatus? = { await ProjectGit.status(at: $0) }
-    /// The git state of a remote project, over one background ssh
-    /// connection (`ProjectGit.remoteStatus`).
+    /// The git state of a remote project, from the host's server over the
+    /// host's connection (`ProjectGit.remoteStatus`).
     @ObservationIgnored var remoteGitReader: (ProjectPath) async -> ProjectGit.RemoteResult = { await ProjectGit.remoteStatus($0) }
-    /// Whether a background ssh connection may be made at all (#272): the
-    /// kill switch of every background connection to a host.
-    @ObservationIgnored var remoteGitAllowed: () -> Bool = { Preferences.shared.backgroundSSHConnections }
-    /// The ssh destinations that refused the background login in this run
-    /// (`ProjectGit.RemoteResult.authRefused`). No git read goes to them
-    /// again, as the foreground probe suspends them too.
-    private(set) var refusedRemoteHosts: Set<String> = []
     @ObservationIgnored private var pendingGitReads: [UUID: Task<Void, Never>] = [:]
 
     /// How long a project is quiet after its last command before its
@@ -267,30 +264,11 @@ final class ProjectMemory {
 
     // MARK: - Git
 
-    /// Why the panel shows no git state for a project, or nil when a read
-    /// is possible.
-    enum GitUnavailability: Equatable {
-        /// Background ssh connections are off (Settings → General).
-        case backgroundSSHOff
-        /// The host refused the background login in this run.
-        case refused(host: String)
-    }
-
-    /// Whether a project's git state can be read now. A local project can
-    /// always be read. A remote project needs background ssh connections,
-    /// and a host that refused the login once is not asked again.
-    func gitUnavailability(for project: Project) -> GitUnavailability? {
-        guard case let .remote(user, host, _)? = ProjectPath.parse(project.path) else { return nil }
-        guard remoteGitAllowed() else { return .backgroundSSHOff }
-        let destination = RemoteSpawn.destination(user: user, host: host)
-        return refusedRemoteHosts.contains(destination) ? .refused(host: destination) : nil
-    }
-
     /// Read a project's git state again, after `delay`. A read that is
-    /// already waiting is replaced. A remote project is read over ssh
-    /// (`gitUnavailability` says when it is not).
+    /// already waiting is replaced. A remote project is read by the host's
+    /// server.
     func refreshGit(_ projectID: UUID, after delay: Duration = .zero) {
-        guard let project = projectLookup(projectID), gitUnavailability(for: project) == nil else { return }
+        guard let project = projectLookup(projectID) else { return }
         pendingGitReads[projectID]?.cancel()
         pendingGitReads[projectID] = Task { [weak self] in
             if delay > .zero { try? await Task.sleep(for: delay) }
@@ -310,9 +288,11 @@ final class ProjectMemory {
             // in the git dir, and while no summary is on record every read
             // is "not seen", so a read that found the same state restarted
             // the 10-minute wait, and with the panel up the background
-            // summary never came.
+            // summary never came. A project with no summary yet gets its
+            // first one at once: the Git state says most of it, and a new
+            // project must not wait for commands.
             if case let .read(status?) = result, status != previous, gitStateIsNews(for: project) {
-                scheduleBackgroundSummary(projectID)
+                scheduleBackgroundSummary(projectID, after: summarizer.hasSummary(projectID: projectID) ? nil : .zero)
             }
         }
     }
@@ -333,21 +313,11 @@ final class ProjectMemory {
     }
 
     /// What a read leaves behind. An answer replaces the state. No answer
-    /// keeps the last one: a flaky link must not blank the panel. A refusal
-    /// suspends the host for the run.
+    /// keeps the last one: a flaky link must not blank the panel.
     private func apply(_ result: ProjectGit.RemoteResult, to project: Project) {
-        switch result {
-        case let .read(status):
-            git[project.id] = status
-        case .unreachable:
-            break
-        case .authRefused:
-            if case let .remote(user, host, _)? = ProjectPath.parse(project.path) {
-                let destination = RemoteSpawn.destination(user: user, host: host)
-                refusedRemoteHosts.insert(destination)
-                logger.info("git read auth refused for \(destination, privacy: .public); not asking again this run")
-            }
-        }
+        guard case let .read(status) = result else { return }
+        git[project.id] = status
+        gitAnswered.insert(project.id)
     }
 
     /// The rows of the panel's Suggested section: the model's suggestions
@@ -369,7 +339,8 @@ final class ProjectMemory {
     /// wait. This and the panel's button are the only ways a summary is
     /// written: a panel that opens shows the stored one, and a command that
     /// finishes only restarts the wait, so the model never runs in the
-    /// middle of work.
+    /// middle of work. The one exception is a project's first summary,
+    /// which a Git read schedules with no wait (`refreshGit`).
     func scheduleBackgroundSummary(_ projectID: UUID, after delay: Duration? = nil) {
         quietTimers[projectID]?.cancel()
         let wait = delay ?? summaryQuietPeriod
@@ -387,9 +358,7 @@ final class ProjectMemory {
     /// button); otherwise the same records cost nothing.
     func writeSummary(_ projectID: UUID, force: Bool = false) async {
         guard summaryAllowed(), let project = projectLookup(projectID) else { return }
-        if gitUnavailability(for: project) == nil {
-            await apply(readGit(project), to: project)
-        }
+        await apply(readGit(project), to: project)
         guard !Task.isCancelled else { return }
         summarizer.refresh(
             projectID: projectID,
@@ -409,16 +378,6 @@ final class ProjectMemory {
         store.forget(projectID)
         git[projectID] = nil
         summarizer.forget(projectID: projectID)
-    }
-
-    func forgetAll() {
-        for timer in quietTimers.values {
-            timer.cancel()
-        }
-        quietTimers.removeAll()
-        store.forgetAll()
-        git.removeAll()
-        summarizer.forgetAll()
     }
 
     /// Project lookup for the git read. Set by `attach`.

@@ -75,6 +75,25 @@ struct RemoteHostsTests {
     }
 
     @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(3)))
+    func a_background_read_runs_on_the_hosts_server_with_no_login_of_its_own() async throws {
+        try await withSSHDHost { host in
+            let fixture = Fixture(host)
+            // No connection yet: a background read never logs in.
+            #expect(await fixture.hosts.run(["/bin/sh", "-c", "true"], destination: "box", timeout: .seconds(5)) == nil)
+            #expect(host.sshd.acceptedLogins() == 0)
+
+            _ = try await fixture.run(fixture.pane())
+            #expect(fixture.ready == ["box"])
+            let result = try #require(
+                await fixture.hosts.run(["/bin/sh", "-c", "printf read-%s ok; exit 3"], destination: "box", timeout: .seconds(5))
+            )
+            #expect(String(decoding: result.output.bytes, as: UTF8.self) == "read-ok")
+            #expect(result.code == 3)
+            #expect(host.sshd.acceptedLogins() == 1)
+        }
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(3)))
     func a_dropped_link_waits_dimmed_and_heals_on_a_trigger() async throws {
         try await withSSHDHost { host in
             let fixture = Fixture(host)
@@ -219,6 +238,12 @@ struct RemoteHostsTests {
         private let connections = LockedBox<[String]>([])
         /// The hosts whose link came back (`hostDidConnect`).
         var connected: [String] { connections.value }
+        private let readyHosts = LockedBox<[String]>([])
+
+        /// The hosts whose link became ready, in order.
+        var ready: [String] {
+            readyHosts.value
+        }
 
         /// The wakes that the app posted.
         var woken: [String] {
@@ -231,6 +256,7 @@ struct RemoteHostsTests {
             var configuration = RemoteHosts.Configuration(key: host.key, declines: .memory(), creationGrace: creationGrace)
             configuration.post = { [posted] name in posted.mutate { $0.append(name) } }
             configuration.hostDidConnect = { [connections] destination in connections.mutate { $0.append(destination) } }
+            configuration.linkReady = { [readyHosts] destination in readyHosts.mutate { $0.append(destination) } }
             hosts = RemoteHosts(connections: host.connections, servers: host.servers, configuration: configuration)
         }
 

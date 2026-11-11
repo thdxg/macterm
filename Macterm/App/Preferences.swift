@@ -471,29 +471,14 @@ final class Preferences {
         didSet { Keys.showProjectNewTabButton.write(showProjectNewTabButton, to: defaults) }
     }
 
-    /// Allow non-interactive background ssh connections to remote-project
-    /// hosts: the foreground probe (live tab names, busy-close verdicts,
-    /// layout `run:` capture) and the opt-in terminfo install. On by default.
-    /// Off exists for keys gated behind a per-connection biometric dialog
-    /// (#272): every background connection raises a Touch ID prompt BatchMode
-    /// can't suppress, so off narrows Macterm's ssh traffic to the panes' own
-    /// connections plus the one-shot `zmx kill` of an explicit close. Remote
-    /// tabs then fall back to the host name / OSC titles, and closing warns
-    /// only on a positively-known running command (OSC 133 execution state) —
-    /// never from the conservative ssh-is-always-busy fallback.
-    var backgroundSSHConnections: Bool {
-        didSet { Keys.backgroundSSHConnections.write(backgroundSSHConnections, to: defaults) }
-    }
-
     /// Reconnect a remote pane whose ssh connection died (#281): respawn the
     /// surface so it redials and reattaches the SAME zmx session (which
     /// replays scrollback), instead of leaving the pane on ghostty's
     /// abnormal-exit overlay until the app is relaunched. Trigger-driven —
     /// system wake, app activation, project selection — never a timer, so an
     /// unreachable host is retried a bounded number of times per return, not
-    /// polled. Off exists for the same reason as `backgroundSSHConnections`:
-    /// a Touch ID-gated key (#272) would raise one prompt per dead pane on
-    /// every wake.
+    /// polled. Off exists for keys behind a Touch ID dialog (#272): a
+    /// reconnect after the master died is a new login.
     var reconnectRemotePanes: Bool {
         didSet { Keys.reconnectRemotePanes.write(reconnectRemotePanes, to: defaults) }
     }
@@ -1065,7 +1050,6 @@ final class Preferences {
         projectMemoryPanelVisible = Keys.projectMemoryPanelVisible.read(defaults)
         showNewProjectButton = Keys.showNewProjectButton.read(defaults)
         showProjectNewTabButton = Keys.showProjectNewTabButton.read(defaults)
-        backgroundSSHConnections = Keys.backgroundSSHConnections.read(defaults)
         reconnectRemotePanes = Keys.reconnectRemotePanes.read(defaults)
         textFilePlacement = Keys.textFilePlacement.read(defaults)
         // The domain of the app only: `defaults` also answers from the
@@ -1172,6 +1156,11 @@ final class Preferences {
             defaults.removeObject(forKey: "macterm.memory.summary")
             defaults.set(true, forKey: Keys.migrationRetiredMemorySummary)
         }
+        // A host's background reads go through its server over the host's
+        // one connection, and make no login (0058). The Background SSH
+        // connections switch is gone, so its key is dead. Removing it again
+        // costs nothing, so no flag guards it.
+        defaults.removeObject(forKey: "macterm.remote.backgroundSSHConnections")
     }
 
     /// Reads the two-layer config preference. The single-path key came from the
@@ -1257,7 +1246,6 @@ final class Preferences {
         static let projectMemoryPanelVisible = PreferenceStorageKey("macterm.memory.panelVisible", default: false)
         static let showNewProjectButton = PreferenceStorageKey("macterm.sidebar.showNewProjectButton", default: true)
         static let showProjectNewTabButton = PreferenceStorageKey("macterm.sidebar.showProjectNewTabButton", default: true)
-        static let backgroundSSHConnections = PreferenceStorageKey("macterm.remote.backgroundSSHConnections", default: true)
         static let reconnectRemotePanes = PreferenceStorageKey("macterm.remote.reconnectDroppedPanes", default: true)
         static let textFilePlacement = PreferenceStorageKey("macterm.textFiles.placement", default: TextFilePlacement.split)
         /// The key of the "Offer to save passwords" toggle this replaced, so a

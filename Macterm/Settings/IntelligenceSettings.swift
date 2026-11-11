@@ -6,8 +6,6 @@ import SwiftUI
 struct IntelligenceSettings: View {
     @State
     private var preferences = Preferences.shared
-    @State
-    private var isConfirmingForgetAll = false
 
     var body: some View {
         Form {
@@ -21,12 +19,6 @@ struct IntelligenceSettings: View {
                     Text(projectInsightsCaption).settingsDescription()
                 }
                 .disabled(!modelIsAvailable)
-                LabeledContent("Recorded commands") {
-                    HStack {
-                        Text(recordedCommands)
-                        Button("Forget All…", role: .destructive) { isConfirmingForgetAll = true }
-                    }
-                }
             } header: {
                 Text("Project Insights")
             }
@@ -43,12 +35,6 @@ struct IntelligenceSettings: View {
         // System Settings.
         .onAppear {
             ProjectMemory.shared.refreshModelAvailability()
-            ProjectMemory.shared.store.prepareAll()
-        }
-        .confirmationDialog("Forget the insights of all projects?", isPresented: $isConfirmingForgetAll) {
-            Button("Forget All", role: .destructive) { ProjectMemory.shared.forgetAll() }
-        } message: {
-            Text("Macterm deletes every command that it recorded. You cannot undo this.")
         }
     }
 
@@ -116,20 +102,6 @@ struct IntelligenceSettings: View {
             defaultValue: "\(description) \(modelStatus).",
             comment: "The description of Project Insights, then the reason that it is not available."
         )
-    }
-
-    /// The count of the recorded commands that Macterm can read, also
-    /// while Project Insights is off: older records stay on disk.
-    private var recordedCommands: String {
-        let count = ProjectMemory.shared.store.recordedCommandCount
-        guard count > 0 else {
-            return String(
-                localized: "settings.intelligence.recordedCommands.none",
-                defaultValue: "None",
-                comment: "Macterm has recorded no commands."
-            )
-        }
-        return String(localized: "\(count) commands", comment: "The number of commands that Project Insights recorded.")
     }
 
     private var modelStatus: String {

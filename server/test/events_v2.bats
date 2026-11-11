@@ -116,7 +116,7 @@ PY
   python3 - <<'PY'
 from v2client import Client
 c = Client("s1")
-c.attach()
+c.attach(foreground=True)
 first = c.wait_msg("foreground")
 assert first["idle"] is True, first
 c.type("sleep 30\r")
@@ -147,7 +147,71 @@ assert b.wait_msg("title")["title"] == b"kept"
 assert b.wait_msg("cwd")["url"] == b"file:///srv"
 assert b.wait_msg("progress")["state"] == "indeterminate"
 assert b.wait_msg("status")["state"] == "running"
+b.attach(foreground=True)
 assert b.wait_msg("foreground")["idle"] is True
+PY
+}
+
+@test "events: only a client that asks gets the foreground" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+from v2client import Client
+a = Client("s1")
+a.attach()
+b = Client("s1")
+b.attach(foreground=True)
+b.wait_msg("foreground")
+b.type("sleep 30\r")
+b.wait(lambda: b"sleep" in b.messages("foreground")[-1]["a"]["comm"], what="the sleep foreground")
+assert a.messages("foreground") == [], a.messages("foreground")
+# A refresh drops the queue: the client that asked gets the foreground
+# again, and the other client still gets none.
+count = len(b.messages("foreground"))
+b.pane("refresh")
+b.wait_msg("foreground", count=count + 1)
+ends = len(a.messages("snapshot.end"))
+a.pane("refresh")
+a.wait_msg("snapshot.end", count=ends + 1)
+assert a.messages("foreground") == [], a.messages("foreground")
+PY
+}
+
+# An idle session with only clients that did not ask for the foreground
+# does not wake. With a client that asked, it wakes each 500 ms. macOS counts
+# each wakeup of the session's poll as an interrupt wakeup
+# (`proc_pid_rusage`, as scripts/_harness.py reads it), Linux as a voluntary
+# context switch.
+@test "events: an idle session wakes only for a client that wants the foreground" {
+  "$ZMX" session s1 -- /bin/sh
+  SESSION_PID=$(python3 "$BATS_TEST_DIRNAME/v2client.py" pid s1) python3 - <<'PY'
+import ctypes, os, struct, sys, time
+from v2client import Client
+pid = int(os.environ["SESSION_PID"])
+def switches():
+    if sys.platform == "darwin":
+        buf = ctypes.create_string_buffer(512)
+        # RUSAGE_INFO_V2; ri_interrupt_wkups is at offset 40.
+        assert ctypes.CDLL("/usr/lib/libproc.dylib").proc_pid_rusage(pid, 2, buf) == 0
+        return struct.unpack_from("Q", buf.raw, 40)[0]
+    for line in open("/proc/%d/status" % pid):
+        if line.startswith("voluntary_ctxt_switches:"):
+            return int(line.split()[1])
+def wakeups(seconds=3):
+    time.sleep(0.5)
+    before = switches()
+    time.sleep(seconds)
+    return switches() - before
+a = Client("s1")
+a.attach()
+a.type("printf 'idle-%s\\n' 1\r")
+a.wait_output("idle-1")
+quiet = wakeups()
+assert quiet <= 1, quiet
+b = Client("s1")
+b.attach(foreground=True)
+b.wait_msg("foreground")
+polled = wakeups()
+assert polled >= 4, polled
 PY
 }
 

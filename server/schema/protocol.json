@@ -136,6 +136,16 @@
       ],
       "args": "ServerExit.Args",
       "result": "ServerExit.Result"
+    },
+    {
+      "name": "command.run",
+      "type": "CommandRun",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "CommandRun.Args",
+      "result": "CommandRun.Result"
     }
   ],
   "events": [
@@ -839,6 +849,64 @@
       "cases": []
     },
     {
+      "name": "CommandRun.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "argv",
+          "type": "[bin]",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "cwd",
+          "type": "bin",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "timeout_ms",
+          "type": "u32",
+          "optional": false,
+          "default": "5000",
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "CommandRun.Result",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "output",
+          "type": "bin",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "truncated",
+          "type": "bool",
+          "optional": false,
+          "default": "false",
+          "since": 1
+        },
+        {
+          "name": "code",
+          "type": "u8",
+          "optional": true,
+          "since": 1
+        },
+        {
+          "name": "signal",
+          "type": "u8",
+          "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
       "name": "SessionExit",
       "kind": "struct",
       "fields": [
@@ -934,6 +1002,13 @@
           "type": "u16",
           "optional": false,
           "default": "0",
+          "since": 1
+        },
+        {
+          "name": "foreground",
+          "type": "bool",
+          "optional": false,
+          "default": "false",
           "since": 1
         }
       ],

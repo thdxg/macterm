@@ -315,14 +315,18 @@ struct ProjectMemoryTests {
         // came. A read that finds the same state restarts nothing.
         var runs = 0
         let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        // A summary for another state, so that the reads take the quiet
+        // wait: a project with no summary gets its first one with no wait.
+        summarizer.loadStored = { _ in StoredSummary(key: "older", text: "Earlier work.", writtenAt: Date(), suggestions: nil) }
         memory.gitReader = { _ in GitStatus(branch: "main") }
         let deadline = Date().addingTimeInterval(1)
         memory.refreshGit(project.id)
-        while summarizer.state(for: project.id).phase != .done, Date() < deadline {
+        while runs == 0 || summarizer.state(for: project.id).phase != .done, Date() < deadline {
             try await Task.sleep(for: .milliseconds(15))
             memory.refreshGit(project.id)
         }
         #expect(summarizer.state(for: project.id).phase == .done)
+        #expect(summarizer.state(for: project.id).text == "You built the project.")
         #expect(runs == 1)
     }
 
@@ -357,6 +361,40 @@ struct ProjectMemoryTests {
             try await Task.sleep(for: .milliseconds(20))
         }
         #expect(runs == 2)
+    }
+
+    @Test
+    func a_project_with_no_summary_gets_its_first_one_at_its_first_git_read() async throws {
+        var runs = 0
+        let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        // A quiet period that no test waits for: only a summary with no wait
+        // can arrive.
+        memory.summaryQuietPeriod = .seconds(600)
+        var git = GitStatus(branch: "main")
+        memory.gitReader = { _ in git }
+
+        memory.refreshGit(project.id)
+        try await waitForSummary(summarizer, project.id)
+        #expect(runs == 1)
+
+        // With a summary on record, a new Git state waits the quiet period.
+        git.recentCommits = [GitStatus.Commit(hash: "def5678", subject: "Fix", date: now)]
+        memory.refreshGit(project.id)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(runs == 1)
+        #expect(summarizer.state(for: project.id).phase == .done)
+    }
+
+    @Test
+    func a_git_read_with_no_state_writes_no_summary() async throws {
+        var runs = 0
+        let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        memory.summaryQuietPeriod = .seconds(600)
+
+        memory.refreshGit(project.id)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(runs == 0)
+        #expect(summarizer.state(for: project.id).phase == .idle)
     }
 
     @Test
@@ -465,6 +503,97 @@ struct ProjectMemoryTests {
         #expect(summary.commandCount == 4)
     }
 
+    @Test
+    func a_retry_with_options_added_resolves_the_failure() {
+        // The log of Ethan's screenshot: the card showed `git clean`.
+        let entries = [
+            entry("git clean", exit: 128, minutesAgo: 790),
+            entry("git clean -f", exit: 0, minutesAgo: 789),
+            entry("git pull", exit: 0, minutesAgo: 30),
+            entry("git status", exit: 0, minutesAgo: 29),
+        ]
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure == nil)
+        #expect(MemoryCommand.retryKey("git  clean -f -d") == "git clean")
+        #expect(MemoryCommand.retryKey("npm run build --watch") == "npm run build")
+    }
+
+    @Test
+    func an_option_before_the_subcommand_keys_the_whole_command() {
+        // The words before the first option would be the program alone.
+        #expect(MemoryCommand.retryKey("python -m pytest") == "python -m pytest")
+        #expect(MemoryCommand.retryKey("git -C repo push") == "git -C repo push")
+        let entries = [
+            entry("python -m pytest", exit: 1, minutesAgo: 10),
+            entry("python -m http.server", exit: 0, minutesAgo: 5),
+        ]
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "python -m pytest")
+    }
+
+    @Test
+    func a_success_of_another_subcommand_does_not_resolve_the_failure() {
+        let entries = [
+            entry("make test", exit: 2, minutesAgo: 10),
+            entry("make lint", exit: 0, minutesAgo: 5),
+        ]
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "make test")
+    }
+
+    @Test
+    func a_failure_before_the_latest_pause_is_not_shown() {
+        let failed = entry("make test", exit: 2, minutesAgo: 180)
+        // An hour with no command ends the stretch the failure was in.
+        #expect(ProjectMemorySummary(entries: [failed, entry("git status", exit: 0, minutesAgo: 110)]).unresolvedFailure == nil)
+        // A shorter gap is time in an editor: the failure is still the
+        // thing to fix.
+        #expect(ProjectMemorySummary(entries: [failed, entry("git status", exit: 0, minutesAgo: 130)]).unresolvedFailure?.id == failed.id)
+    }
+
+    @Test
+    func a_failure_that_is_the_latest_command_always_shows() {
+        let entries = [
+            entry("make test", exit: 0, minutesAgo: 3000),
+            entry("make test", exit: 2, minutesAgo: 0),
+        ]
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "make test")
+    }
+
+    @Test
+    func the_model_reads_no_failure_that_the_panel_does_not_show() {
+        let entries = [
+            entry("git clean", exit: 128, minutesAgo: 30),
+            entry("git clean -f", exit: 0, minutesAgo: 29),
+            entry("make test", exit: 2, minutesAgo: 1),
+        ]
+        #expect(ProjectMemorySummary.withoutSettledFailures(entries).map(\.command) == ["git clean -f", "make test"])
+        #expect(ProjectMemorySuggestions.candidates(entries: entries) == ["make test", "git clean -f"])
+        let digest = ProjectMemoryDigest(projectName: "x", entries: entries, git: nil, now: now)
+        #expect(digest?.text.contains("`git clean` failed") == false)
+        #expect(digest?.text.contains("`make test` failed") == true)
+    }
+
+    @Test
+    func every_open_failure_stays_for_the_model() {
+        let entries = [
+            entry("make test", exit: 2, minutesAgo: 10),
+            entry("make lint", exit: 1, minutesAgo: 5),
+        ]
+        // The card shows the latest; the older one is still open.
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "make lint")
+        #expect(ProjectMemorySummary.withoutSettledFailures(entries).count == 2)
+        #expect(ProjectMemorySuggestions.candidates(entries: entries) == ["make lint", "make test"])
+    }
+
+    @Test
+    func a_failure_before_the_latest_pause_is_not_told_to_the_model() {
+        let entries = [
+            entry("make test", exit: 2, minutesAgo: 180),
+            entry("git status", exit: 0, minutesAgo: 60),
+        ]
+        let digest = ProjectMemoryDigest(projectName: "x", entries: entries, git: nil, now: now)
+        #expect(digest?.text.contains("make test") == false)
+        #expect(ProjectMemorySuggestions.candidates(entries: entries) == ["git status"])
+    }
+
     // MARK: - Quick actions
 
     // MARK: - Remote git
@@ -478,7 +607,6 @@ struct ProjectMemoryTests {
         memory.gitReader = { _ in Issue.record("a remote project never reads git locally")
             return nil
         }
-        memory.remoteGitAllowed = { true }
         return (memory, project)
     }
 
@@ -490,7 +618,7 @@ struct ProjectMemoryTests {
     }
 
     @Test
-    func a_remote_project_reads_git_over_ssh_and_keeps_the_last_state_when_unreachable() async throws {
+    func a_remote_project_reads_git_on_the_host_and_keeps_the_last_state_when_unreachable() async throws {
         let (memory, project) = makeRemoteMemory()
         var reads: [ProjectPath] = []
         var answer: ProjectGit.RemoteResult = .read(GitStatus(branch: "main"))
@@ -508,45 +636,5 @@ struct ProjectMemoryTests {
         try await Task.sleep(for: .milliseconds(50))
         #expect(reads.count == 2)
         #expect(memory.git[project.id]?.branch == "main")
-        #expect(memory.gitUnavailability(for: project) == nil)
-    }
-
-    @Test
-    func background_ssh_off_reads_nothing_and_says_why() async throws {
-        let (memory, project) = makeRemoteMemory()
-        memory.remoteGitAllowed = { false }
-        var reads = 0
-        memory.remoteGitReader = { _ in reads += 1
-            return .read(nil)
-        }
-        #expect(memory.gitUnavailability(for: project) == .backgroundSSHOff)
-        memory.refreshGit(project.id)
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(reads == 0)
-        #expect(memory.git[project.id] == nil)
-    }
-
-    @Test
-    func a_refused_login_suspends_the_host_for_the_run() async throws {
-        let (memory, project) = makeRemoteMemory()
-        var reads = 0
-        memory.remoteGitReader = { _ in reads += 1
-            return .authRefused
-        }
-        memory.refreshGit(project.id)
-        let deadline = Date().addingTimeInterval(5)
-        while memory.refusedRemoteHosts.isEmpty, Date() < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(memory.refusedRemoteHosts == ["me@devbox"])
-        #expect(memory.gitUnavailability(for: project) == .refused(host: "me@devbox"))
-
-        memory.refreshGit(project.id)
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(reads == 1)
-
-        // A local project is never gated.
-        let local = Project(name: "app", path: "/tmp", sortOrder: 1)
-        #expect(memory.gitUnavailability(for: local) == nil)
     }
 }

@@ -52,7 +52,7 @@ runs:
   steps:
     - uses: jdx/mise-action@v5.2.7
 
-    # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
+    # Pin the toolchain: the macOS 27 runner defaults to whatever Xcode the image
     # currently ships, which is how macterm#340's type-check failure stayed
     # invisible. See the action for the full rationale.
     - name: Select Xcode

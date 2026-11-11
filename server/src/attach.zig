@@ -324,7 +324,7 @@ const Client = struct {
         }
         writeAll(stdout, "\x1b[0m\x1b[2J\x1b[H") catch {};
 
-        try c.sendPane(m.Attach, attachSize(ipc.getTerminalSize(stdout)));
+        try c.sendPane(m.Attach, attachMessage(ipc.getTerminalSize(stdout), c.foreground_events));
 
         const detach_disabled = util.isDetachKeyDisabled();
         var claims: util.ClaimFilter = .{};
@@ -511,8 +511,8 @@ pub fn writeForegroundFixtures(w: *std.Io.Writer) !void {
     try w.writeAll("]\n");
 }
 
-fn attachSize(size: ipc.Resize) m.Attach {
-    return .{ .cols = size.cols, .rows = size.rows, .xpixel = size.xpixel, .ypixel = size.ypixel };
+fn attachMessage(size: ipc.Resize, foreground_events: bool) m.Attach {
+    return .{ .cols = size.cols, .rows = size.rows, .xpixel = size.xpixel, .ypixel = size.ypixel, .foreground = foreground_events };
 }
 
 fn resizeOf(size: ipc.Resize) m.Resize {

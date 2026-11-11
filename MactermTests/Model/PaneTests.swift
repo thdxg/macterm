@@ -613,7 +613,7 @@ struct PaneTests {
     }
 
     @Test
-    func remote_pane_matches_an_agent_from_the_probe() {
+    func remote_pane_matches_an_agent_from_the_report() {
         let pane = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         pane.applyRemoteForeground(RemoteForeground(comm: "/opt/homebrew/bin/codex", command: "codex --yolo"))
         #expect(pane.agentIcon == .codex)
@@ -653,8 +653,8 @@ struct PaneTests {
     }
 
     @Test
-    func remote_pane_keeps_its_agent_through_a_probe_blip() {
-        // nil (session missing from a successful probe) changes nothing, as
+    func remote_pane_keeps_its_agent_through_an_empty_report() {
+        // nil (an empty report) changes nothing, as
         // for the name and the command.
         let pane = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         pane.applyRemoteForeground(RemoteForeground(comm: "2.1.207", isIdle: false, command: "claude"))
@@ -687,7 +687,7 @@ struct PaneTests {
     @Test
     func remoteCloseVerdict_running_execution_state_is_busy() {
         // A command mid-output (OSC 133 / activity heartbeats) is busy even
-        // before any probe result lands.
+        // before any report lands.
         let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         p.executionState = .running
         #expect(p.remoteNeedsConfirmClose == true)
@@ -695,9 +695,9 @@ struct PaneTests {
 
     @Test
     func remoteCloseVerdict_shell_at_prompt_is_idle() {
-        // The probe reporting the session's shell means an idle prompt — the
+        // A report of the session's shell means an idle prompt — the
         // exact case that must NOT warn (an idle local pane doesn't). `-zsh`
-        // is the login form the probe actually returns.
+        // is the login form the host actually reports.
         let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         p.applyRemoteForegroundName("-zsh")
         #expect(p.remoteNeedsConfirmClose == false)
@@ -706,7 +706,7 @@ struct PaneTests {
 
     @Test
     func remoteCloseVerdict_program_foreground_is_busy() {
-        // A probe-named program is busy even when the execution tracker has
+        // A reported program is busy even when the execution tracker has
         // quiet-settled (a silent editor produces no heartbeats).
         let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         p.applyRemoteForegroundName("hx")
@@ -734,7 +734,7 @@ struct PaneTests {
         )
         #expect(remote.remoteNeedsConfirmClose == true)
 
-        // No host verdict (older probe, pgid read failure): fall back to
+        // No host verdict (pgid read failure): fall back to
         // the local database heuristic.
         remote.applyRemoteForeground(
             RemoteForeground(comm: "zsh", isIdle: nil, command: nil)
@@ -743,83 +743,10 @@ struct PaneTests {
     }
 
     @Test
-    func remotePanes_prime_a_probe_request_at_init() {
-        // Scheduled probes cover only the frontmost project, so a restored
-        // pane in a background project would otherwise never be probed —
-        // leaving `needsConfirmClose` on its conservative ssh-is-busy
-        // fallback for every plain-shell close until the project was
-        // selected once. The primed request rides any project's poll tick.
-        let remote = Pane(projectPath: "me@host.example:proj", projectID: UUID())
-        #expect(remote.remoteProbePending)
-
-        let local = Pane(projectPath: "/", projectID: UUID())
-        #expect(!local.remoteProbePending)
-    }
-
-    @Test
-    func probeMiss_rearms_a_never_named_pane_bounded() {
-        // A successful probe listing without this session (the registration
-        // race) must re-arm the request — a consumed request would strand
-        // the pane nil once its project leaves the frontmost slot.
-        let remote = Pane(projectPath: "me@host.example:proj", projectID: UUID())
-        remote.consumeRemoteProbeRequest()
-        remote.noteRemoteProbeMiss()
-        #expect(remote.remoteProbePending)
-
-        // Once a name has landed, a later listing miss (a blip) re-arms
-        // nothing — applyRemoteForegroundName already keeps the last-known
-        // name, and the scheduled cadence owns steady-state refreshes.
-        remote.applyRemoteForegroundName("bash")
-        remote.consumeRemoteProbeRequest()
-        remote.noteRemoteProbeMiss()
-        #expect(!remote.remoteProbePending)
-
-        // Bounded: a session that will never register stops re-arming.
-        let stranded = Pane(projectPath: "me@host.example:proj", projectID: UUID())
-        for _ in 0 ..< 16 {
-            stranded.consumeRemoteProbeRequest()
-            stranded.noteRemoteProbeMiss()
-        }
-        #expect(stranded.remoteProbePending)
-        stranded.consumeRemoteProbeRequest()
-        stranded.noteRemoteProbeMiss()
-        #expect(!stranded.remoteProbePending)
-    }
-
-    @Test
-    func remoteCommandBoundary_requests_a_probe_for_remote_panes_only() {
-        let local = Pane(projectPath: "/", projectID: UUID())
-        local.noteRemoteCommandBoundary()
-        #expect(!local.remoteProbePending)
-
-        let remote = Pane(projectPath: "me@host.example:proj", projectID: UUID())
-        remote.noteRemoteCommandBoundary()
-        #expect(remote.remoteProbePending)
-        remote.consumeRemoteProbeRequest()
-        #expect(!remote.remoteProbePending)
-    }
-
-    @Test
-    func executionTransitions_request_a_probe_on_remote_panes() {
-        // Both edges are naming boundaries: idle→running (a program took the
-        // foreground) and running→done (the shell owns it again).
-        let remote = Pane(projectPath: "me@host.example:proj", projectID: UUID())
-        remote.executionState = .running
-        #expect(remote.remoteProbePending)
-        remote.consumeRemoteProbeRequest()
-        remote.executionState = .done
-        #expect(remote.remoteProbePending)
-
-        let local = Pane(projectPath: "/", projectID: UUID())
-        local.executionState = .running
-        #expect(!local.remoteProbePending)
-    }
-
-    @Test
-    func remoteCloseVerdict_is_nil_before_any_probe_result() {
-        // No probe has ever landed (unreachable host, BatchMode auth failure)
-        // → no verdict; `needsConfirmClose` falls back to the conservative
-        // surface reading rather than silently killing an unknown foreground.
+    func remoteCloseVerdict_is_nil_before_any_report() {
+        // No report has ever landed (a host with no server, or before the
+        // first report) → no verdict; `needsConfirmClose` falls back to the
+        // conservative surface reading.
         let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         #expect(p.remoteNeedsConfirmClose == nil)
     }
@@ -837,7 +764,7 @@ struct PaneTests {
     func remoteForegroundCommand_is_nil_while_idle_at_the_remote_prompt() {
         // A shell in the foreground is an idle prompt — the same "idle saves
         // no run" contract local panes get. `-zsh` is the login form the
-        // probe actually returns; its args carry the same dash.
+        // host actually reports; its args carry the same dash.
         let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         p.applyRemoteForeground(RemoteForeground(comm: "btop", command: "btop"))
         p.applyRemoteForeground(RemoteForeground(comm: "-zsh", command: "-zsh"))
@@ -846,7 +773,7 @@ struct PaneTests {
 
     @Test
     func remoteForegroundCommand_falls_back_to_the_comm_basename_without_args() {
-        // A probe line with no args field (older script, a ps that reported
+        // A report with no args field (a ps that reported
         // nothing) still yields a usable `run:` — the short name.
         let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         p.applyRemoteForeground(RemoteForeground(comm: "/usr/local/bin/hx", command: nil))
@@ -854,8 +781,8 @@ struct PaneTests {
     }
 
     @Test
-    func remoteForegroundCommand_survives_a_probe_blip() {
-        // nil (session missing from a successful probe) keeps the last-known
+    func remoteForegroundCommand_survives_an_empty_report() {
+        // nil (an empty report) keeps the last-known
         // command, mirroring the name-freeze contract.
         let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         p.applyRemoteForeground(RemoteForeground(comm: "btop", command: "btop --utf-force"))

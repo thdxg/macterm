@@ -403,6 +403,10 @@ private enum SettingsWindowChrome {
 /// built-in controls consult) lets the text follow its group's state. It sets
 /// the color only: in a control's label, the grouped form gives the font.
 private struct SettingsDescription: ViewModifier {
+    /// The space above a control's description, under its title. A section's
+    /// footnote does not get it.
+    static let gap: CGFloat = 2
+
     @Environment(\.isEnabled) private var isEnabled
 
     func body(content: Content) -> some View {
@@ -429,16 +433,17 @@ private struct DimsWhenDisabled: ViewModifier {
 extension View {
     /// The description of one control, as System Settings draws it: the
     /// second `Text` of the control's label, which a grouped form shows under
-    /// the title. It sets the color only; the form gives the font.
+    /// the title, a little lower than the form puts it. It sets the color
+    /// and the gap only; the form gives the font.
     func settingsDescription() -> some View {
-        modifier(SettingsDescription())
+        modifier(SettingsDescription()).padding(.top, SettingsDescription.gap)
     }
 
     /// Secondary text in a row that Macterm lays out itself: a section's
     /// footnote, the description in a row with no native subtitle, a status
     /// line. The font of a native subtitle, and its dimmed color.
     func settingsSecondaryText() -> some View {
-        font(.subheadline).settingsDescription()
+        font(.subheadline).modifier(SettingsDescription())
     }
 
     /// Fades primary text to match a disabled control — see `DimsWhenDisabled`.
@@ -487,7 +492,7 @@ private struct SettingsSlider: View {
     var body: some View {
         // The `Slider` dims itself inside a `.disabled(_:)` scope, but the
         // flanking `Text`s are not controls and wouldn't follow on their own.
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 2 + SettingsDescription.gap) {
             HStack {
                 Text(label)
                     .frame(width: Self.labelWidth, alignment: .leading)
@@ -577,7 +582,6 @@ private struct GeneralSettings: View {
     /// NOT `@AppStorage`, which binds to `UserDefaults.standard` — banned by the
     /// project, and it diverged from the `.onChange` write-through under test.
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
-    @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
     @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
     @State private var textFilePlacement: TextFilePlacement = Preferences.shared.textFilePlacement
     @State private var appLanguage: String? = Preferences.shared.appLanguage
@@ -730,14 +734,6 @@ private struct GeneralSettings: View {
             }
 
             Section {
-                Toggle(isOn: $backgroundSSHConnections) {
-                    Text("Background SSH connections")
-                    Text("Enable for live tab names, close warnings, and the Git state of remote projects.")
-                        .settingsDescription()
-                }
-                .onChange(of: backgroundSSHConnections) { _, v in
-                    Preferences.shared.backgroundSSHConnections = v
-                }
                 Toggle(isOn: $reconnectRemotePanes) {
                     Text("Reconnect panes after a dropped connection")
                     Text("Connects a disconnected pane to its session again when you wake the Mac or return to the app.")

@@ -44,6 +44,20 @@ struct ProjectMemoryAnswerTests {
     }
 
     @Test
+    func a_failure_that_a_retry_fixed_is_not_named() {
+        let entries = [
+            entry("git clean", exit: 128, minutesAgo: 30),
+            entry("git clean -f", exit: 0, minutesAgo: 29),
+            entry("git status", exit: 0, minutesAgo: 1),
+        ]
+        #expect(answer(entries) == "The last command, git status, succeeded 1 minute ago.")
+
+        // A failure before an hour with no command is not named either.
+        let paused = [entry("make test", exit: 1, minutesAgo: 180), entry("git status", exit: 0, minutesAgo: 60)]
+        #expect(answer(paused) == "The last command, git status, succeeded 1 hour ago.")
+    }
+
+    @Test
     func a_log_with_no_command_text_counts_the_commands() {
         #expect(answer([entry(nil, exit: 0, minutesAgo: 60), entry(nil, exit: 0, minutesAgo: 10)]) ==
             "2 commands ran in acme, the last one 10 minutes ago.")

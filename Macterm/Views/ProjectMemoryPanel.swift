@@ -50,8 +50,8 @@ struct ProjectMemoryPanel: View {
         .task(id: project.id) {
             memory.store.prepare(project.id)
             // The stored summary, for the paragraph. Nothing is written
-            // here: a summary is written after a quiet period, or by the
-            // button.
+            // here: a summary is written after a quiet period, at once for
+            // a project with none (its first Git read), or by the button.
             summarizer.prepare(projectID: project.id)
             // Git changes that no command in this project makes (another
             // app, an editor in a pane) show up with no button: the panel
@@ -128,7 +128,11 @@ struct ProjectMemoryPanel: View {
                 }
             }
         }
-        gitSection
+        // A remote project that no read answered yet (no connection or no
+        // server up) has no Git section: the panel does not know why.
+        if !project.isRemote || memory.gitAnswered.contains(project.id) || memory.readingGit.contains(project.id) {
+            gitSection
+        }
         if !entries.isEmpty {
             section(String(localized: "Recent")) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -309,23 +313,14 @@ struct ProjectMemoryPanel: View {
 
     private var gitSection: some View {
         section(String(localized: "Git")) {
-            switch memory.gitUnavailability(for: project) {
-            case .backgroundSSHOff:
-                gitNote(
-                    String(localized: "Turn on Background SSH connections in Settings → General to read the Git state of a remote project.")
-                )
-            case let .refused(host):
-                gitNote(String(localized: "\(host) refused the background login, so Macterm does not read its Git state in this run."))
-            case nil:
-                if let git {
-                    gitDetails(git)
-                } else if memory.readingGit.contains(project.id) {
-                    ProgressView().controlSize(.small)
-                } else if project.isRemote {
-                    gitNote(String(localized: "This folder is not in a Git repository, or Git is not installed on the host."))
-                } else {
-                    gitNote(String(localized: "This folder is not in a Git repository, or Git is not installed."))
-                }
+            if let git {
+                gitDetails(git)
+            } else if memory.readingGit.contains(project.id) {
+                ProgressView().controlSize(.small)
+            } else if project.isRemote {
+                gitNote(String(localized: "This folder is not in a Git repository, or Git is not installed on the host."))
+            } else {
+                gitNote(String(localized: "This folder is not in a Git repository, or Git is not installed."))
             }
         }
     }

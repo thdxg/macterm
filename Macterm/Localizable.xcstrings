@@ -313,22 +313,6 @@
         }
       }
     },
-    "%@ refused the background login, so Macterm does not read its Git state in this run." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@이(가) 백그라운드 로그인을 거부했으므로, Macterm은 이번 실행에서 해당 호스트의 Git 상태를 읽지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 拒绝了后台登录，因此 Macterm 在本次运行中不再读取它的 Git 状态。"
-          }
-        }
-      }
-    },
     "%@ share this folder and the layout file “%@” with this project. Your save replaced their layout. Each save replaces the one before. Give the projects different names to keep separate layout files." : {
       "localizations" : {
         "en" : {
@@ -498,53 +482,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 秒"
-          }
-        }
-      }
-    },
-    "%lld commands" : {
-      "comment" : "The number of commands that Project Insights recorded.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld command"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld commands"
-                }
-              }
-            }
-          }
-        },
-        "ko" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "명령 %lld개"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld 条命令"
-                }
-              }
-            }
           }
         }
       }
@@ -1628,22 +1565,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "可用"
-          }
-        }
-      }
-    },
-    "Background SSH connections" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "백그라운드 SSH 연결"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "后台 SSH 连接"
           }
         }
       }
@@ -3105,22 +3026,6 @@
         }
       }
     },
-    "Enable for live tab names, close warnings, and the Git state of remote projects." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "실시간 탭 이름, 닫기 경고, 원격 프로젝트의 Git 상태를 사용하려면 켜십시오."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开后可获得实时标签页名称、关闭警告和远程项目的 Git 状态。"
-          }
-        }
-      }
-    },
     "Enable password manager" : {
       "localizations" : {
         "ko" : {
@@ -3671,54 +3576,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "前台进程"
-          }
-        }
-      }
-    },
-    "Forget All" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "모두 지우기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全部清除"
-          }
-        }
-      }
-    },
-    "Forget All…" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "모두 지우기…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全部清除…"
-          }
-        }
-      }
-    },
-    "Forget the insights of all projects?" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "모든 프로젝트의 인사이트를 지우시겠습니까?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要清除所有项目的洞察吗？"
           }
         }
       }
@@ -4948,22 +4805,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 无法将捕捉内容写入为 PNG。"
-          }
-        }
-      }
-    },
-    "Macterm deletes every command that it recorded. You cannot undo this." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm이 기록한 모든 명령을 삭제합니다. 이 작업은 취소할 수 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm 会删除它记录的所有命令。此操作无法撤销。"
           }
         }
       }
@@ -7775,22 +7616,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接断开后重新连接窗格"
-          }
-        }
-      }
-    },
-    "Recorded commands" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "기록된 명령"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已记录的命令"
           }
         }
       }
@@ -11092,22 +10917,6 @@
         }
       }
     },
-    "Turn on Background SSH connections in Settings → General to read the Git state of a remote project." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "원격 프로젝트의 Git 상태를 읽으려면 설정 → 일반에서 백그라운드 SSH 연결을 켜십시오."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要读取远程项目的 Git 状态，请在“设置 → 通用”中打开后台 SSH 连接。"
-          }
-        }
-      }
-    },
     "Turned off in Settings → Password Manager" : {
       "localizations" : {
         "ko" : {
@@ -12120,30 +11929,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@%2$@。"
-          }
-        }
-      }
-    },
-    "settings.intelligence.recordedCommands.none" : {
-      "comment" : "Macterm has recorded no commands.",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "None"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "없음"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无"
           }
         }
       }

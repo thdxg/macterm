@@ -1455,13 +1455,6 @@ final class AppState {
     @ObservationIgnored
     private var zmxRefreshGate = ZmxRefreshGate()
 
-    /// Tier-2 remote tab naming (#104): batched per-host ssh probes on their
-    /// own throttled cadence, decoupled from the local poll's 250ms bursts.
-    /// The probe closure is handed in per refresh so it always reads the
-    /// injectable `zmx` (tests swap `zmx` after init).
-    @ObservationIgnored
-    private let remoteForegroundResolver = RemoteForegroundResolver()
-
     /// Drops overlapping session listings so a slow one can't pile up
     /// behind the poll.
     @ObservationIgnored
@@ -1684,33 +1677,14 @@ final class AppState {
     func refreshAllForegroundProcesses() {
         var didAcknowledgeCompletion = false
         var sawBusyPane = false
-        var activeRemotePanes: [Pane] = []
         for (projectID, ws) in workspaces {
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() {
-                    if pane.isRemote {
-                        // The local process table only knows `ssh` here — a
-                        // local refresh would stomp the probe-derived name
-                        // and instantly expire remote OSC titles. Execution
-                        // state still settles from output heartbeats, and
-                        // the frontmost project's panes feed the throttled
-                        // remote probe below. A pane holding a boundary
-                        // request rides along from ANY project — a command
-                        // finishing in a background project must still
-                        // rename its tab without waiting for a switch — and
-                        // so does a title waiting on a probe to confirm it.
-                        // A pane whose host pushes its foreground through the
-                        // pane's own connection needs no probe at all
-                        // (`Pane.remoteForegroundIsPushed`).
-                        if !pane.remoteForegroundIsPushed,
-                           projectID == activeProjectID || pane.remoteProbePending
-                           || pane.awaitsRemoteTitleConfirmation
-                        {
-                            activeRemotePanes.append(pane)
-                        }
-                    } else {
-                        pane.refreshForegroundProcess()
-                    }
+                    // The local process table only knows `ssh` for a remote
+                    // pane: its host pushes its foreground through the pane's
+                    // own connection (`Pane.receiveUnknownAPC`). Execution
+                    // state still settles from output heartbeats below.
+                    if !pane.isRemote { pane.refreshForegroundProcess() }
                     // An activity-sourced run whose output has been quiet past
                     // the window settles to `.done`. The output heartbeat is
                     // occlusion-independent, so silence is meaningful whether or
@@ -1732,27 +1706,6 @@ final class AppState {
         // tracks what the tab is actually doing — not just what it did at pin
         // time. Cheap in steady state: a name compare per pinned pane.
         notePinnedForegroundChangesIfNeeded()
-        // Visibility gates only the *scheduled* probes (nobody is looking at
-        // the names). A boundary request still probes while occluded — same
-        // rationale as the local #210 refresh, which runs unconditionally —
-        // so the name is already right when the window next appears instead
-        // of waiting for an interaction.
-        let panesToProbe = isAnyWindowVisible()
-            ? activeRemotePanes
-            : activeRemotePanes.filter { $0.remoteProbePending || $0.awaitsRemoteTitleConfirmation }
-        // The background-connections toggle gates ALL probe kinds — scheduled,
-        // boundary, and priming requests alike — because each is a fresh ssh
-        // connection, and one connection is one Touch ID dialog on a
-        // biometric-gated key (#272). This is the single resolver call site,
-        // so the check lives here rather than inside the resolver.
-        if !panesToProbe.isEmpty, Preferences.shared.backgroundSSHConnections {
-            remoteForegroundResolver.refresh(panes: panesToProbe, probe: zmx.remoteForegrounds)
-        } else {
-            // Turned off with a title still waiting on a probe: none is coming.
-            for pane in panesToProbe {
-                pane.abandonRemoteTitleConfirmation()
-            }
-        }
     }
 
     private func recordProjectVisit(_ projectID: UUID) {

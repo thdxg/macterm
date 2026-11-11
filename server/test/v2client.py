@@ -141,8 +141,8 @@ class Client:
     def pane(self, t, **a):
         self.send_msg(PANE, {"t": t, "a": a})
 
-    def attach(self, cols=80, rows=24):
-        self.pane("attach", cols=cols, rows=rows)
+    def attach(self, cols=80, rows=24, foreground=False):
+        self.pane("attach", cols=cols, rows=rows, foreground=foreground)
 
     def type(self, text):
         self.send(PANE, BYTES, text.encode() if isinstance(text, str) else text)
