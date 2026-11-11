@@ -156,10 +156,15 @@ final class RemoteServers {
     func connect(_ destination: String, login: Bool = true, install: Bool = true) async throws -> Link {
         while let busy = connecting[destination] {
             _ = try? await busy.value
+            // A finished task awaits with no suspension, and the owner's
+            // cleanup below cannot run until this loop yields: a waiter that
+            // resumed first spun on the main actor for ever. Whoever sees
+            // the finished task first removes it.
+            if connecting[destination] == busy { connecting[destination] = nil }
         }
         let task = Task { try await self.open(destination, login: login, install: install) }
         connecting[destination] = task
-        defer { connecting[destination] = nil }
+        defer { if connecting[destination] == task { connecting[destination] = nil } }
         return try await task.value
     }
 
