@@ -85,7 +85,7 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # the `cursor-morph` key, a mode of `smooth-cursor`, makes a gliding block
 # cursor a comet, longer when it is faster. Other cursor shapes do not
 # change. Upstream through #15162. No C API change.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-10-53dbc59}"
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-10-341bbd1}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.
