@@ -43,11 +43,11 @@ jobs:
       matrix:
         include:
           - name: macOS
-            runner: macos-15
+            runner: blacksmith-6vcpu-macos-15
           - name: Linux x86_64
-            runner: ubuntu-latest
+            runner: blacksmith-4vcpu-ubuntu-2404
           - name: Linux aarch64
-            runner: ubuntu-24.04-arm
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     defaults:

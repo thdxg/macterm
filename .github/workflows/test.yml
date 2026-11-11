@@ -22,12 +22,12 @@ concurrency:
 jobs:
   changes:
     name: Detect changes
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       swift: ${{ steps.filter.outputs.swift }}
       extensions: ${{ steps.filter.outputs.extensions }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: useblacksmith/checkout@v1
       - uses: dorny/paths-filter@v4
         id: filter
         with:
@@ -371,7 +371,7 @@ jobs:
   smoke-macos-26:
     name: Smoke (macos-26)
     needs: release-build
-    runs-on: macos-26
+    runs-on: blacksmith-6vcpu-macos-26
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -390,7 +390,7 @@ jobs:
   smoke-macos-15:
     name: Smoke (macos-15)
     needs: release-build
-    runs-on: macos-15
+    runs-on: blacksmith-6vcpu-macos-15
     timeout-minutes: 10
     steps:
       - name: Checkout

@@ -40,7 +40,7 @@ jobs:
     # below would fail on a tag that isn't `vX.Y.Z` and paint main red for a tip
     # build that worked fine.
     if: ${{ github.ref_name != 'tip' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # Explicit: reading a release only needs contents:read, and declaring it
     # keeps the job working if the repo's default workflow token is ever
     # tightened.
@@ -77,13 +77,13 @@ jobs:
 
   build:
     needs: [flag, server]
-    runs-on: xcode-27
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: useblacksmith/checkout@v1
         with:
           fetch-depth: 0
 
@@ -136,7 +136,7 @@ jobs:
 
   release:
     needs: [flag, build]
-    runs-on: xcode-27
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
     env:
@@ -148,7 +148,7 @@ jobs:
     outputs:
       version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: useblacksmith/checkout@v1
         with:
           fetch-depth: 0
 
@@ -223,7 +223,7 @@ jobs:
     # carries a real JSON boolean; that property is lost the moment the value
     # comes from a job output.)
     if: ${{ needs.flag.outputs.prerelease == 'false' }}
-    runs-on: xcode-27
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
       GH_TOKEN: ${{ secrets.HOMEBREW_TAP_PAT }}
       VERSION: ${{ needs.release.outputs.version }}
@@ -236,7 +236,7 @@ jobs:
           echo "sha256=$(shasum -a 256 macterm.dmg | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - name: Checkout tap
-        uses: actions/checkout@v7
+        uses: useblacksmith/checkout@v1
         with:
           repository: thdxg/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_PAT }}

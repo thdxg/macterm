@@ -23,10 +23,10 @@ concurrency:
 jobs:
   site-build:
     name: Site Build
-    runs-on: ubuntu-24.04-arm
+    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
     steps:
       - name: Check Out Macterm
-        uses: actions/checkout@v7
+        uses: useblacksmith/checkout@v1
         with:
           path: macterm
           # The sitemap's <lastmod> is the commit date of each page, and
@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check Out the Website
-        uses: actions/checkout@v7
+        uses: useblacksmith/checkout@v1
         with:
           repository: macterm/website
           path: website
