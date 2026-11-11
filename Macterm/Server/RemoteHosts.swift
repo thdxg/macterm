@@ -447,6 +447,7 @@ final class RemoteHosts {
                 logger.info("remote host \(destination, privacy: .public): plain shells: \(failure.description, privacy: .public)")
                 return .plain(route)
             default:
+                // `.windowsHost` ends here on purpose: the plain-shell command is POSIX.
                 throw failure
             }
         }

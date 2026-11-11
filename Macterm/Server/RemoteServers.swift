@@ -194,9 +194,11 @@ final class RemoteServers {
                 return link
             case let .ended(status, text):
                 guard let check = HostCheck.parse(status: status, stderr: text) else {
-                    // 255 is a lost link. Any other status with no line of the
-                    // script can be a host with no `sh`: ask it if it is Windows.
-                    if status != 255, await isWindows(destination) { throw Failure.windowsHost }
+                    // A host with no `sh` ends with a plain exit status. Ask it if
+                    // it is Windows.
+                    if Self.shouldProbeForWindows(status: status, login: login), await isWindows(destination) {
+                        throw Failure.windowsHost
+                    }
                     throw Failure.attachFailed(HostCheck.clean(SSHControlPath.lastLine(of: text)))
                 }
                 switch check {
@@ -213,6 +215,12 @@ final class RemoteServers {
                 }
             }
         }
+    }
+
+    /// The probe runs only for a plain exit status (not 255, a lost link, and
+    /// not -1, a kill or a time-out), and never when the caller may not log in.
+    nonisolated static func shouldProbeForWindows(status: Int32, login: Bool) -> Bool {
+        login && status > 0 && status != 255
     }
 
     /// True when the host answers the probe of `HostCheck.windowsProbe` as
@@ -474,7 +482,7 @@ enum HostCheck: Equatable {
 
     /// One command that cmd.exe and PowerShell run, in the host's ssh shell.
     /// `%OS%` is Windows' own variable in cmd.exe, and `$env:OS` is it in
-    /// PowerShell. Both give `Windows_NT`. A POSIX shell gives `%OS% :OS`. The
+    /// PowerShell. Both give `Windows_NT`. No other shell prints that word. The
     /// test does not read the host's error text, which is in the host's
     /// language.
     static let windowsProbe = "echo %OS% $env:OS"
