@@ -24,7 +24,7 @@ permissions: {}
 jobs:
   dispatch:
     name: Start a Site Build
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       # GITHUB_TOKEN cannot reach another repository. This is a token of the
       # org's macterm-ci GitHub App, for macterm/website only, with contents
