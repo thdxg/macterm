@@ -427,6 +427,16 @@ jobs:
           mkdir -p sparkle && tar -xf sparkle.tar.xz -C sparkle
           echo "$PWD/sparkle/bin" >> "$GITHUB_PATH"
 
+      - name: App Token
+        id: app-token
+        if: steps.current.outputs.superseded != 'true' && steps.published.outputs.published != 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MACTERM_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MACTERM_APP_PRIVATE_KEY }}
+          repositories: macterm
+          permission-contents: write
+
       # LAST, on purpose: the DMG is already on the release, so the feed can
       # never name an enclosure that isn't there yet. ROLLING=true replaces the
       # single tip item instead of appending one per commit.
@@ -434,6 +444,9 @@ jobs:
         if: steps.current.outputs.superseded != 'true' && steps.published.outputs.published != 'true'
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          # The app pushes, and its bot user is the commit author.
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           VERSION: ${{ steps.version.outputs.version }}
           PRERELEASE: "true"
           CHANNEL: tip

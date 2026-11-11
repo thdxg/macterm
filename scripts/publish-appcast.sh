@@ -15,10 +15,15 @@
 #   SPARKLE_ED_PRIVATE_KEY — EdDSA private key (Sparkle format)
 #   VERSION                — e.g. 1.8.0, or 0.9.0-beta.1 for a prerelease
 #   TAG                    — e.g. v1.8.0
-#   GH_TOKEN               — token with contents:write on this repo
+#   GH_TOKEN               — token with contents:write on this repo. The
+#                            workflows pass a token of the macterm-ci app,
+#                            so the push is the push of the app.
 #   GITHUB_REPOSITORY      — provided by GitHub Actions (owner/repo)
 #
 # Optional env:
+#   APP_SLUG               — slug of the GitHub App that owns GH_TOKEN. The
+#                            commit author is its bot user. Default:
+#                            github-actions[bot].
 #   PRERELEASE             — "true" for a prerelease. Required for any channel.
 #   CHANNEL                — Sparkle channel name for the new items. Empty =
 #                            the default channel (visible to everyone).
@@ -190,8 +195,18 @@ cd "$WORKDIR"
 
 # Set the bot identity PER-CLONE (not --global): run locally, a --global config
 # would silently overwrite the maintainer's own git identity.
-git config user.name "github-actions[bot]"
-git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+if [[ -n "${APP_SLUG:-}" ]]; then
+  BOT="${APP_SLUG}[bot]"
+  BOT_ID=$(GH_TOKEN="$GH_TOKEN" gh api "/users/${BOT}" --jq .id) || {
+    echo "error: could not read the user id of ${BOT}" >&2
+    exit 1
+  }
+else
+  BOT="github-actions[bot]"
+  BOT_ID=41898282
+fi
+git config user.name "$BOT"
+git config user.email "${BOT_ID}+${BOT}@users.noreply.github.com"
 
 # Seed the appcast header on first publication.
 if [[ ! -f appcast.xml ]]; then

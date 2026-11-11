@@ -204,9 +204,21 @@ jobs:
           mkdir -p sparkle && tar -xf sparkle.tar.xz -C sparkle
           echo "$PWD/sparkle/bin" >> "$GITHUB_PATH"
 
+      - name: App Token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MACTERM_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MACTERM_APP_PRIVATE_KEY }}
+          repositories: macterm
+          permission-contents: write
+
       - name: Publish appcast
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          # The app pushes, and its bot user is the commit author.
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           VERSION: ${{ steps.release.outputs.version }}
           TAG: ${{ steps.release.outputs.tag }}
         run: scripts/publish-appcast.sh dmgs
