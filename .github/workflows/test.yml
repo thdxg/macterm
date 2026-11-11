@@ -81,7 +81,7 @@ jobs:
     if: >-
       !cancelled()
       && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.extensions == 'true')
-    runs-on: blacksmith-6vcpu-macos-27
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -228,7 +228,7 @@ jobs:
     needs: [changes, server]
     # !cancelled(): see the unit job.
     if: ${{ !cancelled() && needs.changes.outputs.swift == 'true' }}
-    runs-on: blacksmith-6vcpu-macos-27
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -316,7 +316,7 @@ jobs:
     needs: [changes, server]
     # !cancelled(): see the unit job.
     if: ${{ !cancelled() && needs.changes.outputs.swift == 'true' }}
-    runs-on: blacksmith-6vcpu-macos-27
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@v7
