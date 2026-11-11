@@ -110,6 +110,21 @@ struct RemoteServersTests {
     }
 
     @Test
+    func the_windows_probe_reads_the_os_variable_and_not_the_error_text() {
+        #expect(HostCheck.isWindows(stdout: "Windows_NT $env:OS\r\n"))
+        #expect(HostCheck.isWindows(stdout: "%OS%\r\nWindows_NT\r\n"))
+        #expect(!HostCheck.isWindows(stdout: "%OS% :OS\n"))
+        #expect(!HostCheck.isWindows(stdout: ""))
+        #expect(!HostCheck.isWindows(stdout: "'sh' is not recognized\n"))
+    }
+
+    @Test
+    func a_windows_host_shows_its_own_line_in_the_pane() {
+        #expect(RemotePaneText.connectFailure(RemoteServers.Failure.windowsHost, host: "win")
+            == "win runs Windows. Macterm does not support Windows hosts.")
+    }
+
+    @Test
     func a_consent_holds_only_for_the_same_destination_host_id_and_host_keys() {
         func host(_ id: String?, _ keys: String = "123") -> HostCheck.Missing {
             .init(system: "Linux", machine: "x86_64", hostID: id, hostKeys: keys)

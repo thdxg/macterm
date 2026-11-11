@@ -591,6 +591,8 @@ enum RemotePaneText {
             case let .configUnreadable(line): "ssh cannot read its configuration: \(HostCheck.clean(line))"
             default: "Macterm cannot connect to \(host): \(failure.description)."
             }
+        case RemoteServers.Failure.windowsHost:
+            "\(host) runs Windows. Macterm does not support Windows hosts."
         case let failure as RemoteServers.Failure:
             "Macterm cannot start its server on \(host): \(failure.description)."
         default:

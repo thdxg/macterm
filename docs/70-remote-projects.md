@@ -18,6 +18,8 @@ A remote project is a project whose folder is on another machine. Each pane is a
 
 If you choose **Continue Without Server**, each pane is a plain SSH shell. It ends when the connection stops, and its tab shows no program name. To install the server later, open the menu of the project in **Settings → Projects** and choose **Install Server on Host…**. A host with no build (for example, BSD) also gets plain shells.
 
+**Windows hosts are not supported.** When the SSH shell of the host is `cmd.exe` or PowerShell, the pane says that the host runs Windows and that Macterm does not support it.
+
 **Connection settings come from `~/.ssh/config`.** They never come from Macterm. Define a `Host` alias and use the alias as the host of the project. When your config has a `ControlMaster` that is running, Macterm uses it and logs in to nothing.
 
 ```text title="~/.ssh/config"
