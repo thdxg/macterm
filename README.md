@@ -62,7 +62,7 @@
 ### Homebrew
 
 ```bash
-brew install --cask thdxg/tap/macterm
+brew install --cask macterm/tap/macterm
 ```
 
 The cask removes the Gatekeeper quarantine attribute when it installs. The app then starts with no extra prompts.
