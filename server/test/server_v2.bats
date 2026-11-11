@@ -413,3 +413,36 @@ for bad in (dict(argv=[b"sh"]), dict(argv=[]), dict(argv=[b"/bin/sh"], cwd=b"rel
 assert c.call("session.list") == {"sessions": []}
 PY
 }
+
+@test "server: attention flags survive a server restart, and pane.seen clears them with an event to a second client" {
+  "$ZMX" server
+  python3 - <<'PY'
+import os
+from v2client import Client, ServerClient
+c = ServerClient()
+c.call("session.create", id="att", command=[b"/bin/sh"])
+a = Client("att")
+a.attach()
+a.type("printf '\\033]133;C\\007\\033]133;D;0\\007\\007'\r")
+c.wait_event("pane.attention", lambda x: x["id"] == "att" and x["unseen"] and x["bell"])
+assert c.sessions()["att"]["unseen"] is True
+c.call("server.exit")
+assert os.system(os.environ["ZMX"] + " server") == 0
+c.wait_closed()
+
+# A new server reads the flags again from the session.
+n = ServerClient()
+s = n.sessions()["att"]
+assert s["unseen"] is True and s["bell"] is True and s["failed"] is False
+second = ServerClient()
+assert n.call("pane.seen", id="att") == {}
+for client in (n, second):
+    ev = client.wait_event("pane.attention", lambda x: x["id"] == "att" and not x["unseen"])
+    assert ev["bell"] is False
+assert n.sessions()["att"]["unseen"] is False
+# The answer is also sent when nothing is set.
+assert n.call("pane.seen", id="att") == {}
+assert n.request("pane.seen", id="nope")["err"]["code"] == "not_found"
+n.call("session.kill", id="att")
+PY
+}

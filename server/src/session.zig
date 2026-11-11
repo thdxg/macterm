@@ -723,6 +723,9 @@ const Session = struct {
             s.ending = true;
         } else if (std.mem.eql(u8, msg.t, m.Refresh.name)) {
             s.refresh(c);
+        } else if (std.mem.eql(u8, msg.t, m.Seen.name)) {
+            s.watch.seen();
+            s.sendEvents();
         } else if (std.mem.eql(u8, msg.t, m.Take.name)) {
             if (s.exited() != null) {
                 std.log.info("session {s}: exit status taken", .{s.name});
@@ -1032,6 +1035,7 @@ const Session = struct {
             },
             .activity => s.broadcastPane(m.Activity, .{}, true),
             .status => |st| s.broadcastPane(m.Status, st, true),
+            .attention => |a| s.broadcastPane(m.Attention, a, false),
             .program => |records| s.broadcastPane(m.ProgramStatus, .{ .records = records }, true),
         }
     }
@@ -1051,6 +1055,7 @@ const Session = struct {
             .cwd => |u| s.sendPane(c, m.Cwd, .{ .url = .{ .bytes = u } }),
             .progress => |p| s.sendPane(c, m.Progress, p),
             .status => |st| s.sendPane(c, m.Status, st),
+            .attention => |a| s.sendPane(c, m.Attention, a),
             .program => |records| s.sendPane(c, m.ProgramStatus, .{ .records = records }),
             else => {},
         };
