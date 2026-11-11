@@ -125,8 +125,9 @@ struct OpenMactermProjectIntent: OpenIntent {
 /// Reads what project memory already holds (`ProjectMemoryAnswer`): the
 /// stored summary, or the facts of the log. It never asks the model, so it
 /// answers at once and runs nothing. A summary is written after a quiet
-/// period and from the panel's button only, so a project that was busy a
-/// minute ago gets its latest command and not a paragraph.
+/// period (the first one at the project's first Git read) and from the
+/// panel's button only, so a project that was busy a minute ago gets its
+/// latest command and not a paragraph.
 struct GetMactermProjectMemoryIntent: AppIntent {
     static let title: LocalizedStringResource = "Where Did I Leave Off"
     static let description = IntentDescription(

@@ -360,6 +360,40 @@ struct ProjectMemoryTests {
     }
 
     @Test
+    func a_project_with_no_summary_gets_its_first_one_at_its_first_git_read() async throws {
+        var runs = 0
+        let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        // A quiet period that no test waits for: only a summary with no wait
+        // can arrive.
+        memory.summaryQuietPeriod = .seconds(600)
+        var git = GitStatus(branch: "main")
+        memory.gitReader = { _ in git }
+
+        memory.refreshGit(project.id)
+        try await waitForSummary(summarizer, project.id)
+        #expect(runs == 1)
+
+        // With a summary on record, a new Git state waits the quiet period.
+        git.recentCommits = [GitStatus.Commit(hash: "def5678", subject: "Fix", date: now)]
+        memory.refreshGit(project.id)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(runs == 1)
+        #expect(summarizer.state(for: project.id).phase == .done)
+    }
+
+    @Test
+    func a_project_with_no_git_state_waits_the_quiet_period() async throws {
+        var runs = 0
+        let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        memory.summaryQuietPeriod = .seconds(600)
+
+        memory.refreshGit(project.id)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(runs == 0)
+        #expect(summarizer.state(for: project.id).phase == .idle)
+    }
+
+    @Test
     func the_button_writes_a_summary_now_and_again_for_the_same_records() async throws {
         var runs = 0
         let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }

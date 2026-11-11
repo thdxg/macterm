@@ -53,7 +53,7 @@ A paragraph at the top of the **Summary** section says what you were working on.
 
 When a tracked file has uncommitted changes, the model also reads the diff of the staged and unstaged changes, so that the summary can say what you changed and not only which files. Macterm leaves out binary files, lockfiles, `.env` files, key files, files and folders with "secret" or "credential" in the name, files with a private key, and files with very long lines, such as minified code. The diff goes only to the on-device model, and Macterm does not keep it. The model is told not to write a secret, and Macterm replaces secrets in the summary with `•••`, with the same filter as for the output of a command (see [What Macterm records](#what-macterm-records)). This filter cannot find every secret. A long diff is cut a whole file at a time. Macterm does not read the diff of a commit or of a file that Git does not track.
 
-Macterm writes the summary ten minutes after the last command in a project, panel or no panel, so that a panel you open after a break shows it at once. It does not write it while you work: a command that finishes only starts the ten minutes again. A change in the Git state that the summary has not seen, such as a commit from another terminal, starts the ten minutes too. A project with no command yet gets a summary of its Git state alone: the branch in use, its commits and its changes. Macterm keeps the summary with the records, so it is there after you start Macterm again. To write it now, click the reload button in the header of the **Summary** section. While the model writes, the panel shows **Summarizing…** until the first words arrive, and the facts below it do not wait.
+Macterm writes the summary ten minutes after the last command in a project, panel or no panel, so that a panel you open after a break shows it at once. It does not write it while you work: a command that finishes only starts the ten minutes again. A change in the Git state that the summary has not seen, such as a commit from another terminal, starts the ten minutes too. A project with no summary yet gets one as soon as Macterm reads its Git state, with no wait: the branch in use, its commits and its changes. Macterm keeps the summary with the records, so it is there after you start Macterm again. To write it now, click the reload button in the header of the **Summary** section. While the model writes, the panel shows **Summarizing…** until the first words arrive, and the facts below it do not wait.
 
 ## Ask Siri or Shortcuts
 
@@ -80,4 +80,4 @@ For a remote project, Macterm reads the Git state on the host, over one ssh conn
 
 ## Forget the records
 
-To forget all projects, open **Settings → Intelligence**, then click **Forget All…**. When you remove a project, Macterm deletes its records too.
+When you remove a project, Macterm deletes its records too.
