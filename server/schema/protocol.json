@@ -1,5 +1,5 @@
 {
-  "level": 1,
+  "level": 2,
   "min_level": 1,
   "trust": [
     "local",
@@ -35,6 +35,16 @@
     "PaneMessage"
   ],
   "methods": [
+    {
+      "name": "control.resume",
+      "type": "ControlResume",
+      "since": 2,
+      "senders": [
+        "local"
+      ],
+      "args": "ControlResume.Args",
+      "result": "ControlResume.Result"
+    },
     {
       "name": "channel.open",
       "type": "ChannelOpen",
@@ -356,6 +366,14 @@
       "senders": [
         "local"
       ]
+    },
+    {
+      "name": "resumed",
+      "type": "Resumed",
+      "since": 2,
+      "senders": [
+        "session"
+      ]
     }
   ],
   "types": [
@@ -561,6 +579,44 @@
           "type": "raw",
           "optional": true,
           "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ControlResume.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "epoch",
+          "type": "u64",
+          "optional": false,
+          "since": 2
+        },
+        {
+          "name": "seq",
+          "type": "u64",
+          "optional": false,
+          "since": 2
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "ControlResume.Result",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "replayed",
+          "type": "bool",
+          "optional": false,
+          "since": 2
+        },
+        {
+          "name": "seq",
+          "type": "u64",
+          "optional": false,
+          "since": 2
         }
       ],
       "cases": []
@@ -1117,6 +1173,18 @@
           "optional": false,
           "default": "false",
           "since": 1
+        },
+        {
+          "name": "resume_epoch",
+          "type": "u64",
+          "optional": true,
+          "since": 2
+        },
+        {
+          "name": "resume_offset",
+          "type": "u64",
+          "optional": true,
+          "since": 2
         }
       ],
       "cases": []
@@ -1182,6 +1250,12 @@
           "type": "bool",
           "optional": false,
           "since": 1
+        },
+        {
+          "name": "offset",
+          "type": "u64",
+          "optional": true,
+          "since": 2
         }
       ],
       "cases": []
@@ -1517,6 +1591,19 @@
       "name": "Seen",
       "kind": "struct",
       "fields": [],
+      "cases": []
+    },
+    {
+      "name": "Resumed",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "offset",
+          "type": "u64",
+          "optional": false,
+          "since": 2
+        }
+      ],
       "cases": []
     }
   ]

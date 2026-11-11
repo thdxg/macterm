@@ -716,6 +716,13 @@ The frames and messages between the app, the server and the session processes (d
 - The base is main, not the last release, until v2 has a release. A new field in an older type names its level in `field_since`.
 - Field names and enum tags are snake_case ASCII (`checkName`), so the Swift String compare is the Zig byte compare.
 - `scripts/protocol.sh` needs Zig 0.17 on PATH or in `$ZIG`.
+- **Resume (protocol level 2, design/003 §7).**
+  - A session counts its output bytes and keeps the last 256 KiB in `ring.zig`. The ring grows only with output, to 320 KiB at most.
+  - `snapshot.start` carries the `offset` that its screen shows.
+  - `attach` can carry `resume_epoch` (the epoch in the session's `hello`) and `resume_offset`. The session answers `resumed` and the missing bytes, with no snapshot and no repaint. It sends a snapshot when the epoch differs or the ring lost the bytes.
+  - The server keeps the last 256 event batches. `control.resume {epoch, seq}` replays the batches after `seq`. Otherwise it answers `replayed: false`, and the client reads `session.list`.
+  - `macterm connect` tracks its offset and connects again after a lost link. The app's pty client does not use resume yet (m3).
+  - The relay needs no change. It drops queued output and then a snapshot follows, so a client's count is a prefix of the stream until the snapshot resets it.
 
 ### The app's client of the local server (`Macterm/Server/`)
 
