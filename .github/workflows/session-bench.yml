@@ -58,10 +58,6 @@ jobs:
   # runs on macOS only.
   macos:
     name: Session Layer (macOS)
-    strategy:
-      fail-fast: false
-      matrix:
-        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     needs: server
     runs-on: macos-15
     timeout-minutes: 30
@@ -95,12 +91,11 @@ jobs:
       - name: Upload results
         uses: actions/upload-artifact@v7
         with:
-          name: session-results-macos-${{ matrix.run }}
+          name: session-results-macos
           path: session-macos.json
 
       # Fails when v2 is worse than v1 beyond the limits.
       - name: Compare v2 with v1
-        continue-on-error: true
         run: python3 scripts/session_bench.py check session-macos.json >> "$GITHUB_STEP_SUMMARY"
 
   # The latency arms plus the ssh arms, against sshd on localhost with 25 ms
@@ -109,10 +104,6 @@ jobs:
   # VM kernel has no sch_netem module.
   linux:
     name: Session Layer (Linux)
-    strategy:
-      fail-fast: false
-      matrix:
-        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     needs: server
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -164,10 +155,9 @@ jobs:
       - name: Upload results
         uses: actions/upload-artifact@v7
         with:
-          name: session-results-linux-${{ matrix.run }}
+          name: session-results-linux
           path: session-linux.json
 
       # Fails when v2 is worse than v1 beyond the limits.
       - name: Compare v2 with v1
-        continue-on-error: true
         run: python3 scripts/session_bench.py check session-linux.json >> "$GITHUB_STEP_SUMMARY"
