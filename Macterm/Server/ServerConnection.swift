@@ -31,6 +31,11 @@ final class ServerConnection: @unchecked Sendable {
     private var nextID: UInt64 = 1
     private var pending: [UInt64: CheckedContinuation<MactermProtocol.Response, Error>] = [:]
     private var isClosed = false
+    /// The open pane channels, by number (`openChannel`).
+    private var channelSinks: [UInt32: PaneChannel.Sink] = [:]
+    /// Frames of a channel that arrived before `openChannel` could register
+    /// its sink. The reader thread is faster than the response's waiter.
+    private var earlyFrames: [UInt32: [ProtocolFrame]] = [:]
 
     /// How long the handshake waits for the server's `hello`.
     static let handshakeTimeout: TimeInterval = 5
@@ -126,6 +131,53 @@ final class ServerConnection: @unchecked Sendable {
         return try response.result(of: method)
     }
 
+    /// Opens a pane channel to `session` (design/003 §1): the server joins
+    /// it to the session, and every frame of the channel comes through the
+    /// returned object. The pane sends `attach` first, to get output.
+    func openChannel(session: String) async throws -> PaneChannel {
+        let result = try await call(MactermProtocol.ChannelOpen.self, .init(session: session))
+        let channel = PaneChannel(connection: self, number: result.channel)
+        guard register(channel.sink, as: result.channel) else {
+            channel.sink.finish()
+            throw ServerClientError.disconnected
+        }
+        return channel
+    }
+
+    /// Registers the sink and hands it the frames that came before. False
+    /// when the connection ended.
+    private func register(_ sink: PaneChannel.Sink, as number: UInt32) -> Bool {
+        lock.lock()
+        if isClosed {
+            lock.unlock()
+            return false
+        }
+        channelSinks[number] = sink
+        let early = earlyFrames.removeValue(forKey: number) ?? []
+        lock.unlock()
+        for frame in early { sink.deliver(frame) }
+        return true
+    }
+
+    /// Forgets a channel. Frames that still come for it are dropped.
+    func releaseChannel(_ number: UInt32) {
+        lock.lock()
+        let sink = channelSinks.removeValue(forKey: number)
+        earlyFrames.removeValue(forKey: number)
+        lock.unlock()
+        sink?.finish()
+    }
+
+    /// Sends a frame on a pane channel. Throws `disconnected` when the
+    /// connection ended.
+    func send(frame: ProtocolFrame) throws {
+        let data = try frame.encoded()
+        fdLock.lock()
+        defer { fdLock.unlock() }
+        guard fdIsOpen else { throw ServerClientError.disconnected }
+        try Self.writeAll(fd, data)
+    }
+
     /// Ends the connection. Requests that wait fail with `disconnected`.
     func close() {
         // The reader thread closes the fd when its read ends.
@@ -148,7 +200,11 @@ final class ServerConnection: @unchecked Sendable {
             while true {
                 do {
                     let frame = try reader.next()
-                    try handle(ProtocolControl.decode(frame.body))
+                    if frame.channel == ProtocolFrame.controlChannel {
+                        try handle(ProtocolControl.decode(frame.body))
+                    } else {
+                        route(frame)
+                    }
                 } catch {
                     if case ServerClientError.disconnected = error {} else {
                         logger.error("server connection: \(String(describing: error), privacy: .public)")
@@ -185,12 +241,33 @@ final class ServerConnection: @unchecked Sendable {
         }
     }
 
+    private func route(_ frame: ProtocolFrame) {
+        lock.lock()
+        if let sink = channelSinks[frame.channel] {
+            lock.unlock()
+            sink.deliver(frame)
+        } else {
+            // Not registered yet. Frames for a channel that was released
+            // would collect here: the cap keeps that bounded.
+            var held = earlyFrames[frame.channel] ?? []
+            if held.count < 256 { held.append(frame) }
+            earlyFrames[frame.channel] = held
+            lock.unlock()
+        }
+    }
+
     private func finish() {
         lock.lock()
         isClosed = true
         let waiting = pending
         pending = [:]
+        let sinks = channelSinks
+        channelSinks = [:]
+        earlyFrames = [:]
         lock.unlock()
+        for sink in sinks.values {
+            sink.finish()
+        }
         for continuation in waiting.values {
             continuation.resume(throwing: ServerClientError.disconnected)
         }
@@ -277,6 +354,10 @@ extension ServerConnection {
     private static func write(_ fd: Int32, _ message: ProtocolControl) throws {
         guard let body = message.encoded() else { return }
         let data = try ProtocolFrame(channel: ProtocolFrame.controlChannel, kind: .msg, body: body).encoded()
+        try writeAll(fd, data)
+    }
+
+    private static func writeAll(_ fd: Int32, _ data: Data) throws {
         try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
             guard let base = buffer.baseAddress else { return }
             var offset = 0
