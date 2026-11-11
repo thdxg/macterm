@@ -176,17 +176,24 @@ assert a.messages("foreground") == [], a.messages("foreground")
 PY
 }
 
-# Linux counts each wakeup of the session's poll as a voluntary context
-# switch. An idle session with only clients that did not ask for the
-# foreground does not wake. With a client that asked, it wakes each 500 ms.
+# An idle session with only clients that did not ask for the foreground
+# does not wake. With a client that asked, it wakes each 500 ms. macOS counts
+# each wakeup of the session's poll as an interrupt wakeup
+# (`proc_pid_rusage`, as scripts/_harness.py reads it), Linux as a voluntary
+# context switch.
 @test "events: an idle session wakes only for a client that wants the foreground" {
-  [[ -r /proc/self/status ]] || skip "needs /proc"
   "$ZMX" session s1 -- /bin/sh
   SESSION_PID=$(python3 "$BATS_TEST_DIRNAME/v2client.py" pid s1) python3 - <<'PY'
-import os, time
+import ctypes, os, struct, sys, time
 from v2client import Client
+pid = int(os.environ["SESSION_PID"])
 def switches():
-    for line in open("/proc/%s/status" % os.environ["SESSION_PID"]):
+    if sys.platform == "darwin":
+        buf = ctypes.create_string_buffer(512)
+        # RUSAGE_INFO_V2; ri_interrupt_wkups is at offset 40.
+        assert ctypes.CDLL("/usr/lib/libproc.dylib").proc_pid_rusage(pid, 2, buf) == 0
+        return struct.unpack_from("Q", buf.raw, 40)[0]
+    for line in open("/proc/%d/status" % pid):
         if line.startswith("voluntary_ctxt_switches:"):
             return int(line.split()[1])
 def wakeups(seconds=3):
