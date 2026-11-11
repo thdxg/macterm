@@ -19,9 +19,9 @@ struct ProjectMemorySummary: Equatable {
     static let stretchBreak: TimeInterval = 3600
 
     /// The panel's "No commands recorded yet" line shows only for a project
-    /// with neither a command nor Git state.
-    static func showsNoCommandsLine(hasCommands: Bool, hasGitState: Bool) -> Bool {
-        !hasCommands && !hasGitState
+    /// with no command and no Git state, once a read has answered.
+    static func showsNoCommandsLine(hasCommands: Bool, hasGitStateOrUnknown: Bool) -> Bool {
+        !hasCommands && !hasGitStateOrUnknown
     }
 
     init(entries: [MemoryEntry]) {

@@ -157,10 +157,11 @@ struct ProjectMemoryPanel: View {
     @ViewBuilder
     private func leftOff(_ summary: ProjectMemorySummary) -> some View {
         // The line explains an empty project: no command and no Git state.
-        // Git state fills the space, as the summary does from it.
+        // Git state fills the space, as the summary does from it. Before the
+        // first read answers, the state is not known: show nothing.
         let showsNoCommands = ProjectMemorySummary.showsNoCommandsLine(
             hasCommands: summary.lastActivity != nil,
-            hasGitState: git != nil || memory.readingGit.contains(project.id)
+            hasGitStateOrUnknown: git != nil || !memory.gitAnswered.contains(project.id)
         )
         if summaryEnabled || showsNoCommands || summary.unresolvedFailure != nil {
             leftOffSection(summary, showsNoCommands: showsNoCommands)
