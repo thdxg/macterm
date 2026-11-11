@@ -1104,7 +1104,7 @@ The script stops only the process that it started, and it kills its own zmx sess
 
 ### Session layer benchmark
 
-`scripts/session_bench.py` measures what the session layer adds to typing, to a reattach, to memory and to idle wakeups, for v1's and v2's panes side by side, local and over ssh. It runs no app: a pty driver plays the terminal. CI runs it only on a pull request that changes `server/`, `protocol/`, the script or the server build, and by hand (`.github/workflows/session-bench.yml`). It writes the report to the job summary. It is not a required check. Run it locally with a zmx build (`run`, then `report`); `--ssh-host` adds the remote arms. The report gives p50, p95 and p99, and a table of each v1/v2 pair with the ratio:
+`scripts/session_bench.py` measures what the session layer adds to typing, to a reattach, to memory and to idle wakeups, for v1's and v2's panes side by side, local and over ssh. It runs no app: a pty driver plays the terminal. CI runs it on a pull request that changes `server/`, `protocol/`, the script, its limits or the server build, and by hand (`.github/workflows/session-bench.yml`). The workflow starts on every pull request, and a `changes` job skips the measuring jobs when no such file changed, so its checks report also where they are required. It writes the report to the job summary. Run it locally with a zmx build (`run`, then `report`); `--ssh-host` adds the remote arms. The report gives p50, p95 and p99, and a table of each v1/v2 pair with the ratio:
 
 - **Local panes**: one binary has both. `v1` is `zmx attach <s> <command>` (a v1 daemon for each pane), `v2` is `zmx connect <s> -- <command>` (a v2 session made through the server). The run sets `MACTERM_RUNTIME_DIR` to its throwaway folder, so v2 never uses the user's server.
 - **Each pair runs in one run, alternated**: the echo keys go in rounds to v1 and v2 in turn, the reattaches alternate, and the idle panes of both are measured in the same window. A pair is never compared across runs or runners.
@@ -1118,7 +1118,8 @@ The script stops only the process that it started, and it kills its own zmx sess
 - The report gives p95 and p99 only for 20 samples or more.
 - Not measured here: the GUI part of typing latency (`keyDown`, the render, the compositor), and the app's own memory.
 - Every session that a run makes is ended after the run, in a throwaway `ZMX_DIR` and runtime folder. A session with no client drops terminal replies.
-- No baseline comparison.
+- **The gate** (`check`, the step Compare v2 with v1) fails the job when v2 is worse than v1 in the same run. It compares echo p50 and p95 (local and remote), the new remote pane, the reattach and the memory as v2 / v1, and the idle wakeups for each pane as v2 − v1. A limit is no change plus the noise: the largest distance of one run from the median of 20 runs (`limits`, written to `scripts/session_bench_limits.json`, one entry for each system). A v2 that is worse passes also when the difference is under `FLOOR_MS` (1 ms, typing and reopen) or `FLOOR_MB` (2 MB, memory): a user cannot feel it (Ethan, 2026-11-10). Wakeups have no floor. A measurement that the limits name and the run does not have fails. To make the limits again, run the workflow by hand 20 times on one commit and give `limits` all the results JSONs.
+- No comparison with an earlier run: v2 is compared with v1 only.
 
 ### Demo recordings
 
