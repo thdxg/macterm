@@ -22,12 +22,12 @@ concurrency:
 jobs:
   changes:
     name: Detect changes
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
       swift: ${{ steps.filter.outputs.swift }}
       extensions: ${{ steps.filter.outputs.extensions }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: useblacksmith/checkout@v1
       - uses: dorny/paths-filter@v4
         id: filter
         with:
@@ -88,7 +88,7 @@ jobs:
 
       - uses: jdx/mise-action@v5.2.7
 
-      # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
+      # Pin the toolchain: the macOS 27 runner defaults to whatever Xcode the image
       # currently ships, which is how macterm#340's type-check failure stayed
       # invisible here. See the action for the full rationale.
       - name: Select Xcode
@@ -145,7 +145,7 @@ jobs:
       # against.
       #
       # A PINNED RELEASE IS NOT IMMUTABLE — that's what makes the framework hash
-      # load-bearing rather than belt-and-braces. thdxg/ghostty replaced
+      # load-bearing rather than belt-and-braces. macterm/ghostty replaced
       # build-2026-08-02's assets at 08:32Z, hours after CI had cached the
       # earlier bytes under that same tag. The GhosttyKit key rolls weekly with
       # no restore-keys, so when the ISO week turned over the next run
@@ -236,7 +236,7 @@ jobs:
 
       - uses: jdx/mise-action@v5.2.7
 
-      # Pin the toolchain: `xcode-27` defaults to whatever Xcode the image
+      # Pin the toolchain: the macOS 27 runner defaults to whatever Xcode the image
       # currently ships, which is how macterm#340's type-check failure stayed
       # invisible here. See the action for the full rationale.
       - name: Select Xcode

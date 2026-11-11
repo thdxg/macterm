@@ -131,7 +131,7 @@ final class PaletteRegistry {
     typealias Fetch = @Sendable (URL) async throws -> (Data, Int)
 
     nonisolated static let refreshInterval: TimeInterval = 3600
-    nonisolated static let repository = "thdxg/macterm"
+    nonisolated static let repository = "macterm/macterm"
     nonisolated static let folder = "extensions"
 
     /// The repository's ref the extensions are read at: `main`.

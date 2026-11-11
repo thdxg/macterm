@@ -62,7 +62,7 @@ struct TextFileDefaultsTests {
             .deletingLastPathComponent() // App
             .deletingLastPathComponent() // MactermTests
             .deletingLastPathComponent() // repo root
-            .appendingPathComponent("website/docs/pages/20-configuration.md")
+            .appendingPathComponent("docs/20-configuration.md")
         let text = try String(contentsOf: page, encoding: .utf8)
         let start = try #require(text.range(of: "### Text file types"))
         let rest = text[start.upperBound...]

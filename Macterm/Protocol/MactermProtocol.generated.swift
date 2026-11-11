@@ -1138,6 +1138,7 @@ extension MactermProtocol {
         var rows: UInt16
         var xpixel: UInt16 = 0
         var ypixel: UInt16 = 0
+        var foreground: Bool = false
     }
 }
 
@@ -1147,12 +1148,14 @@ extension MactermProtocol.Attach: ProtocolValue {
         var rows: UInt16?
         var xpixel: UInt16?
         var ypixel: UInt16?
+        var foreground: Bool?
         try reader.readMap { key, reader in
             switch key {
             case "cols": cols = try UInt16(from: &reader)
             case "rows": rows = try UInt16(from: &reader)
             case "xpixel": xpixel = try UInt16(from: &reader)
             case "ypixel": ypixel = try UInt16(from: &reader)
+            case "foreground": foreground = try Bool(from: &reader)
             default: return false
             }
             return true
@@ -1161,10 +1164,11 @@ extension MactermProtocol.Attach: ProtocolValue {
         self.rows = try MessagePackReader.required(rows, "rows")
         self.xpixel = xpixel ?? 0
         self.ypixel = ypixel ?? 0
+        self.foreground = foreground ?? false
     }
 
     func encode(to writer: inout MessagePackWriter) {
-        writer.writeMapHeader(4)
+        writer.writeMapHeader(5)
         writer.writeString("cols")
         cols.encode(to: &writer)
         writer.writeString("rows")
@@ -1173,6 +1177,8 @@ extension MactermProtocol.Attach: ProtocolValue {
         xpixel.encode(to: &writer)
         writer.writeString("ypixel")
         ypixel.encode(to: &writer)
+        writer.writeString("foreground")
+        foreground.encode(to: &writer)
     }
 }
 

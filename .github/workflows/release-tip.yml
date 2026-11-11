@@ -34,7 +34,7 @@ jobs:
   # macOS runner on it. Ubuntu, seconds, no checkout of the tree beyond git.
   gate:
     name: Gate
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
       actions: read
@@ -66,7 +66,7 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Target commit: $SHA"
 
-      - uses: actions/checkout@v7
+      - uses: useblacksmith/checkout@v1
         with:
           # Full history AND tags: macterm_tip_version needs the newest vX.Y.Z
           # tag plus the commit count on top of it, and the skip checks below
@@ -150,10 +150,10 @@ jobs:
             # number is pure waste. Mirrors ghostty's paths-filter with
             # `base: tip`, expressed in git so a missing tag is simply "build".
             CHANGED=$(git diff --name-only "$TIP_SHA" "$SHA" \
-              | grep -vE '^(website/|README\.md|AGENTS\.md|CLAUDE\.md|LICENSE|\.github/(ISSUE_TEMPLATE/|.*\.md$))' \
+              | grep -vE '^(docs/|README\.md|AGENTS\.md|CLAUDE\.md|LICENSE|\.github/(ISSUE_TEMPLATE/|.*\.md$))' \
               || true)
             if [[ -z "$CHANGED" ]]; then
-              skip "only docs/website changed since $TIP_SHA"
+              skip "only docs changed since $TIP_SHA"
             fi
           fi
 
