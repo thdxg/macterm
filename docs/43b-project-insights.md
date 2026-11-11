@@ -76,7 +76,7 @@ Each project keeps its 500 latest commands, in `~/Library/Application Support/Ma
 
 Macterm reads the Git state of a local project when the panel shows it, and again as soon as the repository changes, for example when you switch branches in a pane, in your editor or in another terminal. It also reads it after a command finishes while a panel shows the project, when Macterm becomes the active app, and every 15 seconds while the panel shows and Macterm is active. Macterm does not fetch from the remote, so the number of commits behind the upstream changes only after a fetch, for example when you click **Pull**. Macterm uses the Git of Homebrew, or the Git of the Xcode Command Line Tools. If neither is installed, the panel shows no Git state. Macterm never opens the install dialog of the Command Line Tools.
 
-For a remote project, Macterm reads the Git state on the host, over one ssh connection in the background, with the same reads. This needs **Background SSH connections** in **Settings → General → Remote Projects**: each read is a connection, and on a key that asks for Touch ID each connection is a dialog. If a host refuses the background login, Macterm does not ask it again until you start Macterm again, and the panel says so. A branch row types `cd` to the worktree on the host, or `git switch`, into the current pane, as for a local project.
+For a remote project, Macterm's server on the host reads the Git state, with the same reads. The reads use the connection of the host's panes, so they need no login. When no pane of the host is connected, the panel keeps the last state that it read. A branch row types `cd` to the worktree on the host, or `git switch`, into the current pane, as for a local project.
 
 ## Forget the records
 

@@ -10,9 +10,8 @@ private let logger = Logger(subsystem: appBundleID, category: "ZmxClient")
 /// same id attaches again at the next launch. Listing and ending local
 /// sessions go through the server (`LocalSessions`).
 ///
-/// Remote panes (#104) still run v1's `zmx attach` on the REMOTE host
-/// (`RemoteSpawn`); their teardown, foreground probe and orphan sweep go
-/// over ssh from here.
+/// A remote pane is a session of its host's server (0057); its teardown
+/// goes through `RemoteHosts`.
 struct ZmxClient {
     /// Bundled zmx executable URL when the socket-path budget probe passed,
     /// otherwise nil. Use for the wrap-vs-bypass decision on NEW surfaces.
@@ -29,14 +28,6 @@ struct ZmxClient {
     /// server (`RemoteHosts.endSession`). Best-effort: with no connection up
     /// it asks for no login, and the session stays.
     var killRemoteSession: @Sendable (_ remote: ProjectPath, _ sessionID: String, _ zmxPath: String?) async -> Void
-    /// One batched foreground probe of a remote host (#104): session name →
-    /// foreground (`comm` for tab naming, full command line for layout `run:`
-    /// capture) for every `macterm-*` session there, via
-    /// `RemoteSpawn.foregroundProbeArgv`. `zmxPath` (optional) is the explicit
-    /// remote zmx path. Failures are classified (`RemoteProbeOutcome`) so the
-    /// resolver can keep retrying a flaky link but suspend a host that
-    /// refused our non-interactive auth (#272).
-    var remoteForegrounds: @Sendable (_ remote: ProjectPath, _ zmxPath: String?) async -> RemoteProbeOutcome
     /// Every local v2 session from the server (`LocalSessions`), or nil when
     /// the server cannot be reached. nil means UNKNOWN: a caller never ends
     /// or restarts anything on it.
@@ -73,13 +64,6 @@ extension ZmxClient {
             cachedBundledURL
         }
 
-        // Remote ops resolve `ssh` via PATH (through /usr/bin/env), NOT a
-        // hardcoded /usr/bin/ssh: the PANE's own ssh is PATH-resolved (its
-        // command runs through a shell), so ops must dial the same client —
-        // a user on Homebrew OpenSSH gets consistent config/behavior across
-        // both, and the e2e harness's ssh shim (its only route to a hermetic
-        // ssh config, since OpenSSH resolves ~/.ssh/config via the user
-        // record, not $HOME) covers background ops too.
         return ZmxClient(
             executableURL: resolveExecutable,
             isBundled: { bundledExecutable() != nil },
@@ -92,24 +76,6 @@ extension ZmxClient {
                 guard case let .remote(user, host, _) = remote else { return }
                 let destination = RemoteSpawn.destination(user: user, host: host)
                 await RemoteHosts.shared.endSession(sessionID, destination: destination)
-            },
-            remoteForegrounds: { remote, zmxPath in
-                guard let argv = RemoteSpawn.foregroundProbeArgv(remote: remote, zmxPath: zmxPath)
-                else { return .unreachable }
-                // The raw subprocess outcome, not the exit-zero-only wrapper:
-                // classification needs ssh's stderr to tell a refused auth
-                // (suspend the host, #272) from a flaky link (keep retrying).
-                guard let outcome = await runZmxProcess(
-                    remoteSSHArgv(argv),
-                    executable: remoteSSHExecutable,
-                    captureStdout: true,
-                    timeout: .seconds(10)
-                )
-                else { return .unreachable }
-                guard outcome.exitStatus == 0 else {
-                    return RemoteProbeOutcome.classifyFailure(stderr: outcome.stderr)
-                }
-                return .success(RemoteForegroundResolver.parseProbeOutput(outcome.stdout))
             },
             listSessions: {
                 // The unit-test host starts no server (`ZmxBypass.unitTestHost`).
@@ -124,19 +90,12 @@ extension ZmxClient {
         )
     }()
 
-    /// See the PATH-resolution note above `return ZmxClient(` in `live`.
-    private static let remoteSSHExecutable = URL(fileURLWithPath: "/usr/bin/env")
-    private static func remoteSSHArgv(_ argv: [String]) -> [String] {
-        ["ssh"] + argv
-    }
-
     /// No-op client for tests / when zmx is unavailable.
     static let noop = ZmxClient(
         executableURL: { nil },
         isBundled: { false },
         killSession: { _ in },
         killRemoteSession: { _, _, _ in },
-        remoteForegrounds: { _, _ in .unreachable },
         listSessions: { [] },
         endV1Sessions: { _ in true }
     )
@@ -163,154 +122,6 @@ extension ZmxClient {
         if environment["XCTestConfigurationFilePath"] != nil { return .unitTestHost }
         if let reason = ZmxSocketBudget.probe(env: environment) { return .socketPathTooLong(reason) }
         return nil
-    }
-
-    /// A completed subprocess: exit status plus both captured streams. The
-    /// probe path reads `exitStatus`/`stderr` itself to classify failures
-    /// (`RemoteProbeOutcome`).
-    private struct SubprocessOutcome {
-        let exitStatus: Int32
-        let stdout: String
-        let stderr: String
-    }
-
-    private static func runZmxProcess(
-        _ arguments: [String],
-        executable: URL?,
-        captureStdout: Bool = false,
-        timeout: Duration = subprocessTimeout,
-        environment: [String: String]? = nil
-    ) async -> SubprocessOutcome? {
-        guard let executable else { return nil }
-        let commandDesc = "\(executable.lastPathComponent) " + arguments.joined(separator: " ")
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = arguments
-        if let environment { process.environment = environment }
-
-        // macOS pipe buffer is ~64KB; a child that emits more without us draining
-        // would deadlock on write while we await termination. Drain captured
-        // stdout continuously, or send it to /dev/null when unneeded.
-        let stdoutBuffer = OSAllocatedUnfairLock(initialState: Data())
-        // Signals stdout EOF: the readabilityHandler yields once it sees the
-        // empty chunk (pipe write-end fully closed). We await THIS (bounded) to
-        // know the buffer holds the complete output — never a manual blocking
-        // `availableData` drain, which has no timeout and would wedge this
-        // cooperative-pool thread forever if a zmx descendant kept the write
-        // end open past the parent's exit.
-        let stdoutEOF: AsyncStream<Void>
-        if captureStdout {
-            let stdoutPipe = Pipe()
-            process.standardOutput = stdoutPipe
-            stdoutEOF = AsyncStream<Void> { continuation in
-                stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-                    let chunk = handle.availableData
-                    if chunk.isEmpty {
-                        handle.readabilityHandler = nil
-                        continuation.finish()
-                        return
-                    }
-                    stdoutBuffer.withLock { $0.append(chunk) }
-                }
-            }
-        } else {
-            process.standardOutput = FileHandle.nullDevice
-            stdoutEOF = AsyncStream { $0.finish() }
-        }
-        let stderrPipe = Pipe()
-        process.standardError = stderrPipe
-        let stderrBuffer = OSAllocatedUnfairLock(initialState: Data())
-        // Same EOF signalling as stdout: `terminationHandler` can fire before
-        // the last stderr chunk is delivered, and the probe path CLASSIFIES
-        // failures by stderr content — a truncated "Permission denied" would
-        // silently downgrade an auth refusal to a transient failure.
-        let stderrEOF = AsyncStream<Void> { continuation in
-            stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-                let chunk = handle.availableData
-                if chunk.isEmpty {
-                    handle.readabilityHandler = nil
-                    continuation.finish()
-                    return
-                }
-                stderrBuffer.withLock { $0.append(chunk) }
-            }
-        }
-
-        // `terminationHandler` is the cancellation-safe exit signal; wired
-        // BEFORE run() so the signal is never missed.
-        let exitStream = AsyncStream<Int32> { continuation in
-            process.terminationHandler = { proc in
-                continuation.yield(proc.terminationStatus)
-                continuation.finish()
-            }
-        }
-        do {
-            try process.run()
-        } catch {
-            logger.warning("\(commandDesc, privacy: .public) failed: \(EnglishErrorText.describe(error), privacy: .public)")
-            return nil
-        }
-
-        let exitStatus: Int32? = await withTaskGroup(of: Int32?.self) { group in
-            group.addTask {
-                for await status in exitStream {
-                    return status
-                }
-                return nil
-            }
-            group.addTask {
-                try? await Task.sleep(for: timeout)
-                return nil
-            }
-            defer { group.cancelAll() }
-            // `next()` yields Int32?? (group element is itself Int32?); flatten
-            // to the inner status. First child to finish wins (timeout or exit).
-            return await group.next().flatMap(\.self)
-        }
-
-        guard let exitStatus else {
-            if process.isRunning { process.terminate() }
-            // Wait for the kernel to reap before returning so we don't leak a
-            // zombie. Bounded so a wedged SIGTERM target can't extend the path.
-            _ = await withTaskGroup(of: Void.self) { group in
-                group.addTask { for await _ in exitStream {} }
-                group.addTask { try? await Task.sleep(for: .seconds(1)) }
-                defer { group.cancelAll() }
-                await group.next()
-            }
-            logger.warning("\(commandDesc, privacy: .public) timed out after \(timeout, privacy: .public)")
-            return nil
-        }
-        if exitStatus != 0 {
-            // Wait (bounded) for stderr EOF so the classification-bearing
-            // tail has landed before we read the buffer.
-            _ = await withTaskGroup(of: Void.self) { group in
-                group.addTask { for await _ in stderrEOF {} }
-                group.addTask { try? await Task.sleep(for: .seconds(1)) }
-                defer { group.cancelAll() }
-                await group.next()
-            }
-            let stderr = stderrBuffer.withLock { String(data: $0, encoding: .utf8) ?? "" }
-            logger.warning("\(commandDesc, privacy: .public) exit=\(exitStatus, privacy: .public) stderr=\(stderr, privacy: .public)")
-            return SubprocessOutcome(exitStatus: exitStatus, stdout: "", stderr: stderr)
-        }
-        guard captureStdout else { return SubprocessOutcome(exitStatus: 0, stdout: "", stderr: "") }
-        // `terminationHandler` can fire before the final `readabilityHandler`
-        // chunk (and its EOF) have been delivered, so the buffer may still be
-        // missing the tail. Wait for the handler's own empty-chunk EOF signal
-        // rather than draining by hand — but bound the wait: if a zmx
-        // descendant inherited and kept the stdout write end open, EOF never
-        // arrives, and we must not block this thread forever. On timeout we
-        // return whatever was buffered (the common case is tiny `zmx ls`
-        // output already fully delivered before termination).
-        _ = await withTaskGroup(of: Void.self) { group in
-            group.addTask { for await _ in stdoutEOF {} }
-            group.addTask { try? await Task.sleep(for: .seconds(1)) }
-            defer { group.cancelAll() }
-            await group.next()
-        }
-        let stdout = stdoutBuffer.withLock { String(data: $0, encoding: .utf8) ?? "" }
-        return SubprocessOutcome(exitStatus: 0, stdout: stdout, stderr: "")
     }
 }
 
@@ -492,6 +303,41 @@ enum ZmxLeadership {
     static let claimSequence = "\u{1b}_zmx;claim\u{1b}\\"
 }
 
+/// One remote session's foreground, from the host's report
+/// (`ZmxForegroundEvents`): the short process name (`comm`, feeds tab
+/// naming), the host's own idle verdict (`isIdle`, feeds the busy-close
+/// policy), and — when the host's `ps` gave it — the foreground's full
+/// command line (`args`, feeds Save Layout's `run:` capture, the remote
+/// analogue of the local KERN_PROCARGS2 argv).
+struct RemoteForeground: Equatable {
+    let comm: String
+    /// The host's idle verdict — true when the tty's foreground process
+    /// group IS the session leader's (the shell owns its prompt), judged
+    /// where the processes actually live so no local shell database has to
+    /// recognize a remote-only login shell. nil when the host could not say
+    /// — consumers fall back to the local shell-database heuristic.
+    let isIdle: Bool?
+    /// The host's own shell verdict: whether `comm` is listed in the host's
+    /// `/etc/shells`. nil when the host could not say (no `/etc/shells`) —
+    /// consumers then fall back to the local shell database, which misses a
+    /// shell only the host has.
+    let isShell: Bool?
+    /// The full `ps -o args=` command line, nil when the report carried
+    /// none. May describe a shell at its prompt — `Pane.applyRemoteForeground`
+    /// decides whether it counts as a running command.
+    let command: String?
+
+    /// `isIdle` and `isShell` default to nil (no host verdict) so
+    /// name+command call sites — tests, the name-only convenience — read
+    /// unchanged.
+    init(comm: String, isIdle: Bool? = nil, isShell: Bool? = nil, command: String?) {
+        self.comm = comm
+        self.isIdle = isIdle
+        self.isShell = isShell
+        self.command = command
+    }
+}
+
 /// The foreground reports of the zmx fork (`src/foreground.zig` there, patch
 /// 0010): a daemon that a client asked tells it which process group holds
 /// the pty, before the first output that follows each change, and the
@@ -501,9 +347,9 @@ enum ZmxLeadership {
 /// Both constants are a wire contract with the fork, not local choices.
 ///
 /// Only a client started with the variable asks, so only Macterm's remote
-/// panes get reports, and only from a host that runs the fork: an upstream
-/// zmx ignores the request, the pane gets no report, and the ssh probe
-/// (`RemoteForegroundResolver`) keeps naming it as before.
+/// panes get reports. A remote pane is a session of its host's server
+/// (0057), whose client asks for them; a pane with no server on its host (a
+/// plain shell) gets none, and no other source names it.
 enum ZmxForegroundEvents {
     /// Exported by `RemoteSpawn.paneCommand` before `zmx attach`. The client
     /// removes it from its environment before the session starts.
@@ -516,8 +362,8 @@ enum ZmxForegroundEvents {
     /// contain `;`.
     static let reportPrefix = "zmx;foreground;"
 
-    /// The report as a `RemoteForeground`, the same shape as one line of
-    /// the probe, or nil for an APC that is not a report. Pure.
+    /// The report as a `RemoteForeground`, or nil for an APC that is not a
+    /// report. Pure.
     nonisolated static func parse(_ payload: String) -> RemoteForeground? {
         guard payload.hasPrefix(reportPrefix) else { return nil }
         let fields = payload.dropFirst(reportPrefix.count)

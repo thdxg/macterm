@@ -569,7 +569,6 @@ struct ProjectMemoryTests {
         memory.gitReader = { _ in Issue.record("a remote project never reads git locally")
             return nil
         }
-        memory.remoteGitAllowed = { true }
         return (memory, project)
     }
 
@@ -581,7 +580,7 @@ struct ProjectMemoryTests {
     }
 
     @Test
-    func a_remote_project_reads_git_over_ssh_and_keeps_the_last_state_when_unreachable() async throws {
+    func a_remote_project_reads_git_on_the_host_and_keeps_the_last_state_when_unreachable() async throws {
         let (memory, project) = makeRemoteMemory()
         var reads: [ProjectPath] = []
         var answer: ProjectGit.RemoteResult = .read(GitStatus(branch: "main"))
@@ -599,45 +598,5 @@ struct ProjectMemoryTests {
         try await Task.sleep(for: .milliseconds(50))
         #expect(reads.count == 2)
         #expect(memory.git[project.id]?.branch == "main")
-        #expect(memory.gitUnavailability(for: project) == nil)
-    }
-
-    @Test
-    func background_ssh_off_reads_nothing_and_says_why() async throws {
-        let (memory, project) = makeRemoteMemory()
-        memory.remoteGitAllowed = { false }
-        var reads = 0
-        memory.remoteGitReader = { _ in reads += 1
-            return .read(nil)
-        }
-        #expect(memory.gitUnavailability(for: project) == .backgroundSSHOff)
-        memory.refreshGit(project.id)
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(reads == 0)
-        #expect(memory.git[project.id] == nil)
-    }
-
-    @Test
-    func a_refused_login_suspends_the_host_for_the_run() async throws {
-        let (memory, project) = makeRemoteMemory()
-        var reads = 0
-        memory.remoteGitReader = { _ in reads += 1
-            return .authRefused
-        }
-        memory.refreshGit(project.id)
-        let deadline = Date().addingTimeInterval(5)
-        while memory.refusedRemoteHosts.isEmpty, Date() < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(memory.refusedRemoteHosts == ["me@devbox"])
-        #expect(memory.gitUnavailability(for: project) == .refused(host: "me@devbox"))
-
-        memory.refreshGit(project.id)
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(reads == 1)
-
-        // A local project is never gated.
-        let local = Project(name: "app", path: "/tmp", sortOrder: 1)
-        #expect(memory.gitUnavailability(for: local) == nil)
     }
 }

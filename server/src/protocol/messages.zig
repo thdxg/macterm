@@ -312,8 +312,40 @@ pub const ServerExit = struct {
     pub const Result = struct {};
 };
 
+/// Runs a command on the server's machine to its end, and returns what it
+/// wrote to stdout. It is not a session: it has no pty, stdin and stderr are
+/// `/dev/null`, and it has the server's environment. The app's background
+/// reads of a host use it, over the host's one connection (0058). A client
+/// that may create a session may run a command in one, so this gives no new
+/// access.
+pub const CommandRun = struct {
+    pub const name = "command.run";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct {
+        /// The program, an absolute path, then its arguments.
+        argv: []const msgpack.Bin,
+        /// The folder, an absolute path. Null is the home folder.
+        cwd: ?msgpack.Bin = null,
+        /// After this, the command's process group gets SIGKILL and the
+        /// request fails with `timeout`. The server allows at most 60 s.
+        timeout_ms: u32 = 5000,
+    };
+    pub const Result = struct {
+        /// stdout, at most 512 KiB.
+        output: msgpack.Bin,
+        /// The command wrote more than that. The rest is not in `output`.
+        truncated: bool = false,
+        /// The exit code, when the command exited.
+        code: ?u8 = null,
+        /// The signal number, when a signal ended the command.
+        signal: ?u8 = null,
+    };
+};
+
 /// Every request method. A new method goes here.
-pub const methods = .{ ChannelOpen, ChannelClose, ChannelPause, ChannelResume, Ping, SessionCreate, SessionList, SessionInfo, SessionKill, ServerExit };
+pub const methods = .{ ChannelOpen, ChannelClose, ChannelPause, ChannelResume, Ping, SessionCreate, SessionList, SessionInfo, SessionKill, ServerExit, CommandRun };
 
 // ── Events ──────────────────────────────────────────────────────────────────
 

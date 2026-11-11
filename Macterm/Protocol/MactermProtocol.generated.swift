@@ -97,6 +97,14 @@ extension MactermProtocol {
 }
 
 extension MactermProtocol {
+    enum CommandRun: ProtocolMethod {
+        static let name = "command.run"
+        static let since: UInt32 = 1
+        static let senders: [MactermProtocol.Trust] = [.local]
+    }
+}
+
+extension MactermProtocol {
     struct Hello: Equatable {
         var level: UInt32
         var minLevel: UInt32
@@ -1024,6 +1032,99 @@ extension MactermProtocol.ServerExit.Result: ProtocolValue {
 
     func encode(to writer: inout MessagePackWriter) {
         writer.writeMapHeader(0)
+    }
+}
+
+extension MactermProtocol.CommandRun {
+    struct Args: Equatable {
+        var argv: [ProtocolBin]
+        var cwd: ProtocolBin?
+        var timeoutMs: UInt32 = 5000
+    }
+}
+
+extension MactermProtocol.CommandRun.Args: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var argv: [ProtocolBin]?
+        var cwd: ProtocolBin?
+        var timeoutMs: UInt32?
+        try reader.readMap { key, reader in
+            switch key {
+            case "argv": argv = try [ProtocolBin](from: &reader)
+            case "cwd": cwd = try reader.readOptional(ProtocolBin.self)
+            case "timeout_ms": timeoutMs = try UInt32(from: &reader)
+            default: return false
+            }
+            return true
+        }
+        self.argv = try MessagePackReader.required(argv, "argv")
+        self.cwd = cwd
+        self.timeoutMs = timeoutMs ?? 5000
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        var keyCount = 2
+        if cwd != nil { keyCount += 1 }
+        writer.writeMapHeader(keyCount)
+        writer.writeString("argv")
+        argv.encode(to: &writer)
+        if let cwd {
+            writer.writeString("cwd")
+            cwd.encode(to: &writer)
+        }
+        writer.writeString("timeout_ms")
+        timeoutMs.encode(to: &writer)
+    }
+}
+
+extension MactermProtocol.CommandRun {
+    struct Result: Equatable {
+        var output: ProtocolBin
+        var truncated: Bool = false
+        var code: UInt8?
+        var signal: UInt8?
+    }
+}
+
+extension MactermProtocol.CommandRun.Result: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var output: ProtocolBin?
+        var truncated: Bool?
+        var code: UInt8?
+        var signal: UInt8?
+        try reader.readMap { key, reader in
+            switch key {
+            case "output": output = try ProtocolBin(from: &reader)
+            case "truncated": truncated = try Bool(from: &reader)
+            case "code": code = try reader.readOptional(UInt8.self)
+            case "signal": signal = try reader.readOptional(UInt8.self)
+            default: return false
+            }
+            return true
+        }
+        self.output = try MessagePackReader.required(output, "output")
+        self.truncated = truncated ?? false
+        self.code = code
+        self.signal = signal
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        var keyCount = 2
+        if code != nil { keyCount += 1 }
+        if signal != nil { keyCount += 1 }
+        writer.writeMapHeader(keyCount)
+        writer.writeString("output")
+        output.encode(to: &writer)
+        writer.writeString("truncated")
+        truncated.encode(to: &writer)
+        if let code {
+            writer.writeString("code")
+            code.encode(to: &writer)
+        }
+        if let signal {
+            writer.writeString("signal")
+            signal.encode(to: &writer)
+        }
     }
 }
 

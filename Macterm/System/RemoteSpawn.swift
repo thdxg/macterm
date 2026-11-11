@@ -3,23 +3,18 @@ import Foundation
 /// Builds the commands behind remote projects (#104). Pure string assembly:
 /// every command line is unit-testable without a host.
 ///
-/// Two deliberately different profiles:
 /// - **A pane's command** (`sessionCommand`, `plainShellCommand`): it runs
 ///   on the tty of an ssh channel over the host's one connection
 ///   (`SSHConnections.ttyArguments`, 0057). The login happened before, in
 ///   the master, so the channel never asks. Persistence lives in the
 ///   host's server.
-/// - **The foreground probe** (`foregroundProbeArgv`): non-interactive.
-///   `BatchMode=yes` + `ConnectTimeout` so a dead host or an auth prompt can
-///   never hang it.
+/// - **A background read** (`gitProbeScript`): the host's server runs it
+///   (`RemoteHosts.run`, 0058). It opens no connection of its own.
 ///
 /// Port, identity, ControlMaster, and IPv6 literals are deliberately not
 /// expressible here — point the host field at an `~/.ssh/config` alias for
 /// those (the same stance the `path:` grammar took in #137).
 enum RemoteSpawn {
-    /// Connection timeout for background ops.
-    static let opConnectTimeoutSeconds = 5
-
     /// The ssh destination for a parsed remote: `user@host` or bare `host`.
     static func destination(user: String?, host: String) -> String {
         if let user, !user.isEmpty { return "\(user)@\(host)" }
@@ -183,18 +178,6 @@ enum RemoteSpawn {
         return preamble
     }
 
-    /// How the script invokes zmx: a user-supplied absolute path used verbatim
-    /// (deterministic — bypasses all PATH resolution), or the bare command
-    /// `zmx` resolved through `remoteEnvPreamble`'s PATH setup. `zmxPath` comes
-    /// from the project's optional `zmxPath` (New Remote Project sheet / layout
-    /// file) — the escape hatch for hosts where PATH resolution can't find it
-    /// (network-homed dirs, exotic `/bin/sh`, PATH set only in a non-POSIX
-    /// shell config). Double-quoted so a path with spaces survives.
-    static func zmxInvocation(zmxPath: String?) -> String {
-        guard let zmxPath, !zmxPath.trimmingCharacters(in: .whitespaces).isEmpty else { return "zmx" }
-        return posixDoubleQuote(zmxPath.trimmingCharacters(in: .whitespaces))
-    }
-
     /// Where the host's server lives (`server/host/attach.sh`, `d` and `b`).
     static func hostServerBinary(key: String) -> String {
         "$HOME/.local/share/macterm/bin/macterm-\(key)"
@@ -257,127 +240,34 @@ enum RemoteSpawn {
         return "\(remoteShell) \(shellQuote(script))"
     }
 
-    /// One-round-trip foreground probe for tier-2 remote tab naming and layout
-    /// `run:` capture: resolve every `macterm-*` session on the host to its
-    /// tty's foreground process — the same session→leader→tpgid→comm pipeline
-    /// `ZmxForegroundResolver` runs locally, expressed as portable POSIX sh
-    /// (Linux, BSD, macOS remotes). Emits
-    /// `session<TAB>comm<TAB>idleflag<TAB>shellflag<TAB>args` lines; parsed by
-    /// `RemoteForegroundResolver.parseProbeOutput`. The idle flag is the
-    /// HOST's own verdict — `1` when the tty's foreground process group IS
-    /// the session leader's (the shell owns its prompt), `0` when some other
-    /// group holds it — so busyness never depends on the local Mac's shell
-    /// database recognizing a remote-only shell; a failed pgid read emits an
-    /// empty flag, which parses as "unknown" and falls back to the local
-    /// heuristic rather than inventing a verdict. The shell flag is `1` when
-    /// the foreground's name is listed in the HOST's `/etc/shells`, so a
-    /// shell the Mac has never seen (`elvish`, `xonsh`) still counts as a
-    /// shell when it is nested inside the session's own; `0` otherwise, and
-    /// empty when the host has no `/etc/shells` to ask. Terminal multiplexers
-    /// are always `0`: Debian's tmux and screen packages add themselves to
-    /// `/etc/shells`, but `tmux attach` is a program to record and title. `args` is the foreground's
-    /// full command line (the remote analogue of the local KERN_PROCARGS2
-    /// argv that Save Layout records as `run:`) — it may contain tabs, so it
-    /// is the LAST field, consumed as the unsplit remainder.
-    ///
-    /// Deliberately contains NO single quotes: it ships to the host wrapped
-    /// as `sh -c '<script>'`, and the outer quoting must survive any login
-    /// shell (see `remoteShell`).
-    /// `<ZMX>` is substituted with the resolved zmx invocation (bare `zmx` or
-    /// the explicit quoted path) before shipping.
-    static let foregroundProbeScript = """
-    <ZMX> ls 2>/dev/null | while read -r line; do
-      n=; p=
-      for f in $line; do
-        case "$f" in
-          name=*) n=${f#name=} ;;
-          pid=*) p=${f#pid=} ;;
-        esac
-      done
-      case "$n" in macterm-*) ;; *) continue ;; esac
-      case "$p" in ""|*[!0-9]*) continue ;; esac
-      t=$(ps -o tpgid= -p "$p" 2>/dev/null | tr -d " ")
-      [ -n "$t" ] || continue
-      c=$(ps -o comm= -p "$t" 2>/dev/null)
-      [ -n "$c" ] || continue
-      g=$(ps -o pgid= -p "$p" 2>/dev/null | tr -d " ")
-      i=
-      if [ -n "$g" ]; then
-        if [ "$t" = "$g" ]; then i=1; else i=0; fi
-      fi
-      s=
-      if [ -r /etc/shells ]; then
-        s=0; b=${c##*/}; b=${b#-}
-        case "$b" in
-          tmux|screen|zellij) ;;
-          *) while read -r l; do
-               case "$l" in */"$b") s=1; break ;; esac
-             done < /etc/shells ;;
-        esac
-      fi
-      a=$(ps -o args= -p "$t" 2>/dev/null)
-      printf "%s\\t%s\\t%s\\t%s\\t%s\\n" "$n" "$c" "$i" "$s" "$a"
-    done
-    """
-
-    /// argv (for `/usr/bin/ssh`) running the foreground probe on the remote
-    /// host — non-interactive (`BatchMode`), `sh -c`-wrapped so
-    /// any login shell delivers it intact. `zmxPath` (optional) is used
-    /// verbatim. nil for a local path.
-    static func foregroundProbeArgv(remote: ProjectPath, zmxPath: String? = nil) -> [String]? {
-        guard case let .remote(user, host, _) = remote else { return nil }
-        let script = assertSingleQuoteFree(
-            remoteEnvPreamble
-                + foregroundProbeScript.replacingOccurrences(of: "<ZMX>", with: zmxInvocation(zmxPath: zmxPath)),
-            onViolation: .failNonZero
-        )
-        return [
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
-            destination(user: user, host: host),
-            "\(remoteShell) \(shellQuote(script))",
-        ]
-    }
-
     /// The git reads of the memory panel for a remote project, in one
-    /// connection (`ProjectGit.remoteStatus`): the same six reads that
-    /// `ProjectGit.status` runs locally, with their outputs separated by
-    /// `ProjectGit.recordSeparator`. The diff runs only when the status has
-    /// a changed tracked file (a line that starts with `1`, `2` or `u`), as
-    /// locally. The script exits 2 when the directory
+    /// command that the host's server runs (`ProjectGit.remoteStatus`): the
+    /// same six reads that `ProjectGit.status` runs locally, with their
+    /// outputs separated by `ProjectGit.recordSeparator`. The diff runs only
+    /// when the status has a changed tracked file (a line that starts with
+    /// `1`, `2` or `u`), as locally. The script exits 2 when the directory
     /// is not there, 3 when the host has no git, 4 when the directory is not
     /// in a repository, and 0 in all other cases (`ProjectGit.branchLogScript`
-    /// fails on a detached HEAD, which is not a failure of the read); ssh
-    /// itself exits 255. `GIT_OPTIONAL_LOCKS=0` and
-    /// `core.fsmonitor=false` for the same reasons as locally. Never sources
-    /// a profile (see `remoteEnvPreamble`). nil for a local path.
-    static func gitProbeArgv(remote: ProjectPath) -> [String]? {
-        guard case let .remote(user, host, directory) = remote else { return nil }
+    /// fails on a detached HEAD, which is not a failure of the read).
+    /// `GIT_OPTIONAL_LOCKS=0` and `core.fsmonitor=false` for the same reasons
+    /// as locally. Never sources a profile (see `remoteEnvPreamble`).
+    static func gitProbeScript(directory: String) -> String {
         let git = (["git"] + ProjectGit.gitOptions).joined(separator: " ")
         let separator = "printf \"\\036\""
         let branchFormat = "%(refname:short)%1f%(objectname:short)%1f%(committerdate:unix)%1f%(subject)"
-        let script = assertSingleQuoteFree(
-            remoteEnvPreamble
-                + "GIT_OPTIONAL_LOCKS=0; GIT_TERMINAL_PROMPT=0; export GIT_OPTIONAL_LOCKS GIT_TERMINAL_PROMPT; "
-                + "cd \(quoteRemoteDirectory(directory)) 2>/dev/null || exit 2; "
-                + "command -v git >/dev/null 2>&1 || exit 3; "
-                + "s=$(\(git) status --porcelain=v2 --branch --show-stash 2>/dev/null) || exit 4; "
-                + "printf \"%s\\n\" \"$s\"; \(separator); "
-                + "\(git) log -\(ProjectGit.recentCommitCount) --format=%h%x1f%s%x1f%ct 2>/dev/null; \(separator); "
-                + "\(git) for-each-ref refs/heads --sort=-committerdate --count=\(ProjectGit.recentBranchCount) "
-                + "--format=\"\(branchFormat)\" 2>/dev/null; \(separator); "
-                + "\(git) worktree list --porcelain 2>/dev/null; \(separator); "
-                + "{ \(ProjectGit.branchLogScript(git: git)); } 2>/dev/null; \(separator); "
-                + "if printf \"%s\\n\" \"$s\" | grep -q \"^[12u] \"; then "
-                + "\(ProjectGit.diffCommand(git: git)); fi; exit 0",
-            onViolation: .failNonZero
-        )
-        return [
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
-            destination(user: user, host: host),
-            "\(remoteShell) \(shellQuote(script))",
-        ]
+        return remoteEnvPreamble
+            + "GIT_OPTIONAL_LOCKS=0; GIT_TERMINAL_PROMPT=0; export GIT_OPTIONAL_LOCKS GIT_TERMINAL_PROMPT; "
+            + "cd \(quoteRemoteDirectory(directory)) 2>/dev/null || exit 2; "
+            + "command -v git >/dev/null 2>&1 || exit 3; "
+            + "s=$(\(git) status --porcelain=v2 --branch --show-stash 2>/dev/null) || exit 4; "
+            + "printf \"%s\\n\" \"$s\"; \(separator); "
+            + "\(git) log -\(ProjectGit.recentCommitCount) --format=%h%x1f%s%x1f%ct 2>/dev/null; \(separator); "
+            + "\(git) for-each-ref refs/heads --sort=-committerdate --count=\(ProjectGit.recentBranchCount) "
+            + "--format=\"\(branchFormat)\" 2>/dev/null; \(separator); "
+            + "\(git) worktree list --porcelain 2>/dev/null; \(separator); "
+            + "{ \(ProjectGit.branchLogScript(git: git)); } 2>/dev/null; \(separator); "
+            + "if printf \"%s\\n\" \"$s\" | grep -q \"^[12u] \"; then "
+            + "\(ProjectGit.diffCommand(git: git)); fi; exit 0"
     }
 
     /// POSIX single-quote escaping: safe against spaces, globs, `$`, and
@@ -409,37 +299,18 @@ enum RemoteSpawn {
         return "\"\(escaped)\""
     }
 
-    /// What a script does when the single-quote-free invariant is violated.
-    enum QuoteViolationFallback {
-        /// Interactive pane: drop into a shell so the pane stays usable and the
-        /// user sees the diagnostic (a bare exit would vanish the pane).
-        case dropToShell
-        /// Background op (kill / probe): exit NON-zero so the caller sees an
-        /// honest failure instead of a silent no-op that reports success.
-        case failNonZero
-    }
-
     /// The wire-format invariant: an assembled remote script must contain NO
     /// single quotes, so `sh -c '<script>'` tokenizes identically under every
     /// login shell (bash/zsh/fish/nu). Returns the script unchanged when it
-    /// holds, or a safe diagnostic script (never nil, never a `'`) when a
-    /// user-supplied field smuggled one in — so the caller surfaces the problem
-    /// instead of mistokenizing on a non-POSIX login shell.
-    static func assertSingleQuoteFree(
-        _ script: String,
-        onViolation fallback: QuoteViolationFallback = .dropToShell
-    ) -> String {
+    /// holds, or a safe diagnostic script (never a `'`) when a user-supplied
+    /// field smuggled one in: the pane shows the diagnostic and drops into a
+    /// shell, so it stays usable (a bare exit would vanish the pane).
+    static func assertSingleQuoteFree(_ script: String) -> String {
         guard script.contains("'") else { return script }
         // Keep the replacement itself single-quote-free.
-        let diagnostic = "echo \"macterm: remote path contains an unsupported single quote\" >&2; "
-        switch fallback {
-        case .dropToShell:
-            return remoteEnvPreamble + diagnostic + "exec ${SHELL:-/bin/sh}"
-        case .failNonZero:
-            // No shell exec — a kill/probe with a bad path should FAIL, not
-            // land in an interactive shell that exits 0.
-            return diagnostic + "exit 1"
-        }
+        return remoteEnvPreamble
+            + "echo \"macterm: remote path contains an unsupported single quote\" >&2; "
+            + "exec ${SHELL:-/bin/sh}"
     }
 
     /// Quote a remote directory for the `cd` inside the `sh -c` script,

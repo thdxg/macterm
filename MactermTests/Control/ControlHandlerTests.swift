@@ -274,7 +274,6 @@ struct ControlHandlerTests {
             isBundled: { true },
             killSession: { _ in },
             killRemoteSession: { _, _, _ in },
-            remoteForegrounds: { _, _ in .unreachable },
             listSessions: { sessions },
             endV1Sessions: { _ in true }
         )
@@ -1490,7 +1489,6 @@ struct ControlHandlerTests {
             isBundled: { true },
             killSession: { name in await killed.append(name) },
             killRemoteSession: { _, _, _ in },
-            remoteForegrounds: { _, _ in .unreachable },
             listSessions: { [LocalSession(name: "macterm-x-000011112222")] },
             endV1Sessions: { _ in true }
         )

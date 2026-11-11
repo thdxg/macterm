@@ -73,9 +73,16 @@ final class RemoteHosts {
         /// How long a session that the app told a client to make counts as
         /// made (`created`).
         var creationGrace: TimeInterval = 30
+        /// A host's link to its server is up: its background work starts
+        /// (the terminfo install).
+        var linkReady: @MainActor (String) -> Void = { _ in }
 
         static var live: Configuration {
-            Configuration(key: ServerBuilds.bundledKey, declines: .preferences)
+            Configuration(
+                key: ServerBuilds.bundledKey,
+                declines: .preferences,
+                linkReady: { RemoteTerminfoInstaller.shared.ensureInstalled(destination: $0) }
+            )
         }
     }
 
@@ -204,6 +211,36 @@ final class RemoteHosts {
         }
     }
 
+    /// Run a command on a host to its end, over the host's server
+    /// (`command.run`), for a background read: Project Insights' Git state,
+    /// the terminfo install. It uses only a connection that is up, as
+    /// `endSession`: a background read never asks for a login and never
+    /// opens a connection of its own (design/005). nil when no connection or
+    /// no server is up, or when the command did not end in time.
+    func run(
+        _ argv: [String],
+        destination: String,
+        timeout: Duration
+    ) async -> MactermProtocol.CommandRun.Result? {
+        switch hosts[destination] {
+        case let .ready(_, link):
+            return await Self.run(argv, timeout: timeout, over: link)
+        case .plain:
+            return nil
+        case .preparing,
+             nil:
+            break
+        }
+        do {
+            let link = try await servers.connect(destination, login: false, install: false)
+            defer { link.close() }
+            return await Self.run(argv, timeout: timeout, over: link)
+        } catch {
+            logger.info("remote command on \(destination, privacy: .public) not run: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
     /// Install the server on a host where the user declined it, after the
     /// user's click. New panes then get sessions; a plain shell stays plain.
     func installServer(_ destination: String) async throws {
@@ -215,6 +252,7 @@ final class RemoteHosts {
             let link = try await servers.connect(destination)
             if case let .ready(_, old) = hosts[destination] { old.close() }
             hosts[destination] = .ready(route, link)
+            configuration.linkReady(destination)
         } catch RemoteServers.Failure.declined {
             decline(destination)
             throw RemoteServers.Failure.declined
@@ -416,6 +454,7 @@ final class RemoteHosts {
         switch result {
         case let .success(host):
             hosts[destination] = host
+            if case .ready = host { configuration.linkReady(destination) }
         case let .failure(failure):
             hosts[destination] = nil
             for session in sessions {
@@ -479,6 +518,27 @@ final class RemoteHosts {
             }.map(LocalSession.init)
         } catch {
             logger.warning("remote session list failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    private static func run(
+        _ argv: [String],
+        timeout: Duration,
+        over link: RemoteServers.Link
+    ) async -> MactermProtocol.CommandRun.Result? {
+        let connection = link.connection
+        let args = MactermProtocol.CommandRun.Args(
+            argv: argv.map { ProtocolBin(Data($0.utf8)) },
+            cwd: nil,
+            timeoutMs: UInt32(timeout.components.seconds * 1000)
+        )
+        do {
+            return try await LocalSessions.bounded {
+                try await connection.call(MactermProtocol.CommandRun.self, args)
+            }
+        } catch {
+            logger.warning("remote command failed: \(String(describing: error), privacy: .public)")
             return nil
         }
     }

@@ -166,13 +166,6 @@ extension Pane {
             // `notePromptReturned` feeds the naming gate.
             notePromptReturned()
             refreshForegroundProcess()
-            // The remote analogue of the refresh above: the local process
-            // table only knows the ssh client, so `refreshForegroundProcess`
-            // is a no-op for a remote pane — instead request an immediate
-            // host probe (bypassing the resolver's throttle) so the finished
-            // program's name doesn't linger until the next scheduled probe
-            // or user interaction.
-            noteRemoteCommandBoundary()
             // Project memory: off unless the user turned it on, macOS 26+. A
             // mirror parses the same OSC 133;D; only the real pane records.
             if !isMirror {

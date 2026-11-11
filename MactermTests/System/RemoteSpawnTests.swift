@@ -113,8 +113,8 @@ struct RemoteSpawnTests {
         // Nested `if`, never `&&`/`||` chaining — the chained form's
         // left-to-right precedence binds the else-branch wrong.
         #expect(!RemoteSpawn.remoteTermPreamble.contains("||"))
-        // Pane-only: a background op has no terminal to describe.
-        let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
+        // Pane-only: a background read has no terminal to describe.
+        let probe = RemoteSpawn.gitProbeScript(directory: "~/dev/api")
         #expect(!probe.contains("infocmp"))
     }
 
@@ -130,8 +130,8 @@ struct RemoteSpawnTests {
         // `remoteTermPreamble` can't fix, since it only ever downgrades.
         #expect(attach().contains("COLORTERM=truecolor; export COLORTERM;"))
         #expect(RemoteSpawn.plainShellCommand(directory: "~").contains("COLORTERM=truecolor; export COLORTERM;"))
-        // Pane-only: background ops and the naming probe render nothing.
-        let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
+        // Pane-only: a background read renders nothing.
+        let probe = RemoteSpawn.gitProbeScript(directory: "~/dev/api")
         #expect(!probe.contains("COLORTERM"))
     }
 
@@ -144,7 +144,7 @@ struct RemoteSpawnTests {
         #expect(RemoteSpawn.remoteTerminalProgramPreamble.hasPrefix("TERM_PROGRAM=ghostty; export TERM_PROGRAM; "))
         let preamble = RemoteSpawn.terminalProgramPreamble(version: "1.3.2-main+b368389")
         #expect(preamble.contains("TERM_PROGRAM_VERSION=1.3.2-main+b368389; export TERM_PROGRAM_VERSION;"))
-        let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
+        let probe = RemoteSpawn.gitProbeScript(directory: "~/dev/api")
         #expect(!probe.contains("TERM_PROGRAM"))
     }
 
@@ -156,7 +156,7 @@ struct RemoteSpawnTests {
         let cmd = attach()
         #expect(cmd.contains("ZMX_FOREGROUND_EVENTS=1; export ZMX_FOREGROUND_EVENTS; "))
         #expect(try #require(cmd.range(of: "ZMX_FOREGROUND_EVENTS")?.lowerBound) < cmd.range(of: "connect")!.lowerBound)
-        let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
+        let probe = RemoteSpawn.gitProbeScript(directory: "~/dev/api")
         #expect(!probe.contains("ZMX_FOREGROUND_EVENTS"))
     }
 
@@ -176,7 +176,7 @@ struct RemoteSpawnTests {
         // hosts (exec hijack of our fds, tty-stdin read-block, profile
         // exec-loop spin). PATH comes from the fallback dir list; anything
         // else is the project's explicit zmxPath.
-        let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
+        let probe = RemoteSpawn.gitProbeScript(directory: "~/dev/api")
         for wire in [attach(), create(), RemoteSpawn.plainShellCommand(directory: "~"), probe] {
             #expect(!wire.contains(".profile"))
             #expect(!wire.contains("/etc/profile"))
@@ -192,38 +192,11 @@ struct RemoteSpawnTests {
         }
     }
 
-    // MARK: - Foreground probe
-
     @Test
-    func probe_argv_is_noninteractive_and_carries_the_script() {
-        let argv = RemoteSpawn.foregroundProbeArgv(remote: remote)
-        #expect(argv?.prefix(4) == ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"])
-        #expect(argv?.dropFirst(4).first == "devbox")
-        let expectedScript = RemoteSpawn.remoteEnvPreamble
-            + RemoteSpawn.foregroundProbeScript.replacingOccurrences(of: "<ZMX>", with: "zmx")
-        #expect(argv?.last == "\(RemoteSpawn.remoteShell) " + RemoteSpawn.shellQuote(expectedScript))
-        #expect(RemoteSpawn.foregroundProbeScript.contains("tpgid"))
-        // The host-side idle verdict needs the leader's own pgid to compare
-        // against the tty's foreground group.
-        #expect(RemoteSpawn.foregroundProbeScript.contains("pgid"))
-        // The full command line rides along for layout `run:` capture.
-        #expect(RemoteSpawn.foregroundProbeScript.contains("ps -o args="))
-        // The shell verdict is the host's own /etc/shells, not the Mac's.
-        #expect(RemoteSpawn.foregroundProbeScript.contains("done < /etc/shells"))
-        #expect(RemoteSpawn.foregroundProbeScript.contains("tmux|screen|zellij) ;;"))
-        // The sh -c wrapper only survives arbitrary login shells while the
-        // script stays free of single quotes.
-        #expect(!RemoteSpawn.foregroundProbeScript.contains("'"))
-        #expect(RemoteSpawn.foregroundProbeArgv(remote: .local("/a")) == nil)
+    func pane_commands_go_through_sh_c() {
         // sh -c (NOT sh -lc): the login flag is unportable — older dash rejects
         // it and drops to an interactive shell.
         #expect(RemoteSpawn.remoteShell == "sh -c")
-    }
-
-    @Test
-    func probe_argv_substitutes_explicit_zmx_path() {
-        let argv = RemoteSpawn.foregroundProbeArgv(remote: remote, zmxPath: "/opt/zmx")
-        #expect(argv?.last?.contains("\"/opt/zmx\" ls") == true)
     }
 
     // MARK: - Quoting
@@ -308,19 +281,6 @@ struct RemoteSpawnTests {
     }
 
     @Test
-    func assert_single_quote_free_op_path_exits_nonzero_not_a_shell() {
-        // A background op (the probe) with a `'`-carrying path must FAIL
-        // honestly (exit 1), not drop into an interactive shell that exits 0 —
-        // otherwise it would report a silent no-op success.
-        let dirty = "exec zmx ls \"it's\""
-        let result = RemoteSpawn.assertSingleQuoteFree(dirty, onViolation: .failNonZero)
-        #expect(!result.contains("'"))
-        #expect(result.contains("unsupported single quote"))
-        #expect(result.contains("exit 1"))
-        #expect(!result.contains("exec ${SHELL")) // no interactive shell on the op path
-    }
-
-    @Test
     func pane_command_with_single_quote_in_directory_stays_quote_free() {
         // End-to-end: a `'` in the remote directory must not survive into the
         // shipped `sh -c '<script>'` (its `'` would break the outer quoting).
@@ -330,13 +290,6 @@ struct RemoteSpawnTests {
             #expect(!cmd.contains("connect"))
             #expect(cmd.count { $0 == "'" } == 2)
         }
-    }
-
-    @Test
-    func probe_argv_with_single_quote_in_zmx_path_stays_quote_free() {
-        let script = RemoteSpawn.foregroundProbeArgv(remote: remote, zmxPath: "~/it's/zmx")?.last
-        #expect(script?.contains("unsupported single quote") == true)
-        #expect(script?.contains(" ls") == false)
     }
 
     @Test
@@ -359,15 +312,9 @@ struct RemoteSpawnTests {
     // MARK: - Git probe
 
     @Test
-    func git_probe_runs_the_six_reads_in_one_connection() throws {
-        let argv = try #require(RemoteSpawn.gitProbeArgv(remote: remote))
-        #expect(argv.contains("BatchMode=yes"))
-        #expect(argv.contains("devbox"))
-        let command = try #require(argv.last)
-        #expect(command.hasPrefix("sh -c '"))
-        let script = String(command.dropFirst("sh -c '".count).dropLast())
-        // The wire-format invariant: no single quote inside the script.
-        #expect(!script.contains("'"))
+    func git_probe_runs_the_six_reads_in_one_command() {
+        let script = RemoteSpawn.gitProbeScript(directory: "~/dev/api")
+        #expect(script.hasPrefix(RemoteSpawn.remoteEnvPreamble))
         #expect(script.contains("cd ~/\"dev/api\" 2>/dev/null || exit 2"))
         #expect(script.contains("command -v git >/dev/null 2>&1 || exit 3"))
         #expect(script.contains("status --porcelain=v2 --branch --show-stash 2>/dev/null) || exit 4"))
@@ -389,10 +336,9 @@ struct RemoteSpawnTests {
     }
 
     @Test
-    func git_probe_is_nil_for_a_local_path_and_fails_closed_on_a_single_quote() throws {
-        #expect(RemoteSpawn.gitProbeArgv(remote: .local("/tmp")) == nil)
-        let argv = try #require(RemoteSpawn.gitProbeArgv(remote: .remote(user: nil, host: "devbox", directory: "/it's")))
-        #expect(argv.last?.contains("exit 1") == true)
-        #expect(argv.last?.contains("git") == false)
+    func git_probe_reads_a_folder_with_a_single_quote() {
+        // The script is one argument of `command.run`, not text that a login
+        // shell parses, so a single quote inside double quotes is safe.
+        #expect(RemoteSpawn.gitProbeScript(directory: "/it's").contains("cd \"/it's\" 2>/dev/null || exit 2"))
     }
 }
