@@ -40,7 +40,7 @@ jobs:
     # below would fail on a tag that isn't `vX.Y.Z` and paint main red for a tip
     # build that worked fine.
     if: ${{ github.ref_name != 'tip' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     # Explicit: reading a release only needs contents:read, and declaring it
     # keeps the job working if the repo's default workflow token is ever
     # tightened.

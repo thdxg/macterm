@@ -13,8 +13,8 @@ description: >
 # reviewable one-line change instead of a silent one.
 #
 # Xcode 27 because AppIcon.icon uses Icon Composer 27 keys (refractivity, inner
-# specular): the actool of Xcode 26 stops on them. Xcode 27 is only on GitHub's
-# `xcode-27` image (macOS 27), so every macOS job runs there.
+# specular): the actool of Xcode 26 stops on them. Xcode 27 is on GitHub's
+# `xcode-27` image (macOS 27), so every macOS job that builds the app runs there.
 
 inputs:
   version:

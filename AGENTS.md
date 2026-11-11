@@ -1090,7 +1090,7 @@ Conventions:
 
 `Test / Release Build` builds the universal Release app and its DMG with `.github/actions/build-release`. This is the same recipe that `release.yml` and `release-tip.yml` use. The test build has no secrets: it is ad-hoc signed, has the Sparkle placeholder key, and is never published. A release never reuses it. A release always builds again from its tagged commit, with the certificate and the key.
 
-Every other macOS job runs on `xcode-27` (macOS 27). `Test / Smoke` starts the Release build on `macos-26` and `macos-15`, isolated, and requires these things:
+Every other macOS job runs on `xcode-27` (macOS 27). **Runners are chosen by cost.** Every macOS job runs on GitHub-hosted runners, which are free for this public repository. Blacksmith bills a macOS minute 20 times a 2 vCPU Linux minute and has no macOS runner under 6 vCPU: Unit, End-to-end and Release Build there cost about $900 a month at the volume of 2026-11 (about 300 full Test runs a week), for checks about twice as fast. Linux jobs run on Blacksmith's 2 vCPU runners, except the two Linux server tests (4 vCPU, because Zig uses every core) and Session Layer (Linux) (GitHub, for netem). The ghostty fork runs on GitHub-hosted runners. `Test / Smoke` starts the Release build on `macos-26` and `macos-15`, isolated, and requires these things:
 
 - The control socket answers `status`. A newer SDK or Swift runtime can break the launch on an older system without a compile error.
 - The app is a terminal. A new tab and a split each get a shell through the bundled zmx, and a command that the script types there shows its output in `pane dump`.

@@ -17,7 +17,7 @@ name: Server Build
 # older than 90 days are removed, except the build of main's key.
 #
 # macos-15: lipo needs macOS, and zig cannot link with Xcode 26.4 or later
-# (zig#31658). The xcode-27 image has nothing older.
+# (zig#31658). The macOS 27 runner has nothing older.
 
 on:
   workflow_call:
