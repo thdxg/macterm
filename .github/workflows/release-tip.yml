@@ -150,10 +150,10 @@ jobs:
             # number is pure waste. Mirrors ghostty's paths-filter with
             # `base: tip`, expressed in git so a missing tag is simply "build".
             CHANGED=$(git diff --name-only "$TIP_SHA" "$SHA" \
-              | grep -vE '^(website/|README\.md|AGENTS\.md|CLAUDE\.md|LICENSE|\.github/(ISSUE_TEMPLATE/|.*\.md$))' \
+              | grep -vE '^(docs/|README\.md|AGENTS\.md|CLAUDE\.md|LICENSE|\.github/(ISSUE_TEMPLATE/|.*\.md$))' \
               || true)
             if [[ -z "$CHANGED" ]]; then
-              skip "only docs/website changed since $TIP_SHA"
+              skip "only docs changed since $TIP_SHA"
             fi
           fi
 
