@@ -2315,7 +2315,7 @@ extension GhosttyTerminalNSView {
     /// Also refuses until the pane printed its first output (see
     /// `LeadershipClaimReadiness`): before it, the `zmx connect` client has
     /// not put the pty in raw mode, and the kernel echoes the claim as
-    /// `^[_zmx;claim^[\\` on the screen. A refused claim is not recorded, and
+    /// `^[_zmx;claim^[\` on the screen. A refused claim is not recorded, and
     /// the first output sends the sized report again, so the claim follows.
     ///
     /// Idempotent by design — zmx's `handleClaim` returns early when the
