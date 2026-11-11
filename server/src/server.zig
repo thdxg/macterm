@@ -272,7 +272,7 @@ const Channel = struct {
 const Waiter = struct {
     peer: u64,
     re: u64,
-    kind: enum { create, info, kill, list },
+    kind: enum { create, info, kill, list, seen },
 };
 
 /// The server's connection to one session process.
@@ -289,6 +289,8 @@ const Entry = struct {
     greeted: bool = false,
     refused: bool = false,
     state: ?State = null,
+    /// The session's attention flags, from its last `attention` message.
+    attention: m.Attention = .{},
     exit: ?session.ExitStatus = null,
     /// The `session.exit` event went out.
     announced: bool = false,
@@ -336,6 +338,9 @@ const Entry = struct {
             out.rows = st.rows;
             out.clients = st.clients;
         }
+        out.unseen = e.attention.unseen;
+        out.failed = e.attention.failed;
+        out.bell = e.attention.bell;
         if (e.exit) |x| {
             out.code = x.code;
             out.signal = x.signal;
@@ -718,6 +723,23 @@ const Server = struct {
             @memcpy(state.pty_buf[0..state.pty_len], st.pty.bytes[0..state.pty_len]);
             e.state = state;
             if (first) s.settle(e);
+        } else if (std.mem.eql(u8, msg.t, m.Attention.name)) {
+            const a = m.decodePane(m.Attention, arena, msg) catch return s.brokenEntry(e, "a bad attention");
+            const changed = !std.meta.eql(e.attention, a);
+            e.attention = a;
+            if (changed) s.emit(m.PaneAttention, .{ .id = e.id, .unseen = a.unseen, .failed = a.failed, .bell = a.bell });
+            // The event is out: the requests that waited for the answer to
+            // `seen` get their replies.
+            var i: usize = 0;
+            while (i < e.waiters.items.len) {
+                const w = e.waiters.items[i];
+                if (w.kind != .seen) {
+                    i += 1;
+                    continue;
+                }
+                _ = e.waiters.orderedRemove(i);
+                s.reply(w.peer, w.re, m.PaneSeen, .{});
+            }
         } else if (std.mem.eql(u8, msg.t, m.Exit.name)) {
             const x = m.decodePane(m.Exit, arena, msg) catch return s.brokenEntry(e, "a bad exit");
             if (e.exit != null) return;
@@ -736,7 +758,7 @@ const Server = struct {
         for (waiters) |w| switch (w.kind) {
             .create => s.reply(w.peer, w.re, m.SessionCreate, .{ .session = e.info() }),
             .info => s.reply(w.peer, w.re, m.SessionInfo, .{ .session = e.info() }),
-            .kill, .list => s.wait(&e.waiters, w),
+            .kill, .list, .seen => s.wait(&e.waiters, w),
         };
         s.answerLists();
     }
@@ -780,7 +802,7 @@ const Server = struct {
         for (e.waiters.items) |w| switch (w.kind) {
             .kill => s.reply(w.peer, w.re, m.SessionKill, .{}),
             .create => s.replyError(w.peer, w.re, "start_failed", "The session ended before it was ready."),
-            .info, .list => s.replyError(w.peer, w.re, "not_found", "No session has this id."),
+            .info, .list, .seen => s.replyError(w.peer, w.re, "not_found", "No session has this id."),
         };
         e.waiters.clearRetainingCapacity();
         s.answerLists();
@@ -805,7 +827,7 @@ const Server = struct {
                 defer s.gpa.free(waiters);
                 for (waiters) |w| switch (w.kind) {
                     .create => s.replyError(w.peer, w.re, "start_failed", "The session does not answer."),
-                    .info, .list => s.replyError(w.peer, w.re, "not_found", "The session does not answer."),
+                    .info, .list, .seen => s.replyError(w.peer, w.re, "not_found", "The session does not answer."),
                     .kill => s.wait(&e.waiters, w),
                 };
             }
@@ -1120,6 +1142,15 @@ const Server = struct {
                 s.wait(&e.waiters, .{ .peer = p.id, .re = re, .kind = .info });
             },
             m.SessionKill => s.kill(p, re, args.id),
+            m.PaneSeen => {
+                const e = s.findEntry(args.id) orelse
+                    return s.replyError(p.id, re, "not_found", "No session has this id.");
+                if (e.refused) return s.replyError(p.id, re, "refused", "The session runs a build that this server cannot speak to.");
+                if (e.dead or e.exit != null) return s.replyError(p.id, re, "not_found", "No running session has this id.");
+                if (!e.listed()) return s.replyError(p.id, re, "starting", "The session is not ready.");
+                s.wait(&e.waiters, .{ .peer = p.id, .re = re, .kind = .seen });
+                s.sendEntryPane(e, m.Seen, .{});
+            },
             m.ServerExit => {
                 std.log.info("server: server.exit", .{});
                 // Unlinked before the reply, so that a start that follows the

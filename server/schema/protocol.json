@@ -128,6 +128,16 @@
       "result": "SessionKill.Result"
     },
     {
+      "name": "pane.seen",
+      "type": "PaneSeen",
+      "since": 1,
+      "senders": [
+        "local"
+      ],
+      "args": "PaneSeen.Args",
+      "result": "PaneSeen.Result"
+    },
+    {
       "name": "server.exit",
       "type": "ServerExit",
       "since": 1,
@@ -152,6 +162,16 @@
     {
       "name": "session.exit",
       "type": "SessionExit",
+      "since": 1,
+      "senders": [
+        "local",
+        "session",
+        "remote"
+      ]
+    },
+    {
+      "name": "pane.attention",
+      "type": "PaneAttention",
       "since": 1,
       "senders": [
         "local",
@@ -319,6 +339,22 @@
       "since": 1,
       "senders": [
         "session"
+      ]
+    },
+    {
+      "name": "attention",
+      "type": "Attention",
+      "since": 1,
+      "senders": [
+        "session"
+      ]
+    },
+    {
+      "name": "seen",
+      "type": "Seen",
+      "since": 1,
+      "senders": [
+        "local"
       ]
     }
   ],
@@ -757,6 +793,27 @@
           "type": "u16",
           "optional": true,
           "since": 1
+        },
+        {
+          "name": "unseen",
+          "type": "bool",
+          "optional": false,
+          "default": "false",
+          "since": 1
+        },
+        {
+          "name": "failed",
+          "type": "bool",
+          "optional": false,
+          "default": "false",
+          "since": 1
+        },
+        {
+          "name": "bell",
+          "type": "bool",
+          "optional": false,
+          "default": "false",
+          "since": 1
         }
       ],
       "cases": []
@@ -832,6 +889,25 @@
     },
     {
       "name": "SessionKill.Result",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
+    },
+    {
+      "name": "PaneSeen.Args",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "PaneSeen.Result",
       "kind": "struct",
       "fields": [],
       "cases": []
@@ -926,6 +1002,37 @@
           "name": "signal",
           "type": "u8",
           "optional": true,
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "PaneAttention",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "str",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "unseen",
+          "type": "bool",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "failed",
+          "type": "bool",
+          "optional": false,
+          "since": 1
+        },
+        {
+          "name": "bell",
+          "type": "bool",
+          "optional": false,
           "since": 1
         }
       ],
@@ -1377,6 +1484,40 @@
         "auth",
         "unknown"
       ]
+    },
+    {
+      "name": "Attention",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "unseen",
+          "type": "bool",
+          "optional": false,
+          "default": "false",
+          "since": 1
+        },
+        {
+          "name": "failed",
+          "type": "bool",
+          "optional": false,
+          "default": "false",
+          "since": 1
+        },
+        {
+          "name": "bell",
+          "type": "bool",
+          "optional": false,
+          "default": "false",
+          "since": 1
+        }
+      ],
+      "cases": []
+    },
+    {
+      "name": "Seen",
+      "kind": "struct",
+      "fields": [],
+      "cases": []
     }
   ]
 }
