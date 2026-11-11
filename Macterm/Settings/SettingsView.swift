@@ -492,7 +492,7 @@ private struct SettingsSlider: View {
     var body: some View {
         // The `Slider` dims itself inside a `.disabled(_:)` scope, but the
         // flanking `Text`s are not controls and wouldn't follow on their own.
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 2 + SettingsDescription.gap) {
             HStack {
                 Text(label)
                     .frame(width: Self.labelWidth, alignment: .leading)
@@ -510,7 +510,6 @@ private struct SettingsSlider: View {
             if let description {
                 Text(description)
                     .settingsSecondaryText()
-                    .padding(.top, SettingsDescription.gap)
             }
         }
         .background(HostWindowReader(host: host))
