@@ -77,13 +77,13 @@ jobs:
 
   build:
     needs: [flag, server]
-    runs-on: blacksmith-6vcpu-macos-27
+    runs-on: xcode-27
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -136,7 +136,7 @@ jobs:
 
   release:
     needs: [flag, build]
-    runs-on: blacksmith-6vcpu-macos-27
+    runs-on: xcode-27
     permissions:
       contents: write
     env:
@@ -148,7 +148,7 @@ jobs:
     outputs:
       version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -223,7 +223,7 @@ jobs:
     # carries a real JSON boolean; that property is lost the moment the value
     # comes from a job output.)
     if: ${{ needs.flag.outputs.prerelease == 'false' }}
-    runs-on: blacksmith-6vcpu-macos-27
+    runs-on: xcode-27
     env:
       GH_TOKEN: ${{ secrets.HOMEBREW_TAP_PAT }}
       VERSION: ${{ needs.release.outputs.version }}
@@ -236,7 +236,7 @@ jobs:
           echo "sha256=$(shasum -a 256 macterm.dmg | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - name: Checkout tap
-        uses: useblacksmith/checkout@v1
+        uses: actions/checkout@v7
         with:
           repository: thdxg/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_PAT }}

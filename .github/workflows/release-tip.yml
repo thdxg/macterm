@@ -201,7 +201,7 @@ jobs:
     name: Build and publish
     needs: [gate, server]
     if: needs.gate.outputs.build == 'true'
-    runs-on: blacksmith-6vcpu-macos-27
+    runs-on: xcode-27
     # The newest commit replaces an older one still building: a tip build is
     # ~20 minutes of macOS runner, and finishing one that a newer commit has
     # already outdated only publishes it for a newer one to overwrite.

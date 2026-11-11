@@ -43,7 +43,7 @@ jobs:
       matrix:
         include:
           - name: macOS
-            runner: blacksmith-6vcpu-macos-15
+            runner: macos-15
           # 4 vCPU, not 2 like the light jobs: Zig compiles with every core,
           # so 2 vCPU takes about twice as long for about the same billed
           # vCPU-minutes, and aarch64 is already the slowest required check.

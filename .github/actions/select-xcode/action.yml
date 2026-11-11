@@ -13,9 +13,9 @@ description: >
 # reviewable one-line change instead of a silent one.
 #
 # Xcode 27 because AppIcon.icon uses Icon Composer 27 keys (refractivity, inner
-# specular): the actool of Xcode 26 stops on them. Every macOS job that builds
-# the app runs on Blacksmith's macOS 27 runner (`blacksmith-6vcpu-macos-27`),
-# which has Xcode 27.
+# specular): the actool of Xcode 26 stops on them. The jobs that build the app
+# run on macOS 27, which has Xcode 27: Unit, End-to-end and Release Build on
+# Blacksmith's `blacksmith-6vcpu-macos-27`, the others on GitHub's `xcode-27`.
 
 inputs:
   version:

@@ -371,7 +371,7 @@ jobs:
   smoke-macos-26:
     name: Smoke (macos-26)
     needs: release-build
-    runs-on: blacksmith-6vcpu-macos-26
+    runs-on: macos-26
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -390,7 +390,7 @@ jobs:
   smoke-macos-15:
     name: Smoke (macos-15)
     needs: release-build
-    runs-on: blacksmith-6vcpu-macos-15
+    runs-on: macos-15
     timeout-minutes: 10
     steps:
       - name: Checkout
