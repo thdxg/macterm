@@ -195,6 +195,16 @@ fn serveAndExit(dir: []const u8, fds: Bound) noreturn {
     std.process.exit(0);
 }
 
+/// How many event batches the server keeps for `control.resume`.
+pub const batch_ring = 256;
+
+/// One sent event batch.
+const Batch = struct {
+    seq: u64,
+    /// The encoded message, as it went on channel 0.
+    body: []u8,
+};
+
 /// A GUI or a CLI on the server's socket.
 const Peer = struct {
     id: u64,
@@ -272,7 +282,7 @@ const Channel = struct {
 const Waiter = struct {
     peer: u64,
     re: u64,
-    kind: enum { create, info, kill, list },
+    kind: enum { create, info, kill, list, seen },
 };
 
 /// The server's connection to one session process.
@@ -289,6 +299,8 @@ const Entry = struct {
     greeted: bool = false,
     refused: bool = false,
     state: ?State = null,
+    /// The session's attention flags, from its last `attention` message.
+    attention: m.Attention = .{},
     exit: ?session.ExitStatus = null,
     /// The `session.exit` event went out.
     announced: bool = false,
@@ -336,6 +348,9 @@ const Entry = struct {
             out.rows = st.rows;
             out.clients = st.clients;
         }
+        out.unseen = e.attention.unseen;
+        out.failed = e.attention.failed;
+        out.bell = e.attention.bell;
         if (e.exit) |x| {
             out.code = x.code;
             out.signal = x.signal;
@@ -384,6 +399,9 @@ const Server = struct {
     epoch: u64,
     /// Counts event batches in this epoch.
     seq: u64 = 0,
+    /// The last `batch_ring` batches, encoded, oldest first: what a client
+    /// that lost its link gets again (`control.resume`, design/003 §7).
+    batches: std.ArrayList(Batch) = .empty,
     next_peer: u64 = 1,
     peers: std.ArrayList(*Peer) = .empty,
     entries: std.ArrayList(*Entry) = .empty,
@@ -718,6 +736,26 @@ const Server = struct {
             @memcpy(state.pty_buf[0..state.pty_len], st.pty.bytes[0..state.pty_len]);
             e.state = state;
             if (first) s.settle(e);
+        } else if (std.mem.eql(u8, msg.t, m.Attention.name)) {
+            const a = m.decodePane(m.Attention, arena, msg) catch return s.brokenEntry(e, "a bad attention");
+            const changed = !std.meta.eql(e.attention, a);
+            e.attention = a;
+            if (changed) s.emit(m.PaneAttention, .{ .id = e.id, .unseen = a.unseen, .failed = a.failed, .bell = a.bell });
+            // Only `Watch.seen` sends all flags clear after a change, so this
+            // is the answer to `Seen`: the event is out, and the requests
+            // that wait for it get their replies. A flag that was already on
+            // its way does not answer them.
+            if (a.unseen or a.failed or a.bell) return;
+            var i: usize = 0;
+            while (i < e.waiters.items.len) {
+                const w = e.waiters.items[i];
+                if (w.kind != .seen) {
+                    i += 1;
+                    continue;
+                }
+                _ = e.waiters.orderedRemove(i);
+                s.reply(w.peer, w.re, m.PaneSeen, .{});
+            }
         } else if (std.mem.eql(u8, msg.t, m.Exit.name)) {
             const x = m.decodePane(m.Exit, arena, msg) catch return s.brokenEntry(e, "a bad exit");
             if (e.exit != null) return;
@@ -736,7 +774,7 @@ const Server = struct {
         for (waiters) |w| switch (w.kind) {
             .create => s.reply(w.peer, w.re, m.SessionCreate, .{ .session = e.info() }),
             .info => s.reply(w.peer, w.re, m.SessionInfo, .{ .session = e.info() }),
-            .kill, .list => s.wait(&e.waiters, w),
+            .kill, .list, .seen => s.wait(&e.waiters, w),
         };
         s.answerLists();
     }
@@ -780,7 +818,7 @@ const Server = struct {
         for (e.waiters.items) |w| switch (w.kind) {
             .kill => s.reply(w.peer, w.re, m.SessionKill, .{}),
             .create => s.replyError(w.peer, w.re, "start_failed", "The session ended before it was ready."),
-            .info, .list => s.replyError(w.peer, w.re, "not_found", "No session has this id."),
+            .info, .list, .seen => s.replyError(w.peer, w.re, "not_found", "No session has this id."),
         };
         e.waiters.clearRetainingCapacity();
         s.answerLists();
@@ -805,7 +843,7 @@ const Server = struct {
                 defer s.gpa.free(waiters);
                 for (waiters) |w| switch (w.kind) {
                     .create => s.replyError(w.peer, w.re, "start_failed", "The session does not answer."),
-                    .info, .list => s.replyError(w.peer, w.re, "not_found", "The session does not answer."),
+                    .info, .list, .seen => s.replyError(w.peer, w.re, "not_found", "The session does not answer."),
                     .kill => s.wait(&e.waiters, w),
                 };
             }
@@ -1120,6 +1158,15 @@ const Server = struct {
                 s.wait(&e.waiters, .{ .peer = p.id, .re = re, .kind = .info });
             },
             m.SessionKill => s.kill(p, re, args.id),
+            m.PaneSeen => {
+                const e = s.findEntry(args.id) orelse
+                    return s.replyError(p.id, re, "not_found", "No session has this id.");
+                if (e.refused) return s.replyError(p.id, re, "refused", "The session runs a build that this server cannot speak to.");
+                if (e.dead or e.exit != null) return s.replyError(p.id, re, "not_found", "No running session has this id.");
+                if (!e.listed()) return s.replyError(p.id, re, "starting", "The session is not ready.");
+                s.wait(&e.waiters, .{ .peer = p.id, .re = re, .kind = .seen });
+                s.sendEntryPane(e, m.Seen, .{});
+            },
             m.ServerExit => {
                 std.log.info("server: server.exit", .{});
                 // Unlinked before the reply, so that a start that follows the
@@ -1129,6 +1176,7 @@ const Server = struct {
                 s.exit_peer = p.id;
                 s.exiting = true;
             },
+            m.ControlResume => s.resumeControl(p, re, args),
             m.ChannelOpen => s.openChannel(p, re, args.session),
             m.ChannelClose => {
                 const ch = p.findChannel(args.channel) orelse
@@ -1396,7 +1444,42 @@ const Server = struct {
         s.seq += 1;
         const ev = [_]m.Event{.{ .e = E.name, .a = .{ .bytes = args } }};
         const batch: m.EventBatch = .{ .seq = s.seq, .ev = &ev };
-        for (s.peers.items) |p| if (p.greeted and !p.dead) s.sendControl(p, batch);
+        const body = msgpack.encodeAlloc(s.gpa, batch) catch {
+            // The batch is lost: the ring must not claim to be complete.
+            for (s.batches.items) |b| s.gpa.free(b.body);
+            s.batches.clearRetainingCapacity();
+            return;
+        };
+        const kept = s.keepBatch(body);
+        defer if (!kept) s.gpa.free(body);
+        for (s.peers.items) |p| if (p.greeted and !p.dead) s.sendBody(p, body);
+    }
+
+    /// Keeps the batch for `control.resume`, and gives up the oldest ones.
+    /// The ring owns `body` when this returns true. On an allocation failure
+    /// the ring is emptied, so that a resume never skips a batch.
+    fn keepBatch(s: *Server, body: []u8) bool {
+        s.batches.append(s.gpa, .{ .seq = s.seq, .body = body }) catch {
+            for (s.batches.items) |b| s.gpa.free(b.body);
+            s.batches.clearRetainingCapacity();
+            return false;
+        };
+        while (s.batches.items.len > batch_ring) {
+            s.gpa.free(s.batches.orderedRemove(0).body);
+        }
+        return true;
+    }
+
+    /// `control.resume`: sends the batches after `args.seq` when the epoch is
+    /// this server's and the ring still holds every one of them.
+    fn resumeControl(s: *Server, p: *Peer, re: u64, args: m.ControlResume.Args) void {
+        const held = s.batches.items;
+        const complete = args.epoch == s.epoch and args.seq <= s.seq and
+            (args.seq == s.seq or (held.len > 0 and held[0].seq <= args.seq + 1));
+        if (complete) {
+            for (held) |b| if (b.seq > args.seq) s.sendBody(p, b.body);
+        }
+        s.reply(p.id, re, m.ControlResume, .{ .replayed = complete, .seq = s.seq });
     }
 
     fn sendControl(s: *Server, p: *Peer, value: anytype) void {
