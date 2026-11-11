@@ -1180,7 +1180,7 @@ Macterm updates itself with Sparkle. `SUFeedURL` is `https://macterm.thdxg.dev/a
 Secrets:
 
 - `SPARKLE_ED_PUBLIC_KEY` and `SPARKLE_ED_PRIVATE_KEY`.
-- `HOMEBREW_TAP_PAT`.
+- The org secret `MACTERM_APP_PRIVATE_KEY` and the org variable `MACTERM_APP_CLIENT_ID` of the `macterm-ci` GitHub App. The jobs that write to another repository (the cask bump to `macterm/homebrew-tap`, the GhosttyKit bump PR, the website dispatch) take a short-lived token of it from `actions/create-github-app-token`, for that one repository. No workflow uses a personal access token.
 - `MACTERM_SIGNING_CERT_P12` and `MACTERM_SIGNING_CERT_P12_PASSWORD`. This is a stable self-signed certificate. It keeps TCC grants across updates. **Back up the private key and the certificate**. If you lose either one, users are stranded.
 
 The release notes come from the generator of GitHub (`.github/release.yml`). A person chooses the version number. The `/release` skill walks through the ceremony. The recipe for the certificate is in the history of this file.
