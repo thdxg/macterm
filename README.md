@@ -62,8 +62,12 @@
 ### Homebrew
 
 ```bash
+brew tap macterm/tap
+brew trust --cask macterm/tap/macterm
 brew install --cask macterm/tap/macterm
 ```
+
+Homebrew loads a cask from a tap that is not official only after you trust it.
 
 The cask removes the Gatekeeper quarantine attribute when it installs. The app then starts with no extra prompts.
 

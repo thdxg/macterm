@@ -13,10 +13,14 @@ description: Install Macterm with Homebrew or a direct .dmg download.
 This is the recommended way. The cask clears the Gatekeeper quarantine for you.
 
 ```sh
+brew tap macterm/tap
+brew trust --cask macterm/tap/macterm
 brew install --cask macterm/tap/macterm
 ```
 
-> The tap was `thdxg/tap` before November 2026. If you installed from it, `brew update` moves Macterm to `macterm/tap` for you.
+Homebrew loads a cask from a tap that is not official only after you trust it. `brew trust` does this for the Macterm cask alone.
+
+> The tap was `thdxg/tap` before November 2026. If you installed from it, `brew update` shows the commands that move Macterm to `macterm/tap`: the three lines above, with `brew reinstall --cask macterm` in place of the last one. Until you run them, Macterm keeps its updates through its own updater.
 
 ## From Releases
 
