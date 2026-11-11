@@ -7,8 +7,7 @@ name: Download Badge
 # result in shields' endpoint schema for `img.shields.io/endpoint?url=…`.
 #
 # The file lives alone on an orphan `badges` branch, force-pushed as a single
-# commit. (The feed's store is the separate macterm/appcast repository, so a badge
-# commit can never fail a release publish.)
+# commit.
 on:
   schedule:
     - cron: "17 */6 * * *" # every 6 hours

@@ -24,7 +24,7 @@ on:
     types: [completed]
     branches: [main]
   # Manual re-run for a wedged tip (a cancelled publish, a failed push to the
-  # appcast branch, a failed tag push). Builds whatever main is at now — or, if
+  # appcast, a failed tag push). Builds whatever main is at now — or, if
   # that exact version is already in the feed, only moves the tag (see the
   # build job's "Check whether this version is already published").
   workflow_dispatch:
@@ -332,7 +332,7 @@ jobs:
       # read through two CDNs (Cloudflare in front of the site, and raw
       # githubusercontent behind it), so reading it here could see a stale copy.
       # (publish-appcast.sh keeps its own version guard against the real
-      # appcast branch as the backstop.)
+      # appcast as the backstop.)
       #
       # `is-ancestor` is exact for main because PRs merge via squash only, so the
       # history is linear. A tip tag EQUAL to our commit passes (a commit is its

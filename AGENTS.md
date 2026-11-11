@@ -1208,7 +1208,7 @@ The release notes come from the generator of GitHub (`.github/release.yml`). A p
   - `build.sh` bakes `MactermUpdateChannel` into `Info.plist`. A tip build that you install by hand therefore uses the tip channel by default. Beta stamps `stable`.
 - `release.yml` skips itself for `ref_name == 'tip'`.
 - **GitHub Pages is retired, and the `gh-pages` branch with it**. The feed was at `thdxg.github.io/macterm/appcast.xml` before 1.26.0. An install from before that version asks that URL for ever, gets a 404 and reports no update. Such an install updates only by hand.
-- **Never delete `macterm/appcast` or its `main` branch**. `publish-appcast.sh` creates a missing branch again as an empty orphan, and the feed then names only the one release that it publishes. Every other channel is empty until its next publish. The 2026-10-29 deletion of `gh-pages` lost every item in this way, and the branch was rebuilt from a local clone.
+- **Never delete `macterm/appcast` or its `main` branch**. `publish-appcast.sh` creates a missing `main` again as an empty orphan (it cannot make a missing repository), and the feed then names only the one release that it publishes. Every other channel is empty until its next publish. The 2026-10-29 deletion of `gh-pages` lost every item in this way, and the branch was rebuilt from a local clone.
 
 ## Conventions
 

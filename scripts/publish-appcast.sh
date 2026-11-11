@@ -301,7 +301,7 @@ cp "$NOTES_HTML_FILE" "$NOTES_REL_PATH"
 
 git add appcast.xml "$NOTES_REL_PATH"
 # Name the VERSION as well as the tag: a rolling tag is the same string on every
-# publish, so `Publish appcast for tip` alone makes the branch's history
+# publish, so `Publish appcast for tip` alone makes the feed's history
 # unreadable.
 git commit -m "Publish appcast for ${TAG} (${VERSION})"
 git push origin "$FEED_BRANCH"
