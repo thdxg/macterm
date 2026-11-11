@@ -187,8 +187,8 @@ jobs:
 
       # ── Appcast generation ────────────────────────────────────────────
       # Sparkle's `sign_update` produces an EdDSA signature for each DMG.
-      # We then append a new <item> to the appcast on the `appcast` branch.
-      # That branch is the STORE, not a website: macterm.thdxg.dev proxies it
+      # We then append a new <item> to the appcast in the `macterm/appcast` repository.
+      # That repository is the STORE, not a website: macterm.thdxg.dev proxies it
       # (the Caddyfile of macterm/website), so the feed is live the moment this push lands
       # rather than waiting on a site rebuild. See scripts/publish-appcast.sh.
       #
@@ -210,7 +210,9 @@ jobs:
         with:
           client-id: ${{ vars.MACTERM_APP_CLIENT_ID }}
           private-key: ${{ secrets.MACTERM_APP_PRIVATE_KEY }}
-          repositories: macterm
+          repositories: |
+            macterm
+            appcast
           permission-contents: write
 
       - name: Publish appcast
