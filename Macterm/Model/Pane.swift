@@ -261,7 +261,7 @@ final class Pane: Identifiable {
             isReceivingRemoteSnapshot = false
         default:
             guard let report = ZmxForegroundEvents.parse(payload) else { return }
-            applyRemoteForeground(report, origin: .remoteEvent)
+            applyRemoteForeground(report)
         }
     }
 
