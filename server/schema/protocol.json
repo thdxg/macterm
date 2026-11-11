@@ -935,6 +935,13 @@
           "optional": false,
           "default": "0",
           "since": 1
+        },
+        {
+          "name": "foreground",
+          "type": "bool",
+          "optional": false,
+          "default": "false",
+          "since": 1
         }
       ],
       "cases": []

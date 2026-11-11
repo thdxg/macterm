@@ -324,7 +324,7 @@ const Client = struct {
         }
         writeAll(stdout, "\x1b[0m\x1b[2J\x1b[H") catch {};
 
-        try c.sendPane(m.Attach, attachSize(ipc.getTerminalSize(stdout)));
+        try c.sendPane(m.Attach, attachMessage(ipc.getTerminalSize(stdout), c.foreground_events));
 
         const detach_disabled = util.isDetachKeyDisabled();
         var claims: util.ClaimFilter = .{};
@@ -383,7 +383,7 @@ const Client = struct {
                         const lead = m.decodePane(m.Lead, arena, msg) catch return error.Protocol;
                         // A client that starts to lead sends its size.
                         if (lead.leader) try c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout)));
-                    } else if (c.foreground_events and std.mem.eql(u8, msg.t, m.Foreground.name)) {
+                    } else if (std.mem.eql(u8, msg.t, m.Foreground.name)) {
                         const fg = m.decodePane(m.Foreground, arena, msg) catch return error.Protocol;
                         var buf: [apc_max]u8 = undefined;
                         // In the output stream, so it lands in front of the
@@ -498,8 +498,8 @@ pub fn writeForegroundFixtures(w: *std.Io.Writer) !void {
     try w.writeAll("]\n");
 }
 
-fn attachSize(size: ipc.Resize) m.Attach {
-    return .{ .cols = size.cols, .rows = size.rows, .xpixel = size.xpixel, .ypixel = size.ypixel };
+fn attachMessage(size: ipc.Resize, foreground_events: bool) m.Attach {
+    return .{ .cols = size.cols, .rows = size.rows, .xpixel = size.xpixel, .ypixel = size.ypixel, .foreground = foreground_events };
 }
 
 fn resizeOf(size: ipc.Resize) m.Resize {

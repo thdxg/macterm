@@ -116,7 +116,7 @@ PY
   python3 - <<'PY'
 from v2client import Client
 c = Client("s1")
-c.attach()
+c.attach(foreground=True)
 first = c.wait_msg("foreground")
 assert first["idle"] is True, first
 c.type("sleep 30\r")
@@ -147,7 +147,55 @@ assert b.wait_msg("title")["title"] == b"kept"
 assert b.wait_msg("cwd")["url"] == b"file:///srv"
 assert b.wait_msg("progress")["state"] == "indeterminate"
 assert b.wait_msg("status")["state"] == "running"
+b.attach(foreground=True)
 assert b.wait_msg("foreground")["idle"] is True
+PY
+}
+
+@test "events: only a client that asks gets the foreground" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+from v2client import Client
+a = Client("s1")
+a.attach()
+b = Client("s1")
+b.attach(foreground=True)
+b.wait_msg("foreground")
+b.type("sleep 30\r")
+b.wait(lambda: b"sleep" in b.messages("foreground")[-1]["a"]["comm"], what="the sleep foreground")
+assert a.messages("foreground") == [], a.messages("foreground")
+PY
+}
+
+# Linux counts each wakeup of the session's poll as a voluntary context
+# switch. An idle session with only clients that did not ask for the
+# foreground does not wake. With a client that asked, it wakes each 500 ms.
+@test "events: an idle session wakes only for a client that wants the foreground" {
+  [[ -r /proc/self/status ]] || skip "needs /proc"
+  "$ZMX" session s1 -- /bin/sh
+  SESSION_PID=$(python3 "$BATS_TEST_DIRNAME/v2client.py" pid s1) python3 - <<'PY'
+import os, time
+from v2client import Client
+def switches():
+    for line in open("/proc/%s/status" % os.environ["SESSION_PID"]):
+        if line.startswith("voluntary_ctxt_switches:"):
+            return int(line.split()[1])
+def wakeups(seconds=3):
+    time.sleep(0.5)
+    before = switches()
+    time.sleep(seconds)
+    return switches() - before
+a = Client("s1")
+a.attach()
+a.type("printf 'idle-%s\\n' 1\r")
+a.wait_output("idle-1")
+quiet = wakeups()
+assert quiet <= 1, quiet
+b = Client("s1")
+b.attach(foreground=True)
+b.wait_msg("foreground")
+polled = wakeups()
+assert polled >= 4, polled
 PY
 }
 

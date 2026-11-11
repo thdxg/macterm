@@ -419,6 +419,9 @@ pub const Attach = struct {
     rows: u16,
     xpixel: u16 = 0,
     ypixel: u16 = 0,
+    /// The client wants `foreground` messages. The session reads the pty's
+    /// foreground only while a client that asked for them is connected.
+    foreground: bool = false,
 };
 
 /// The client's new size. Only the leader's size reaches the pty.
