@@ -141,20 +141,17 @@ jobs:
           LATEST: ${{ steps.check.outputs.latest }}
           BRANCH: ${{ steps.check.outputs.branch }}
           API_OK: ${{ steps.api.outputs.ok }}
-          # The app token, for `gh pr create` (see the job's env).
+          # The app token, for the bot lookup and `gh pr create` (see the job's env).
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
-          # The commit is the app's bot user, the same actor that opens the PR.
-          # Its name and id come from the token step, so that a renamed or
-          # replaced app needs no change here. If the id is not found, the step
-          # stops before it pushes anything.
+          # The commit author is the app's bot user, which also opens the PR.
+          # The name and id come from the token step, so a new app needs no change.
           BOT="${APP_SLUG}[bot]"
-          BOT_ID=$(gh api "/users/${BOT}" --jq .id)
-          if [[ ! "$BOT_ID" =~ ^[0-9]+$ ]]; then
+          BOT_ID=$(gh api "/users/${BOT}" --jq .id) || {
             echo "error: could not read the user id of ${BOT}" >&2
             exit 1
-          fi
+          }
           git config user.name  "$BOT"
           git config user.email "${BOT_ID}+${BOT}@users.noreply.github.com"
           git checkout -b "$BRANCH"
