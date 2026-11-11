@@ -65,8 +65,15 @@ final class Pane: Identifiable {
     @ObservationIgnored
     var hostSessionDirectory: String?
     /// A remote pane whose connection stopped: it waits for a trigger or a
-    /// key (`RemoteHosts`), and the leaf dims. Never persisted.
+    /// key (`RemoteHosts`). Its frozen screen is blurred and dimmed, as a
+    /// mirror that does not lead is, so that it does not look live. Never
+    /// persisted.
     var isRemoteLinkLost = false
+    /// A lost pane that shows a line of Macterm's (why the connect failed,
+    /// "Press a key to try again."): the leaf only dims, so that the line
+    /// stays legible. Set by `RemoteHosts` with the line, cleared when the
+    /// link comes back or stops again.
+    var showsRemoteLinkMessage = false
     /// Process the pane launches on first surface creation, injected into the
     /// shell as `command + "\n"`. Set from a declarative layout; nil for an
     /// interactively-created pane (plain shell). Recorded here so a layout
@@ -246,8 +253,32 @@ final class Pane: Identifiable {
     /// remote pane's foreground: a pane with no server on its host (a plain
     /// shell) gets none.
     func receiveUnknownAPC(_ payload: String) {
-        guard isRemote, let report = ZmxForegroundEvents.parse(payload) else { return }
-        applyRemoteForeground(report)
+        guard isRemote else { return }
+        switch payload {
+        case ZmxForegroundEvents.snapshotStart:
+            isReceivingRemoteSnapshot = true
+        case ZmxForegroundEvents.snapshotEnd:
+            isReceivingRemoteSnapshot = false
+        default:
+            guard let report = ZmxForegroundEvents.parse(payload) else { return }
+            applyRemoteForeground(report)
+        }
+    }
+
+    /// Between the two snapshot marks of a remote pane: the output is the
+    /// session's replay, not new output. Its title is the last one that the
+    /// session saw, maybe a prompt's from before the program in front
+    /// started, so it never names the tab (`receiveReportedTitle`): the
+    /// pushed foreground does. Cleared with the surface and when the
+    /// connection stops.
+    @ObservationIgnored
+    private(set) var isReceivingRemoteSnapshot = false
+
+    /// The pane's connection stopped (`RemoteHosts`): a replay that it cut
+    /// is over, and the next attach clears any line of Macterm's.
+    func remoteLinkDidStop() {
+        isReceivingRemoteSnapshot = false
+        showsRemoteLinkMessage = false
     }
 
     @ObservationIgnored
@@ -568,6 +599,8 @@ final class Pane: Identifiable {
     /// have looked. `receiveReportedTitle(_:programPID:)` is the unthrottled
     /// core.
     func receiveReportedTitle(_ title: String) {
+        // Before the throttle, which can hold a title past the end mark.
+        guard !isReceivingRemoteSnapshot else { return }
         switch titleReportThrottle.receive(title, at: Date()) {
         case .evaluate:
             evaluateReportedTitle(title)
@@ -841,6 +874,13 @@ final class Pane: Identifiable {
         isRemote && isRemoteLinkLost
     }
 
+    /// The ssh destination of a remote pane (`[user@]host`), the key of its
+    /// host's one connection. nil for a local pane.
+    nonisolated var remoteDestination: String? {
+        guard case let .remote(user, host, _) = remoteSpec else { return nil }
+        return RemoteSpawn.destination(user: user, host: host)
+    }
+
     /// Whether closing this pane must be confirmed first because a foreground
     /// program is running. This is the single signal every busy-close guard
     /// reads (pane/tab close, project removal, the CLI's `busy` error,
@@ -945,6 +985,7 @@ final class Pane: Identifiable {
         view.onAdaptiveBackgroundChange = nil
         view.onOutputActivity = nil
         view.onUnknownAPC = nil
+        isReceivingRemoteSnapshot = false
         // A remote pane's report described the connection that goes now.
         // The next connection's session reports again; until then nothing
         // is known, so the close falls back to the surface's reading.

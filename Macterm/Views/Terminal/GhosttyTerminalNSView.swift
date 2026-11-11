@@ -263,6 +263,7 @@ final class GhosttyTerminalNSView: NSView {
     /// decisions belong to `TerminalExecutionTracker.markOutputActivity`, not
     /// here; this method forwards only the total row count that decision needs.
     func surfaceDidOutputActivity(total: UInt64, offset _: UInt64, len _: UInt64) {
+        if claimReadiness.noteOutput() { onSurfaceSized?() }
         onOutputActivity?(total)
     }
 
@@ -348,9 +349,10 @@ final class GhosttyTerminalNSView: NSView {
     var onUserInput: (() -> Void)?
     /// The surface has a real size for the first time — from here on a zmx
     /// leadership claim can be delivered (`sendLeadershipClaim` refuses before
-    /// it). Fired once per surface.
+    /// it). Fires at the first size, and again at the first output (the claim waits for it).
     var onSurfaceSized: (() -> Void)?
     private var hasReportedSurfaceSize = false
+    private var claimReadiness = LeadershipClaimReadiness()
     /// Bool is best-effort evidence that the submitted prompt contained text.
     ///
     /// CALL ORDER: every path that reports a submission fires `onInteraction`
@@ -380,6 +382,14 @@ final class GhosttyTerminalNSView: NSView {
     static let remotePaneClientPath: String? = Bundle.main.resourceURL.map {
         $0.appendingPathComponent("bin/macterm").path
     }.flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
+
+    /// The command wrapper of a remote pane's surface: the client, with the
+    /// command that libghostty resolved after `--`, which the client takes
+    /// and does not run. nil without a client, and in the unit-test host.
+    static func remoteClientArgv(client: String?, bypass: ZmxBypass? = ZmxClient.liveBypass) -> [String]? {
+        guard let client, bypass != .unitTestHost else { return nil }
+        return [client, "remote-pane", "--"]
+    }
 
     /// A remote pane with no client: one line, then a wait for the close.
     static let noRemoteClientCommand =
@@ -661,14 +671,18 @@ final class GhosttyTerminalNSView: NSView {
             // session runs the remote user's login shell. Logins go to a
             // sheet (`SSHLoginPrompts`), never to the pane.
             //
+            // The client is the surface's command wrapper (`remoteClientArgv`),
+            // so the command that libghostty resolves after it, login(1) and
+            // a shell, never runs, and no local "Last login" line shows.
+            //
             // Without the client (and in the unit-test host, which restores
             // the developer's panes, `ZmxBypass.unitTestHost`) the pane says
             // so and waits. Fail closed: never a local shell in a remote
             // project, and never an exit, which would end the session.
-            if let client = Self.remotePaneClientPath, ZmxClient.liveBypass != .unitTestHost {
-                config.command = cString("\(RemoteSpawn.shellQuote(client)) remote-pane")
-            } else {
+            if Self.remoteClientArgv(client: Self.remotePaneClientPath) == nil {
                 config.command = cString(Self.noRemoteClientCommand)
+            } else {
+                config.disable_shell_integration = true
             }
         } else {
             // Canonicalize before libghostty sees it: the string is exported
@@ -709,7 +723,7 @@ final class GhosttyTerminalNSView: NSView {
         // budget) → no wrapper, a plain unpersisted shell.
         // The argv element buffers come from `cString` (freed in
         // destroySurface); the pointer array is bound around the spawn below.
-        var wrapper = remoteSpec != nil ? [] : ZmxAttach.wrapperArgv(
+        var wrapper = remoteSpec != nil ? Self.remoteClientArgv(client: Self.remotePaneClientPath) ?? [] : ZmxAttach.wrapperArgv(
             executablePath: ZmxClient.live.executableURL()?.path,
             sessionID: sessionName
         )
@@ -747,7 +761,7 @@ final class GhosttyTerminalNSView: NSView {
                 envVars.append(ghostty_env_var_s(key: k, value: v))
             }
         }
-        if !wrapperArgv.isEmpty, let dir = ZmxSocketBudget.socketDir() {
+        if remoteSpec == nil, !wrapperArgv.isEmpty, let dir = ZmxSocketBudget.socketDir() {
             // Pin the runtime dir for `zmx connect`, so that it finds the
             // server and the sessions where the app's `LocalSessions` looks
             // and where the budget probe measured.
@@ -1052,6 +1066,7 @@ final class GhosttyTerminalNSView: NSView {
         ghostty_surface_set_size(surface, widthPx, heightPx)
         if !hasReportedSurfaceSize {
             hasReportedSurfaceSize = true
+            claimReadiness.noteSized()
             onSurfaceSized?()
         }
     }
@@ -2309,12 +2324,20 @@ extension GhosttyTerminalNSView {
     /// laid out yet (an off-screen tab, the incubator) would resize the shared
     /// pty to a placeholder for every mirror at once.
     ///
+    /// Also refuses until the pane printed its first output (see
+    /// `LeadershipClaimReadiness`): before it, the `zmx connect` client has
+    /// not put the pty in raw mode, and the kernel echoes the claim as
+    /// `^[_zmx;claim^[\` on the screen. A refused claim is not recorded, and
+    /// the first output sends the sized report again, so the claim follows.
+    ///
     /// Idempotent by design — zmx's `handleClaim` returns early when the
     /// client is already leader, sending no size request — so callers may
     /// claim freely rather than tracking whether it is needed.
     @discardableResult
     func sendLeadershipClaim() -> Bool {
-        guard let size = surfaceSize, size.columns > 0, size.rows > 0 else { return false }
+        guard let size = surfaceSize, size.columns > 0, size.rows > 0,
+              claimReadiness.hasOutput
+        else { return false }
         return sendControlSequence(ZmxLeadership.claimSequence)
     }
 
@@ -2529,5 +2552,26 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
         let viewPt = NSPoint(x: x, y: bounds.height - y)
         let screenPt = window?.convertPoint(toScreen: convert(viewPt, to: nil)) ?? viewPt
         return NSRect(x: screenPt.x, y: screenPt.y - h, width: w, height: h)
+    }
+}
+
+/// When a pane may send the zmx leadership claim. The claim is input, and the
+/// pty echoes input until the `zmx connect` client sets raw mode. The client
+/// writes its first output right after that, so the first output is the
+/// signal that a claim is safe.
+struct LeadershipClaimReadiness: Equatable {
+    private(set) var isSized = false
+    private(set) var hasOutput = false
+
+    mutating func noteSized() {
+        isSized = true
+    }
+
+    /// Returns true when this output is the first one and the surface already
+    /// has a size: the caller reports the size again, so the claim goes out.
+    mutating func noteOutput() -> Bool {
+        guard !hasOutput else { return false }
+        hasOutput = true
+        return isSized
     }
 }
