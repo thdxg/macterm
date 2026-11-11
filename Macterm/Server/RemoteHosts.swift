@@ -447,6 +447,7 @@ final class RemoteHosts {
                 logger.info("remote host \(destination, privacy: .public): plain shells: \(failure.description, privacy: .public)")
                 return .plain(route)
             default:
+                // `.windowsHost` ends here on purpose: the plain-shell command is POSIX.
                 throw failure
             }
         }
@@ -591,6 +592,8 @@ enum RemotePaneText {
             case let .configUnreadable(line): "ssh cannot read its configuration: \(HostCheck.clean(line))"
             default: "Macterm cannot connect to \(host): \(failure.description)."
             }
+        case RemoteServers.Failure.windowsHost:
+            "\(host) runs Windows. Macterm does not support Windows hosts."
         case let failure as RemoteServers.Failure:
             "Macterm cannot start its server on \(host): \(failure.description)."
         default:
