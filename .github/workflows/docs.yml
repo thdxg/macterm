@@ -38,6 +38,8 @@ jobs:
         with:
           repository: macterm/website
           path: website
+          # The landing page's <lastmod> is its commit date in this repository.
+          fetch-depth: 0
 
       - name: Set Up Bun
         uses: oven-sh/setup-bun@v2
