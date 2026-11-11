@@ -58,12 +58,20 @@ jobs:
   # runs on macOS only.
   macos:
     name: Session Layer (macOS)
-    needs: server
+    needs: [changes, server]
+    if: ${{ !cancelled() && needs.changes.outputs.bench == 'true' }}
     runs-on: macos-15
     timeout-minutes: 30
     permissions:
       contents: read
     steps:
+      # A skipped job counts as passing where the check is required.
+      - name: Require the Server
+        if: needs.server.result != 'success'
+        run: |
+          echo "The Server job did not succeed: ${{ needs.server.result }}"
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -104,12 +112,20 @@ jobs:
   # VM kernel has no sch_netem module.
   linux:
     name: Session Layer (Linux)
-    needs: server
+    needs: [changes, server]
+    if: ${{ !cancelled() && needs.changes.outputs.bench == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
     steps:
+      # A skipped job counts as passing where the check is required.
+      - name: Require the Server
+        if: needs.server.result != 'success'
+        run: |
+          echo "The Server job did not succeed: ${{ needs.server.result }}"
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v7
 

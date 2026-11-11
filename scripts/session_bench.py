@@ -1024,7 +1024,10 @@ def cmd_limits(args):
     for system, results in sorted(by_system.items()):
         if len(results) < args.min_runs:
             sys.exit(f"error: {len(results)} runs of {system}; the limits need {args.min_runs}")
-        names = set.intersection(*(set(gate_values(r["arms"])) for r in results))
+        name_sets = [set(gate_values(r["arms"])) for r in results]
+        names = set.intersection(*name_sets)
+        if any(n != names for n in name_sets):
+            sys.exit(f"error: the runs of {system} do not all have the same measurements")
         entries = {}
         for name in sorted(names):
             kind = gate_values(results[0]["arms"])[name][2]
@@ -1054,6 +1057,7 @@ def cmd_check(args):
     with open(args.limits) as f:
         limits = json.load(f)["systems"]
     failed = False
+    failures = []
     lines = ["## Session layer gate", ""]
     for path, result in zip(args.results, load_results(args.results)):
         system = result["runner"]["system"]
@@ -1061,6 +1065,7 @@ def cmd_check(args):
         entries = limits.get(system)
         if not entries:
             lines += [f"No limits for {system}. Fail.", ""]
+            failures.append(f"No limits for {system}")
             failed = True
             continue
         values = gate_values(result["arms"])
@@ -1071,6 +1076,7 @@ def cmd_check(args):
         for name, entry in entries.items():
             if name not in values:
                 lines.append(f"| {name} | — | — | — | {entry['limit']:.3f} | Fail: not measured |")
+                failures.append(f"{system}: {name} not measured")
                 failed = True
                 continue
             v1, v2, kind, floor = values[name]
@@ -1078,22 +1084,18 @@ def cmd_check(args):
             if stat <= entry["limit"]:
                 verdict = "Pass"
             elif v2 - v1 < floor:
-                verdict = f"Pass: under the floor of {floor:g}"
+                verdict = f"Pass: under {floor:g} {'MB' if 'emory' in name else 'ms'}"
             else:
                 verdict = "Fail"
+                failures.append(f"{system}: {name}: v1 {v1:.3f}, v2 {v2:.3f}, limit {entry['limit']:.3f}")
                 failed = True
             lines.append(
                 f"| {name} | {v1:.3f} | {v2:.3f} | {stat:.3f} | {entry['limit']:.3f} | {verdict} |"
             )
         lines.append("")
-    lines.append(
-        "_A limit is no change (a ratio of 1, a difference of 0) plus the largest "
-        f"spread of the statistic in the runs of {os.path.basename(args.limits)}. "
-        f"A slower or larger v2 also passes when the difference is under {FLOOR_MS:g} ms "
-        f"(typing, reopen) or {FLOOR_MB:g} MB (memory)._"
-    )
     print("\n".join(lines))
     if failed:
+        print("Gate failed:", *failures, sep="\n", file=sys.stderr)
         sys.exit(1)
 
 
