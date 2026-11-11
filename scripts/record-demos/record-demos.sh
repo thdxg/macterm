@@ -4,7 +4,7 @@
 #   ./scripts/record-demos/record-demos.sh check          preflight only
 #   ./scripts/record-demos/record-demos.sh all            record every demo
 #   ./scripts/record-demos/record-demos.sh 1 3            record only those demos
-#   ./scripts/record-demos/record-demos.sh web            re-encode them into assets/demo/
+#   ./scripts/record-demos/record-demos.sh web            re-encode them into assets/demo/ of the website checkout
 #   ./scripts/record-demos/record-demos.sh remote-up [password]  bring the ssh container up alone
 #   ./scripts/record-demos/record-demos.sh remote-down    and tear it down
 #   ./scripts/record-demos/record-demos.sh quick-prefs    set the quick-terminal geometry (needs an app restart)
@@ -682,14 +682,17 @@ remote_down() {
 
 # ------------------------------------------------------- website variants ----
 # The landing page plays these inline, stacked, so they are re-encoded smaller
-# than the masters and given a poster frame. Written straight into the repo's
-# assets/, which the macterm/website build copies to public/assets, so
-# they are served at /assets/demo/… with no build step.
-WEB_DIR="$REPO/assets/demo"
+# than the masters and given a poster frame. Written straight into assets/demo/
+# of the macterm/website checkout (MACTERM_WEBSITE_DIR, default: ../website
+# next to this repository), whose build copies it to public/assets, so they
+# are served at /assets/demo/… with no build step.
+WEBSITE_DIR="${MACTERM_WEBSITE_DIR:-$REPO/../website}"
+WEB_DIR="$WEBSITE_DIR/assets/demo"
 WEB_WIDTH=1400
 
 web_assets() {
   command -v ffmpeg >/dev/null || die "ffmpeg not found"
+  [ -f "$WEBSITE_DIR/content.mjs" ] || die "no website checkout at $WEBSITE_DIR (set MACTERM_WEBSITE_DIR)"
   mkdir -p "$WEB_DIR"
   local pair name src out
   for pair in \
