@@ -15,10 +15,14 @@
 #   SPARKLE_ED_PRIVATE_KEY — EdDSA private key (Sparkle format)
 #   VERSION                — e.g. 1.8.0, or 0.9.0-beta.1 for a prerelease
 #   TAG                    — e.g. v1.8.0
-#   GH_TOKEN               — token with contents:write on this repo
+#   GH_TOKEN               — token with contents:write on this repo. The
+#                            workflows pass a token of the macterm-ci app,
+#                            so the push is the push of the app.
 #   GITHUB_REPOSITORY      — provided by GitHub Actions (owner/repo)
 #
 # Optional env:
+#   GIT_AUTHOR_BOT_NAME,   — the commit identity. Default: github-actions[bot].
+#   GIT_AUTHOR_BOT_EMAIL     The workflows set the bot user of the app.
 #   PRERELEASE             — "true" for a prerelease. Required for any channel.
 #   CHANNEL                — Sparkle channel name for the new items. Empty =
 #                            the default channel (visible to everyone).
@@ -190,8 +194,8 @@ cd "$WORKDIR"
 
 # Set the bot identity PER-CLONE (not --global): run locally, a --global config
 # would silently overwrite the maintainer's own git identity.
-git config user.name "github-actions[bot]"
-git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+git config user.name "${GIT_AUTHOR_BOT_NAME:-github-actions[bot]}"
+git config user.email "${GIT_AUTHOR_BOT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
 
 # Seed the appcast header on first publication.
 if [[ ! -f appcast.xml ]]; then
