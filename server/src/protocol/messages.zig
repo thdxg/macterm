@@ -309,8 +309,11 @@ pub const SessionKill = struct {
 /// A client shows the pane to the user: the session clears its attention
 /// flags (`Attention`). Only a local client may send it (the GUI or the CLI
 /// of the same user, over the socket that checks the peer's uid, design/006
-/// §2). It reveals nothing and changes no program. A host's server gets it
-/// from no one: `remote` is not a sender. The reply goes after the session
+/// §2). On a host, the app's connection through ssh is `local` to that
+/// host's server, so the app can send it there. It reveals nothing and
+/// changes no program. A program in a pane is also a local client and can
+/// clear a flag, as it can send `session.kill`. A host's server cannot send
+/// it to the Mac: `remote` is not a sender. The reply goes after the session
 /// sent the flags again, so every client already has the event.
 pub const PaneSeen = struct {
     pub const name = "pane.seen";

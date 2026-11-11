@@ -728,8 +728,11 @@ const Server = struct {
             const changed = !std.meta.eql(e.attention, a);
             e.attention = a;
             if (changed) s.emit(m.PaneAttention, .{ .id = e.id, .unseen = a.unseen, .failed = a.failed, .bell = a.bell });
-            // The event is out: the requests that waited for the answer to
-            // `seen` get their replies.
+            // Only `Watch.seen` sends all flags clear after a change, so this
+            // is the answer to `Seen`: the event is out, and the requests
+            // that wait for it get their replies. A flag that was already on
+            // its way does not answer them.
+            if (a.unseen or a.failed or a.bell) return;
             var i: usize = 0;
             while (i < e.waiters.items.len) {
                 const w = e.waiters.items[i];
