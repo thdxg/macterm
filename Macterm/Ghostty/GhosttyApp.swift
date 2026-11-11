@@ -257,11 +257,8 @@ final class GhosttyApp {
         ghostty_app_tick(app)
     }
 
-    /// Propagate application-level focus to libghostty. When the app is not the
-    /// active app, surfaces stop blinking the cursor and running idle
-    /// animations — redraws that otherwise keep every surface's renderer busy.
-    /// Visible surfaces still draw real terminal output; this only throttles
-    /// app-focus-driven repaints (see also per-surface occlusion).
+    /// Set app focus for non-global keybinds. Surface focus controls cursor
+    /// blinking and animations and must be sent separately.
     func setAppFocus(_ focused: Bool) {
         guard let app else { return }
         ghostty_app_set_focus(app, focused)
