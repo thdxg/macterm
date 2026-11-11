@@ -153,22 +153,22 @@ struct ProjectMemoryPanel: View {
     }
 
     /// The Summary section, only with something under its heading: the
-    /// model's paragraph or button, the no-commands line or the failure card.
+    /// model's paragraph or button, the nothing-to-summarize line or the failure card.
     @ViewBuilder
     private func leftOff(_ summary: ProjectMemorySummary) -> some View {
-        // The line explains an empty project: no command and no Git state.
+        // The line says why the Summary is empty: no command and no Git state.
         // Git state fills the space, as the summary does from it. Before the
         // first read answers, the state is not known: show nothing.
-        let showsNoCommands = ProjectMemorySummary.showsNoCommandsLine(
+        let showsNothingToSummarize = ProjectMemorySummary.showsNothingToSummarize(
             hasCommands: summary.lastActivity != nil,
             hasGitStateOrUnknown: git != nil || !memory.gitAnswered.contains(project.id)
         )
-        if summaryEnabled || showsNoCommands || summary.unresolvedFailure != nil {
-            leftOffSection(summary, showsNoCommands: showsNoCommands)
+        if summaryEnabled || showsNothingToSummarize || summary.unresolvedFailure != nil {
+            leftOffSection(summary, showsNothingToSummarize: showsNothingToSummarize)
         }
     }
 
-    private func leftOffSection(_ summary: ProjectMemorySummary, showsNoCommands: Bool) -> some View {
+    private func leftOffSection(_ summary: ProjectMemorySummary, showsNothingToSummarize: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             // The header row carries the reload button, so the body is the
             // paragraph alone.
@@ -180,8 +180,8 @@ struct ProjectMemoryPanel: View {
             }
             VStack(alignment: .leading, spacing: 10) {
                 summaryParagraph
-                if showsNoCommands {
-                    Text("No commands recorded yet. Run something in this project.")
+                if showsNothingToSummarize {
+                    Text("Nothing to summarize yet.")
                         .font(.callout)
                         .foregroundStyle(MactermTheme.fgMuted)
                 }
@@ -199,8 +199,13 @@ struct ProjectMemoryPanel: View {
         if summaryEnabled {
             let state = summarizer.state(for: project.id)
             switch state.phase {
-            case .idle,
-                 .failed:
+            case .idle:
+                EmptyView()
+            case .failed where state.text.isEmpty:
+                Text("The summary could not be written.")
+                    .font(.callout)
+                    .foregroundStyle(MactermTheme.fgMuted)
+            case .failed:
                 EmptyView()
             case .waiting where state.text.isEmpty:
                 Text("Summarizing…")

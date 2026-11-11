@@ -5618,22 +5618,6 @@
         }
       }
     },
-    "No commands recorded yet. Run something in this project." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "아직 기록된 명령이 없습니다. 이 프로젝트에서 명령을 실행하십시오."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "还没有记录任何命令。请在此项目中运行命令。"
-          }
-        }
-      }
-    },
     "No default config files found." : {
       "localizations" : {
         "ko" : {
@@ -6160,6 +6144,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 中还没有运行过任何命令。"
+          }
+        }
+      }
+    },
+    "Nothing to summarize yet." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 요약할 내용이 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有可总结的内容。"
           }
         }
       }
@@ -10370,6 +10370,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "该截图不是 Macterm 可以读取的图像。"
+          }
+        }
+      }
+    },
+    "The summary could not be written." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약을 작성하지 못했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法写出摘要。"
           }
         }
       }

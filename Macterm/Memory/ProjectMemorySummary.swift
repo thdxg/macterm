@@ -18,9 +18,9 @@ struct ProjectMemorySummary: Equatable {
     /// is not a break: a failure is still the thing to fix after it.
     static let stretchBreak: TimeInterval = 3600
 
-    /// The panel's "No commands recorded yet" line shows only for a project
+    /// The panel's "Nothing to summarize yet" line shows only for a project
     /// with no command and no Git state, once a read has answered.
-    static func showsNoCommandsLine(hasCommands: Bool, hasGitStateOrUnknown: Bool) -> Bool {
+    static func showsNothingToSummarize(hasCommands: Bool, hasGitStateOrUnknown: Bool) -> Bool {
         !hasCommands && !hasGitStateOrUnknown
     }
 
