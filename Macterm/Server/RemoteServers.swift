@@ -86,6 +86,9 @@ final class RemoteServers {
         /// The command of step 1 ended with no `hello` and no answer of the
         /// script: ssh's 255 (a lost link), or a proxy that cannot start.
         case attachFailed(String)
+        /// The attach command could not run `sh` and the host says that it is
+        /// Windows (`HostCheck.windowsProbe`).
+        case windowsHost
         case installFailed(String)
         /// The host's server needs a newer app.
         case appTooOld(needsLevel: UInt32)
@@ -102,6 +105,7 @@ final class RemoteServers {
             case let .noBuild(target): "this build of Macterm has no server for \(target)"
             case let .attachFailed(reason):
                 reason.isEmpty ? "the host's server did not answer" : "the host's server did not answer: \(reason)"
+            case .windowsHost: "Windows hosts are not supported"
             case let .installFailed(reason):
                 reason.isEmpty ? "the install of the server failed" : "the install of the server failed: \(reason)"
             case let .appTooOld(level): "the host's server needs Macterm with protocol level \(level)"
@@ -190,6 +194,11 @@ final class RemoteServers {
                 return link
             case let .ended(status, text):
                 guard let check = HostCheck.parse(status: status, stderr: text) else {
+                    // A host with no `sh` ends with a plain exit status. Ask it if
+                    // it is Windows.
+                    if Self.shouldProbeForWindows(status: status, login: login), await isWindows(destination) {
+                        throw Failure.windowsHost
+                    }
                     throw Failure.attachFailed(HostCheck.clean(SSHControlPath.lastLine(of: text)))
                 }
                 switch check {
@@ -206,6 +215,21 @@ final class RemoteServers {
                 }
             }
         }
+    }
+
+    /// The probe runs only for a plain exit status (not 255, a lost link, and
+    /// not -1, a kill or a time-out), and never when the caller may not log in.
+    nonisolated static func shouldProbeForWindows(status: Int32, login: Bool) -> Bool {
+        login && status > 0 && status != 255
+    }
+
+    /// True when the host answers the probe of `HostCheck.windowsProbe` as
+    /// Windows. A probe that fails is not Windows.
+    private func isWindows(_ destination: String) async -> Bool {
+        guard let outcome = try? await connections.run(destination, HostCheck.windowsProbe, timeout: .seconds(15)) else {
+            return false
+        }
+        return HostCheck.isWindows(stdout: outcome.stdout)
     }
 
     /// True when the host's server must make way for this build's: a lower
@@ -455,6 +479,18 @@ enum HostCheck: Equatable {
     }
 
     static let marker = "macterm-host"
+
+    /// One command that cmd.exe and PowerShell run, in the host's ssh shell.
+    /// `%OS%` is Windows' own variable in cmd.exe, and `$env:OS` is it in
+    /// PowerShell. Both give `Windows_NT`. No other shell prints that word. The
+    /// test does not read the host's error text, which is in the host's
+    /// language.
+    static let windowsProbe = "echo %OS% $env:OS"
+
+    /// True when a word of the probe's output is `Windows_NT`.
+    static func isWindows(stdout: String) -> Bool {
+        stdout.split(whereSeparator: \.isWhitespace).contains("Windows_NT")
+    }
 
     /// nil when the status and the text are not the script's: ssh's own
     /// failure, or a host that printed something else.

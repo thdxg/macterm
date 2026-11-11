@@ -141,8 +141,35 @@ class Client:
     def pane(self, t, **a):
         self.send_msg(PANE, {"t": t, "a": a})
 
-    def attach(self, cols=80, rows=24, foreground=False):
-        self.pane("attach", cols=cols, rows=rows, foreground=foreground)
+    def attach(self, cols=80, rows=24, foreground=False, resume=None):
+        """`resume` is (epoch, offset): ask to resume (design/003 section 7)."""
+        extra = {} if resume is None else {"resume_epoch": resume[0], "resume_offset": resume[1]}
+        self.pane("attach", cols=cols, rows=rows, foreground=foreground, **extra)
+
+    def epoch(self):
+        """The `epoch` of the peer's hello."""
+        self.wait(lambda: self.control(), what="the peer's hello")
+        return self.control()[0]["epoch"]
+
+    def offset(self):
+        """The offset after the last output byte that this client got: the
+        offset of its last snapshot (or `resumed`, or 0), plus the output
+        bytes after it. A snapshot's own bytes do not count."""
+        offset, snap = 0, False
+        for ch, kind, v in self.frames:
+            if ch != PANE:
+                continue
+            if kind == MSG:
+                t = v.get("t")
+                if t == "snapshot.start":
+                    snap, offset = True, v["a"]["offset"]
+                elif t == "snapshot.end":
+                    snap = False
+                elif t == "resumed":
+                    offset = v["a"]["offset"]
+            elif not snap:
+                offset += len(v)
+        return offset
 
     def type(self, text):
         self.send(PANE, BYTES, text.encode() if isinstance(text, str) else text)

@@ -174,7 +174,7 @@ PY
   fake_session s1 9 9 9
   run "$ZMX" connect s1 </dev/null
   [ "$status" -eq 1 ]
-  [[ "$output" == *'session "s1" needs protocol level 9 or later, and this build speaks level 1'* ]]
+  [[ "$output" == *'session "s1" needs protocol level 9 or later, and this build speaks level 2'* ]]
 }
 
 @test "connect: a session of a level under ours is refused with a message" {
