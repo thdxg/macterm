@@ -21,7 +21,7 @@ const msgpack = @import("msgpack.zig");
 const Raw = msgpack.Raw;
 
 /// The level that this build speaks. It counts additions to the protocol.
-pub const level: u32 = 1;
+pub const level: u32 = 2;
 
 /// The lowest level that this build accepts from a peer.
 pub const min_level: u32 = 1;
@@ -151,6 +151,21 @@ pub const EventBatch = struct {
 };
 
 // ── Methods ─────────────────────────────────────────────────────────────────
+
+/// A client that lost its link asks for the event batches that it missed
+/// (design/003 §7). With the same `epoch` as the server's `hello` and all the
+/// batches after `seq` still in the server's ring, the server sends them (as
+/// events, before the reply) and `replayed` is true. Otherwise `replayed` is
+/// false: the server restarted, or the ring lost a batch, and the client reads
+/// the full state (`session.list`). `seq` is the count of batches now.
+pub const ControlResume = struct {
+    pub const name = "control.resume";
+    pub const since = 2;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { epoch: u64, seq: u64 };
+    pub const Result = struct { replayed: bool, seq: u64 };
+};
 
 /// Opens a channel for a session's pane (design/003 §1).
 pub const ChannelOpen = struct {
@@ -345,7 +360,7 @@ pub const CommandRun = struct {
 };
 
 /// Every request method. A new method goes here.
-pub const methods = .{ ChannelOpen, ChannelClose, ChannelPause, ChannelResume, Ping, SessionCreate, SessionList, SessionInfo, SessionKill, ServerExit, CommandRun };
+pub const methods = .{ ControlResume, ChannelOpen, ChannelClose, ChannelPause, ChannelResume, Ping, SessionCreate, SessionList, SessionInfo, SessionKill, ServerExit, CommandRun };
 
 // ── Events ──────────────────────────────────────────────────────────────────
 
@@ -454,6 +469,15 @@ pub const Attach = struct {
     /// The client wants `foreground` messages. The session reads the pty's
     /// foreground only while a client that asked for them is connected.
     foreground: bool = false,
+    /// A client that lost its link asks to resume (design/003 §7): the
+    /// `epoch` of the session's `hello` and the offset after the last output
+    /// byte that it got. If the session still holds the output after that
+    /// offset, it answers with `Resumed` and the missing bytes, and no
+    /// snapshot. Otherwise it sends a snapshot. Both fields or none.
+    resume_epoch: ?u64 = null,
+    resume_offset: ?u64 = null,
+
+    pub const field_since = .{ .resume_epoch = 2, .resume_offset = 2 };
 };
 
 /// The client's new size. Only the leader's size reaches the pty.
@@ -496,6 +520,25 @@ pub const SnapshotStart = struct {
     pub const senders = from_session;
 
     scrollback: bool,
+    /// The output offset that the screen in this snapshot shows: the output
+    /// bytes that follow it start here. A client that counts the output
+    /// bytes it gets takes this as its offset (`Attach.resume_offset`).
+    offset: ?u64 = null,
+
+    pub const field_since = .{ .offset = 2 };
+};
+
+/// The answer to an `Attach` that asked to resume, when the session still
+/// holds the output after the client's offset: the output bytes from that
+/// offset follow at once, then the live output. No snapshot comes. A client
+/// that gets `SnapshotStart` in place of this has to show the snapshot.
+pub const Resumed = struct {
+    pub const name = "resumed";
+    pub const since = 2;
+    pub const senders = from_session;
+
+    /// The offset of the first byte that follows. The client's own offset.
+    offset: u64,
 };
 
 pub const SnapshotEnd = struct {
@@ -759,6 +802,7 @@ pub const max_program_records = 64;
 pub const pane_messages = .{
     State, Attach, Resize,     Claim, Lead,     SnapshotStart, SnapshotEnd, Exit,   Take,          End, Refresh,
     Title, Cwd,    Foreground, Mark,  Progress, Bell,          Activity,    Status, ProgramStatus,
+    Resumed,
 };
 
 pub fn encodePane(w: *std.Io.Writer, comptime M: type, value: M) std.Io.Writer.Error!void {

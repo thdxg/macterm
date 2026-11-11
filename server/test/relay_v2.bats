@@ -149,7 +149,7 @@ assert not [x for x in after if x[0] == "bytes"], after
 snapshots = len(c.messages(ch, "snapshot.start"))
 assert c.call("channel.resume", channel=ch) == {}
 start = c.wait_msg(ch, "snapshot.start", count=snapshots + 1)
-assert start == {"scrollback": False}, start
+assert start["scrollback"] is False and start["offset"] > 0, start
 c.wait_msg(ch, "snapshot.end", count=snapshots + 1)
 c.wait_output(ch, "later-3")
 c.type(ch, "printf 'live-%s\\n' 4\r")
@@ -179,7 +179,7 @@ c.type(ch, "yes 0123456789012345678901234567890123456789012345678901234567890123
 # waits in the server longer than 1 s.
 time.sleep(4)
 c.count_only.discard(ch)
-c.wait(lambda: any(v.get("t") == "snapshot.start" and v["a"] == {"scrollback": False}
+c.wait(lambda: any(v.get("t") == "snapshot.start" and v["a"]["scrollback"] is False
                    for v in c.messages(ch)), timeout=20, what="a snapshot after the skip")
 c.wait_output(ch, "done-9", timeout=120)
 # The output that waited was dropped, not sent late.

@@ -28,6 +28,7 @@ const protocol = @import("protocol/protocol.zig");
 const ghostty_vt = terminal.ghostty_vt;
 const frame = protocol.frame;
 const msgpack = protocol.msgpack;
+const ring = @import("ring.zig");
 const m = protocol.messages;
 
 /// The subcommand that the macOS session runs after its disclaiming re-exec.
@@ -317,6 +318,8 @@ const Session = struct {
     pty_name: []const u8,
     pty_name_buf: [128]u8,
     epoch: u64,
+    /// The last output bytes, and their count (design/003 §7).
+    output: ring.Ring = .{},
     size: ipc.Resize,
     /// The terminal, and the events it gives (events.zig).
     watch: events.Watch,
@@ -572,6 +575,8 @@ const Session = struct {
         if (data.len == 0) return;
         const out = util.rewritePromptRedraw(s.gpa, data) orelse data;
         defer if (out.ptr != data.ptr) s.gpa.free(out);
+        // The offsets count what clients get, so the ring holds `out`.
+        s.output.append(s.gpa, out);
         for (s.clients.items) |c| {
             if (!c.attached or c.behind or c.dead) continue;
             c.out.append(s.gpa, m.pane_channel, .bytes, out, true) catch {
@@ -699,7 +704,7 @@ const Session = struct {
         if (std.mem.eql(u8, msg.t, m.Attach.name)) {
             const a = try m.decodePane(m.Attach, arena, msg);
             const size = paneSize(a.cols, a.rows, a.xpixel, a.ypixel) orelse return;
-            s.attach(c, size);
+            s.attach(c, size, resumeOf(a));
             if (a.foreground and !c.wants_foreground) {
                 c.wants_foreground = true;
                 s.checkForeground(c);
@@ -739,7 +744,7 @@ const Session = struct {
         }
     }
 
-    fn attach(s: *Session, c: *Client, size: ipc.Resize) void {
+    fn attach(s: *Session, c: *Client, size: ipc.Resize, want: ?Resume) void {
         // Output that queued before the attach is not this client's: a client
         // gets output only after its snapshot.
         const was_attached = c.attached;
@@ -749,17 +754,46 @@ const Session = struct {
         const leads = s.leader == c;
         // The snapshot is laid out for the size the leader renders at.
         if (leads) resizeTerm(s.gpa, &s.watch.term, size) catch {};
-        if (s.has_output) _ = s.sendSnapshot(c, true);
+        // A client that lost its link and has all of its output but the last
+        // bytes gets those bytes, and nothing is drawn again.
+        const resumed = if (!was_attached) if (want) |w| s.resumeOutput(c, w) else false else false;
+        if (!resumed and s.has_output) _ = s.sendSnapshot(c, true);
         if (leads) {
             s.resize(size);
             // A repaint for incremental renderers: TIOCSWINSZ with the same
-            // size sends no SIGWINCH, so send it (v1's reattach rule).
-            if (s.has_output and !s.pty_closed) {
+            // size sends no SIGWINCH, so send it (v1's reattach rule). Not
+            // for a resume: the program has drawn what the client missed.
+            if (!resumed and s.has_output and !s.pty_closed) {
                 var pgrp: lib_posix.pid_t = 0;
                 if (cross.ioctl(s.pty_fd, cross.TIOCGPGRP, &pgrp) == 0 and pgrp > 0)
                     lib_posix.kill(-pgrp, .WINCH) catch {};
             }
         }
+    }
+
+    /// Answers a resume: `Resumed` and the bytes after the client's offset.
+    /// False when the session cannot (another epoch, bytes that the ring
+    /// lost): nothing was sent, and the client gets a snapshot.
+    fn resumeOutput(s: *Session, c: *Client, want: Resume) bool {
+        if (want.epoch != s.epoch) return false;
+        const missing = s.output.since(want.offset) orelse return false;
+        s.sendPane(c, m.Resumed, .{ .offset = want.offset });
+        var rest = missing;
+        while (rest.len > 0 and !c.dead) {
+            const n = @min(rest.len, snapshot_chunk);
+            // Output, so a client that falls behind drops it as it drops any
+            // output, and then gets a snapshot.
+            c.out.append(s.gpa, m.pane_channel, .bytes, rest[0..n], true) catch {
+                s.dropClient(c);
+                return true;
+            };
+            rest = rest[n..];
+        }
+        if (c.out.droppableLen() > client_cap) {
+            c.out.drop();
+            c.behind = true;
+        }
+        return true;
     }
 
     /// `size` comes from `paneSize`: never 0.
@@ -813,7 +847,7 @@ const Session = struct {
         defer s.gpa.free(raw);
         const data = util.rewritePromptRedraw(s.gpa, raw) orelse raw;
         defer if (data.ptr != raw.ptr) s.gpa.free(data);
-        s.sendPane(c, m.SnapshotStart, .{ .scrollback = scrollback });
+        s.sendPane(c, m.SnapshotStart, .{ .scrollback = scrollback, .offset = s.output.end() });
         var rest = data;
         while (rest.len > 0 and !c.dead) {
             const n = @min(rest.len, snapshot_chunk);
@@ -838,7 +872,7 @@ const Session = struct {
         if (s.has_output and s.sendSnapshot(c, false)) return;
         // With no output, or no memory for the snapshot: an empty one, so
         // that a relay that waits for one stops waiting.
-        s.sendPane(c, m.SnapshotStart, .{ .scrollback = false });
+        s.sendPane(c, m.SnapshotStart, .{ .scrollback = false, .offset = s.output.end() });
         s.sendPane(c, m.SnapshotEnd, .{});
     }
 
@@ -1086,6 +1120,13 @@ fn pollTimeoutFor(foreground_client: bool, deadline: ?i64, now: i64) i32 {
 }
 
 /// A size from a client, cut to `max_cells`. Null for a size of 0.
+/// What an `Attach` asks to resume from.
+const Resume = struct { epoch: u64, offset: u64 };
+
+fn resumeOf(a: m.Attach) ?Resume {
+    return .{ .epoch = a.resume_epoch orelse return null, .offset = a.resume_offset orelse return null };
+}
+
 fn paneSize(cols: u16, rows: u16, xpixel: u16, ypixel: u16) ?ipc.Resize {
     if (cols == 0 or rows == 0) return null;
     return .{ .cols = @min(cols, max_cells), .rows = @min(rows, max_cells), .xpixel = xpixel, .ypixel = ypixel };
