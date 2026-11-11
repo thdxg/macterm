@@ -445,7 +445,7 @@ demo2() {  # sidebar toggle, including over a full-screen TUI, across tabs
 # Demo 3 opens a directory as a new project from the palette. Everything it
 # cleans up is matched by that directory's PATH, never by name: a project of
 # yours may share the name (a `website` of your own was nearly removed once).
-D3_DIR="$HOME/dev/macterm/website/docs"
+D3_DIR="$HOME/dev/macterm/docs"
 D3_NAME="$(basename "$D3_DIR")"
 d3_cleanup() {
   local n
@@ -683,7 +683,7 @@ remote_down() {
 # ------------------------------------------------------- website variants ----
 # The landing page plays these inline, stacked, so they are re-encoded smaller
 # than the masters and given a poster frame. Written straight into the repo's
-# assets/, which website/public/assets symlinks (and the Dockerfile copies), so
+# assets/, which the macterm/website build copies to public/assets, so
 # they are served at /assets/demo/… with no build step.
 WEB_DIR="$REPO/assets/demo"
 WEB_WIDTH=1400
@@ -1651,7 +1651,7 @@ drive12() {
 demo12() {  # copy mode scrolls up a long traceback, and Explain Output explains its cause
   say "demo 12 — copy mode and Explain Output"
   [ "$(strings /Applications/Macterm.app/Contents/MacOS/Macterm 2>/dev/null | grep -c 'Explain Selection')" -gt 0 ] \
-    || die "installed Macterm ($(app_version)) has no Explain Output; demo 12 needs a build with thdxg/macterm#622"
+    || die "installed Macterm ($(app_version)) has no Explain Output; demo 12 needs a build with macterm/macterm#622"
   local model; model="$(model_status)"
   [ "$model" = available ] || die "Apple Intelligence cannot explain output on this Mac now ($model)"
   local keymap chord

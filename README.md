@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/thdxg/macterm/releases/latest">
-    <img src="https://img.shields.io/github/v/release/thdxg/macterm?label=version&color=blue" alt="Latest version" />
+  <a href="https://github.com/macterm/macterm/releases/latest">
+    <img src="https://img.shields.io/github/v/release/macterm/macterm?label=version&color=blue" alt="Latest version" />
   </a>
-  <a href="https://github.com/thdxg/macterm/releases">
-    <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fthdxg%2Fmacterm%2Fbadges%2Fdownloads.json" alt="Total downloads" />
+  <a href="https://github.com/macterm/macterm/releases">
+    <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmacterm%2Fmacterm%2Fbadges%2Fdownloads.json" alt="Total downloads" />
   </a>
-  <a href="https://github.com/thdxg/macterm/actions/workflows/checks.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/thdxg/macterm/checks.yml?branch=main&label=checks" alt="CI status" />
+  <a href="https://github.com/macterm/macterm/actions/workflows/checks.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/macterm/macterm/checks.yml?branch=main&label=checks" alt="CI status" />
   </a>
   <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="macOS 14+" />
 </p>
@@ -24,7 +24,7 @@
 <p align="center">
   <a href="https://macterm.thdxg.dev"><b>Website</b></a> ·
   <a href="https://macterm.thdxg.dev/docs"><b>Docs</b></a> ·
-  <a href="https://github.com/thdxg/macterm/releases"><b>Releases</b></a> ·
+  <a href="https://github.com/macterm/macterm/releases"><b>Releases</b></a> ·
   <a href="https://www.reddit.com/r/macterm"><b>Reddit</b></a>
 </p>
 
@@ -62,14 +62,14 @@
 ### Homebrew
 
 ```bash
-brew install --cask thdxg/tap/macterm
+brew install --cask macterm/tap/macterm
 ```
 
 The cask removes the Gatekeeper quarantine attribute when it installs. The app then starts with no extra prompts.
 
 ### From Releases
 
-Download the latest `.dmg` from [Releases](https://github.com/thdxg/macterm/releases). Open it and drag Macterm to Applications. The app has no Apple Developer certificate signature, so clear the quarantine flag one time:
+Download the latest `.dmg` from [Releases](https://github.com/macterm/macterm/releases). Open it and drag Macterm to Applications. The app has no Apple Developer certificate signature, so clear the quarantine flag one time:
 
 ```bash
 xattr -cr /Applications/Macterm.app
@@ -87,7 +87,7 @@ font-family = JetBrains Mono
 font-size = 16
 ```
 
-A few Macterm defaults are different from the Ghostty defaults: theme, font size, padding and `macos-option-as-alt`. Macterm also sets `tab-inherit-working-directory = false`, so new tabs open at the project root. Macterm loads these defaults before your config. A key that you set always wins. `defaultsBody` in [`MactermConfig.swift`](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift) has the full list.
+A few Macterm defaults are different from the Ghostty defaults: theme, font size, padding and `macos-option-as-alt`. Macterm also sets `tab-inherit-working-directory = false`, so new tabs open at the project root. Macterm loads these defaults before your config. A key that you set always wins. `defaultsBody` in [`MactermConfig.swift`](https://github.com/macterm/macterm/blob/main/Macterm/Config/MactermConfig.swift) has the full list.
 
 Macterm has its own settings for window opacity, sidebar behavior, quick terminal size and keymaps. Open them with **Macterm → Settings**. The [configuration docs](https://macterm.thdxg.dev/docs/configuration) give the full order of precedence and the few window keys that Macterm overrides.
 
@@ -104,12 +104,12 @@ An extension streamlines your workflows for Git, Docker, Kubernetes, SSH, coding
 ## Cookbook
 
 The community shares workflows and recipes: layouts, keybinds and scripts that people run with Macterm. For example:
-- [Use one set of <kbd>⌃hjkl</kbd> keybinds to move between Neovim splits and Macterm panes](https://github.com/thdxg/macterm/discussions/217)
-- [Drive an interactive program from a script](https://github.com/thdxg/macterm/discussions/218)
-- [Give a coding agent control of Macterm](https://github.com/thdxg/macterm/discussions/219)
-- [A Neovim plugin that moves focus between Neovim splits and Macterm panes with the same directional keybinds](https://github.com/thdxg/macterm/discussions/459)
+- [Use one set of <kbd>⌃hjkl</kbd> keybinds to move between Neovim splits and Macterm panes](https://github.com/macterm/macterm/discussions/217)
+- [Drive an interactive program from a script](https://github.com/macterm/macterm/discussions/218)
+- [Give a coding agent control of Macterm](https://github.com/macterm/macterm/discussions/219)
+- [A Neovim plugin that moves focus between Neovim splits and Macterm panes with the same directional keybinds](https://github.com/macterm/macterm/discussions/459)
 
-Do you have a recipe? [Start a Cookbook topic](https://github.com/thdxg/macterm/discussions/new?category=cookbook). Anyone can post a recipe, and anyone can use one.
+Do you have a recipe? [Start a Cookbook topic](https://github.com/macterm/macterm/discussions/new?category=cookbook). Anyone can post a recipe, and anyone can use one.
 
 ## Contributing
 

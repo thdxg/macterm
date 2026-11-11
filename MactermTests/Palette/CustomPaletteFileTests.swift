@@ -332,7 +332,7 @@ struct CustomPaletteFileTests {
             .deletingLastPathComponent() // Palette
             .deletingLastPathComponent() // MactermTests
             .deletingLastPathComponent() // repo root
-            .appendingPathComponent("website/docs/pages")
+            .appendingPathComponent("docs")
         var examples: [String: String] = [:]
         for file in try FileManager.default.contentsOfDirectory(at: pages, includingPropertiesForKeys: nil)
             where file.pathExtension == "md"

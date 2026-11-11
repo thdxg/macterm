@@ -1,0 +1,62 @@
+name: Docs
+
+# Runs the site build of macterm/website against the docs/ and assets/ of a
+# pull request, so that a page that breaks the build fails here and not after
+# the merge. It builds the pages only: no image and no push. The site's own
+# workflow builds and publishes the image from main.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "assets/**"
+      - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  site-build:
+    name: Site Build
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    steps:
+      - name: Check Out Macterm
+        uses: useblacksmith/checkout@v1
+        with:
+          path: macterm
+          # The sitemap's <lastmod> is the commit date of each page, and
+          # lastmod.mjs refuses a date from the edge of a shallow clone.
+          fetch-depth: 0
+
+      - name: Check Out the Website
+        uses: useblacksmith/checkout@v1
+        with:
+          repository: macterm/website
+          path: website
+          # The landing page's <lastmod> is its commit date in this repository.
+          fetch-depth: 0
+
+      - name: Set Up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: website/.bun-version
+
+      - name: Install
+        working-directory: website
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        working-directory: website
+        env:
+          MACTERM_DIR: ${{ github.workspace }}/macterm
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The changelog reads the releases of this repository.
+          MACTERM_RELEASES_REPO: ${{ github.repository }}
+        run: |
+          bun releases.mjs
+          bun run build

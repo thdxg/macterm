@@ -69,8 +69,9 @@ jobs:
           path: session-macos.json
 
   # The latency arms plus the ssh arms, against sshd on localhost with 25 ms
-  # of delay each way (50 ms round trip). Linux, because sshd and netem are an
-  # apt install there.
+  # of delay each way (50 ms round trip) and 100 Mbit/s. Linux, because sshd
+  # and netem are an apt install there. GitHub-hosted, because the Blacksmith
+  # VM kernel has no sch_netem module.
   linux:
     name: Session Layer (Linux)
     needs: server
@@ -109,16 +110,16 @@ jobs:
           chmod 600 ~/.ssh/authorized_keys
           ssh -o BatchMode=yes -o StrictHostKeyChecking=no localhost true
 
-      - name: Delay loopback by 25 ms
+      - name: Delay Loopback by 25 ms and Limit It to 100 Mbit/s
         run: |
           sudo modprobe sch_netem || true
-          sudo tc qdisc add dev lo root netem delay 25ms
+          sudo tc qdisc add dev lo root netem delay 25ms rate 100mbit
           ping -c 3 localhost
 
       - name: Measure
         run: |
           python3 scripts/session_bench.py run --zmx zmx/zmx --ssh-host localhost \
-            --network "localhost, netem delay 25 ms each way" --out session-linux.json
+            --network "localhost, netem delay 25 ms each way, 100 Mbit/s" --out session-linux.json
           python3 scripts/session_bench.py report session-linux.json >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload results

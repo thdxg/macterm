@@ -63,7 +63,7 @@ final class GhosttyCallbacks: @unchecked Sendable {
             // when the shell marked no input. Valid for the action only, so
             // it is copied here, before the hop to the main queue. The field
             // is read as a nullable pointer whatever the header says: the
-            // build of thdxg/ghostty#40 imports it non-null under the
+            // build of macterm/ghostty#40 imports it non-null under the
             // header's assume_nonnull region, and #41 marks it nullable.
             let command = Self.reportedCommand(action.action.command_finished)
             DispatchQueue.main.async {

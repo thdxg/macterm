@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/palette.schema.json
 name: Git Branches
 description: Switch to, log or diff a branch of the project
 requires: [git]

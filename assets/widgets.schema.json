@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/widgets.schema.json",
+  "$id": "https://raw.githubusercontent.com/macterm/macterm/main/assets/widgets.schema.json",
   "title": "Macterm desktop widgets",
   "description": "The desktop widgets, in ~/.config/macterm/widgets.yaml. Macterm keeps this file up to date by itself. It writes the file again each time that you add, move, resize or remove a widget, and when you quit. It reads your edits when it starts and before each of its own writes. An entry that you add becomes a widget. When you remove an entry, Macterm removes its widget the next time that it starts.",
   "type": "object",

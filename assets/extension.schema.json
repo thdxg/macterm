@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json",
+  "$id": "https://raw.githubusercontent.com/macterm/macterm/main/assets/extension.schema.json",
   "title": "Macterm extension",
   "description": "extension.yaml: a Macterm extension as a whole. It has what Settings → Extensions shows, and who maintains the extension. The capabilities of the extension are next to it in its folder. For now, these are palettes, one YAML file for each palette, in palettes/ (assets/palette.schema.json).",
   "type": "object",

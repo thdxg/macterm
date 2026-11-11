@@ -5,7 +5,7 @@
 # The `appcast` BRANCH is the store. It is an orphan branch with no commit in
 # common with main, and it is not a website: macterm.thdxg.dev proxies
 # /appcast.xml and /notes/* straight off the branch through
-# raw.githubusercontent.com (see the @updates block in website/Caddyfile).
+# raw.githubusercontent.com (see the @updates block in the Caddyfile of macterm/website).
 # That is why this script does an ordinary git read-modify-write, and why the
 # feed is live the moment this push lands — there is no site rebuild or deploy
 # in the path. The branch was named gh-pages until GitHub Pages was retired;
@@ -75,16 +75,16 @@ COMPARISON_VERSION="$(sparkle_comparison_version "$VERSION")"
 PUB_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
 REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
 # Where a Sparkle client is told to FETCH these files from. Keep it in step with
-# SUFeedURL in Macterm/Info.plist and SITE_URL in website/build-docs.mjs — all
+# SUFeedURL in Macterm/Info.plist and SITE_URL in build-docs.mjs of macterm/website — all
 # three name the same origin. (Enclosures stay on GitHub release assets below;
 # only the feed and its notes pages come from the site.)
 SITE_URL="https://macterm.thdxg.dev"
 NOTES_REL_PATH="notes/${TAG}.html"
-# The branch that holds appcast.xml and notes/. website/Caddyfile proxies it
+# The branch that holds appcast.xml and notes/. The Caddyfile of macterm/website proxies it
 # by name and release-tip.yml reads it by name, so all three must agree.
-# UpdaterChannelTests pins them together.
+# UpdaterChannelTests and check-feed.mjs of macterm/website pin them together.
 FEED_BRANCH="appcast"
-# The `.html` is load-bearing: website/Caddyfile exempts /notes/* from the
+# The `.html` is load-bearing: the Caddyfile of macterm/website exempts /notes/* from the
 # redirect that strips `.html` everywhere else, precisely so this URL resolves.
 NOTES_URL="${SITE_URL}/${NOTES_REL_PATH}"
 

@@ -40,14 +40,14 @@ Then do these steps:
 1. Write the palettes in `palettes/`. Use them for a while. The [file format](https://macterm.thdxg.dev/docs/extensions) is in the docs. Start each file with the schema line, so your editor checks the file:
 
    ```yaml
-   # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
+   # yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/palette.schema.json
    ```
 
    To try the whole extension, put the folder in `~/.config/macterm/extensions/`. Macterm reads it the next time that you press <kbd>⌘P</kbd>.
 2. Add `extension.yaml`:
 
    ```yaml
-   # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
+   # yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/extension.schema.json
    name: Kubernetes
    description: Browse a cluster's namespaces, pods, deployments and services
    icon: shippingbox

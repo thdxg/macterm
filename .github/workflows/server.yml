@@ -12,7 +12,7 @@ name: Server
 # its unexpanded name, which never matches the required name.
 #
 # macOS runs on macos-15: zig cannot link with Xcode 26.4 or later
-# (zig#31658), and the xcode-27 image has nothing older.
+# (zig#31658), and the macOS 27 runner has nothing older.
 
 on:
   pull_request:
@@ -44,10 +44,13 @@ jobs:
         include:
           - name: macOS
             runner: macos-15
+          # 4 vCPU, not 2 like the light jobs: Zig compiles with every core,
+          # so 2 vCPU takes about twice as long for about the same billed
+          # vCPU-minutes, and aarch64 is already the slowest required check.
           - name: Linux x86_64
-            runner: ubuntu-latest
+            runner: blacksmith-4vcpu-ubuntu-2404
           - name: Linux aarch64
-            runner: ubuntu-24.04-arm
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     defaults:

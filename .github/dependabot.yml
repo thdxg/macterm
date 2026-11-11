@@ -22,18 +22,3 @@ updates:
         group-by: dependency-name
         patterns:
           - "*"
-
-  # The website image's bases (oven/bun, caddy). Nothing else in the repo
-  # builds an image, so this watches website/Containerfile alone.
-  - package-ecosystem: docker
-    directory: "/website"
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
-    labels:
-      - dependencies
-      - area:ci
-    commit-message:
-      prefix: chore
-      include: scope

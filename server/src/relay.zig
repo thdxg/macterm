@@ -16,6 +16,11 @@ const std = @import("std");
 const frame = @import("protocol/protocol.zig").frame;
 
 /// Output older than this is skipped ahead (design/003 §6: start at 1 s).
+/// Measured (scripts/session_bench.py, relay flood, 50 ms round trip and
+/// 100 Mbit/s): a flood that fills the link skips ahead about 75 times in
+/// each run of a few seconds, which is `skip_bytes` and not the age, and an
+/// interrupt shows its prompt after about 210 ms. The age trips only for
+/// output a little faster than the link, so 1 s stays.
 pub const skip_ms = 1000;
 
 /// A channel with more than this to drop is skipped ahead. The same cap as a

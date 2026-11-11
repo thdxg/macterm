@@ -2,7 +2,7 @@
 .claude/
 .codegraph/
 
-# Ghostty resources downloaded by setup.sh from the thdxg/ghostty release,
+# Ghostty resources downloaded by setup.sh from the macterm/ghostty release,
 # mirroring a real Ghostty.app layout
 GhosttyKit.xcframework
 Macterm/Resources/*
