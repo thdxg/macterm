@@ -153,22 +153,22 @@ struct ProjectMemoryPanel: View {
     }
 
     /// The Summary section, only with something under its heading: the
-    /// model's paragraph or button, the nothing-to-summarize line or the failure card.
+    /// model's paragraph or button, the git-only line or the failure card.
     @ViewBuilder
     private func leftOff(_ summary: ProjectMemorySummary) -> some View {
         // The line says why the Summary is empty: no command and no Git state.
         // Git state fills the space, as the summary does from it. Before the
         // first read answers, the state is not known: show nothing.
-        let showsNothingToSummarize = ProjectMemorySummary.showsNothingToSummarize(
+        let showsGitOnlyNote = ProjectMemorySummary.showsGitOnlyNote(
             hasCommands: summary.lastActivity != nil,
             hasGitStateOrUnknown: git != nil || !memory.gitAnswered.contains(project.id)
         )
-        if summaryEnabled || showsNothingToSummarize || summary.unresolvedFailure != nil {
-            leftOffSection(summary, showsNothingToSummarize: showsNothingToSummarize)
+        if summaryEnabled || showsGitOnlyNote || summary.unresolvedFailure != nil {
+            leftOffSection(summary, showsGitOnlyNote: showsGitOnlyNote)
         }
     }
 
-    private func leftOffSection(_ summary: ProjectMemorySummary, showsNothingToSummarize: Bool) -> some View {
+    private func leftOffSection(_ summary: ProjectMemorySummary, showsGitOnlyNote: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             // The header row carries the reload button, so the body is the
             // paragraph alone.
@@ -180,8 +180,8 @@ struct ProjectMemoryPanel: View {
             }
             VStack(alignment: .leading, spacing: 10) {
                 summaryParagraph
-                if showsNothingToSummarize {
-                    Text("Nothing to summarize yet.")
+                if showsGitOnlyNote {
+                    Text("Summary is only available in a git repository.")
                         .font(.callout)
                         .foregroundStyle(MactermTheme.fgMuted)
                 }

@@ -6148,22 +6148,6 @@
         }
       }
     },
-    "Nothing to summarize yet." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "아직 요약할 내용이 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "还没有可总结的内容。"
-          }
-        }
-      }
-    },
     "Number" : {
       "localizations" : {
         "ko" : {
@@ -9725,6 +9709,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "摘要"
+          }
+        }
+      }
+    },
+    "Summary is only available in a git repository." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약은 git 저장소에서만 사용할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅在 git 仓库中提供摘要。"
           }
         }
       }
