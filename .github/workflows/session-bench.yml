@@ -70,17 +70,18 @@ jobs:
 
   # The latency arms plus the ssh arms, against sshd on localhost with 25 ms
   # of delay each way (50 ms round trip) and 100 Mbit/s. Linux, because sshd
-  # and netem are an apt install there.
+  # and netem are an apt install there. GitHub-hosted, because the Blacksmith
+  # VM kernel has no sch_netem module.
   linux:
     name: Session Layer (Linux)
     needs: server
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@v1
+        uses: actions/checkout@v7
 
       - name: Download the Server
         uses: actions/download-artifact@v8
