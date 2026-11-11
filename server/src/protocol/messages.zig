@@ -230,6 +230,11 @@ pub const Session = struct {
     /// The clients that show the session (they sent `attach`). Null when
     /// the session did not say (a session of an older build).
     clients: ?u16 = null,
+    /// The pane's attention flags, from the session's `attention` message.
+    /// All false for a pane that has nothing to show.
+    unseen: bool = false,
+    failed: bool = false,
+    bell: bool = false,
 };
 
 pub const SessionState = enum {
@@ -301,6 +306,24 @@ pub const SessionKill = struct {
     pub const Result = struct {};
 };
 
+/// A client shows the pane to the user: the session clears its attention
+/// flags (`Attention`). Only a local client may send it (the GUI or the CLI
+/// of the same user, over the socket that checks the peer's uid, design/006
+/// §2). On a host, the app's connection through ssh is `local` to that
+/// host's server, so the app can send it there. It reveals nothing and
+/// changes no program. A program in a pane is also a local client and can
+/// clear a flag, as it can send `session.kill`. A host's server cannot send
+/// it to the Mac: `remote` is not a sender. The reply goes after the session
+/// sent the flags again, so every client already has the event.
+pub const PaneSeen = struct {
+    pub const name = "pane.seen";
+    pub const since = 1;
+    pub const senders: []const Trust = &.{.local};
+
+    pub const Args = struct { id: []const u8 };
+    pub const Result = struct {};
+};
+
 /// The server exits and leaves every session running, so that a newer app
 /// can start its own server (design/002).
 pub const ServerExit = struct {
@@ -345,7 +368,7 @@ pub const CommandRun = struct {
 };
 
 /// Every request method. A new method goes here.
-pub const methods = .{ ChannelOpen, ChannelClose, ChannelPause, ChannelResume, Ping, SessionCreate, SessionList, SessionInfo, SessionKill, ServerExit, CommandRun };
+pub const methods = .{ ChannelOpen, ChannelClose, ChannelPause, ChannelResume, Ping, SessionCreate, SessionList, SessionInfo, SessionKill, PaneSeen, ServerExit, CommandRun };
 
 // ── Events ──────────────────────────────────────────────────────────────────
 
@@ -362,11 +385,24 @@ pub const SessionExit = struct {
     signal: ?u8 = null,
 };
 
+/// A pane's attention flags changed (the session's `attention` message,
+/// design/004 §6). Sent for each change, also a clear by `pane.seen`.
+pub const PaneAttention = struct {
+    pub const name = "pane.attention";
+    pub const since = 1;
+    pub const senders = everyone;
+
+    id: []const u8,
+    unseen: bool,
+    failed: bool,
+    bell: bool,
+};
+
 /// Every event type. A new event goes here. Each one declares `name`,
 /// `since` and `senders`, as a method does, and its fields are the event's
 /// `a`. No event may hold a `Secret` (design/006 §1); `schema.check` refuses
 /// one.
-pub const events = .{SessionExit};
+pub const events = .{ SessionExit, PaneAttention };
 
 /// True if a connection with this trust may send message `M`. A message from
 /// a sender outside the list gets an error reply and a log line; the link
@@ -687,6 +723,34 @@ pub const Status = struct {
     failed: bool = false,
 };
 
+/// What the pane shows that the user did not see yet (design/004 §6). The
+/// session keeps it for as long as the pane lives, so a client that attaches
+/// later, with the app quit in between, gets it with the current state.
+/// `unseen` is set when a run ends (`status` goes to `done`) and when the
+/// bell rings; `failed` says that the run that ended failed. A new run
+/// clears `unseen` and `failed`. `Seen` clears all three. A client sends it
+/// when it shows the pane in the active app.
+pub const Attention = struct {
+    pub const name = "attention";
+    pub const since = 1;
+    pub const senders = from_session;
+
+    /// A run ended, or the bell rang, and no client showed the pane since.
+    unseen: bool = false,
+    /// With `unseen`: the ended run failed (`Status.failed`).
+    failed: bool = false,
+    /// The bell rang and no client showed the pane since.
+    bell: bool = false,
+};
+
+/// A client showed the pane to the user: clear the attention flags. The
+/// session answers with `attention`, also when nothing changed.
+pub const Seen = struct {
+    pub const name = "seen";
+    pub const since = 1;
+    pub const senders = from_client;
+};
+
 pub const ProgramState = enum {
     /// At rest, waits for the user's next instruction.
     idle,
@@ -758,7 +822,7 @@ pub const max_program_records = 64;
 /// Every message on a pane channel. A new one goes here.
 pub const pane_messages = .{
     State, Attach, Resize,     Claim, Lead,     SnapshotStart, SnapshotEnd, Exit,   Take,          End, Refresh,
-    Title, Cwd,    Foreground, Mark,  Progress, Bell,          Activity,    Status, ProgramStatus,
+    Title, Cwd,    Foreground, Mark,  Progress, Bell,          Activity,    Status, ProgramStatus, Attention, Seen,
 };
 
 pub fn encodePane(w: *std.Io.Writer, comptime M: type, value: M) std.Io.Writer.Error!void {
