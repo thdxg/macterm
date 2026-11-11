@@ -315,14 +315,18 @@ struct ProjectMemoryTests {
         // came. A read that finds the same state restarts nothing.
         var runs = 0
         let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        // A summary for another state, so that the reads take the quiet
+        // wait: a project with no summary gets its first one with no wait.
+        summarizer.loadStored = { _ in StoredSummary(key: "older", text: "Earlier work.", writtenAt: Date(), suggestions: nil) }
         memory.gitReader = { _ in GitStatus(branch: "main") }
         let deadline = Date().addingTimeInterval(1)
         memory.refreshGit(project.id)
-        while summarizer.state(for: project.id).phase != .done, Date() < deadline {
+        while runs == 0 || summarizer.state(for: project.id).phase != .done, Date() < deadline {
             try await Task.sleep(for: .milliseconds(15))
             memory.refreshGit(project.id)
         }
         #expect(summarizer.state(for: project.id).phase == .done)
+        #expect(summarizer.state(for: project.id).text == "You built the project.")
         #expect(runs == 1)
     }
 
@@ -357,6 +361,40 @@ struct ProjectMemoryTests {
             try await Task.sleep(for: .milliseconds(20))
         }
         #expect(runs == 2)
+    }
+
+    @Test
+    func a_project_with_no_summary_gets_its_first_one_at_its_first_git_read() async throws {
+        var runs = 0
+        let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        // A quiet period that no test waits for: only a summary with no wait
+        // can arrive.
+        memory.summaryQuietPeriod = .seconds(600)
+        var git = GitStatus(branch: "main")
+        memory.gitReader = { _ in git }
+
+        memory.refreshGit(project.id)
+        try await waitForSummary(summarizer, project.id)
+        #expect(runs == 1)
+
+        // With a summary on record, a new Git state waits the quiet period.
+        git.recentCommits = [GitStatus.Commit(hash: "def5678", subject: "Fix", date: now)]
+        memory.refreshGit(project.id)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(runs == 1)
+        #expect(summarizer.state(for: project.id).phase == .done)
+    }
+
+    @Test
+    func a_git_read_with_no_state_writes_no_summary() async throws {
+        var runs = 0
+        let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        memory.summaryQuietPeriod = .seconds(600)
+
+        memory.refreshGit(project.id)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(runs == 0)
+        #expect(summarizer.state(for: project.id).phase == .idle)
     }
 
     @Test

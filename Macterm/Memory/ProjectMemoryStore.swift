@@ -46,24 +46,6 @@ final class ProjectMemoryStore {
         _ = entries(for: projectID)
     }
 
-    /// Read the file of every project into the cache, once each: what
-    /// `recordedCommandCount` counts. Call it outside the view update.
-    func prepareAll() {
-        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        for file in files where file.pathExtension == "json" {
-            guard let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent) else { continue }
-            prepare(id)
-        }
-    }
-
-    /// The commands recorded in the projects read so far. After
-    /// `prepareAll` it is every recorded command, and it follows each
-    /// append and forget with no disk read. A file that does not decode
-    /// is not counted (`loadFailed`), but `forgetAll` still deletes it.
-    var recordedCommandCount: Int {
-        entries.values.reduce(0) { $0 + $1.count }
-    }
-
     /// The project's entries, oldest first, read from disk the first time.
     func entries(for projectID: UUID) -> [MemoryEntry] {
         if let cached = entries[projectID] { return cached }
@@ -100,20 +82,6 @@ final class ProjectMemoryStore {
         summaries[projectID] = nil
         loadFailed.remove(projectID)
         try? FileManager.default.removeItem(at: fileURL(for: projectID))
-    }
-
-    /// Delete every project's memory.
-    func forgetAll() {
-        for task in pendingSaves.values {
-            task.cancel()
-        }
-        pendingSaves.removeAll()
-        loadFailed.removeAll()
-        for key in entries.keys {
-            entries[key] = []
-        }
-        summaries.removeAll()
-        try? FileManager.default.removeItem(at: directory)
     }
 
     /// Delete the files of projects that no longer exist.

@@ -82,6 +82,12 @@ final class ProjectMemorySummarizer {
         return state
     }
 
+    /// Whether the project has a summary: a stored one, or the text of a
+    /// run in this launch.
+    func hasSummary(projectID: UUID) -> Bool {
+        !(currentState(for: projectID)?.text.isEmpty ?? true)
+    }
+
     /// Load the stored summary into the state, for a view that reads it.
     /// Outside a view update, as a `.task`.
     func prepare(projectID: UUID) {
@@ -181,13 +187,5 @@ final class ProjectMemorySummarizer {
     func forget(projectID: UUID) {
         tasks.removeValue(forKey: projectID)?.cancel()
         states[projectID] = nil
-    }
-
-    func forgetAll() {
-        for task in tasks.values {
-            task.cancel()
-        }
-        tasks.removeAll()
-        states.removeAll()
     }
 }

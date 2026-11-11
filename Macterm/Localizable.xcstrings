@@ -486,53 +486,6 @@
         }
       }
     },
-    "%lld commands" : {
-      "comment" : "The number of commands that Project Insights recorded.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld command"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld commands"
-                }
-              }
-            }
-          }
-        },
-        "ko" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "명령 %lld개"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld 条命令"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "%lld commands ran in %@, the last one %@." : {
       "localizations" : {
         "en" : {
@@ -3627,54 +3580,6 @@
         }
       }
     },
-    "Forget All" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "모두 지우기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全部清除"
-          }
-        }
-      }
-    },
-    "Forget All…" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "모두 지우기…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全部清除…"
-          }
-        }
-      }
-    },
-    "Forget the insights of all projects?" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "모든 프로젝트의 인사이트를 지우시겠습니까?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要清除所有项目的洞察吗？"
-          }
-        }
-      }
-    },
     "Full Disk Access is off" : {
       "localizations" : {
         "ko" : {
@@ -4900,22 +4805,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 无法将捕捉内容写入为 PNG。"
-          }
-        }
-      }
-    },
-    "Macterm deletes every command that it recorded. You cannot undo this." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm이 기록한 모든 명령을 삭제합니다. 이 작업은 취소할 수 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Macterm 会删除它记录的所有命令。此操作无法撤销。"
           }
         }
       }
@@ -7727,22 +7616,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接断开后重新连接窗格"
-          }
-        }
-      }
-    },
-    "Recorded commands" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "기록된 명령"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已记录的命令"
           }
         }
       }
@@ -12056,30 +11929,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@%2$@。"
-          }
-        }
-      }
-    },
-    "settings.intelligence.recordedCommands.none" : {
-      "comment" : "Macterm has recorded no commands.",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "None"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "없음"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无"
           }
         }
       }

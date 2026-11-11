@@ -288,9 +288,11 @@ final class ProjectMemory {
             // in the git dir, and while no summary is on record every read
             // is "not seen", so a read that found the same state restarted
             // the 10-minute wait, and with the panel up the background
-            // summary never came.
+            // summary never came. A project with no summary yet gets its
+            // first one at once: the Git state says most of it, and a new
+            // project must not wait for commands.
             if case let .read(status?) = result, status != previous, gitStateIsNews(for: project) {
-                scheduleBackgroundSummary(projectID)
+                scheduleBackgroundSummary(projectID, after: summarizer.hasSummary(projectID: projectID) ? nil : .zero)
             }
         }
     }
@@ -337,7 +339,8 @@ final class ProjectMemory {
     /// wait. This and the panel's button are the only ways a summary is
     /// written: a panel that opens shows the stored one, and a command that
     /// finishes only restarts the wait, so the model never runs in the
-    /// middle of work.
+    /// middle of work. The one exception is a project's first summary,
+    /// which a Git read schedules with no wait (`refreshGit`).
     func scheduleBackgroundSummary(_ projectID: UUID, after delay: Duration? = nil) {
         quietTimers[projectID]?.cancel()
         let wait = delay ?? summaryQuietPeriod
@@ -375,16 +378,6 @@ final class ProjectMemory {
         store.forget(projectID)
         git[projectID] = nil
         summarizer.forget(projectID: projectID)
-    }
-
-    func forgetAll() {
-        for timer in quietTimers.values {
-            timer.cancel()
-        }
-        quietTimers.removeAll()
-        store.forgetAll()
-        git.removeAll()
-        summarizer.forgetAll()
     }
 
     /// Project lookup for the git read. Set by `attach`.

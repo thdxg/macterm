@@ -50,8 +50,8 @@ struct ProjectMemoryPanel: View {
         .task(id: project.id) {
             memory.store.prepare(project.id)
             // The stored summary, for the paragraph. Nothing is written
-            // here: a summary is written after a quiet period, or by the
-            // button.
+            // here: a summary is written after a quiet period, at once for
+            // a project with none (its first Git read), or by the button.
             summarizer.prepare(projectID: project.id)
             // Git changes that no command in this project makes (another
             // app, an editor in a pane) show up with no button: the panel
