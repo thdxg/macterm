@@ -30,6 +30,7 @@ extension AppState {
         enum Kind: Equatable {
             case closePane(paneID: UUID, projectID: UUID)
             case closeTab(tabID: UUID, projectID: UUID)
+            case restartSessions(tabID: UUID, projectID: UUID)
             case removeProject(UUID)
             case removeSelection
             case applyLayout(projectID: UUID)

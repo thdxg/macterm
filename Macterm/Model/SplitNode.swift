@@ -253,6 +253,12 @@ extension SplitNode {
         }
     }
 
+    /// The tree with each pane of `replacements` (by id) swapped for its new
+    /// pane, in the same place.
+    func replacing(_ replacements: [UUID: Pane]) -> SplitNode {
+        replacingPanes { replacements[$0.id] ?? $0 }
+    }
+
     private func replacingPanes(_ replacement: (Pane) -> Pane) -> SplitNode {
         switch self {
         case let .pane(pane):

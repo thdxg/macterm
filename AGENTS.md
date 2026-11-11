@@ -730,6 +730,10 @@ The frames and messages between the app, the server and the session processes (d
 - `ServerConnection` reads the socket on a thread of its own. A request waits for its response by id. `events` gives one element for each event batch. When the connection ends, each request that waits fails with `ServerClientError.disconnected`. Only the reader thread closes the fd, under the lock that each write holds.
 - `LocalServerTests` runs the bundled server in a runtime directory under `/tmp` (a socket path has at most 103 bytes).
 
+### Sessions of an older build (design/002, option A)
+
+A session keeps the build that started it. After an update, `AppState.outdatedSessions` holds the running local sessions whose build key differs from the bundled server's (`SessionBuild`, from `session.list`; refreshed with the zmx cache). A tab with one shows a small badge in the sidebar (the exception, not the normal state). **Restart Session** (`AppCommand.restartSession`, no default chord) is available only then. It swaps each older pane of the active tab for a new pane in the same folder, ends the old session, and asks first when a program runs (`paneNeedsConfirmClose`). It never runs by itself. Not built: restarting all idle tabs (option C), keeping the old screen, and remote sessions.
+
 ### Local panes are v2 sessions
 
 Every local pane (workspace, pinned, quick terminal, widget) is a v2 session of the local server. Remote panes are v2 sessions of the host's server (see Remote Projects).

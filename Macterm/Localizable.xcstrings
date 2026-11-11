@@ -795,6 +795,22 @@
         }
       }
     },
+    "A process is still running in this tab. Restarting the session ends it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 탭에서 프로세스가 아직 실행 중입니다. 세션을 다시 시작하면 종료됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此标签页中仍有进程在运行。重启会话会结束该进程。"
+          }
+        }
+      }
+    },
     "A process is still running in this widget. Remove the widget anyway?" : {
       "localizations" : {
         "ko" : {
@@ -8182,6 +8198,54 @@
         }
       }
     },
+    "Restart" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시 시작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重启"
+          }
+        }
+      }
+    },
+    "Restart Session" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션 다시 시작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重启会话"
+          }
+        }
+      }
+    },
+    "Restart running processes?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 중인 프로세스를 다시 시작하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要重启正在运行的进程吗？"
+          }
+        }
+      }
+    },
     "Restart to Update" : {
       "localizations" : {
         "ko" : {
@@ -8355,6 +8419,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在运行"
+          }
+        }
+      }
+    },
+    "Runs an older version" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 버전으로 실행 중"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行旧版本"
           }
         }
       }
@@ -10687,6 +10767,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此面板的文件已不存在"
+          }
+        }
+      }
+    },
+    "This tab runs an older version. Restart Session to update it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 탭은 이전 버전으로 실행 중입니다. 세션을 다시 시작하여 업데이트하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此标签页运行的是旧版本。重启会话即可更新。"
           }
         }
       }

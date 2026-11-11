@@ -213,6 +213,13 @@ extension AppCommand {
                   let view = pane.nsView, view.surface != nil
             else { return nil }
             return { view.sendBindingAction("toggle_readonly") }
+        case .restartSession:
+            // The active tab, when one of its sessions runs an older build
+            // than the app. Without one there is nothing to restart.
+            guard let projectID, let tab = ctx.appState.workspaces[projectID]?.activeTab,
+                  ctx.appState.tabRunsOlderSession(tab)
+            else { return nil }
+            return { ctx.appState.requestRestartSessions(tabID: tab.id, projectID: projectID) }
         case .explainOutput:
             // The selection, or the output of the last command, of the
             // focused pane. Only where Apple's on-device model can run.

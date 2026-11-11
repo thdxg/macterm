@@ -322,6 +322,14 @@ struct HotkeysTests {
     }
 
     @Test
+    func restartSession_is_an_unbound_pane_command() {
+        #expect(HotkeyAction.restartSession.defaultShortcut == "none")
+        #expect(HotkeyAction.restartSession.title == "Restart Session")
+        #expect(AppCommand.restartSession.hotkeyAction == .restartSession)
+        #expect(AppCommand.restartSession.category == .panes)
+    }
+
+    @Test
     func capturePane_is_an_unbound_pane_command() {
         #expect(HotkeyAction.capturePane.defaultShortcut == "none")
         #expect(HotkeyAction.capturePane.title == "Capture Pane")

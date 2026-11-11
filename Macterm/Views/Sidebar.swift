@@ -1312,8 +1312,19 @@ private struct SidebarTabRow: View {
                 .onExitCommand { cancelRename() }
                 .onAppear { focused = true }
         } else {
-            TabRowTitle(tab: tab)
-                .inlineRenameClickTarget(onSelect: select, onBeginRename: beginRename)
+            HStack(spacing: 4) {
+                TabRowTitle(tab: tab)
+                    .inlineRenameClickTarget(onSelect: select, onBeginRename: beginRename)
+                if appState.tabRunsOlderSession(tab) {
+                    // The exception: a session that an update left on an
+                    // older build. Restart Session cures it.
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .help("This tab runs an older version. Restart Session to update it.")
+                        .accessibilityLabel("Runs an older version")
+                }
+            }
         }
     }
 
