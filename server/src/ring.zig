@@ -12,7 +12,8 @@ const std = @import("std");
 pub const default_cap = 256 * 1024;
 
 /// A ring drops its oldest bytes only when it holds this much more than its
-/// cap, so a flood of output does not move memory for each write.
+/// cap, so a flood of output does not move memory for each write. A ring
+/// that held a flood keeps its memory: at most cap + slack, 320 KiB.
 const slack = 64 * 1024;
 
 pub const Ring = struct {

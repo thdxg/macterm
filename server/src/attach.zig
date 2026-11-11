@@ -347,7 +347,7 @@ const Client = struct {
             // Reset the terminal and its colors, as v1's attach does.
             writeAll(stdout, "\x1bc\x1b]110\x1b\\\x1b]111\x1b\\\x1b]112\x1b\\") catch {};
         }
-        writeAll(stdout, "\x1b[0m\x1b[2J\x1b[H") catch {};
+        writeAll(stdout, reset_screen) catch {};
 
         try c.sendAttach(stdout);
 
@@ -364,9 +364,12 @@ const Client = struct {
             };
             _ = lib_posix.poll(&fds, -1) catch return error.Protocol;
 
+            // A send that fails is a lost link: the read below sees the end
+            // of the stream and reconnects. The bytes that did not go are
+            // dropped, as a terminal drops keys while its link is down.
             if (fds[2].revents & lib_posix.POLL.IN != 0) {
                 try signal.drainSignalPipe();
-                try c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout)));
+                c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout))) catch |err| if (err != error.Protocol) return err;
             }
 
             if (fds[0].revents & (lib_posix.POLL.IN | lib_posix.POLL.HUP | lib_posix.POLL.ERR) != 0) {
@@ -379,8 +382,8 @@ const Client = struct {
                 const data = buf[0..n];
                 if (!detach_disabled and util.isCtrlBackslash(data)) return .detached;
                 const filtered = claims.feed(data);
-                for (0..filtered.claims) |_| try c.sendPane(m.Claim, .{});
-                if (filtered.forward.len > 0) try c.sendFrame(m.pane_channel, .bytes, filtered.forward);
+                for (0..filtered.claims) |_| c.sendPane(m.Claim, .{}) catch |err| if (err != error.Protocol) return err;
+                if (filtered.forward.len > 0) c.sendFrame(m.pane_channel, .bytes, filtered.forward) catch |err| if (err != error.Protocol) return err;
             }
 
             if (fds[1].revents & (lib_posix.POLL.IN | lib_posix.POLL.HUP | lib_posix.POLL.ERR) != 0) {
@@ -415,7 +418,7 @@ const Client = struct {
                     if (std.mem.eql(u8, msg.t, m.Lead.name)) {
                         const lead = m.decodePane(m.Lead, arena, msg) catch return error.Protocol;
                         // A client that starts to lead sends its size.
-                        if (lead.leader) try c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout)));
+                        if (lead.leader) c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout))) catch |err| if (err != error.Protocol) return err;
                     } else if (c.foreground_events and std.mem.eql(u8, msg.t, m.Foreground.name)) {
                         const fg = m.decodePane(m.Foreground, arena, msg) catch return error.Protocol;
                         var buf: [apc_max]u8 = undefined;
@@ -482,14 +485,23 @@ const Client = struct {
         };
         lib_posix.close(c.fd);
         c.fd = fd;
+        if (!runtime.allowPeer(runtime.peerUid(fd), std.c.getuid())) return false;
         c.in.clearRetainingCapacity();
         c.consumed = 0;
+        // A snapshot that the link cut leaves a partial screen: the offset
+        // says nothing, and the session sends a snapshot again.
+        if (c.in_snapshot) c.offset = null;
         c.in_snapshot = false;
         const before = c.epoch;
         const hs = c.handshake() catch return false;
         if (hs != null) return false;
         // A session that is not the one that we left has other offsets.
-        if (c.epoch != before) c.offset = null;
+        if (c.epoch != before) {
+            c.offset = null;
+            // The screen shows another session's output: clear it now, as
+            // a session with no output sends no snapshot to do it.
+            writeAll(stdout, reset_screen) catch return false;
+        }
         c.reconnected = true;
         try c.sendAttach(stdout);
         return true;

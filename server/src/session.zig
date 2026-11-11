@@ -1119,7 +1119,6 @@ fn pollTimeoutFor(foreground_client: bool, deadline: ?i64, now: i64) i32 {
     return timeout;
 }
 
-/// A size from a client, cut to `max_cells`. Null for a size of 0.
 /// What an `Attach` asks to resume from.
 const Resume = struct { epoch: u64, offset: u64 };
 
@@ -1127,6 +1126,7 @@ fn resumeOf(a: m.Attach) ?Resume {
     return .{ .epoch = a.resume_epoch orelse return null, .offset = a.resume_offset orelse return null };
 }
 
+/// A size from a client, cut to `max_cells`. Null for a size of 0.
 fn paneSize(cols: u16, rows: u16, xpixel: u16, ypixel: u16) ?ipc.Resize {
     if (cols == 0 or rows == 0) return null;
     return .{ .cols = @min(cols, max_cells), .rows = @min(rows, max_cells), .xpixel = xpixel, .ypixel = ypixel };

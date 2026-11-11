@@ -1410,7 +1410,12 @@ const Server = struct {
         s.seq += 1;
         const ev = [_]m.Event{.{ .e = E.name, .a = .{ .bytes = args } }};
         const batch: m.EventBatch = .{ .seq = s.seq, .ev = &ev };
-        const body = msgpack.encodeAlloc(s.gpa, batch) catch return;
+        const body = msgpack.encodeAlloc(s.gpa, batch) catch {
+            // The batch is lost: the ring must not claim to be complete.
+            for (s.batches.items) |b| s.gpa.free(b.body);
+            s.batches.clearRetainingCapacity();
+            return;
+        };
         const kept = s.keepBatch(body);
         defer if (!kept) s.gpa.free(body);
         for (s.peers.items) |p| if (p.greeted and !p.dead) s.sendBody(p, body);
