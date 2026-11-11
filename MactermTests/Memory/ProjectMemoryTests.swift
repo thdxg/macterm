@@ -465,6 +465,97 @@ struct ProjectMemoryTests {
         #expect(summary.commandCount == 4)
     }
 
+    @Test
+    func a_retry_with_options_added_resolves_the_failure() {
+        // The log of Ethan's screenshot: the card showed `git clean`.
+        let entries = [
+            entry("git clean", exit: 128, minutesAgo: 790),
+            entry("git clean -f", exit: 0, minutesAgo: 789),
+            entry("git pull", exit: 0, minutesAgo: 30),
+            entry("git status", exit: 0, minutesAgo: 29),
+        ]
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure == nil)
+        #expect(MemoryCommand.retryKey("git  clean -f -d") == "git clean")
+        #expect(MemoryCommand.retryKey("npm run build --watch") == "npm run build")
+    }
+
+    @Test
+    func an_option_before_the_subcommand_keys_the_whole_command() {
+        // The words before the first option would be the program alone.
+        #expect(MemoryCommand.retryKey("python -m pytest") == "python -m pytest")
+        #expect(MemoryCommand.retryKey("git -C repo push") == "git -C repo push")
+        let entries = [
+            entry("python -m pytest", exit: 1, minutesAgo: 10),
+            entry("python -m http.server", exit: 0, minutesAgo: 5),
+        ]
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "python -m pytest")
+    }
+
+    @Test
+    func a_success_of_another_subcommand_does_not_resolve_the_failure() {
+        let entries = [
+            entry("make test", exit: 2, minutesAgo: 10),
+            entry("make lint", exit: 0, minutesAgo: 5),
+        ]
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "make test")
+    }
+
+    @Test
+    func a_failure_before_the_latest_pause_is_not_shown() {
+        let failed = entry("make test", exit: 2, minutesAgo: 180)
+        // An hour with no command ends the stretch the failure was in.
+        #expect(ProjectMemorySummary(entries: [failed, entry("git status", exit: 0, minutesAgo: 110)]).unresolvedFailure == nil)
+        // A shorter gap is time in an editor: the failure is still the
+        // thing to fix.
+        #expect(ProjectMemorySummary(entries: [failed, entry("git status", exit: 0, minutesAgo: 130)]).unresolvedFailure?.id == failed.id)
+    }
+
+    @Test
+    func a_failure_that_is_the_latest_command_always_shows() {
+        let entries = [
+            entry("make test", exit: 0, minutesAgo: 3000),
+            entry("make test", exit: 2, minutesAgo: 0),
+        ]
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "make test")
+    }
+
+    @Test
+    func the_model_reads_no_failure_that_the_panel_does_not_show() {
+        let entries = [
+            entry("git clean", exit: 128, minutesAgo: 30),
+            entry("git clean -f", exit: 0, minutesAgo: 29),
+            entry("make test", exit: 2, minutesAgo: 1),
+        ]
+        #expect(ProjectMemorySummary.withoutSettledFailures(entries).map(\.command) == ["git clean -f", "make test"])
+        #expect(ProjectMemorySuggestions.candidates(entries: entries) == ["make test", "git clean -f"])
+        let digest = ProjectMemoryDigest(projectName: "x", entries: entries, git: nil, now: now)
+        #expect(digest?.text.contains("`git clean` failed") == false)
+        #expect(digest?.text.contains("`make test` failed") == true)
+    }
+
+    @Test
+    func every_open_failure_stays_for_the_model() {
+        let entries = [
+            entry("make test", exit: 2, minutesAgo: 10),
+            entry("make lint", exit: 1, minutesAgo: 5),
+        ]
+        // The card shows the latest; the older one is still open.
+        #expect(ProjectMemorySummary(entries: entries).unresolvedFailure?.command == "make lint")
+        #expect(ProjectMemorySummary.withoutSettledFailures(entries).count == 2)
+        #expect(ProjectMemorySuggestions.candidates(entries: entries) == ["make lint", "make test"])
+    }
+
+    @Test
+    func a_failure_before_the_latest_pause_is_not_told_to_the_model() {
+        let entries = [
+            entry("make test", exit: 2, minutesAgo: 180),
+            entry("git status", exit: 0, minutesAgo: 60),
+        ]
+        let digest = ProjectMemoryDigest(projectName: "x", entries: entries, git: nil, now: now)
+        #expect(digest?.text.contains("make test") == false)
+        #expect(ProjectMemorySuggestions.candidates(entries: entries) == ["git status"])
+    }
+
     // MARK: - Quick actions
 
     // MARK: - Remote git

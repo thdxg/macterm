@@ -40,7 +40,7 @@ The panel has these sections:
 
 | Section | What it shows |
 | --- | --- |
-| **Summary** | A short paragraph that says where you left off (see [Summary](#summary)). If the latest run of a command failed and you did not run it again with success, the panel shows that command, its exit code and the last lines of its output. |
+| **Summary** | A short paragraph that says where you left off (see [Summary](#summary)). If a command failed and you did not fix it, the panel shows that command, its exit code and the last lines of its output. A later success of the same command, also with other options (`git clean -f` after `git clean`), fixes it. A failure before a pause of an hour or more with no command is not shown. |
 | **Suggested** | Up to five commands to run next. The model chooses them from the commands that ran in this project and a few Git commands, with a reason for each. It never makes up a command: a suggestion that is not a command of this project, or `git status`, `git pull`, `git fetch`, `git diff`, `git log` or `git stash list`, is dropped. It suggests a command only for a cause that it sees, such as a failed run or the Git state, never because the command ran recently. When it has nothing to suggest, the panel shows no Suggested section. |
 | **Git** | The branches with the latest commits, the current one highlighted. Click a branch to go to it in the current pane: Macterm types `cd` to the worktree that has the branch checked out, or `git switch` for a branch with no worktree. The pane must be at a prompt. |
 | **Recent** | The latest commands. Click one to run it again. |
@@ -49,7 +49,7 @@ A command that you click runs in a new split next to the focused pane. Macterm t
 
 ## Summary
 
-A paragraph at the top of the **Summary** section says what you were working on. Apple's on-device model writes it from the Git state first (the commits of the current branch, or the latest commits on a main branch, the changed files and, when you have uncommitted changes, what changed in them), and from the recorded commands second. Nothing leaves your Mac.
+A paragraph at the top of the **Summary** section says what you were working on. Apple's on-device model writes it from the Git state first (the commits of the current branch, or the latest commits on a main branch, the changed files and, when you have uncommitted changes, what changed in them). The model reads the recorded commands only when Git shows no commits and no changed files, because the **Recent** list already shows them. Nothing leaves your Mac.
 
 When a tracked file has uncommitted changes, the model also reads the diff of the staged and unstaged changes, so that the summary can say what you changed and not only which files. Macterm leaves out binary files, lockfiles, `.env` files, key files, files and folders with "secret" or "credential" in the name, files with a private key, and files with very long lines, such as minified code. The diff goes only to the on-device model, and Macterm does not keep it. The model is told not to write a secret, and Macterm replaces secrets in the summary with `•••`, with the same filter as for the output of a command (see [What Macterm records](#what-macterm-records)). This filter cannot find every secret. A long diff is cut a whole file at a time. Macterm does not read the diff of a commit or of a file that Git does not track.
 
@@ -57,7 +57,7 @@ Macterm writes the summary ten minutes after the last command in a project, pane
 
 ## Ask Siri or Shortcuts
 
-The action **Where Did I Leave Off** returns the same answer as text, for a project that you select. Say "Where did I leave off in Macterm" to Siri, or add the action to a shortcut. The text is the summary when Macterm wrote one, then the commands that finished after it. Without a summary, it is the latest command and its result, and a command that failed and did not succeed since. The action never writes a summary. See [Shortcuts](/docs/shortcuts).
+The action **Where Did I Leave Off** returns the same answer as text, for a project that you select. Say "Where did I leave off in Macterm" to Siri, or add the action to a shortcut. The text is the summary when Macterm wrote one, then the commands that finished after it. Without a summary, it is the latest command and its result, and a failed command that the panel shows. The action never writes a summary. See [Shortcuts](/docs/shortcuts).
 
 ## What Macterm records
 

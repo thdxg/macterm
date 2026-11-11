@@ -20,11 +20,13 @@ enum ProjectMemorySuggestions {
     static let safeGitCommands = ["git status", "git pull", "git fetch", "git diff", "git log", "git stash list"]
 
     /// The commands the model may choose from: the project's own, newest
-    /// first, with no duplicates, nothing trivial and nothing masked.
+    /// first, with no duplicates, nothing trivial and nothing masked. A
+    /// failure that the panel does not show is not one
+    /// (`ProjectMemorySummary.withoutSettledFailures`).
     static func candidates(entries: [MemoryEntry]) -> [String] {
         var seen: Set<String> = []
         var result: [String] = []
-        for entry in entries.reversed() {
+        for entry in ProjectMemorySummary.withoutSettledFailures(entries).reversed() {
             guard let command = entry.command else { continue }
             let normalized = MemoryCommand.normalized(command)
             guard !MemoryCommand.isTrivial(normalized), !MemoryCommand.isMasked(normalized), !seen.contains(normalized)

@@ -31,13 +31,11 @@ struct ProjectMemoryDigest: Equatable {
     The diff is uncommitted work: never call it commits. \
     Never write a key, token, password or other secret value, also when the diff has one. \
     On a main branch, say what the latest commits did. Do not list the commit subjects one by one. \
-    Mention a command only when it shows something about the work that Git does not show. \
-    Do not retell the commands or their order. \
     Do not state a goal and do not write "The goal is". \
     Do not describe a failed command and do not suggest a next step: the panel shows these separately. \
     Name a file only when the text lists it under Changed files. When the text has no Changed files, \
     name no file and say nothing about changes, staged files or the working tree. \
-    When there is no Git state, say what the commands show about the work. \
+    When the text has no commits and no changed files, say what the commands show about the work. \
     Name only branches, commits, files and commands that are in the text; never guess a name or a change. \
     Put commands, branches and file names in backticks. \
     Do not say how long ago things happened: the reader may see the text hours later. \
@@ -60,8 +58,15 @@ struct ProjectMemoryDigest: Equatable {
     """
 
     var projectName: String
-    /// The digest text, oldest command last.
+    /// The digest text, newest command first. The suggestions read it.
     var text: String
+    /// What the summary reads: `text` without the commands when Git shows
+    /// the work (`gitShowsWork`). The panel's Recent list shows the
+    /// commands, and with them in the prompt the model ended its summary
+    /// with "The `git pull` and `git status` commands confirmed the current
+    /// state." in 8 of 12 runs, also when the instructions told it not to
+    /// retell them. Without Git work, the commands are all there is.
+    var summaryText: String
     /// The commands the model may choose from (`ProjectMemorySuggestions.candidates`).
     var candidates: [String]
     /// What the summary is for: the records and the git state, with no
@@ -83,6 +88,17 @@ struct ProjectMemoryDigest: Equatable {
             of: Self.digest(entries: entries, git: git, now: now),
             tokenBudget: Self.textTokenBudget
         )
+        summaryText = git.map(Self.gitShowsWork) == true
+            ? OutputExplanation.excerpt(of: Self.digest(entries: [], git: git, now: now), tokenBudget: Self.textTokenBudget)
+            : text
+    }
+
+    /// Whether the Git state shows work for the summary to describe: commits
+    /// (of the branch, or the latest on a main branch) or changed files.
+    static func gitShowsWork(_ git: GitStatus) -> Bool {
+        if !git.changedPaths.isEmpty { return true }
+        if git.branch != nil, let own = git.branchCommits, !git.isOnMainBranch { return !own.isEmpty }
+        return !git.recentCommits.isEmpty
     }
 
     /// The prompt for `OnDeviceModel.suggestCommands`: the digest, the
@@ -107,7 +123,7 @@ struct ProjectMemoryDigest: Equatable {
             lines.append("Write the reply in \(replyLanguage).")
         }
         lines.append("<<<")
-        lines.append(text)
+        lines.append(summaryText)
         lines.append(">>>")
         return lines.joined(separator: "\n")
     }
@@ -159,7 +175,7 @@ struct ProjectMemoryDigest: Equatable {
             }
         }
         var commands: [String] = []
-        let recent = entries.suffix(recentCommandCount).reversed()
+        let recent = ProjectMemorySummary.withoutSettledFailures(entries).suffix(recentCommandCount).reversed()
         if !recent.isEmpty {
             commands.append("Commands, newest first:")
             for entry in recent {
