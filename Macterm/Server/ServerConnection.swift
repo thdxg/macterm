@@ -4,8 +4,9 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "ServerConnection")
 
-/// One connection to the local server's channel 0 (design/003 §1, §4): the
-/// handshake, requests and their responses, and the server's events.
+/// One connection to a server (design/003 §1, §4): the handshake, requests
+/// and their responses, the server's events, and the pane channels that the
+/// server relays (`openChannel`).
 ///
 /// A thread of its own reads the socket. A request waits for its response,
 /// matched by id. When the connection ends, every waiting request fails with
@@ -33,9 +34,13 @@ final class ServerConnection: @unchecked Sendable {
     private var isClosed = false
     /// The open pane channels, by number (`openChannel`).
     private var channelSinks: [UInt32: PaneChannel.Sink] = [:]
-    /// Frames of a channel that arrived before `openChannel` could register
-    /// its sink. The reader thread is faster than the response's waiter.
+    /// Frames of a channel that arrived before `openChannel` registered its
+    /// sink, in order. A channel that holds too many fails when it registers.
     private var earlyFrames: [UInt32: [ProtocolFrame]] = [:]
+    private var overflowedChannels: Set<UInt32> = []
+    /// Channels that `releaseChannel` ended: their late frames are dropped.
+    private var releasedChannels: Set<UInt32> = []
+    private static let earlyFrameLimit = 256
 
     /// How long the handshake waits for the server's `hello`.
     static let handshakeTimeout: TimeInterval = 5
@@ -89,6 +94,10 @@ final class ServerConnection: @unchecked Sendable {
                 throw ServerClientError.serverTooOld(level: theirs.level)
             }
             setReceiveTimeout(fd, seconds: 0)
+            // A server that stops reading must not hold a writer for ever:
+            // the write fails, and the connection counts as lost.
+            var sendTimeout = timeval(tv_sec: 10, tv_usec: 0)
+            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &sendTimeout, socklen_t(MemoryLayout<timeval>.size))
             let connection = ServerConnection(fd: fd, hello: theirs, pid: peerPID)
             connection.startReading(reader)
             return connection
@@ -148,14 +157,18 @@ final class ServerConnection: @unchecked Sendable {
     /// when the connection ended.
     private func register(_ sink: PaneChannel.Sink, as number: UInt32) -> Bool {
         lock.lock()
-        if isClosed {
-            lock.unlock()
+        defer { lock.unlock() }
+        if isClosed || overflowedChannels.remove(number) != nil {
+            earlyFrames.removeValue(forKey: number)
             return false
         }
+        releasedChannels.remove(number)
         channelSinks[number] = sink
-        let early = earlyFrames.removeValue(forKey: number) ?? []
-        lock.unlock()
-        for frame in early { sink.deliver(frame) }
+        // Delivered under the lock, so that no newer frame passes them.
+        // `deliver` never blocks.
+        for frame in earlyFrames.removeValue(forKey: number) ?? [] {
+            sink.deliver(frame)
+        }
         return true
     }
 
@@ -164,6 +177,7 @@ final class ServerConnection: @unchecked Sendable {
         lock.lock()
         let sink = channelSinks.removeValue(forKey: number)
         earlyFrames.removeValue(forKey: number)
+        releasedChannels.insert(number)
         lock.unlock()
         sink?.finish()
     }
@@ -247,11 +261,18 @@ final class ServerConnection: @unchecked Sendable {
             lock.unlock()
             sink.deliver(frame)
         } else {
-            // Not registered yet. Frames for a channel that was released
-            // would collect here: the cap keeps that bounded.
-            var held = earlyFrames[frame.channel] ?? []
-            if held.count < 256 { held.append(frame) }
-            earlyFrames[frame.channel] = held
+            // Not registered yet: hold the frame for `openChannel`. Never drop
+            // one in silence: a channel with too many fails instead.
+            if !releasedChannels.contains(frame.channel) {
+                var held = earlyFrames[frame.channel] ?? []
+                if held.count < Self.earlyFrameLimit {
+                    held.append(frame)
+                    earlyFrames[frame.channel] = held
+                } else {
+                    overflowedChannels.insert(frame.channel)
+                    earlyFrames.removeValue(forKey: frame.channel)
+                }
+            }
             lock.unlock()
         }
     }
@@ -264,6 +285,7 @@ final class ServerConnection: @unchecked Sendable {
         let sinks = channelSinks
         channelSinks = [:]
         earlyFrames = [:]
+        overflowedChannels = []
         lock.unlock()
         for sink in sinks.values {
             sink.finish()
@@ -373,7 +395,7 @@ extension ServerConnection {
     }
 }
 
-/// Reads whole frames from a socket. Only channel 0 comes from the server.
+/// Reads whole frames from a socket.
 private struct FrameReader {
     let fd: Int32
     var buffer = Data()

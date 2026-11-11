@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: appBundleID, category: "PaneChannel")
 
 /// What a pane channel delivers (design/003 §1): the session's output as raw
 /// bytes, and its own messages. A message that this build does not know, or
@@ -25,11 +28,25 @@ enum PaneChannelEvent: Equatable {
             guard let message = try? MessagePackReader.decode(MactermProtocol.PaneMessage.self, from: frame.body) else {
                 return nil
             }
-            self = Self.decode(message) ?? .other(message.t)
+            if let event = Self.decode(message) {
+                self = event
+            } else {
+                // A known type that does not read is as bad as a lost frame.
+                if Self.known.contains(message.t) {
+                    logger.error("pane channel: message \(message.t, privacy: .public) could not be read")
+                }
+                self = .other(message.t)
+            }
         default:
             return nil
         }
     }
+
+    private static let known: Set<String> = [
+        MactermProtocol.State.name, MactermProtocol.Lead.name, MactermProtocol.SnapshotStart.name,
+        MactermProtocol.SnapshotEnd.name, MactermProtocol.Resumed.name, MactermProtocol.Exit.name,
+        MactermProtocol.Title.name, MactermProtocol.Foreground.name,
+    ]
 
     private static func decode(_ message: MactermProtocol.PaneMessage) -> PaneChannelEvent? {
         switch message.t {
@@ -57,8 +74,10 @@ enum PaneChannelEvent: Equatable {
 
 /// One pane's channel on a `ServerConnection`: the surface's view of its
 /// session. Output and the session's messages come through `events`, in
-/// order, and end when the channel or the connection ends. Input never
-/// waits for the server: a write that blocks is the caller's queue's.
+/// order, and end when the channel or the connection ends. A caller writes
+/// input from a queue of its own: a write that the server does not take fails
+/// after 10 s. Call `close()` when done:
+/// the events buffer without a limit until then.
 final class PaneChannel: @unchecked Sendable {
     let number: UInt32
     let events: AsyncStream<PaneChannelEvent>
@@ -75,7 +94,11 @@ final class PaneChannel: @unchecked Sendable {
         }
 
         func deliver(_ frame: ProtocolFrame) {
-            if let event = PaneChannelEvent(frame) { continuation.yield(event) }
+            if let event = PaneChannelEvent(frame) {
+                continuation.yield(event)
+            } else {
+                logger.error("pane channel: a frame could not be read, kind=\(frame.kind.rawValue, privacy: .public)")
+            }
         }
 
         func finish() {
@@ -108,11 +131,13 @@ final class PaneChannel: @unchecked Sendable {
     /// Stops the output of a pane that no one sees. The session's messages
     /// still come. `resume` brings a snapshot first (design/003 §6).
     func pause() async throws {
-        _ = try await connection?.call(MactermProtocol.ChannelPause.self, .init(channel: number))
+        guard let connection else { throw ServerClientError.disconnected }
+        _ = try await connection.call(MactermProtocol.ChannelPause.self, .init(channel: number))
     }
 
     func resume() async throws {
-        _ = try await connection?.call(MactermProtocol.ChannelResume.self, .init(channel: number))
+        guard let connection else { throw ServerClientError.disconnected }
+        _ = try await connection.call(MactermProtocol.ChannelResume.self, .init(channel: number))
     }
 
     /// Ends the channel. The session keeps running.

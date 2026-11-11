@@ -45,6 +45,33 @@ struct PaneChannelTests {
     }
 
     @Test
+    func a_burst_of_output_right_after_the_open_arrives_whole_and_in_order() async throws {
+        try await withServer { server in
+            let connection = try await server.connect()
+            defer { connection.close() }
+            let id = "chan-burst-\(UInt32.random(in: 0 ... .max))"
+            _ = try await connection.call(
+                MactermProtocol.SessionCreate.self,
+                Self.args(id: id, command: ["/bin/sh", "-c", "i=1; while [ $i -le 3000 ]; do echo n$i; i=$((i+1)); done; sleep 30"])
+            )
+            let channel = try await connection.openChannel(session: id)
+            try channel.send(MactermProtocol.Attach(cols: 200, rows: 24))
+            var iterator = channel.events.makeAsyncIterator()
+            var screen = Data()
+            while !String(decoding: screen, as: UTF8.self).contains("n3000") {
+                guard let event = await iterator.next() else { Issue.record("ended early")
+                    return
+                }
+                if case let .output(data) = event { screen.append(data) }
+            }
+            let numbers = String(decoding: screen, as: UTF8.self)
+                .split(whereSeparator: \.isNewline).compactMap { $0.hasPrefix("n") ? Int($0.dropFirst()) : nil }
+            #expect(numbers == Array(numbers.first! ... 3000))
+            await channel.close()
+        }
+    }
+
+    @Test
     func a_closed_connection_ends_the_events_of_its_channels() async throws {
         try await withServer { server in
             let connection = try await server.connect()
