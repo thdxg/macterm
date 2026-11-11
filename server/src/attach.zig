@@ -33,6 +33,15 @@ const m = protocol.messages;
 
 pub const protocol_level = m.level;
 
+/// How often, and how long between tries, a client connects again after a
+/// lost link before it gives up.
+const reconnect_tries = 5;
+const reconnect_wait_ms = 100;
+
+/// What the first attach writes before the session's snapshot: it clears the
+/// screen and puts the cursor home.
+const reset_screen = "\x1b[0m\x1b[2J\x1b[H";
+
 /// How long the session may take to answer the handshake.
 const handshake_timeout_ms = 5000;
 
@@ -108,10 +117,11 @@ pub fn run(gpa: std.mem.Allocator, dir: []const u8, name: []const u8, create: ?C
         if (try createSession(gpa, dir, name, spec)) |outcome| return outcome;
     } else if (!have_dir) return error.NoSession;
     const fd = ipc.connectSession(path) catch return error.NoSession;
-    defer lib_posix.close(fd);
+    var c: Client = .{ .gpa = gpa, .fd = fd, .path = path, .foreground_events = lib_posix.getenv(foreground.env_var) != null };
+    // `reconnect` changes the fd.
+    defer lib_posix.close(c.fd);
     if (!runtime.allowPeer(runtime.peerUid(fd), std.c.getuid())) return error.WrongPeer;
 
-    var c: Client = .{ .gpa = gpa, .fd = fd, .foreground_events = lib_posix.getenv(foreground.env_var) != null };
     defer c.in.deinit(gpa);
     if (try c.handshake()) |outcome| return outcome;
     return c.loop();
@@ -254,6 +264,20 @@ const Client = struct {
     consumed: usize = 0,
     /// Write the session's foreground as v1's APC (interim, until m3).
     foreground_events: bool = false,
+    /// The session's socket, to connect again after a lost link.
+    path: []const u8 = "",
+    /// The `epoch` of the session's `hello`.
+    epoch: u64 = 0,
+    /// The offset after the last output byte that the terminal got
+    /// (design/003 §7). 0 at the start: a session with no output sends no
+    /// snapshot, and its first byte is at 0. Null when it is not known: a
+    /// session of level 1 sent a snapshot with no offset.
+    offset: ?u64 = 0,
+    /// The frames are a snapshot's: they are not output.
+    in_snapshot: bool = false,
+    /// The link was lost and made again: a snapshot that comes shows the
+    /// whole pane, over a screen that holds the old one.
+    reconnected: bool = false,
 
     /// Hello in each direction, then the session's `state`. Null when the
     /// pane may start; an outcome when the two levels refuse each other.
@@ -274,6 +298,7 @@ const Client = struct {
                     .hello => |theirs| {
                         if (greeted) return error.Protocol;
                         greeted = true;
+                        c.epoch = theirs.epoch;
                         switch (m.negotiate(mine, theirs)) {
                             .refuse => |r| {
                                 c.sendControl(r) catch {};
@@ -322,9 +347,9 @@ const Client = struct {
             // Reset the terminal and its colors, as v1's attach does.
             writeAll(stdout, "\x1bc\x1b]110\x1b\\\x1b]111\x1b\\\x1b]112\x1b\\") catch {};
         }
-        writeAll(stdout, "\x1b[0m\x1b[2J\x1b[H") catch {};
+        writeAll(stdout, reset_screen) catch {};
 
-        try c.sendPane(m.Attach, attachMessage(ipc.getTerminalSize(stdout), c.foreground_events));
+        try c.sendAttach(stdout);
 
         const detach_disabled = util.isDetachKeyDisabled();
         var claims: util.ClaimFilter = .{};
@@ -339,9 +364,12 @@ const Client = struct {
             };
             _ = lib_posix.poll(&fds, -1) catch return error.Protocol;
 
+            // A send that fails is a lost link: the read below sees the end
+            // of the stream and reconnects. The bytes that did not go are
+            // dropped, as a terminal drops keys while its link is down.
             if (fds[2].revents & lib_posix.POLL.IN != 0) {
                 try signal.drainSignalPipe();
-                try c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout)));
+                c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout))) catch |err| if (err != error.Protocol) return err;
             }
 
             if (fds[0].revents & (lib_posix.POLL.IN | lib_posix.POLL.HUP | lib_posix.POLL.ERR) != 0) {
@@ -354,12 +382,15 @@ const Client = struct {
                 const data = buf[0..n];
                 if (!detach_disabled and util.isCtrlBackslash(data)) return .detached;
                 const filtered = claims.feed(data);
-                for (0..filtered.claims) |_| try c.sendPane(m.Claim, .{});
-                if (filtered.forward.len > 0) try c.sendFrame(m.pane_channel, .bytes, filtered.forward);
+                for (0..filtered.claims) |_| c.sendPane(m.Claim, .{}) catch |err| if (err != error.Protocol) return err;
+                if (filtered.forward.len > 0) c.sendFrame(m.pane_channel, .bytes, filtered.forward) catch |err| if (err != error.Protocol) return err;
             }
 
             if (fds[1].revents & (lib_posix.POLL.IN | lib_posix.POLL.HUP | lib_posix.POLL.ERR) != 0) {
-                if (!try c.fill()) return .closed;
+                if (!try c.fill()) {
+                    // The link is lost, with no exit: try to resume.
+                    if (!try c.reconnect(stdout)) return .closed;
+                }
                 if (try c.drain(stdout)) |outcome| return outcome;
             }
         }
@@ -373,7 +404,12 @@ const Client = struct {
             if (f.channel != m.pane_channel) continue;
             switch (f.kind) {
                 // The terminal is gone: nothing can show the pane.
-                .bytes => writeAll(stdout, f.body) catch return .detached,
+                .bytes => {
+                    if (!c.in_snapshot) if (c.offset) |o| {
+                        c.offset = o + f.body.len;
+                    };
+                    writeAll(stdout, f.body) catch return .detached;
+                },
                 .msg => {
                     var arena_state: std.heap.ArenaAllocator = .init(c.gpa);
                     defer arena_state.deinit();
@@ -382,20 +418,36 @@ const Client = struct {
                     if (std.mem.eql(u8, msg.t, m.Lead.name)) {
                         const lead = m.decodePane(m.Lead, arena, msg) catch return error.Protocol;
                         // A client that starts to lead sends its size.
-                        if (lead.leader) try c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout)));
+                        if (lead.leader) c.sendPane(m.Resize, resizeOf(ipc.getTerminalSize(stdout))) catch |err| if (err != error.Protocol) return err;
                     } else if (c.foreground_events and std.mem.eql(u8, msg.t, m.Foreground.name)) {
                         const fg = m.decodePane(m.Foreground, arena, msg) catch return error.Protocol;
                         var buf: [apc_max]u8 = undefined;
                         // In the output stream, so it lands in front of the
                         // output that the session sent after it.
                         writeAll(stdout, foregroundApc(&buf, fg)) catch return .detached;
-                    } else if (c.foreground_events and std.mem.eql(u8, msg.t, m.SnapshotStart.name)) {
+                    } else if (std.mem.eql(u8, msg.t, m.SnapshotStart.name)) {
+                        const start = m.decodePane(m.SnapshotStart, arena, msg) catch return error.Protocol;
+                        c.in_snapshot = true;
+                        c.offset = start.offset;
+                        if (c.reconnected) {
+                            // The session could not resume: draw the pane
+                            // again, as the first attach does.
+                            c.reconnected = false;
+                            writeAll(stdout, reset_screen) catch return .detached;
+                        }
                         // Around the snapshot, so the app can tell the
                         // replay from new output: a title in the replay is
                         // old, and nothing says who set it.
-                        writeAll(stdout, snapshot_start_apc) catch return .detached;
-                    } else if (c.foreground_events and std.mem.eql(u8, msg.t, m.SnapshotEnd.name)) {
-                        writeAll(stdout, snapshot_end_apc) catch return .detached;
+                        if (c.foreground_events) writeAll(stdout, snapshot_start_apc) catch return .detached;
+                    } else if (std.mem.eql(u8, msg.t, m.SnapshotEnd.name)) {
+                        c.in_snapshot = false;
+                        if (c.foreground_events) writeAll(stdout, snapshot_end_apc) catch return .detached;
+                    } else if (std.mem.eql(u8, msg.t, m.Resumed.name)) {
+                        // The bytes after our offset follow, and nothing is
+                        // drawn again.
+                        const r = m.decodePane(m.Resumed, arena, msg) catch return error.Protocol;
+                        c.offset = r.offset;
+                        c.reconnected = false;
                     } else if (std.mem.eql(u8, msg.t, m.Exit.name)) {
                         const e = m.decodePane(m.Exit, arena, msg) catch return error.Protocol;
                         // The server takes the status (`take`), not the pane.
@@ -406,6 +458,53 @@ const Client = struct {
             }
         }
         return null;
+    }
+
+    /// Sends `attach`: with the offset that the terminal has, when the
+    /// session may still hold the bytes after it.
+    fn sendAttach(c: *Client, stdout: i32) (Error || error{OutOfMemory})!void {
+        var a = attachMessage(ipc.getTerminalSize(stdout), c.foreground_events);
+        if (c.reconnected) if (c.offset) |o| {
+            a.resume_epoch = c.epoch;
+            a.resume_offset = o;
+        };
+        try c.sendPane(m.Attach, a);
+    }
+
+    /// The link to the session ended with no exit. Connects again a few
+    /// times, and attaches asking to resume from the offset that the
+    /// terminal has (design/003 §7). False when the session does not answer:
+    /// it ended, or crashed.
+    fn reconnect(c: *Client, stdout: i32) (Error || error{OutOfMemory})!bool {
+        var tries: u32 = 0;
+        const fd = while (true) : (tries += 1) {
+            if (ipc.connectSession(c.path)) |fd| break fd else |_| {}
+            if (tries >= reconnect_tries) return false;
+            var ts: std.c.timespec = .{ .sec = 0, .nsec = reconnect_wait_ms * std.time.ns_per_ms };
+            _ = std.c.nanosleep(&ts, null);
+        };
+        lib_posix.close(c.fd);
+        c.fd = fd;
+        if (!runtime.allowPeer(runtime.peerUid(fd), std.c.getuid())) return false;
+        c.in.clearRetainingCapacity();
+        c.consumed = 0;
+        // A snapshot that the link cut leaves a partial screen: the offset
+        // says nothing, and the session sends a snapshot again.
+        if (c.in_snapshot) c.offset = null;
+        c.in_snapshot = false;
+        const before = c.epoch;
+        const hs = c.handshake() catch return false;
+        if (hs != null) return false;
+        // A session that is not the one that we left has other offsets.
+        if (c.epoch != before) {
+            c.offset = null;
+            // The screen shows another session's output: clear it now, as
+            // a session with no output sends no snapshot to do it.
+            writeAll(stdout, reset_screen) catch return false;
+        }
+        c.reconnected = true;
+        try c.sendAttach(stdout);
+        return true;
     }
 
     /// Reads what the socket has. False at the end of the stream.

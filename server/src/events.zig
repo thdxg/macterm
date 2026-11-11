@@ -31,6 +31,8 @@ pub const Event = union(enum) {
     bell,
     activity,
     status: m.Status,
+    /// The flags that wait for a client to see them (`Watch.attention`).
+    attention: m.Attention,
     /// Every program status record, from `Watch.programRecords`.
     program: []m.ProgramRecord,
 };
@@ -62,6 +64,9 @@ pub const Watch = struct {
     /// The last progress report; null after `remove`.
     progress: ?m.Progress = null,
     status: m.Status = .{ .state = .idle },
+    /// What the user did not see yet. A run that ends and the bell set it,
+    /// a new run clears `unseen` and `failed`, and `seen` clears it all.
+    attention: m.Attention = .{},
     /// A progress report started the run, not a mark.
     run_by_progress: bool = false,
     /// The command that runs now, for its `end` mark.
@@ -146,6 +151,7 @@ pub const Watch = struct {
         if (w.term.getPwd()) |p| if (p.len > 0) try out.append(w.gpa, .{ .cwd = p });
         if (w.progress) |p| try out.append(w.gpa, .{ .progress = p });
         if (w.status.state != .idle) try out.append(w.gpa, .{ .status = w.status });
+        if (w.attention.unseen or w.attention.bell) try out.append(w.gpa, .{ .attention = w.attention });
         if (w.records.items.len > 0) {
             const records = try w.programRecords();
             out.append(w.gpa, .{ .program = records }) catch |err| {
@@ -200,6 +206,24 @@ pub const Watch = struct {
         if (w.status.state == state and w.status.failed == failed) return;
         w.status = .{ .state = state, .failed = failed };
         w.push(.{ .status = w.status });
+        switch (state) {
+            .done => w.setAttention(.{ .unseen = true, .failed = failed, .bell = w.attention.bell }),
+            .running => w.setAttention(.{ .bell = w.attention.bell }),
+            else => {},
+        }
+    }
+
+    fn setAttention(w: *Watch, next: m.Attention) void {
+        if (std.meta.eql(w.attention, next)) return;
+        w.attention = next;
+        w.push(.{ .attention = next });
+    }
+
+    /// A client showed the pane to the user. Pushes the flags also when they
+    /// were clear, so that the client that asked gets its answer.
+    pub fn seen(w: *Watch) void {
+        w.attention = .{};
+        w.push(.{ .attention = w.attention });
     }
 
     fn startRun(w: *Watch, by_progress: bool) void {
@@ -433,7 +457,11 @@ pub const Watch = struct {
     }
 
     fn onBell(h: *Handler) void {
-        fromHandler(h).coalesce(.bell);
+        const w = fromHandler(h);
+        var next = w.attention;
+        next.bell = true;
+        w.setAttention(next);
+        w.coalesce(.bell);
     }
 
     fn onProgress(h: *Handler, r: ProgressReport) void {
@@ -626,7 +654,7 @@ test "events: a title, a cwd and a bell go out at once" {
     try testing.expectEqualStrings("file://host/tmp/a%20b", cwds[0]);
     const tags = try f.tags();
     defer testing.allocator.free(tags);
-    try testing.expectEqualSlices(std.meta.Tag(Event), &.{ .title, .cwd, .bell }, tags);
+    try testing.expectEqualSlices(std.meta.Tag(Event), &.{ .title, .cwd, .attention, .bell }, tags);
 }
 
 test "events: a title flood coalesces to the first and the newest" {
@@ -1049,4 +1077,64 @@ test "events: a new client gets the program status records" {
     try testing.expectEqual(2, records.len);
     try testing.expectEqualStrings("make", records[1].app.?);
     try testing.expectEqual(.question, records[1].kind.?);
+}
+
+test "events: an ended run sets unseen, a failed run sets failed, a new run clears both" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x1b]133;C\x07", 0);
+    try testing.expectEqual(m.Attention{}, f.w.attention);
+    f.feed("\x1b]133;D;0\x07", 10);
+    try testing.expectEqual(m.Attention{ .unseen = true }, f.w.attention);
+    f.feed("\x1b]133;C\x07", 20);
+    try testing.expectEqual(m.Attention{}, f.w.attention);
+    // A failed run: a progress error ends it (v1's red dot).
+    f.feed("\x1b]133;D;0\x07", 30);
+    f.feed("\x1b]9;4;1;40\x07", 40);
+    f.feed("\x1b]9;4;2\x07", 50);
+    try testing.expectEqual(m.Attention{ .unseen = true, .failed = true }, f.w.attention);
+    const flags = try f.only(.attention);
+    defer testing.allocator.free(flags);
+    try testing.expectEqual(5, flags.len);
+}
+
+test "events: the bell sets bell, a new run keeps it, and seen clears everything" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    f.feed("\x07\x07", 0);
+    try testing.expectEqual(m.Attention{ .bell = true }, f.w.attention);
+    f.feed("\x1b]133;C\x07\x1b]133;D;0\x07", 10);
+    try testing.expectEqual(m.Attention{ .unseen = true, .bell = true }, f.w.attention);
+    f.feed("\x1b]133;C\x07", 20);
+    try testing.expectEqual(m.Attention{ .bell = true }, f.w.attention);
+    f.w.seen();
+    try testing.expectEqual(m.Attention{}, f.w.attention);
+    // The clear is pushed also when nothing was set, so that the client that
+    // asked gets its answer.
+    f.w.clearReady();
+    f.w.seen();
+    const flags = try f.only(.attention);
+    defer testing.allocator.free(flags);
+    try testing.expectEqual(1, flags.len);
+}
+
+test "events: a new client gets the flags only when one is set" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    var out: std.ArrayList(Event) = .empty;
+    defer out.deinit(testing.allocator);
+    try f.w.current(&out);
+    for (out.items) |e| try testing.expect(e != .attention);
+    f.feed("\x1b]133;C\x07\x1b]133;D;1\x07", 0);
+    out.clearRetainingCapacity();
+    try f.w.current(&out);
+    var found = false;
+    for (out.items) |e| if (e == .attention) {
+        found = true;
+        try testing.expectEqual(m.Attention{ .unseen = true }, e.attention);
+    };
+    try testing.expect(found);
 }

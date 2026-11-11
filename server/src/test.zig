@@ -19,5 +19,6 @@ comptime {
     _ = @import("attach.zig");
     _ = @import("events.zig");
     _ = @import("relay.zig");
+    _ = @import("ring.zig");
     _ = @import("proxy.zig");
 }

@@ -716,6 +716,13 @@ The frames and messages between the app, the server and the session processes (d
 - The base is main, not the last release, until v2 has a release. A new field in an older type names its level in `field_since`.
 - Field names and enum tags are snake_case ASCII (`checkName`), so the Swift String compare is the Zig byte compare.
 - `scripts/protocol.sh` needs Zig 0.17 on PATH or in `$ZIG`.
+- **Resume (protocol level 2, design/003 §7).**
+  - A session counts its output bytes and keeps the last 256 KiB in `ring.zig`. The ring grows only with output, to 320 KiB at most.
+  - `snapshot.start` carries the `offset` that its screen shows.
+  - `attach` can carry `resume_epoch` (the epoch in the session's `hello`) and `resume_offset`. The session answers `resumed` and the missing bytes, with no snapshot and no repaint. It sends a snapshot when the epoch differs or the ring lost the bytes.
+  - The server keeps the last 256 event batches. `control.resume {epoch, seq}` replays the batches after `seq`. Otherwise it answers `replayed: false`, and the client reads `session.list`.
+  - `macterm connect` tracks its offset and connects again after a lost link. The app's pty client does not use resume yet (m3).
+  - The relay needs no change. It drops queued output and then a snapshot follows, so a client's count is a prefix of the stream until the snapshot resets it.
 
 ### The app's client of the local server (`Macterm/Server/`)
 
@@ -740,6 +747,7 @@ Every local pane (workspace, pinned, quick terminal, widget) is a v2 session of 
 - **`LocalSessions` is the app's one server connection** (`LocalSessions.shared`). It connects at the first use and again after the connection ends (the server exits when it has no session and no client). `MactermApp` connects at launch, so a server of an older build is replaced early. `ZmxClient.live` sends `killSession`, `listSessions`, `session list/info/kill` and the foreground cache through it.
 - **The app ends a session whose shell exited** (`session.kill` takes the status): at its `session.exit` event, and at each connect for one that exited while no app was connected. Its pane already closed from the client's exit. Without this, a session keeps its exit status for ever, and a pane of the same name attaches to an exited session.
 - **The foreground and the tty come from `session.list`**: `shell_pid` (the pty's leader) and `pty`. `ZmxForegroundResolver` reads the foreground group of the shell, and `daemonTTYPath` is the session's pty, for the password monitor and secure input. `ProcessInspector` is unchanged.
+- **A session keeps each pane's attention flags** (`Attention`: `unseen`, `failed`, `bell`, `events.zig`; design/004 §6). A run that ends and a bell set them. A new run clears `unseen` and `failed`. They live in the session process, so they stay while the app is quit and across a restart of the server: a new server reads them from the session. `session.list` shows them, and the server sends `pane.attention` to every client at each change. `pane.seen` (local clients only) tells the session to clear them, and the reply goes after the event. The GUI does not call it yet: v1's code still derives its own dots until the cut-over.
 - **No listing gate.** One server answers every list. `session list` lists only running sessions. `clients` is the session's own count of the clients that sent `attach`: the session sends `state` again to the server each time the count changes.
 - **The local orphan sweep runs once at launch** (`AppState.sweepLocalOrphans`, `ZmxReaper.localOrphans`): it ends a running `macterm-` session that no pane claims and no client shows. It is safe because each build flavor has its own runtime folder (`LocalServer.folderName`: `macterm`, `macterm-debug`), so every session there is this flavor's. This also keeps a Release pane's session off the Debug binary. It skips everything when `WorkspaceStore.loadFailed`.
 - **`zmx connect <name> --` asks the server first, also when the socket answers.** The server refuses a create for a session whose shell exited (`exited`); the client ends it (`session.kill`) and creates again, as v1's `zmx attach` made a new session for a dead one. A connection that ends before the reply (a server that a newer app replaced) gets one more try.
