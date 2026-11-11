@@ -78,6 +78,6 @@ Macterm reads the Git state of a local project when the panel shows it, and agai
 
 For a remote project, Macterm reads the Git state on the host, over one ssh connection in the background, with the same reads. This needs **Background SSH connections** in **Settings → General → Remote Projects**: each read is a connection, and on a key that asks for Touch ID each connection is a dialog. If a host refuses the background login, Macterm does not ask it again until you start Macterm again, and the panel says so. A branch row types `cd` to the worktree on the host, or `git switch`, into the current pane, as for a local project.
 
-## Forget the records
+## When you remove a project
 
 When you remove a project, Macterm deletes its records too.

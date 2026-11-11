@@ -315,14 +315,18 @@ struct ProjectMemoryTests {
         // came. A read that finds the same state restarts nothing.
         var runs = 0
         let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
+        // A summary for another state, so that the reads take the quiet
+        // wait: a project with no summary gets its first one with no wait.
+        summarizer.loadStored = { _ in StoredSummary(key: "older", text: "Earlier work.", writtenAt: Date(), suggestions: nil) }
         memory.gitReader = { _ in GitStatus(branch: "main") }
         let deadline = Date().addingTimeInterval(1)
         memory.refreshGit(project.id)
-        while summarizer.state(for: project.id).phase != .done, Date() < deadline {
+        while runs == 0 || summarizer.state(for: project.id).phase != .done, Date() < deadline {
             try await Task.sleep(for: .milliseconds(15))
             memory.refreshGit(project.id)
         }
         #expect(summarizer.state(for: project.id).phase == .done)
+        #expect(summarizer.state(for: project.id).text == "You built the project.")
         #expect(runs == 1)
     }
 
@@ -382,7 +386,7 @@ struct ProjectMemoryTests {
     }
 
     @Test
-    func a_project_with_no_git_state_waits_the_quiet_period() async throws {
+    func a_git_read_with_no_state_writes_no_summary() async throws {
         var runs = 0
         let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
         memory.summaryQuietPeriod = .seconds(600)
