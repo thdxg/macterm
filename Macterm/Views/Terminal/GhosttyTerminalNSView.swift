@@ -349,7 +349,7 @@ final class GhosttyTerminalNSView: NSView {
     var onUserInput: (() -> Void)?
     /// The surface has a real size for the first time — from here on a zmx
     /// leadership claim can be delivered (`sendLeadershipClaim` refuses before
-    /// it). Fired once per surface.
+    /// it). Fires at the first size, and again at the first output (the claim waits for it).
     var onSurfaceSized: (() -> Void)?
     private var hasReportedSurfaceSize = false
     private var claimReadiness = LeadershipClaimReadiness()

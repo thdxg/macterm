@@ -231,3 +231,26 @@ struct GhosttyTerminalNSViewTests {
         #expect(try defaultKeybindsClaimCommand(keyCode: 12, unshifted: "\u{0439}", text: "q"))
     }
 }
+
+struct LeadershipClaimReadinessTests {
+    @Test
+    func output_after_the_size_asks_for_a_new_claim_once() {
+        var readiness = LeadershipClaimReadiness()
+        readiness.noteSized()
+        #expect(!readiness.hasOutput)
+        let first = readiness.noteOutput()
+        let second = readiness.noteOutput()
+        #expect(first)
+        #expect(readiness.hasOutput)
+        #expect(!second)
+    }
+
+    @Test
+    func output_before_the_size_asks_for_nothing() {
+        var readiness = LeadershipClaimReadiness()
+        let early = readiness.noteOutput()
+        #expect(!early)
+        readiness.noteSized()
+        #expect(readiness.hasOutput)
+    }
+}
