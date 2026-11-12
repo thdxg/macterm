@@ -72,9 +72,22 @@ jobs:
       contents: write
     uses: ./.github/workflows/server-build.yml
 
+  # A second try, only when the first Server / Build was cancelled. A job
+  # that gets no runner runs no step, and the platform cancels it after about
+  # 18 minutes (runs 43067162506 and others). A build that fails is a real
+  # failure and is not tried again. A cancel of the whole run (a newer push)
+  # skips this job.
+  server-retry:
+    name: Server (Retry)
+    needs: [changes, server]
+    if: ${{ !cancelled() && needs.server.result == 'cancelled' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/server-build.yml
+
   unit:
     name: Unit
-    needs: [changes, server]
+    needs: [changes, server, server-retry]
     # !cancelled(), not the default success(): a failed server build must
     # fail this job (at the artifact download), not skip it. A skipped job
     # passes a required check.
@@ -83,6 +96,12 @@ jobs:
       && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.extensions == 'true')
     runs-on: xcode-27
     steps:
+      - name: Check the Server Build
+        if: ${{ needs.server.result != 'success' && needs.server-retry.result != 'success' }}
+        run: |
+          echo "::error::Server / Build did not make the server artifact (result: ${{ needs.server.result }}, retry: ${{ needs.server-retry.result }}). A cancelled build with no steps is a runner that did not start: run the failed jobs again."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -225,12 +244,18 @@ jobs:
   # unit signal and failures are attributable at a glance.
   e2e:
     name: End-to-end
-    needs: [changes, server]
+    needs: [changes, server, server-retry]
     # !cancelled(): see the unit job.
     if: ${{ !cancelled() && needs.changes.outputs.swift == 'true' }}
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
+      - name: Check the Server Build
+        if: ${{ needs.server.result != 'success' && needs.server-retry.result != 'success' }}
+        run: |
+          echo "::error::Server / Build did not make the server artifact (result: ${{ needs.server.result }}, retry: ${{ needs.server-retry.result }}). A cancelled build with no steps is a runner that did not start: run the failed jobs again."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -313,11 +338,17 @@ jobs:
   # always builds again from its own commit; this only proves that it can.
   release-build:
     name: Release Build
-    needs: [changes, server]
+    needs: [changes, server, server-retry]
     # !cancelled(): see the unit job.
     if: ${{ !cancelled() && needs.changes.outputs.swift == 'true' }}
     runs-on: xcode-27
     steps:
+      - name: Check the Server Build
+        if: ${{ needs.server.result != 'success' && needs.server-retry.result != 'success' }}
+        run: |
+          echo "::error::Server / Build did not make the server artifact (result: ${{ needs.server.result }}, retry: ${{ needs.server-retry.result }}). A cancelled build with no steps is a runner that did not start: run the failed jobs again."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
