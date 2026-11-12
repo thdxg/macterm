@@ -72,25 +72,12 @@ jobs:
       contents: write
     uses: ./.github/workflows/server-build.yml
 
-  # A second try, only when the first Server / Build was cancelled. A job
-  # that gets no runner runs no step, and the platform cancels it after about
-  # 18 minutes (runs 43067162506 and others). A build that fails is a real
-  # failure and is not tried again. A cancel of the whole run (a newer push)
-  # skips this job.
-  server-retry:
-    name: Server (Retry)
-    needs: [changes, server]
-    if: ${{ !cancelled() && needs.server.result == 'cancelled' }}
-    permissions:
-      contents: write
-    uses: ./.github/workflows/server-build.yml
-
   unit:
     name: Unit
-    needs: [changes, server, server-retry]
+    needs: [changes, server]
     # !cancelled(), not the default success(): a failed server build must
     # fail this job (at the artifact download), not skip it. A skipped job
-    # passes a required check. A skipped server-retry does not skip it.
+    # passes a required check.
     if: >-
       !cancelled()
       && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.extensions == 'true')
@@ -238,7 +225,7 @@ jobs:
   # unit signal and failures are attributable at a glance.
   e2e:
     name: End-to-end
-    needs: [changes, server, server-retry]
+    needs: [changes, server]
     # !cancelled(): see the unit job.
     if: ${{ !cancelled() && needs.changes.outputs.swift == 'true' }}
     runs-on: xcode-27
@@ -326,7 +313,7 @@ jobs:
   # always builds again from its own commit; this only proves that it can.
   release-build:
     name: Release Build
-    needs: [changes, server, server-retry]
+    needs: [changes, server]
     # !cancelled(): see the unit job.
     if: ${{ !cancelled() && needs.changes.outputs.swift == 'true' }}
     runs-on: xcode-27
