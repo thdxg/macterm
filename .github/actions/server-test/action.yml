@@ -1,0 +1,130 @@
+name: Server Test
+description: >-
+  Runs the Zig tests and the bats tests of the session server, and on macOS
+  the check of the generated protocol files. The caller checks out the
+  repository first, with a depth of 2. It is a composite action so that the
+  macOS job and its retry run the same steps (server.yml).
+
+runs:
+  using: composite
+  steps:
+    # The files that the pull request changes, from the merge commit. This
+    # needs no API call: dorny/paths-filter failed once when the API call
+    # failed with an empty message (run 42713507061). On a push, the paths
+    # of the trigger already matched.
+    - name: Find Server Changes
+      id: changes
+      shell: bash
+      run: |
+        server=true
+        if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+          files="$(git diff --no-renames --name-only HEAD^1 HEAD)"
+          if ! grep -qE '^(server/|protocol/|Macterm/Protocol/|scripts/build-server\.sh$|scripts/protocol\.sh$|scripts/server-zig\.sh$|\.github/workflows/server\.yml$|\.github/actions/server-test/)' <<<"$files"; then
+            server=false
+          fi
+        fi
+        echo "server=$server" | tee -a "$GITHUB_OUTPUT"
+
+    - name: Zig Version
+      if: steps.changes.outputs.server == 'true'
+      id: zig
+      shell: bash
+      run: echo "version=$(scripts/build-server.sh zig-version)" >> "$GITHUB_OUTPUT"
+
+    # The cache of setup-zig is off: it saves the cache also from a job that
+    # failed or that a newer push cancelled. Run 42760283476 restored such a
+    # cache, which named an output file that was not in it. The steps below
+    # save the cache only after a build that passed. The key changes only
+    # when build.zig.zon or the Zig version changes, so each key is saved once.
+    - name: Install Zig
+      if: steps.changes.outputs.server == 'true'
+      uses: mlugg/setup-zig@v2
+      with:
+        version: ${{ steps.zig.outputs.version }}
+        use-cache: false
+
+    - name: Restore the Zig Cache
+      if: steps.changes.outputs.server == 'true'
+      id: zig-cache
+      uses: actions/cache/restore@v6
+      with:
+        path: .zig-cache
+        key: server-zig-${{ runner.os }}-${{ runner.arch }}-${{ steps.zig.outputs.version }}-${{ hashFiles('server/build.zig.zon') }}
+        restore-keys: |
+          server-zig-${{ runner.os }}-${{ runner.arch }}-${{ steps.zig.outputs.version }}-
+
+    - name: Fetch the Zig Packages
+      if: steps.changes.outputs.server == 'true'
+      shell: bash
+      working-directory: server
+      run: ../scripts/server-zig.sh fetch
+
+    # host_install.bats runs its own sshd as the runner's user. macOS has
+    # one at /usr/sbin/sshd.
+    - name: Install Bats and sshd
+      if: steps.changes.outputs.server == 'true'
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = macOS ]; then
+          brew install bats-core
+        else
+          sudo apt-get update -q
+          sudo apt-get install -y -q bats openssh-server
+        fi
+
+    - name: Run the Zig Tests
+      if: steps.changes.outputs.server == 'true'
+      shell: bash
+      working-directory: server
+      run: ../scripts/server-zig.sh build test --summary all
+
+    - name: Build
+      if: steps.changes.outputs.server == 'true'
+      shell: bash
+      working-directory: server
+      run: ../scripts/server-zig.sh build
+
+    # Only after a build that passed (the default if: is success()), and
+    # only for a new key.
+    - name: Save the Zig Cache
+      if: steps.changes.outputs.server == 'true' && steps.zig-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: .zig-cache
+        key: ${{ steps.zig-cache.outputs.cache-primary-key }}
+
+    # The Swift side of the protocol is generated from the Zig schema
+    # (design/003 §3). This step fails in three cases:
+    # - a generated file is not current, or someone edited it;
+    # - the schema breaks the add-only rule against the metadata on main;
+    # - a reply or an event holds a secret (design/006 §1).
+    - name: Check the Generated Protocol Files
+      if: steps.changes.outputs.server == 'true' && runner.os == 'macOS'
+      shell: bash
+      run: |
+        git fetch --no-tags --depth=1 origin main
+        PROTOCOL_BASE=FETCH_HEAD scripts/protocol.sh --check
+
+    # A skipped test fails the step, so a missing tool cannot hide a test.
+    # daemon_responsibility.bats tests a macOS concept, so Linux leaves it
+    # out. The short TMPDIR keeps the socket paths under the macOS limit of
+    # 104 bytes.
+    - name: Run the Bats Tests
+      if: steps.changes.outputs.server == 'true'
+      shell: bash
+      working-directory: server
+      env:
+        TMPDIR: ${{ runner.temp }}
+      run: |
+        files=()
+        for f in test/*.bats; do
+          if [ "$RUNNER_OS" != macOS ] && [ "$f" = test/daemon_responsibility.bats ]; then
+            continue
+          fi
+          files+=("$f")
+        done
+        bats --tap "${files[@]}" | tee bats.tap
+        if grep -qE '^ok [0-9]+ .* # skip' bats.tap; then
+          echo "::error::A bats test was skipped."
+          exit 1
+        fi
