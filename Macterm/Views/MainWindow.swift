@@ -925,7 +925,7 @@ struct WelcomeView: View {
                             .foregroundStyle(MactermTheme.fgMuted)
                             .frame(width: 160, alignment: .leading)
                         Text(shortcutLabel(for: action))
-                            .font(.terminal(size: 11))
+                            .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(MactermTheme.fgDim)
                     }
                 }
@@ -990,7 +990,7 @@ struct EmptyProjectView: View {
                 // A sentinel workspace (the scratch tabs) has no project
                 // directory to show, as the window's subtitle has none.
                 Text(Project.isSynthetic(project.id) ? "" : project.path)
-                    .font(.terminal(size: 12))
+                    .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(MactermTheme.fgMuted)
                     .textSelection(.enabled)
             }
@@ -1003,7 +1003,7 @@ struct EmptyProjectView: View {
                             .foregroundStyle(MactermTheme.fgMuted)
                             .frame(width: 160, alignment: .leading)
                         Text(shortcutLabel(for: action))
-                            .font(.terminal(size: 11))
+                            .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(MactermTheme.fgDim)
                     }
                 }
