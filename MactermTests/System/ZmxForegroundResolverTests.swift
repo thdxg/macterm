@@ -31,7 +31,7 @@ struct ZmxForegroundResolverEntriesTests {
             id: "macterm-x", state: .running, build: "b", level: 1,
             pid: 10, shellPid: 11, pty: ProtocolBin(Data("/dev/ttys004".utf8)), cols: 80, rows: 24, clients: 2
         )
-        #expect(LocalSession(session) == LocalSession(name: "macterm-x", shellPID: 11, ttyPath: "/dev/ttys004", clients: 2))
+        #expect(LocalSession(session) == LocalSession(name: "macterm-x", shellPID: 11, ttyPath: "/dev/ttys004", clients: 2, build: "b"))
         var exited = session
         exited.state = .exited
         #expect(!LocalSession(exited).isRunning)

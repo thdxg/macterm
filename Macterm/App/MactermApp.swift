@@ -136,6 +136,12 @@ struct MactermApp: App {
                     titleOverride: "Copy Session ID"
                 )
                 AppCommandMenuItem(command: .capturePane, appState: appState, projectStore: projectStore, titleOverride: "Capture Pane")
+                AppCommandMenuItem(
+                    command: .restartSession,
+                    appState: appState,
+                    projectStore: projectStore,
+                    titleOverride: "Restart Session"
+                )
                 Divider()
                 AppCommandMenuItem(command: .closePane, appState: appState, projectStore: projectStore, titleOverride: "Close Pane")
                 AppCommandMenuItem(command: .closeTab, appState: appState, projectStore: projectStore, titleOverride: "Close Tab")

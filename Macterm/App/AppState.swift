@@ -1460,6 +1460,11 @@ final class AppState {
     @ObservationIgnored
     private var zmxRefreshInFlight = false
 
+    /// The local sessions that run an older build than the app
+    /// (`SessionBuild`), from the last listing. A tab with one shows a
+    /// badge, and Restart Session ends them (`AppState+SessionRestart`).
+    var outdatedSessions: Set<String> = []
+
     /// Bounded retries while a *wrapped* pane is missing from the server's
     /// list: a freshly-spawned session registers asynchronously, so the
     /// refresh fired by its creation event usually runs too early. Reset on
@@ -1622,7 +1627,12 @@ final class AppState {
             let sessions = await zmx.listSessions()
             if let sessions { ZmxForegroundResolver.updateCache(sessions) }
             let names = Set((sessions ?? []).filter(\.isRunning).map(\.name))
-            await MainActor.run { self?.finishZmxRefresh(running: names) }
+            // A failed listing keeps the last answer: nothing is known.
+            let outdated = sessions.map { SessionBuild.outdatedNames(in: $0, appKey: ServerBuilds.bundledKey) }
+            await MainActor.run {
+                if let outdated, self?.outdatedSessions != outdated { self?.outdatedSessions = outdated }
+                self?.finishZmxRefresh(running: names)
+            }
         }
     }
 
@@ -1946,7 +1956,7 @@ final class AppState {
     /// incubator's oversized grid. An ordered-out owner's SwiftUI tree still
     /// mounts new children (covered by the hidden-window E2E). Zoom is different:
     /// the recursive split view does not mount the hidden child at all.
-    private func warmIfUnrendered(_ pane: Pane, in tab: TerminalTab) {
+    func warmIfUnrendered(_ pane: Pane, in tab: TerminalTab) {
         let hiddenByZoom = tab.zoomedPaneID.map { $0 != pane.id } ?? false
         if hiddenByZoom || ownerWindow(of: tab, in: pane.projectID) == nil {
             warmPane(pane)
@@ -2350,7 +2360,7 @@ final class AppState {
 
     /// Drop leadership records for sessions nothing attaches any more, so the
     /// table can't grow across a long run.
-    private func pruneSessionLeaders() {
+    func pruneSessionLeaders() {
         let live = Set(allAttachedPanes().map(\.sessionName))
         sessionLeaders = sessionLeaders.filter { live.contains($0.key) }
     }
