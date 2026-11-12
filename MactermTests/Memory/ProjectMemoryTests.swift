@@ -336,6 +336,8 @@ struct ProjectMemoryTests {
         let (memory, summarizer, project) = makeBackgroundMemory { runs += 1 }
         var git = GitStatus(branch: "main")
         memory.gitReader = { _ in git }
+        // No command is recorded: the Git state alone earns the summary.
+        #expect(memory.store.entries(for: project.id).isEmpty)
 
         // No command at all: the Git state alone is the digest.
         memory.refreshGit(project.id)

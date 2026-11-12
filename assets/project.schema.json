@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/macterm/macterm/main/assets/project.schema.json",
+  "$id": "https://macterm.thdxg.dev/schemas/project.schema.json",
   "title": "Macterm project",
   "description": "A Macterm project declaration. One file for each project in ~/.config/macterm/projects/. It declares the path of the project and, if you want, its tab and pane layout. Macterm matches a file to a project by `path`. The file name does not matter. \"Save Layout\" writes the file. You can edit it by hand.",
   "type": "object",

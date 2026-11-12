@@ -153,20 +153,22 @@ struct ProjectMemoryPanel: View {
     }
 
     /// The Summary section, only with something under its heading: the
-    /// model's paragraph or button, the no-commands line or the failure card.
+    /// model's paragraph or button, the git-only line or the failure card.
     @ViewBuilder
     private func leftOff(_ summary: ProjectMemorySummary) -> some View {
-        // With no command, the line explains the empty Recent list, unless
-        // the summary already fills the space from the Git state. A stored
-        // summary is not drawn while the model cannot run.
-        let showsNoCommands = summary.lastActivity == nil
-            && (!summaryEnabled || summarizer.state(for: project.id).text.isEmpty)
-        if summaryEnabled || showsNoCommands || summary.unresolvedFailure != nil {
-            leftOffSection(summary, showsNoCommands: showsNoCommands)
+        // The line says why the Summary is empty: no command and no Git state.
+        // Git state fills the space, as the summary does from it. Before the
+        // first read answers, the state is not known: show nothing.
+        let showsGitOnlyNote = ProjectMemorySummary.showsGitOnlyNote(
+            hasCommands: summary.lastActivity != nil,
+            hasGitStateOrUnknown: git != nil || !memory.gitAnswered.contains(project.id)
+        )
+        if summaryEnabled || showsGitOnlyNote || summary.unresolvedFailure != nil {
+            leftOffSection(summary, showsGitOnlyNote: showsGitOnlyNote)
         }
     }
 
-    private func leftOffSection(_ summary: ProjectMemorySummary, showsNoCommands: Bool) -> some View {
+    private func leftOffSection(_ summary: ProjectMemorySummary, showsGitOnlyNote: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             // The header row carries the reload button, so the body is the
             // paragraph alone.
@@ -178,8 +180,8 @@ struct ProjectMemoryPanel: View {
             }
             VStack(alignment: .leading, spacing: 10) {
                 summaryParagraph
-                if showsNoCommands {
-                    Text("No commands recorded yet. Run something in this project.")
+                if showsGitOnlyNote {
+                    Text("Summary is only available in a git repository.")
                         .font(.callout)
                         .foregroundStyle(MactermTheme.fgMuted)
                 }
@@ -197,8 +199,13 @@ struct ProjectMemoryPanel: View {
         if summaryEnabled {
             let state = summarizer.state(for: project.id)
             switch state.phase {
-            case .idle,
-                 .failed:
+            case .idle:
+                EmptyView()
+            case .failed where state.text.isEmpty:
+                Text("The summary could not be written.")
+                    .font(.callout)
+                    .foregroundStyle(MactermTheme.fgMuted)
+            case .failed:
                 EmptyView()
             case .waiting where state.text.isEmpty:
                 Text("Summarizing…")
@@ -253,7 +260,7 @@ struct ProjectMemoryPanel: View {
             HStack(spacing: 6) {
                 outcomeGlyph(.failure)
                 Text(verbatim: entry.command ?? "")
-                    .font(.terminal(.callout))
+                    .font(.callout.monospaced())
                     .lineLimit(2)
                     .truncationMode(.middle)
             }
@@ -264,7 +271,7 @@ struct ProjectMemoryPanel: View {
             }
             if let tail = entry.failureTail {
                 Text(verbatim: tail)
-                    .font(.terminal(.caption))
+                    .font(.caption.monospaced())
                     .foregroundStyle(MactermTheme.fgMuted)
                     .lineLimit(6)
                     .truncationMode(.head)
@@ -289,7 +296,7 @@ struct ProjectMemoryPanel: View {
                     // A command's middle is its distinctive part; the
                     // reason is a sentence and reads from its start.
                     Text(verbatim: action.title)
-                        .font(.terminal(.callout))
+                        .font(.callout.monospaced())
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if let subtitle = action.subtitle {
@@ -368,7 +375,7 @@ struct ProjectMemoryPanel: View {
                     .font(.caption)
                     .foregroundStyle(MactermTheme.fgMuted)
                 Text(verbatim: branch.name)
-                    .font(.terminal(.caption, weight: isCurrent ? .semibold : .regular))
+                    .font(.caption.monospaced().weight(isCurrent ? .semibold : .regular))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
@@ -429,7 +436,7 @@ struct ProjectMemoryPanel: View {
             HStack(spacing: 6) {
                 outcomeGlyph(entry.outcome)
                 Text(verbatim: entry.command ?? String(localized: "Unknown command"))
-                    .font(.terminal(.caption))
+                    .font(.caption.monospaced())
                     .foregroundStyle(entry.command == nil ? MactermTheme.fgDim : MactermTheme.fg)
                     .lineLimit(1)
                     .truncationMode(.middle)

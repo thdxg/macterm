@@ -57,6 +57,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case capturePane = "capture_pane"
     case copyMode = "copy_mode"
     case readOnlyMode = "read_only_mode"
+    case restartSession = "restart_session"
     case explainOutput = "explain_output"
     case applyLayout = "apply_layout"
     case saveLayout = "save_layout"
@@ -189,6 +190,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         // Unbound, as ghostty's `toggle_readonly` is: a stray chord would
         // make a pane drop the keys that follow it.
         case .readOnlyMode: "none"
+        // Unbound: it ends a shell, so no chord may fire it by accident.
+        case .restartSession: "none"
         // Not ⌘E: ghostty binds it to `search_selection`, and a chord whose
         // command cannot run is swallowed, so ⌘E would do nothing on a Mac
         // without Apple Intelligence.

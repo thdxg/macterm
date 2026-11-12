@@ -125,6 +125,18 @@ struct BundledResourcesTests {
         )
     }
 
+    /// The MIT licence of zmx needs its notice with every copy of the server.
+    @Test
+    func bundled_zmx_ships_its_licence_notice() throws {
+        let license = try #require(
+            Bundle.main.url(forResource: "LICENSE", withExtension: nil, subdirectory: "zmx"),
+            "zmx/LICENSE missing from the built bundle — see scripts/embed-zmx.sh"
+        )
+        let text = try String(contentsOf: license, encoding: .utf8)
+        #expect(text.contains("Permission is hereby granted"))
+        #expect(text.contains("Eric Bower"))
+    }
+
     /// The app carries a gzip server build for every host target, named for
     /// the bundled build key, for an install on a host with no download. The
     /// macOS one is the bundled zmx itself, so it has the signature that

@@ -277,7 +277,7 @@ final class SSHLoginPrompts {
             field = secure
         } else if case let .hostKey(key) = question {
             let label = NSTextField(labelWithString: "\(key.host)\n\(key.type) \(key.fingerprint)")
-            label.font = TerminalFont.shared.nsFont(size: NSFont.smallSystemFontSize)
+            label.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
             label.isSelectable = true
             label.lineBreakMode = .byClipping
             label.sizeToFit()

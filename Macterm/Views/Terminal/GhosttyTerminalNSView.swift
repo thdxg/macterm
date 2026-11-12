@@ -467,6 +467,14 @@ final class GhosttyTerminalNSView: NSView {
     var titleProvider: (() -> String?)?
     var isFocused: Bool = false
 
+    /// The focus sent to libghostty. A selected pane can stay first responder
+    /// while its window is not key.
+    private(set) var surfaceIsFocused = false {
+        didSet {
+            if let surface { ghostty_surface_set_focus(surface, surfaceIsFocused) }
+        }
+    }
+
     func presentAdaptivePaneBackground(_ color: NSColor?) {
         onAdaptiveBackgroundChange?(color)
     }
@@ -815,7 +823,7 @@ final class GhosttyTerminalNSView: NSView {
         {
             ghostty_surface_set_display_id(surface, displayID)
         }
-        ghostty_surface_set_focus(surface, isFocused)
+        syncSurfaceFocus(hasKeyboardFocus)
         syncOcclusion()
     }
 
@@ -891,6 +899,7 @@ final class GhosttyTerminalNSView: NSView {
         discardMarkedText()
         if let surface { ghostty_surface_free(surface) }
         surface = nil
+        surfaceIsFocused = false
         accessibilityScreenContentsCache = nil
         configCStrings.forEach { free($0) }
         configCStrings = []
@@ -941,6 +950,7 @@ final class GhosttyTerminalNSView: NSView {
             // Detached from its window (e.g. pulled out of the incubator before
             // re-attaching). Mark occluded so the renderer doesn't draw to an
             // off-screen layer.
+            syncSurfaceFocus(false)
             syncOcclusion()
             return
         }
@@ -949,7 +959,7 @@ final class GhosttyTerminalNSView: NSView {
             let scale = Double(window.backingScaleFactor)
             ghostty_surface_set_content_scale(surface, scale, scale)
             applySurfaceSize(convertToBacking(bounds).size)
-            ghostty_surface_set_focus(surface, isFocused)
+            syncSurfaceFocus(hasKeyboardFocus)
         } else {
             createSurface()
         }
@@ -987,7 +997,19 @@ final class GhosttyTerminalNSView: NSView {
                 self?.syncOcclusion()
             }
         }
-        windowObservers = [backing, screen, occlusion]
+        let focusChanged: @Sendable (Notification) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.syncSurfaceFocus(self.hasKeyboardFocus)
+            }
+        }
+        let becameKey = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main, using: focusChanged
+        )
+        let resignedKey = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: window, queue: .main, using: focusChanged
+        )
+        windowObservers = [backing, screen, occlusion, becameKey, resignedKey]
         syncOcclusion()
     }
 
@@ -1124,14 +1146,18 @@ final class GhosttyTerminalNSView: NSView {
         return CGFloat(size.cell_height_px) / scale
     }
 
+    /// Window focus is separate from app activation: the quick terminal can
+    /// receive keys while another app is active.
+    private func syncSurfaceFocus(_ focused: Bool) {
+        surfaceIsFocused = focused && window?.isKeyWindow == true
+    }
+
     func notifySurfaceFocused() {
-        guard let surface else { return }
-        ghostty_surface_set_focus(surface, true)
+        syncSurfaceFocus(true)
     }
 
     func notifySurfaceUnfocused() {
-        guard let surface else { return }
-        ghostty_surface_set_focus(surface, false)
+        syncSurfaceFocus(false)
     }
 
     // MARK: - First responder
@@ -1140,9 +1166,9 @@ final class GhosttyTerminalNSView: NSView {
 
     override func becomeFirstResponder() -> Bool {
         let result = super.becomeFirstResponder()
-        if result, let surface {
-            ghostty_surface_set_focus(surface, true)
-            onFocus?()
+        if result {
+            syncSurfaceFocus(true)
+            if surface != nil { onFocus?() }
         }
         if result { syncSecureInputFocus(true) }
         return result
@@ -1155,7 +1181,7 @@ final class GhosttyTerminalNSView: NSView {
         // `_markedRange` and kill plain-key input in this pane for good.
         discardMarkedText()
         let result = super.resignFirstResponder()
-        if result, let surface { ghostty_surface_set_focus(surface, false) }
+        if result { syncSurfaceFocus(false) }
         if result { syncSecureInputFocus(false) }
         return result
     }
@@ -1468,7 +1494,7 @@ final class GhosttyTerminalNSView: NSView {
         onInteraction?()
         guard let surface else { return }
         window?.makeFirstResponder(self)
-        ghostty_surface_set_focus(surface, true)
+        syncSurfaceFocus(true)
         onFocus?()
         let pt = mousePoint(from: event)
         ghostty_surface_mouse_pos(surface, pt.x, pt.y, mods(event))

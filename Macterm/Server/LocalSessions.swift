@@ -17,13 +17,24 @@ struct LocalSession: Equatable {
     var isRunning: Bool
     /// The clients that show the session. nil when the session did not say.
     var clients: Int?
+    /// The build that started the session (`1.0.1+thdxg.<key>`), which an
+    /// update never changes.
+    var build: String?
 
-    init(name: String, shellPID: pid_t? = nil, ttyPath: String? = nil, isRunning: Bool = true, clients: Int? = 0) {
+    init(
+        name: String,
+        shellPID: pid_t? = nil,
+        ttyPath: String? = nil,
+        isRunning: Bool = true,
+        clients: Int? = 0,
+        build: String? = nil
+    ) {
         self.name = name
         self.shellPID = shellPID
         self.ttyPath = ttyPath
         self.isRunning = isRunning
         self.clients = clients
+        self.build = build
     }
 
     init(_ session: MactermProtocol.Session) {
@@ -32,7 +43,8 @@ struct LocalSession: Equatable {
             shellPID: session.shellPid.flatMap { pid_t(exactly: $0) },
             ttyPath: session.pty.map { String(decoding: $0.bytes, as: UTF8.self) },
             isRunning: session.state == .running,
-            clients: session.clients.map(Int.init)
+            clients: session.clients.map(Int.init),
+            build: session.build
         )
     }
 }

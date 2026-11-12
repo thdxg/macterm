@@ -683,6 +683,22 @@
         }
       }
     },
+    "A pane shows a badge when its session runs from an older Macterm version." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션이 이전 Macterm 버전으로 실행 중이면 패널에 배지가 표시됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话运行于旧版 Macterm 时，窗格会显示徽章。"
+          }
+        }
+      }
+    },
     "A pane there has a running program. Close it in %@ instead." : {
       "localizations" : {
         "ko" : {
@@ -775,6 +791,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此项目中仍有进程正在运行。移除项目会结束其标签页中的所有进程。"
+          }
+        }
+      }
+    },
+    "A process is still running in this session. Restarting the session ends it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 세션에서 프로세스가 아직 실행 중입니다. 세션을 다시 시작하면 종료됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此会话中仍有进程在运行。重启会话会结束该进程。"
           }
         }
       }
@@ -5618,22 +5650,6 @@
         }
       }
     },
-    "No commands recorded yet. Run something in this project." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "아직 기록된 명령이 없습니다. 이 프로젝트에서 명령을 실행하십시오."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "还没有记录任何命令。请在此项目中运行命令。"
-          }
-        }
-      }
-    },
     "No default config files found." : {
       "localizations" : {
         "ko" : {
@@ -6739,6 +6755,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "其他"
+          }
+        }
+      }
+    },
+    "Outdated" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 버전"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧版本"
           }
         }
       }
@@ -8182,6 +8214,54 @@
         }
       }
     },
+    "Restart" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시 시작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重启"
+          }
+        }
+      }
+    },
+    "Restart Session" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션 다시 시작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重启会话"
+          }
+        }
+      }
+    },
+    "Restart running processes?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 중인 프로세스를 다시 시작하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要重启正在运行的进程吗？"
+          }
+        }
+      }
+    },
     "Restart to Update" : {
       "localizations" : {
         "ko" : {
@@ -9279,6 +9359,22 @@
         }
       }
     },
+    "Show outdated session badge" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 버전 세션 배지 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示旧版会话徽章"
+          }
+        }
+      }
+    },
     "Show spinner over agent icons" : {
       "localizations" : {
         "ko" : {
@@ -9504,6 +9600,22 @@
         }
       }
     },
+    "Some panes in this tab are from an outdated Macterm version" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 탭의 일부 패널은 이전 Macterm 버전에서 실행 중입니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此标签页中的部分窗格来自旧版 Macterm"
+          }
+        }
+      }
+    },
     "Split Automatically" : {
       "localizations" : {
         "ko" : {
@@ -9725,6 +9837,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "摘要"
+          }
+        }
+      }
+    },
+    "Summary is only available in a git repository." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약은 git 저장소에서만 사용할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅在 git 仓库中提供摘要。"
           }
         }
       }
@@ -10370,6 +10498,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "该截图不是 Macterm 可以读取的图像。"
+          }
+        }
+      }
+    },
+    "The summary could not be written." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약을 작성하지 못했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法写出摘要。"
           }
         }
       }

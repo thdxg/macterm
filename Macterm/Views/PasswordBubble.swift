@@ -243,18 +243,18 @@ private struct PasswordBubbleView: View {
         VStack(alignment: .leading, spacing: 3) {
             if let command = id.displayCommand {
                 Text(command)
-                    .font(.terminal(.callout))
+                    .font(.callout.monospaced())
                     .lineLimit(2)
                     .truncationMode(.middle)
             }
             Text(id.prompt)
-                .font(.terminal(.caption))
+                .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .truncationMode(.middle)
             if showsSecret {
                 Text(verbatim: "••••••••")
-                    .font(.terminal(.caption))
+                    .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Password")
             }

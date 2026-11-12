@@ -1356,6 +1356,12 @@ private struct AppearanceSettings: View {
                 .onChange(of: adaptiveTerminalChrome) { _, enabled in
                     Preferences.shared.adaptiveTerminalChromeEnabled = enabled
                 }
+
+                Toggle(isOn: $preferences.showOutdatedSessionBadge) {
+                    Text("Show outdated session badge")
+                    Text("A pane shows a badge when its session runs from an older Macterm version.")
+                        .settingsDescription()
+                }
             }
 
             // The icon is Liquid Glass, which only macOS 26 and later draw.
@@ -2327,7 +2333,7 @@ private struct KeybindButton: View {
             Text(verbatim: isCapturing
                 ? String(localized: "Press keys...", comment: "Settings → Keymaps: the keybind button while it records a chord")
                 : HotkeyRegistry.displayString(for: shortcut))
-                .font(.terminal(size: 12))
+                .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle((isUnmapped && !isCapturing) ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

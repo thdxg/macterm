@@ -53,6 +53,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case capturePane
     case copyMode
     case readOnlyMode
+    case restartSession
     case explainOutput
     case autofillPassword
     // Projects
@@ -142,6 +143,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .capturePane: "Capture Pane"
         case .copyMode: "Copy Mode"
         case .readOnlyMode: "Read-Only Mode"
+        case .restartSession: "Restart Session"
         case .explainOutput: "Explain Output"
         case .autofillPassword: "Autofill Password"
         case .passwordManager: "Password Manager"
@@ -214,6 +216,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .capturePane,
              .copyMode,
              .readOnlyMode,
+             .restartSession,
              .explainOutput,
              .autofillPassword: .panes
         case .openProject,
@@ -296,6 +299,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .capturePane: .capturePane
         case .copyMode: .copyMode
         case .readOnlyMode: .readOnlyMode
+        case .restartSession: .restartSession
         case .explainOutput: .explainOutput
         case .autofillPassword: .autofillPassword
         case .passwordManager: .passwordManager

@@ -161,11 +161,11 @@ private struct SavedPasswordRow: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(verbatim: entry.id.displayCommand ?? String(localized: "Any command"))
-                    .font(.terminal(.body))
+                    .font(.body.monospaced())
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(verbatim: entry.id.isOnDemandOnly ? String(localized: "Filled from the command palette only") : entry.id.prompt)
-                    .font(entry.id.isOnDemandOnly ? .caption : .terminal(.caption))
+                    .font(entry.id.isOnDemandOnly ? .caption : .caption.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)

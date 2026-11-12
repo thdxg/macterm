@@ -34,7 +34,7 @@ extension AgentSkills {
 
         ```yaml
         # ~/.config/macterm/extensions/kubernetes/extension.yaml
-        # yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/extension.schema.json
+        # yaml-language-server: $schema=https://macterm.thdxg.dev/schemas/extension.schema.json
         name: Kubernetes
         description: Browse the namespaces and pods of a cluster
         icon: shippingbox                      # an SF Symbol name; optional
@@ -50,7 +50,7 @@ extension AgentSkills {
 
         ```yaml
         # ~/.config/macterm/extensions/kubernetes/palettes/kubernetes.yaml
-        # yaml-language-server: $schema=https://raw.githubusercontent.com/macterm/macterm/main/assets/palette.schema.json
+        # yaml-language-server: $schema=https://macterm.thdxg.dev/schemas/palette.schema.json
         name: Kubernetes
         description: Namespaces, pods and their logs
         requires: [kubectl]

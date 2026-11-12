@@ -1,24 +1,30 @@
 #!/usr/bin/env bash
 # Sign each DMG with Sparkle's sign_update, then append a new <item> per DMG
-# to appcast.xml on the `appcast` branch.
+# to appcast.xml in the `macterm/appcast` repository.
 #
-# The `appcast` BRANCH is the store. It is an orphan branch with no commit in
-# common with main, and it is not a website: macterm.thdxg.dev proxies
-# /appcast.xml and /notes/* straight off the branch through
-# raw.githubusercontent.com (see the @updates block in the Caddyfile of macterm/website).
-# That is why this script does an ordinary git read-modify-write, and why the
-# feed is live the moment this push lands — there is no site rebuild or deploy
-# in the path. The branch was named gh-pages until GitHub Pages was retired;
-# nothing about the store changed with the name.
+# The `main` branch of `macterm/appcast` is the store. It is not a website:
+# macterm.thdxg.dev proxies /appcast.xml and /notes/* straight off the branch
+# through raw.githubusercontent.com (see the @updates block in the Caddyfile of
+# macterm/website). That is why this script does an ordinary git
+# read-modify-write, and why the feed is live the moment this push lands —
+# there is no site rebuild or deploy in the path. Before 2026-11 the store was
+# the orphan `appcast` branch of macterm/macterm (named gh-pages before that).
 #
 # Required env:
 #   SPARKLE_ED_PRIVATE_KEY — EdDSA private key (Sparkle format)
 #   VERSION                — e.g. 1.8.0, or 0.9.0-beta.1 for a prerelease
 #   TAG                    — e.g. v1.8.0
-#   GH_TOKEN               — token with contents:write on this repo
-#   GITHUB_REPOSITORY      — provided by GitHub Actions (owner/repo)
+#   GH_TOKEN               — token with contents:write on macterm/appcast
+#                            and read access to this repo. The workflows pass
+#                            a token of the macterm-ci app, so the push is the
+#                            push of the app.
+#   GITHUB_REPOSITORY      — provided by GitHub Actions (owner/repo). The
+#                            release assets (enclosures) live in this repo.
 #
 # Optional env:
+#   APP_SLUG               — slug of the GitHub App that owns GH_TOKEN. The
+#                            commit author is its bot user. Default:
+#                            macterm-bot[bot].
 #   PRERELEASE             — "true" for a prerelease. Required for any channel.
 #   CHANNEL                — Sparkle channel name for the new items. Empty =
 #                            the default channel (visible to everyone).
@@ -80,10 +86,12 @@ REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
 # only the feed and its notes pages come from the site.)
 SITE_URL="https://macterm.thdxg.dev"
 NOTES_REL_PATH="notes/${TAG}.html"
-# The branch that holds appcast.xml and notes/. The Caddyfile of macterm/website proxies it
-# by name and release-tip.yml reads it by name, so all three must agree.
-# UpdaterChannelTests and check-feed.mjs of macterm/website pin them together.
-FEED_BRANCH="appcast"
+# The repository and branch that hold appcast.xml and notes/. The Caddyfile of
+# macterm/website proxies them by name and release-tip.yml reads them by name,
+# so all three must agree. UpdaterChannelTests and check-feed.mjs of
+# macterm/website pin them together.
+FEED_REPOSITORY="macterm/appcast"
+FEED_BRANCH="main"
 # The `.html` is load-bearing: the Caddyfile of macterm/website exempts /notes/* from the
 # redirect that strips `.html` everywhere else, precisely so this URL resolves.
 NOTES_URL="${SITE_URL}/${NOTES_REL_PATH}"
@@ -177,9 +185,9 @@ for dmg in "${dmgs[@]}"; do
 ITEM
 done
 
-# Clone (or initialize) the feed branch.
+# Clone (or initialize) the feed branch of the feed repository.
 WORKDIR=$(mktemp -d)
-CLONE_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+CLONE_URL="https://x-access-token:${GH_TOKEN}@github.com/${FEED_REPOSITORY}.git"
 if ! git clone --depth=1 --branch "$FEED_BRANCH" "$CLONE_URL" "$WORKDIR" 2>/dev/null; then
   git clone "$CLONE_URL" "$WORKDIR"
   git -C "$WORKDIR" checkout --orphan "$FEED_BRANCH"
@@ -190,8 +198,18 @@ cd "$WORKDIR"
 
 # Set the bot identity PER-CLONE (not --global): run locally, a --global config
 # would silently overwrite the maintainer's own git identity.
-git config user.name "github-actions[bot]"
-git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+if [[ -n "${APP_SLUG:-}" ]]; then
+  BOT="${APP_SLUG}[bot]"
+  BOT_ID=$(GH_TOKEN="$GH_TOKEN" gh api "/users/${BOT}" --jq .id) || {
+    echo "error: could not read the user id of ${BOT}" >&2
+    exit 1
+  }
+else
+  BOT="macterm-bot[bot]"
+  BOT_ID=355106412
+fi
+git config user.name "$BOT"
+git config user.email "${BOT_ID}+${BOT}@users.noreply.github.com"
 
 # Seed the appcast header on first publication.
 if [[ ! -f appcast.xml ]]; then
@@ -283,7 +301,7 @@ cp "$NOTES_HTML_FILE" "$NOTES_REL_PATH"
 
 git add appcast.xml "$NOTES_REL_PATH"
 # Name the VERSION as well as the tag: a rolling tag is the same string on every
-# publish, so `Publish appcast for tip` alone makes the branch's history
+# publish, so `Publish appcast for tip` alone makes the feed's history
 # unreadable.
 git commit -m "Publish appcast for ${TAG} (${VERSION})"
 git push origin "$FEED_BRANCH"
