@@ -996,7 +996,6 @@ final class GhosttyTerminalNSView: NSView {
             forName: NSWindow.didResignKeyNotification, object: window, queue: .main, using: focusChanged
         )
         windowObservers = [backing, screen, occlusion, becameKey, resignedKey]
-        syncSurfaceFocus(hasKeyboardFocus)
         syncOcclusion()
     }
 
