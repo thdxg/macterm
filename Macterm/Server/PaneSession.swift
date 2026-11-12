@@ -203,7 +203,10 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
         while !Task.isCancelled {
             do {
                 let connection = try await connect()
-                if let launch { try await createSession(on: connection, launch) }
+                // Only the first attach makes the session. A session that is
+                // gone later ended: the app ends a session whose shell exited,
+                // and a new shell here would hide that.
+                if firstAttach, let launch { try await createSession(on: connection, launch) }
                 let channel = try await connection.openChannel(session: name)
                 guard install(channel) else {
                     await channel.close()
@@ -228,6 +231,9 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
                 host.paneLinkLost()
                 if !reconnects { return }
             } catch is CancellationError {
+                return
+            } catch let ProtocolControlError.errorResponse(info) where info.code == "not_found" && !firstAttach {
+                host.paneExited(code: nil, signal: nil)
                 return
             } catch {
                 logger.info("pane \(self.name, privacy: .public): \(String(describing: error), privacy: .public)")

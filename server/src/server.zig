@@ -266,6 +266,8 @@ const Channel = struct {
     /// The client closed it. Its input that waits still goes to the session,
     /// then the channel goes.
     closed: bool = false,
+    /// The client got the session's `exit`, or the channel's stand-in for it.
+    exited: bool = false,
 
     fn deinit(ch: *Channel, gpa: std.mem.Allocator) void {
         if (ch.fd >= 0) lib_posix.close(ch.fd);
@@ -1639,6 +1641,7 @@ const Server = struct {
                 const msg = msgpack.decodeSlice(m.PaneMessage, arena, f.body) catch return s.channelGone(p, ch);
                 if (std.mem.eql(u8, msg.t, m.SnapshotStart.name)) break :blk .snapshot_start;
                 if (std.mem.eql(u8, msg.t, m.SnapshotEnd.name)) break :blk .snapshot_end;
+                if (std.mem.eql(u8, msg.t, m.Exit.name)) ch.exited = true;
                 break :blk .message;
             },
             .bytes => if (ch.flow.in_snapshot) .snapshot else .output,
@@ -1688,6 +1691,17 @@ const Server = struct {
         if (ch.open_re) |re| s.replyError(p.id, re, "unavailable", "The session closed the connection.");
         ch.open_re = null;
         if (ch.fd < 0) return;
+        // A session that was killed, or that crashed, closes the connection
+        // with no `exit`. The client would wait for ever: it gets an `exit`
+        // with no status, as the end of the channel.
+        if (ch.greeted and !ch.closed and !ch.exited) {
+            ch.exited = true;
+            var out: std.Io.Writer.Allocating = .init(s.gpa);
+            defer out.deinit();
+            if (m.encodePane(&out.writer, m.Exit, .{})) {
+                ch.q.push(s.gpa, ch.id, .msg, out.written(), s.now(), .message) catch {};
+            } else |_| {}
+        }
         lib_posix.close(ch.fd);
         ch.fd = -1;
     }

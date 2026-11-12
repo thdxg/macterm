@@ -71,6 +71,30 @@ struct PaneSessionTests {
         }
     }
 
+    @Test
+    func a_session_that_was_killed_ends_the_pane_and_is_not_made_again() async throws {
+        try await withServer { server in
+            let host = RecordingPaneHost()
+            let name = "ps-kill-\(UInt32.random(in: 0 ... .max))"
+            let session = PaneSession(
+                name: name,
+                launch: .init(cwd: NSTemporaryDirectory(), argv: ["/bin/sh", "-c", "printf alive-%s ok; sleep 60"], env: []),
+                wantsForeground: false,
+                host: host,
+                connect: { try await server.connect() }
+            )
+            session.start()
+            try await host.waitFor { $0.screen.contains("alive-ok") }
+            let other = try await server.connect()
+            defer { other.close() }
+            _ = try await other.call(MactermProtocol.SessionKill.self, .init(id: name))
+            try await host.waitFor { $0.exit != nil }
+            let sessions = try await other.call(MactermProtocol.SessionList.self, .init()).sessions
+            #expect(sessions.isEmpty)
+            session.stop()
+        }
+    }
+
     // MARK: - Support
 
     /// Holds the connection that a session got, so that a test can end it.
