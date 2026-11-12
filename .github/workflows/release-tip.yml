@@ -475,8 +475,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           COMMIT: ${{ steps.version.outputs.commit }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "macterm-bot[bot]"
+          git config user.email "355106412+macterm-bot[bot]@users.noreply.github.com"
           git tag -fa tip -m "Latest continuous build of main" "$SHA"
           git push --force origin tip
           printf 'Published **%s** (`%s`) to the [tip release](%s/releases/tag/tip).\n' \
