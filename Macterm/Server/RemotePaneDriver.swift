@@ -34,6 +34,7 @@ final class RemotePaneDriver: PaneInputRoute {
     /// Tells a late answer from a current one.
     private var generation = 0
     private var wakeToken: Int32 = NOTIFY_TOKEN_INVALID
+    private var earlyInput = Data()
 
     init(name: String, surface: SurfaceChannelHost, hosts: RemoteHosts = .shared) {
         self.name = name
@@ -116,6 +117,10 @@ final class RemotePaneDriver: PaneInputRoute {
             )
             state = .running(session)
             session.start()
+            if !earlyInput.isEmpty {
+                session.sendInput(earlyInput)
+                earlyInput = Data()
+            }
         }
     }
 
@@ -204,8 +209,11 @@ final class RemotePaneDriver: PaneInputRoute {
         case let .plain(shell): shell.sendInput(data)
         case .waiting: step(.retry)
         case .ended: if data.contains(0x0D) { step(.create) }
-        case .idle,
-             .closed: break
+        case .idle:
+            // The `initial_input` of a layout, written while the surface
+            // starts: it goes to the session when one runs.
+            if earlyInput.count + data.count <= 1 << 20 { earlyInput.append(data) }
+        case .closed: break
         }
     }
 
@@ -244,10 +252,6 @@ final class RemotePaneDriver: PaneInputRoute {
 
         func paneForeground(_ foreground: MactermProtocol.Foreground) {
             surface.paneForeground(foreground)
-        }
-
-        func paneLeadership(_ leader: Bool) {
-            surface.paneLeadership(leader)
         }
 
         func paneExited(code: UInt8?, signal: UInt8?) {

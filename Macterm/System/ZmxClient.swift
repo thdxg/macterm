@@ -320,9 +320,9 @@ struct RemoteForeground: Equatable {
 
     /// The session's `foreground` message. nil for a report with no name.
     init?(_ message: MactermProtocol.Foreground) {
-        let comm = String(decoding: message.comm.bytes, as: UTF8.self).trimmingCharacters(in: .whitespaces)
+        let comm = HostCheck.clean(String(decoding: message.comm.bytes, as: UTF8.self)).trimmingCharacters(in: .whitespaces)
         guard !comm.isEmpty else { return nil }
-        let args = String(decoding: message.args.bytes, as: UTF8.self).trimmingCharacters(in: .whitespaces)
+        let args = HostCheck.clean(String(decoding: message.args.bytes, as: UTF8.self)).trimmingCharacters(in: .whitespaces)
         self.init(comm: comm, isIdle: message.idle, isShell: message.shell, command: args.isEmpty ? nil : args)
     }
 }

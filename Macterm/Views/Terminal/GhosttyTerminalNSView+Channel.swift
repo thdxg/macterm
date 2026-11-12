@@ -17,11 +17,18 @@ extension GhosttyTerminalNSView {
         let route: any PaneInputRoute
         let host: SurfaceChannelHost
         /// Ends the reading: the session, or the driver.
+        let start: @Sendable () -> Void
         let stop: @Sendable () -> Void
 
-        init(route: any PaneInputRoute, host: SurfaceChannelHost, stop: @escaping @Sendable () -> Void) {
+        init(
+            route: any PaneInputRoute,
+            host: SurfaceChannelHost,
+            start: @escaping @Sendable () -> Void,
+            stop: @escaping @Sendable () -> Void
+        ) {
             self.route = route
             self.host = host
+            self.start = start
             self.stop = stop
         }
     }
@@ -75,40 +82,38 @@ extension GhosttyTerminalNSView {
         }
     }
 
-    /// Starts the session of the pane and its reading. The surface exists.
-    func startChannel(surface: ghostty_surface_t, launch: PaneSession.Launch, widthPx: UInt32, heightPx: UInt32) {
-        let size = ghostty_surface_size(surface)
-        let host = SurfaceChannelHost(surface: surface, view: self)
-        host.setGrid(PaneGrid(
-            cols: size.columns, rows: size.rows,
-            widthPx: widthPx > 0 ? widthPx : size.width_px, heightPx: heightPx > 0 ? heightPx : size.height_px
-        ))
-        let session = PaneSession(
-            name: sessionName,
-            launch: launch,
-            wantsForeground: false,
-            host: host,
-            connect: { try await LocalSessions.shared.channelConnection() }
-        )
-        channelRuntime = ChannelRuntime(route: session, host: host, stop: { session.stop() })
-        session.start()
+    /// Makes the session or the driver of the pane, before the surface: a
+    /// key or the `initial_input` that the surface writes while it starts
+    /// is held until the first attach. `launch` is nil for a remote pane.
+    func prepareChannel(launch: PaneSession.Launch?) {
+        let host = SurfaceChannelHost(view: self)
+        if remoteSpec != nil {
+            let driver = RemotePaneDriver(name: sessionName, surface: host)
+            channelRuntime = ChannelRuntime(
+                route: driver,
+                host: host,
+                start: { DispatchQueue.main.async { MainActor.assumeIsolated { driver.start() } } },
+                stop: { DispatchQueue.main.async { MainActor.assumeIsolated { driver.stop() } } }
+            )
+        } else {
+            let session = PaneSession(
+                name: sessionName,
+                launch: launch,
+                wantsForeground: false,
+                host: host,
+                connect: { try await LocalSessions.shared.channelConnection() }
+            )
+            channelRuntime = ChannelRuntime(route: session, host: host, start: { session.start() }, stop: { session.stop() })
+        }
     }
 
-    /// Starts the driver of a remote pane. The surface exists.
-    func startRemoteChannel(surface: ghostty_surface_t, widthPx: UInt32, heightPx: UInt32) {
+    /// Gives the host its surface and starts the reading. The surface exists.
+    func startChannel(surface: ghostty_surface_t) {
+        guard let runtime = channelRuntime else { return }
         let size = ghostty_surface_size(surface)
-        let host = SurfaceChannelHost(surface: surface, view: self)
-        host.setGrid(PaneGrid(
-            cols: size.columns, rows: size.rows,
-            widthPx: widthPx > 0 ? widthPx : size.width_px, heightPx: heightPx > 0 ? heightPx : size.height_px
-        ))
-        let driver = RemotePaneDriver(name: sessionName, surface: host)
-        channelRuntime = ChannelRuntime(
-            route: driver,
-            host: host,
-            stop: { DispatchQueue.main.async { MainActor.assumeIsolated { driver.stop() } } }
-        )
-        driver.start()
+        runtime.host.setSurface(surface)
+        runtime.host.setGrid(PaneGrid(cols: size.columns, rows: size.rows, widthPx: size.width_px, heightPx: size.height_px))
+        runtime.start()
     }
 
     /// Ends the reading and cuts the host from the surface, before the
@@ -126,14 +131,22 @@ extension GhosttyTerminalNSView {
 /// pane. `invalidate` runs before the surface is freed: it waits for a feed
 /// in flight, and no later one reaches the surface.
 final class SurfaceChannelHost: PaneSessionHost, @unchecked Sendable {
+    /// Guards `surface`. Held across a feed, so nothing that libghostty's
+    /// callbacks call may take it (`manual_resize` takes `gridLock`).
     private let lock = NSLock()
     private var surface: ghostty_surface_t?
     private weak var view: GhosttyTerminalNSView?
+    private let gridLock = NSLock()
     private var grid = PaneGrid(cols: 80, rows: 24)
 
-    init(surface: ghostty_surface_t, view: GhosttyTerminalNSView) {
-        self.surface = surface
+    init(view: GhosttyTerminalNSView) {
         self.view = view
+    }
+
+    func setSurface(_ new: ghostty_surface_t) {
+        lock.lock()
+        surface = new
+        lock.unlock()
     }
 
     func invalidate() {
@@ -143,14 +156,14 @@ final class SurfaceChannelHost: PaneSessionHost, @unchecked Sendable {
     }
 
     func setGrid(_ new: PaneGrid) {
-        lock.lock()
+        gridLock.lock()
         grid = new
-        lock.unlock()
+        gridLock.unlock()
     }
 
     func paneGrid() -> PaneGrid {
-        lock.lock()
-        defer { lock.unlock() }
+        gridLock.lock()
+        defer { gridLock.unlock() }
         return grid
     }
 
@@ -173,18 +186,15 @@ final class SurfaceChannelHost: PaneSessionHost, @unchecked Sendable {
         DispatchQueue.main.async { [weak view] in view?.onRemoteForeground?(report) }
     }
 
-    func paneLeadership(_: Bool) {}
-
     func paneExited(code _: UInt8?, signal _: UInt8?) {
-        DispatchQueue.main.async { [weak view] in
-            view?.sessionEnded = true
-            view?.onProcessExit?()
-        }
+        sessionEnded()
     }
 
-    func paneLinkLost() {}
-
     func paneGone() {
+        sessionEnded()
+    }
+
+    private func sessionEnded() {
         DispatchQueue.main.async { [weak view] in
             view?.sessionEnded = true
             view?.onProcessExit?()

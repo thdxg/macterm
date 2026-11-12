@@ -511,7 +511,7 @@ const Server = struct {
                 if (c.ch.fd < 0 or c.peer.dead) continue;
                 if (pfd.revents & lib_posix.POLL.OUT != 0) s.writeChannel(c.peer, c.ch);
                 if (c.ch.fd >= 0 and pfd.revents & lib_posix.POLL.IN == 0 and
-                    pfd.revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) s.channelGone(c.peer, c.ch);
+                    pfd.revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) s.channelEnded(c.peer, c.ch);
             }
             for (s.runs.items[0..nruns], fds.items[2 + npeers + nentries + chans.items.len ..][0..nruns]) |r, pfd| {
                 if (r.out_fd >= 0 and pfd.revents != 0) s.readRun(r);
@@ -1587,9 +1587,9 @@ const Server = struct {
         var buf: [16 * 1024]u8 = undefined;
         const n = lib_posix.read(ch.fd, &buf) catch |err| switch (err) {
             error.WouldBlock => return,
-            else => return s.channelGone(p, ch),
+            else => return s.channelEnded(p, ch),
         };
-        if (n == 0) return s.channelGone(p, ch);
+        if (n == 0) return s.channelEnded(p, ch);
         ch.in.appendSlice(s.gpa, buf[0..n]) catch return s.channelGone(p, ch);
 
         const t = s.now();
@@ -1687,14 +1687,12 @@ const Server = struct {
 
     /// The session closed the channel's connection. The frames that wait
     /// still go to the client (a last `exit`), then the channel goes.
-    fn channelGone(s: *Server, p: *Peer, ch: *Channel) void {
-        if (ch.open_re) |re| s.replyError(p.id, re, "unavailable", "The session closed the connection.");
-        ch.open_re = null;
-        if (ch.fd < 0) return;
-        // A session that was killed, or that crashed, closes the connection
-        // with no `exit`. The client would wait for ever: it gets an `exit`
-        // with no status, as the end of the channel.
-        if (ch.greeted and !ch.closed and !ch.exited) {
+    /// The session closed its end of the channel with no `exit` (it was
+    /// killed, or it crashed): the client gets an `exit` with no status, as
+    /// the end of the channel. A failure of the relay itself (`channelGone`)
+    /// is not an exit.
+    fn channelEnded(s: *Server, p: *Peer, ch: *Channel) void {
+        if (ch.fd >= 0 and ch.greeted and !ch.closed and !ch.exited) {
             ch.exited = true;
             var out: std.Io.Writer.Allocating = .init(s.gpa);
             defer out.deinit();
@@ -1702,6 +1700,13 @@ const Server = struct {
                 ch.q.push(s.gpa, ch.id, .msg, out.written(), s.now(), .message) catch {};
             } else |_| {}
         }
+        s.channelGone(p, ch);
+    }
+
+    fn channelGone(s: *Server, p: *Peer, ch: *Channel) void {
+        if (ch.open_re) |re| s.replyError(p.id, re, "unavailable", "The session closed the connection.");
+        ch.open_re = null;
+        if (ch.fd < 0) return;
         lib_posix.close(ch.fd);
         ch.fd = -1;
     }

@@ -131,7 +131,7 @@ final class GhosttyTerminalNSView: NSView {
     /// `ssh -t … zmx attach` directly as its command — never under the local
     /// zmx wrapper (nested zmx is broken upstream) — so all the local
     /// persistence machinery (wrapper, ZMX_DIR pin, `isZmxWrapped`) stays off.
-    private let remoteSpec: ProjectPath?
+    let remoteSpec: ProjectPath?
 
     /// Whether this surface belongs to a remote project. Read by the poll
     /// and title paths, which must not treat the local `ssh` client as the
@@ -152,7 +152,20 @@ final class GhosttyTerminalNSView: NSView {
     /// (`startChannel`). Read on libghostty's io thread by the manual
     /// callbacks: set before the first byte, cleared before the surface is
     /// freed.
-    nonisolated(unsafe) var channelRuntime: ChannelRuntime?
+    nonisolated(unsafe) private var channelRuntimeStorage: ChannelRuntime?
+    private let channelRuntimeLock = NSLock()
+    var channelRuntime: ChannelRuntime? {
+        get {
+            channelRuntimeLock.lock()
+            defer { channelRuntimeLock.unlock() }
+            return channelRuntimeStorage
+        }
+        set {
+            channelRuntimeLock.lock()
+            channelRuntimeStorage = newValue
+            channelRuntimeLock.unlock()
+        }
+    }
 
     /// The pane's session ended (its shell exited, or it is gone). Set on the
     /// main actor before `onProcessExit` runs.
@@ -753,11 +766,17 @@ final class GhosttyTerminalNSView: NSView {
         // env-absent paths without four-way nesting.
         var channelLaunch: PaneSession.Launch?
         func newSurface() {
-            if remoteChannel { Self.enableManualIO(&config) }
+            if remoteChannel {
+                Self.enableManualIO(&config)
+                prepareChannel(launch: nil)
+            }
             if channelMode {
                 channelLaunch = Self.resolveLaunch(app: app, config: &config)
-                guard channelLaunch != nil else { return }
+                guard let channelLaunch else { return }
                 Self.enableManualIO(&config)
+                // Before the surface: `initial_input` goes out through
+                // `manual_write` while the surface is made.
+                prepareChannel(launch: channelLaunch)
             }
             surface = ghostty_surface_new(app, &config)
         }
@@ -785,14 +804,17 @@ final class GhosttyTerminalNSView: NSView {
                 makeSurface()
             }
         }
-        guard let surface else { return }
+        guard let surface else {
+            stopChannel()
+            return
+        }
 
-        if let channelLaunch {
+        if channelLaunch != nil {
             isZmxWrapped = true
-            startChannel(surface: surface, launch: channelLaunch, widthPx: initialWidthPx, heightPx: initialHeightPx)
+            startChannel(surface: surface)
             NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
         } else if remoteChannel {
-            startRemoteChannel(surface: surface, widthPx: initialWidthPx, heightPx: initialHeightPx)
+            startChannel(surface: surface)
         }
 
         // A wrapped spawn created (or reattached) a zmx session — the

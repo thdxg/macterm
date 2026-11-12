@@ -551,7 +551,11 @@ final class RemoteHosts {
         lines.removeFirst(2)
         let env = lines.filter { line in
             guard let equals = line.firstIndex(of: "="), equals != line.startIndex else { return false }
-            return line[..<equals].allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
+            let name = line[..<equals]
+            // The server's environment is the one of the pane that started
+            // it: the login of that ssh does not belong to a new session.
+            guard !name.hasPrefix("SSH_") else { return false }
+            return name.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
         }
         let launch = PaneSession.Launch(cwd: cwd, argv: nil, env: env)
         return (launch, found ? nil : "macterm: cannot cd to \(directory)")

@@ -21,11 +21,10 @@ protocol PaneSessionHost: AnyObject, Sendable {
     /// A snapshot of the pane starts or ends. Titles inside it are old.
     func paneSnapshot(started: Bool)
     func paneForeground(_ foreground: MactermProtocol.Foreground)
-    /// The session says if this client leads (its size is the pty's).
-    func paneLeadership(_ leader: Bool)
     /// The shell exited. The session ended.
     func paneExited(code: UInt8?, signal: UInt8?)
-    /// The channel ended with no exit. The session tries to connect again.
+    /// The channel ended with no exit. The session tries to connect again,
+    /// unless it was made with no reconnect.
     func paneLinkLost()
     /// The session did not come back. The pane has nothing to show.
     func paneGone()
@@ -38,6 +37,10 @@ protocol PaneInputRoute: AnyObject, Sendable {
     func sendInput(_ data: Data)
     func claim(grid: PaneGrid?)
     func sendSize(_ grid: PaneGrid?)
+}
+
+extension PaneSessionHost {
+    func paneLinkLost() {}
 }
 
 /// One pane's session on a server: it makes the session when a `launch` is
@@ -60,12 +63,11 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
 
     typealias Connect = @Sendable () async throws -> ServerConnection
 
-    /// Clears the screen, the scrollback and the cursor, as the first
-    /// attach of `macterm attach` does.
-    static let resetScreen = Data("\u{1B}[0m\u{1B}[2J\u{1B}[H".utf8)
+    /// Clears the screen, the scrollback and the cursor.
+    static let resetScreen = Data("\u{1B}[0m\u{1B}[3J\u{1B}[2J\u{1B}[H".utf8)
 
-    private static let reconnectTries = 5
-    private static let reconnectWait: Duration = .milliseconds(200)
+    private static let reconnectTries = 12
+    private static let reconnectWait: Duration = .milliseconds(500)
 
     let name: String
     private let host: any PaneSessionHost
@@ -165,16 +167,6 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
         send { try $0.send(resize) }
     }
 
-    func pause() async {
-        let channel = currentChannel()
-        try? await channel?.pause()
-    }
-
-    func resume() async {
-        let channel = currentChannel()
-        try? await channel?.resume()
-    }
-
     private func send(_ body: @escaping @Sendable (PaneChannel) throws -> Void) {
         guard let channel = currentChannel() else { return }
         output.async {
@@ -223,11 +215,13 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
                     host.paneFeed(Self.resetScreen)
                     firstAttach = false
                 }
-                let (early, claimed) = markAttached()
-                if !early.isEmpty { output.async { try? channel.sendInput(early) } }
-                if claimed { claim(grid: nil) }
+                if markAttached(channel) { claim(grid: nil) }
+                let started = Date()
                 if await read(channel, reconnected: reconnected) { return }
                 reconnected = true
+                // A channel that ends at once counts as a failed try, so a
+                // server that drops each channel does not make a tight loop.
+                if Date().timeIntervalSince(started) < 2 { tries += 1 }
                 host.paneLinkLost()
                 if !reconnects { return }
             } catch is CancellationError {
@@ -260,19 +254,17 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
             switch event {
             case let .output(data):
                 host.paneFeed(data)
-            case let .snapshotStart(start):
+            case .snapshotStart:
                 // The first snapshot comes over the cleared screen. One after
                 // a lost link comes over the old screen: clear it first.
                 if needsReset {
                     host.paneFeed(Self.resetScreen)
                     needsReset = false
                 }
-                _ = start
                 host.paneSnapshot(started: true)
             case .snapshotEnd:
                 host.paneSnapshot(started: false)
             case let .lead(leader):
-                host.paneLeadership(leader)
                 // A client that starts to lead sends its size.
                 if leader { sendSize(nil) }
             case let .foreground(foreground):
@@ -324,16 +316,19 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
         lock.unlock()
     }
 
-    /// The first attach went out: later input goes straight to the channel.
-    /// Returns what waited.
-    private func markAttached() -> (input: Data, claimed: Bool) {
+    /// The first attach went out. The input that waited is queued before
+    /// `attached` shows, so later input cannot pass it. True when a claim
+    /// waited too.
+    private func markAttached(_ channel: PaneChannel) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        attached = true
-        defer {
-            pendingInput = Data()
-            claimPending = false
+        if !pendingInput.isEmpty {
+            let early = pendingInput
+            output.async { try? channel.sendInput(early) }
         }
-        return (pendingInput, claimPending)
+        attached = true
+        pendingInput = Data()
+        defer { claimPending = false }
+        return claimPending
     }
 }

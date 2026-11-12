@@ -78,6 +78,7 @@ final class PlainShell: PaneInputRoute, @unchecked Sendable {
             let count = read(primaryFD, &buffer, buffer.count)
             if count > 0 { host?.paneFeed(Data(buffer[0 ..< count])) }
         }
+        reader.setCancelHandler { close(primaryFD) }
         reader.resume()
         self.reader = reader
         let exit = DispatchSource.makeProcessSource(identifier: childPID, eventMask: .exit, queue: .global(qos: .userInitiated))
@@ -130,22 +131,25 @@ final class PlainShell: PaneInputRoute, @unchecked Sendable {
         }
     }
 
-    /// Ends the shell: SIGHUP to its process group, as a closed terminal.
+    /// Stops reading and closes the pty. The fd closes in the reader's
+    /// cancel handler, so a read in flight never meets a closed fd.
     func stop() {
-        reader?.cancel()
-        reader = nil
+        let reader = reader
+        self.reader = nil
         exitSource?.cancel()
         exitSource = nil
-        let primary = primary
-        io.async {
-            guard !self.closed else { return }
-            self.closed = true
-            close(primary)
-        }
+        io.async { self.closed = true }
+        reader?.cancel()
     }
 
+    /// Ends the shell: SIGHUP to ssh, and the exit is collected.
     func terminate() {
         kill(pid, SIGHUP)
+        let pid = pid
+        DispatchQueue.global(qos: .utility).async {
+            var status: Int32 = 0
+            waitpid(pid, &status, 0)
+        }
         stop()
     }
 }

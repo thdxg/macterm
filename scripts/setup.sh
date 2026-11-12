@@ -89,6 +89,9 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # manual surface (`manual_io`, `manual_write`, `manual_resize` on the surface
 # config, `ghostty_surface_feed`) that runs no child. C API: new fields at the
 # end of `ghostty_surface_config_s` and one new function. No renumbered enum.
+# build-2026-11-12-f55ac55: + downstream patch 0023 (macterm/ghostty#50):
+# `ghostty_launch_resolve` and `ghostty_launch_free` return the argv, env and
+# folder that a surface would run, for a manual surface. New C API only.
 GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-12-f55ac55}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the

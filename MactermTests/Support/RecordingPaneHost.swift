@@ -59,8 +59,6 @@ final class RecordingPaneHost: PaneSessionHost, @unchecked Sendable {
         lock.unlock()
     }
 
-    func paneLeadership(_: Bool) {}
-
     func paneExited(code: UInt8?, signal: UInt8?) {
         lock.lock()
         state.exit = (code, signal)
