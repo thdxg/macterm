@@ -122,6 +122,11 @@ if ! grep -q "^Identifier=com.thdxg.macterm$" <<<"$ZMX_SIGNATURE"; then
   echo "ERROR: $ZMX_BINARY is not signed as com.thdxg.macterm. Pane programs would ask for permission as a second app" >&2
   exit 1
 fi
+# The MIT licence of zmx needs its notice with every copy (scripts/embed-zmx.sh).
+if ! cmp -s "$PROJECT_ROOT/server/LICENSE" "$APP_BUNDLE/Contents/Resources/zmx/LICENSE"; then
+  echo "ERROR: $APP_BUNDLE has no copy of server/LICENSE at Contents/Resources/zmx/LICENSE" >&2
+  exit 1
+fi
 # The bundled server must be the one built from server/ at this commit: its
 # key is the tree's, and `zmx version` names that key. The app reads the key
 # from the names of the server files below (`ServerBuilds.bundledKey`).
