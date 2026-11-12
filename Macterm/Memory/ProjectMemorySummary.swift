@@ -18,6 +18,12 @@ struct ProjectMemorySummary: Equatable {
     /// is not a break: a failure is still the thing to fix after it.
     static let stretchBreak: TimeInterval = 3600
 
+    /// The panel's "Summary is only available in a git repository" line shows only for a project
+    /// with no command and no Git state, once a read has answered.
+    static func showsGitOnlyNote(hasCommands: Bool, hasGitStateOrUnknown: Bool) -> Bool {
+        !hasCommands && !hasGitStateOrUnknown
+    }
+
     init(entries: [MemoryEntry]) {
         lastActivity = entries.last?.finishedAt
         lastCommand = entries.last { $0.command != nil }
