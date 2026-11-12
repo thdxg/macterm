@@ -50,6 +50,111 @@ struct GhosttyTerminalNSViewTests {
         #expect(GhosttyTerminalNSView.cursor(for: GHOSTTY_MOUSE_SHAPE_PROGRESS) == nil)
     }
 
+    // MARK: - Window focus
+
+    private final class FocusTestWindow: NSPanel {
+        var keyForTest = false
+        override var isKeyWindow: Bool { keyForTest }
+
+        func setKeyForTest(_ key: Bool) {
+            keyForTest = key
+            NotificationCenter.default.post(
+                name: key ? NSWindow.didBecomeKeyNotification : NSWindow.didResignKeyNotification,
+                object: self
+            )
+        }
+    }
+
+    private func makeFocusWindow() -> FocusTestWindow {
+        let window = FocusTestWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        return window
+    }
+
+    @Test
+    func surfaceFocus_stopsWhenTheWindowLosesKeyAndReturnsWithKey() {
+        let window = makeFocusWindow()
+        let view = makeView()
+        defer { view.destroySurface() }
+        window.contentView?.addSubview(view)
+        window.setKeyForTest(true)
+        view.isFocused = true
+        #expect(window.makeFirstResponder(view))
+        #expect(view.surfaceIsFocused)
+
+        window.setKeyForTest(false)
+
+        #expect(window.firstResponder === view)
+        #expect(view.isFocused)
+        #expect(!view.surfaceIsFocused)
+
+        window.setKeyForTest(true)
+        #expect(view.surfaceIsFocused)
+    }
+
+    @Test
+    func surfaceFocus_restoreCannotFocusANonKeyWindow() {
+        let window = makeFocusWindow()
+        let view = makeView()
+        defer { view.destroySurface() }
+        window.contentView?.addSubview(view)
+        #expect(window.makeFirstResponder(view))
+
+        view.notifySurfaceFocused()
+
+        #expect(!view.surfaceIsFocused)
+    }
+
+    @Test
+    func surfaceFocus_keyWindowFocusesOnlyItsFirstResponder() {
+        let window = makeFocusWindow()
+        let first = makeView()
+        let second = makeView()
+        defer {
+            first.destroySurface()
+            second.destroySurface()
+        }
+        window.contentView?.addSubview(first)
+        window.contentView?.addSubview(second)
+        #expect(window.makeFirstResponder(first))
+
+        window.setKeyForTest(true)
+        #expect(first.surfaceIsFocused)
+        #expect(!second.surfaceIsFocused)
+
+        #expect(window.makeFirstResponder(second))
+        #expect(!first.surfaceIsFocused)
+        #expect(second.surfaceIsFocused)
+    }
+
+    @Test
+    func surfaceFocus_followsTheViewToItsNewWindow() {
+        let oldWindow = makeFocusWindow()
+        let newWindow = makeFocusWindow()
+        let view = makeView()
+        defer { view.destroySurface() }
+        oldWindow.contentView?.addSubview(view)
+        oldWindow.setKeyForTest(true)
+        #expect(oldWindow.makeFirstResponder(view))
+        #expect(view.surfaceIsFocused)
+
+        view.removeFromSuperview()
+        #expect(!view.surfaceIsFocused)
+        newWindow.contentView?.addSubview(view)
+        #expect(newWindow.makeFirstResponder(view))
+        #expect(!view.surfaceIsFocused)
+
+        oldWindow.setKeyForTest(true)
+        #expect(!view.surfaceIsFocused)
+        newWindow.setKeyForTest(true)
+        #expect(view.surfaceIsFocused)
+        oldWindow.setKeyForTest(false)
+        #expect(view.surfaceIsFocused)
+    }
+
     // MARK: - Progress report routing
 
     /// ERROR reaches the finish callback flagged as a failure; REMOVE and

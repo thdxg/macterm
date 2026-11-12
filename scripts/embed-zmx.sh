@@ -30,6 +30,15 @@ mkdir -p "${destination_dir}"
 cp -cp "${zmx_source}" "${destination_dir}/zmx" 2>/dev/null || cp -p "${zmx_source}" "${destination_dir}/zmx"
 chmod +x "${destination_dir}/zmx"
 
+# The MIT licence of zmx needs its notice with every copy of the server. The
+# app ships the server, so the notice goes next to it.
+license_source="${srcroot}/server/LICENSE"
+if [[ ! -s "${license_source}" ]]; then
+  echo "error: ${license_source} is not there. The zmx licence notice must ship with the app." >&2
+  exit 1
+fi
+cp -p "${license_source}" "${destination_dir}/LICENSE"
+
 # Sign the copy as the APP: the same certificate Xcode signs the bundle with
 # (ad-hoc in a local build, the identity that Configs/Local.xcconfig names in a
 # Debug build that has one, the stable release certificate in CI) and, more

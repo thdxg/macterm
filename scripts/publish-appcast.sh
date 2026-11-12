@@ -24,7 +24,7 @@
 # Optional env:
 #   APP_SLUG               — slug of the GitHub App that owns GH_TOKEN. The
 #                            commit author is its bot user. Default:
-#                            github-actions[bot].
+#                            macterm-bot[bot].
 #   PRERELEASE             — "true" for a prerelease. Required for any channel.
 #   CHANNEL                — Sparkle channel name for the new items. Empty =
 #                            the default channel (visible to everyone).
@@ -205,8 +205,8 @@ if [[ -n "${APP_SLUG:-}" ]]; then
     exit 1
   }
 else
-  BOT="github-actions[bot]"
-  BOT_ID=41898282
+  BOT="macterm-bot[bot]"
+  BOT_ID=355106412
 fi
 git config user.name "$BOT"
 git config user.email "${BOT_ID}+${BOT}@users.noreply.github.com"
