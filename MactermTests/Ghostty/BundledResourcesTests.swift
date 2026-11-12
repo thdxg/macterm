@@ -109,18 +109,6 @@ struct BundledResourcesTests {
     /// only as `zmx`, and Xcode never re-signs a Mach-O it copies into
     /// Resources/, so `scripts/embed-zmx.sh` does it — this pins that a build
     /// phase edit can't silently turn every pane prompt into one for "zmx".
-    /// The MIT licence of zmx needs its notice with every copy of the server.
-    @Test
-    func bundled_zmx_ships_its_licence_notice() throws {
-        let license = try #require(
-            Bundle.main.url(forResource: "LICENSE", withExtension: nil, subdirectory: "zmx"),
-            "zmx/LICENSE missing from the built bundle — see scripts/embed-zmx.sh"
-        )
-        let text = try String(contentsOf: license, encoding: .utf8)
-        #expect(text.contains("Permission is hereby granted"))
-        #expect(text.contains("Eric Bower"))
-    }
-
     /// Read from the test host's own bundle, which is the built app.
     @Test
     func bundled_zmx_is_signed_as_the_app() throws {
@@ -135,6 +123,18 @@ struct BundledResourcesTests {
             signature.output.contains("Identifier=\(appID)\n"),
             "zmx is not signed as \(appID):\n\(signature.output)"
         )
+    }
+
+    /// The MIT licence of zmx needs its notice with every copy of the server.
+    @Test
+    func bundled_zmx_ships_its_licence_notice() throws {
+        let license = try #require(
+            Bundle.main.url(forResource: "LICENSE", withExtension: nil, subdirectory: "zmx"),
+            "zmx/LICENSE missing from the built bundle — see scripts/embed-zmx.sh"
+        )
+        let text = try String(contentsOf: license, encoding: .utf8)
+        #expect(text.contains("Permission is hereby granted"))
+        #expect(text.contains("Eric Bower"))
     }
 
     /// The app carries a gzip server build for every host target, named for
