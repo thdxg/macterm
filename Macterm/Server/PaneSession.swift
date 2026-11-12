@@ -129,12 +129,11 @@ final class PaneSession: @unchecked Sendable {
     /// the pty.
     func sendSize(_ known: PaneGrid? = nil) {
         let grid = known ?? host.paneGrid()
-        send { try $0.send(MactermProtocol.Resize(
-            cols: grid.cols,
-            rows: grid.rows,
-            xpixel: Self.clamp(grid.widthPx),
-            ypixel: Self.clamp(grid.heightPx)
-        )) }
+        let resize = MactermProtocol.Resize(
+            cols: grid.cols, rows: grid.rows,
+            xpixel: Self.clamp(grid.widthPx), ypixel: Self.clamp(grid.heightPx)
+        )
+        send { try $0.send(resize) }
     }
 
     func pause() async {
