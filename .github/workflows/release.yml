@@ -278,8 +278,8 @@ jobs:
             echo "No changes — cask already at ${VERSION}."
             exit 0
           fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name  "macterm-bot[bot]"
+          git config user.email "355106412+macterm-bot[bot]@users.noreply.github.com"
           git add Casks/macterm.rb
           git commit -m "macterm ${VERSION}"
           git push origin HEAD:main
