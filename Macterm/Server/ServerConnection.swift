@@ -4,8 +4,9 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "ServerConnection")
 
-/// One connection to the local server's channel 0 (design/003 §1, §4): the
-/// handshake, requests and their responses, and the server's events.
+/// One connection to a server (design/003 §1, §4): the handshake, requests
+/// and their responses, the server's events, and the pane channels that the
+/// server relays (`openChannel`).
 ///
 /// A thread of its own reads the socket. A request waits for its response,
 /// matched by id. When the connection ends, every waiting request fails with
@@ -31,6 +32,15 @@ final class ServerConnection: @unchecked Sendable {
     private var nextID: UInt64 = 1
     private var pending: [UInt64: CheckedContinuation<MactermProtocol.Response, Error>] = [:]
     private var isClosed = false
+    /// The open pane channels, by number (`openChannel`).
+    private var channelSinks: [UInt32: PaneChannel.Sink] = [:]
+    /// Frames of a channel that arrived before `openChannel` registered its
+    /// sink, in order. A channel that holds too many fails when it registers.
+    private var earlyFrames: [UInt32: [ProtocolFrame]] = [:]
+    private var overflowedChannels: Set<UInt32> = []
+    /// Channels that `releaseChannel` ended: their late frames are dropped.
+    private var releasedChannels: Set<UInt32> = []
+    private static let earlyFrameLimit = 256
 
     /// How long the handshake waits for the server's `hello`.
     static let handshakeTimeout: TimeInterval = 5
@@ -84,6 +94,10 @@ final class ServerConnection: @unchecked Sendable {
                 throw ServerClientError.serverTooOld(level: theirs.level)
             }
             setReceiveTimeout(fd, seconds: 0)
+            // A server that stops reading must not hold a writer for ever:
+            // the write fails, and the connection counts as lost.
+            var sendTimeout = timeval(tv_sec: 10, tv_usec: 0)
+            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &sendTimeout, socklen_t(MemoryLayout<timeval>.size))
             let connection = ServerConnection(fd: fd, hello: theirs, pid: peerPID)
             connection.startReading(reader)
             return connection
@@ -126,6 +140,58 @@ final class ServerConnection: @unchecked Sendable {
         return try response.result(of: method)
     }
 
+    /// Opens a pane channel to `session` (design/003 §1): the server joins
+    /// it to the session, and every frame of the channel comes through the
+    /// returned object. The pane sends `attach` first, to get output.
+    func openChannel(session: String) async throws -> PaneChannel {
+        let result = try await call(MactermProtocol.ChannelOpen.self, .init(session: session))
+        let channel = PaneChannel(connection: self, number: result.channel)
+        guard register(channel.sink, as: result.channel) else {
+            channel.sink.finish()
+            throw ServerClientError.disconnected
+        }
+        return channel
+    }
+
+    /// Registers the sink and hands it the frames that came before. False
+    /// when the connection ended.
+    private func register(_ sink: PaneChannel.Sink, as number: UInt32) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if isClosed || overflowedChannels.remove(number) != nil {
+            earlyFrames.removeValue(forKey: number)
+            return false
+        }
+        releasedChannels.remove(number)
+        channelSinks[number] = sink
+        // Delivered under the lock, so that no newer frame passes them.
+        // `deliver` never blocks.
+        for frame in earlyFrames.removeValue(forKey: number) ?? [] {
+            sink.deliver(frame)
+        }
+        return true
+    }
+
+    /// Forgets a channel. Frames that still come for it are dropped.
+    func releaseChannel(_ number: UInt32) {
+        lock.lock()
+        let sink = channelSinks.removeValue(forKey: number)
+        earlyFrames.removeValue(forKey: number)
+        releasedChannels.insert(number)
+        lock.unlock()
+        sink?.finish()
+    }
+
+    /// Sends a frame on a pane channel. Throws `disconnected` when the
+    /// connection ended.
+    func send(frame: ProtocolFrame) throws {
+        let data = try frame.encoded()
+        fdLock.lock()
+        defer { fdLock.unlock() }
+        guard fdIsOpen else { throw ServerClientError.disconnected }
+        try Self.writeAll(fd, data)
+    }
+
     /// Ends the connection. Requests that wait fail with `disconnected`.
     func close() {
         // The reader thread closes the fd when its read ends.
@@ -148,7 +214,11 @@ final class ServerConnection: @unchecked Sendable {
             while true {
                 do {
                     let frame = try reader.next()
-                    try handle(ProtocolControl.decode(frame.body))
+                    if frame.channel == ProtocolFrame.controlChannel {
+                        try handle(ProtocolControl.decode(frame.body))
+                    } else {
+                        route(frame)
+                    }
                 } catch {
                     if case ServerClientError.disconnected = error {} else {
                         logger.error("server connection: \(String(describing: error), privacy: .public)")
@@ -185,12 +255,41 @@ final class ServerConnection: @unchecked Sendable {
         }
     }
 
+    private func route(_ frame: ProtocolFrame) {
+        lock.lock()
+        if let sink = channelSinks[frame.channel] {
+            lock.unlock()
+            sink.deliver(frame)
+        } else {
+            // Not registered yet: hold the frame for `openChannel`. Never drop
+            // one in silence: a channel with too many fails instead.
+            if !releasedChannels.contains(frame.channel) {
+                var held = earlyFrames[frame.channel] ?? []
+                if held.count < Self.earlyFrameLimit {
+                    held.append(frame)
+                    earlyFrames[frame.channel] = held
+                } else {
+                    overflowedChannels.insert(frame.channel)
+                    earlyFrames.removeValue(forKey: frame.channel)
+                }
+            }
+            lock.unlock()
+        }
+    }
+
     private func finish() {
         lock.lock()
         isClosed = true
         let waiting = pending
         pending = [:]
+        let sinks = channelSinks
+        channelSinks = [:]
+        earlyFrames = [:]
+        overflowedChannels = []
         lock.unlock()
+        for sink in sinks.values {
+            sink.finish()
+        }
         for continuation in waiting.values {
             continuation.resume(throwing: ServerClientError.disconnected)
         }
@@ -277,6 +376,10 @@ extension ServerConnection {
     private static func write(_ fd: Int32, _ message: ProtocolControl) throws {
         guard let body = message.encoded() else { return }
         let data = try ProtocolFrame(channel: ProtocolFrame.controlChannel, kind: .msg, body: body).encoded()
+        try writeAll(fd, data)
+    }
+
+    private static func writeAll(_ fd: Int32, _ data: Data) throws {
         try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
             guard let base = buffer.baseAddress else { return }
             var offset = 0
@@ -292,7 +395,7 @@ extension ServerConnection {
     }
 }
 
-/// Reads whole frames from a socket. Only channel 0 comes from the server.
+/// Reads whole frames from a socket.
 private struct FrameReader {
     let fd: Int32
     var buffer = Data()

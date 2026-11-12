@@ -1127,7 +1127,7 @@ The script stops only the process that it started, and it kills its own zmx sess
 
 `scripts/record-demos/record-demos.sh` records the twelve clips that the landing page plays. It drives the **installed** app with synthetic keystrokes. For demos 8, 9 and 12, it also drives the pointer. Whatever runs it therefore needs Accessibility and Screen Recording. It also needs ffmpeg, and podman for demos 5 and 10 (it starts the podman machine itself).
 
-Masters land in `$MACTERM_DEMOS_OUT` (default `~/Desktop/macterm-demos`). Only `record-demos.sh web` writes into the repo. It encodes the finished clips again to 1400×792 with CRF 26, and a poster of the first frame, in `assets/demo/`. The website build copies `assets/` to `public/assets`, so they are served as `/assets/demo/…`.
+Masters land in `$MACTERM_DEMOS_OUT` (default `~/Desktop/macterm-demos`). Only `record-demos.sh web` writes outside the masters, and it writes into a checkout of `macterm/website` (`MACTERM_WEBSITE_DIR`, default `../website` next to this repository). It encodes the finished clips again to 1400×792 with CRF 26, and a poster of the first frame, in `assets/demo/` of the website. The website build copies them to `public/assets`, so they are served as `/assets/demo/…`. Commit them in the website repository.
 
 The script has these rules. We learned each one with the real app:
 
@@ -1169,7 +1169,9 @@ The script has these rules. We learned each one with the real app:
 The site at `macterm.thdxg.dev` (landing page, docs, changelog, and the proxy of the update feed) is the `macterm/website` repository. This repository keeps what the site renders and serves:
 
 - `docs/*.md`, the user docs. A feature and its docs page land in one PR here. `TextFileDefaultsTests`, `CustomPaletteFileTests` and `DocsLinkTests` read the pages.
-- `assets/`: the JSON schemas (the `$schema` URL of every project, widget, extension and palette file), the icons and the demo clips.
+- `assets/`: the JSON schemas and the icons. The demo clips are in `macterm/website`.
+  - **The schemas are served at `https://macterm.thdxg.dev/schemas/<name>.schema.json`.** That is the `$id`, and the `$schema` line that the app writes. The website build copies the files from here, so this folder stays their one source and the unit tests keep reading it.
+  - **The old address `https://raw.githubusercontent.com/macterm/macterm/main/assets/<name>.schema.json` must keep answering.** Files that users and the extensions of the repository wrote name it. Never delete or rename a schema file here. The extensions keep the old line, because a change to a file of an extension makes each installed copy look outdated.
 
 The site build checks out this repository at `main` and reads `docs/` and `assets/` from it.
 
@@ -1178,12 +1180,12 @@ The site build checks out this repository at `main` and reads `docs/` and `asset
 
 ## Releasing
 
-Macterm updates itself with Sparkle. `SUFeedURL` is `https://macterm.thdxg.dev/appcast.xml`. The Caddyfile of the `macterm/website` repository serves it straight from the `appcast` branch, an orphan branch that is a store and not a site. `FEED_BRANCH` in `scripts/publish-appcast.sh`, the fetch in `release-tip.yml` and the proxy rewrite in the Caddyfile name it. `UpdaterChannelTests` pins the two files in this repository, and `check-feed.mjs` of macterm/website pins its Caddyfile and `SITE_URL` to them. A build that a pushed tag starts releases through `release.yml`. `release.yml`, `release-tip.yml` and `Test / Release Build` share one build recipe, `.github/actions/build-release`.
+Macterm updates itself with Sparkle. `SUFeedURL` is `https://macterm.thdxg.dev/appcast.xml`. The Caddyfile of the `macterm/website` repository serves it straight from the `main` branch of the `macterm/appcast` repository, which is a store and not a site. `FEED_REPOSITORY` and `FEED_BRANCH` in `scripts/publish-appcast.sh`, the fetch in `release-tip.yml` and the proxy rewrite in the Caddyfile name it. The feed lived on the orphan `appcast` branch of this repository until 2026-11. That branch stays as it was. Remove it only after one tip release has published to the new repository. `UpdaterChannelTests` pins the two files in this repository, and `check-feed.mjs` of macterm/website pins its Caddyfile and `SITE_URL` to them. A build that a pushed tag starts releases through `release.yml`. `release.yml`, `release-tip.yml` and `Test / Release Build` share one build recipe, `.github/actions/build-release`.
 
 Secrets:
 
 - `SPARKLE_ED_PUBLIC_KEY` and `SPARKLE_ED_PRIVATE_KEY`.
-- The org secret `MACTERM_APP_PRIVATE_KEY` and the org variable `MACTERM_APP_CLIENT_ID` of the `macterm-ci` GitHub App. The jobs that write to another repository (the cask bump to `macterm/homebrew-tap`, the GhosttyKit bump PR, the website dispatch) take a short-lived token of it from `actions/create-github-app-token`, for that one repository. No workflow uses a personal access token.
+- The org secret `MACTERM_APP_PRIVATE_KEY` and the org variable `MACTERM_APP_CLIENT_ID` of the `macterm-ci` GitHub App. The jobs that write to another repository (the cask bump to `macterm/homebrew-tap`, the GhosttyKit bump PR, the website dispatch). The push of `publish-appcast.sh` to `macterm/appcast` uses it too, so the app is the commit author. These jobs take a short-lived token of it from `actions/create-github-app-token`, for the repositories that they write (`macterm` and `appcast` for a publish). No workflow uses a personal access token.
 - `MACTERM_SIGNING_CERT_P12` and `MACTERM_SIGNING_CERT_P12_PASSWORD`. This is a stable self-signed certificate. It keeps TCC grants across updates. **Back up the private key and the certificate**. If you lose either one, users are stranded.
 
 The release notes come from the generator of GitHub (`.github/release.yml`). A person chooses the version number. The `/release` skill walks through the ceremony. The recipe for the certificate is in the history of this file.
@@ -1204,11 +1206,11 @@ The release notes come from the generator of GitHub (`.github/release.yml`). A p
   - The build job is in one concurrency group with `cancel-in-progress: true`. A newer commit that passed the gate replaces an older build. The setting is at job level, so that a commit that is red, or that only changes docs, cannot cancel a good build. The gate skips a commit when a newer commit already passed Test and Checks, because Test runs finish out of order.
   - There is one tip item in the appcast. Macterm keeps the newest 3 DMGs.
   - The check for staleness asks if the `tip` tag is an ancestor of the built commit. It never compares against HEAD of main.
-  - **Macterm never builds a version again that is already in the appcast**. A run whose tag push failed has shipped everything else. A re-run for the same commit would `--clobber` the DMG with new bytes, while `publish-appcast.sh` keeps the old signature for the equal version. The build job therefore first reads `appcast.xml` from the `appcast` branch. If the version is there, it only moves the tag.
+  - **Macterm never builds a version again that is already in the appcast**. A run whose tag push failed has shipped everything else. A re-run for the same commit would `--clobber` the DMG with new bytes, while `publish-appcast.sh` keeps the old signature for the equal version. The build job therefore first reads `appcast.xml` from `macterm/appcast`. If the version is there, it only moves the tag.
   - `build.sh` bakes `MactermUpdateChannel` into `Info.plist`. A tip build that you install by hand therefore uses the tip channel by default. Beta stamps `stable`.
 - `release.yml` skips itself for `ref_name == 'tip'`.
 - **GitHub Pages is retired, and the `gh-pages` branch with it**. The feed was at `thdxg.github.io/macterm/appcast.xml` before 1.26.0. An install from before that version asks that URL for ever, gets a 404 and reports no update. Such an install updates only by hand.
-- **Never delete the `appcast` branch**. `publish-appcast.sh` creates a missing branch again as an empty orphan, and the feed then names only the one release that it publishes. Every other channel is empty until its next publish. The 2026-10-29 deletion of `gh-pages` lost every item in this way, and the branch was rebuilt from a local clone.
+- **Never delete `macterm/appcast` or its `main` branch**. `publish-appcast.sh` creates a missing `main` again as an empty orphan (it cannot make a missing repository), and the feed then names only the one release that it publishes. Every other channel is empty until its next publish. The 2026-10-29 deletion of `gh-pages` lost every item in this way, and the branch was rebuilt from a local clone.
 
 ## Conventions
 
@@ -1346,7 +1348,7 @@ Macterm-side settings go through `Preferences`. Settings that have the shape of 
 ## Known Limitations
 
 - **Local sessions do not keep running after a restart of the Mac. Remote sessions do**. Every pane (workspace, pinned, quick terminal) persists through zmx. It connects again after a quit.
-- **Remote sessions need Macterm's server on the host**. Macterm installs it at the first connection, after one consent, for Linux x86_64 and aarch64 and for macOS. Any other host, and a host where the user declined, gets plain ssh shells that end with the connection.
+- **Remote sessions need Macterm's server on the host**. Macterm installs it at the first connection, after one consent, for Linux x86_64 and aarch64 and for macOS. Any other host, and a host where the user declined, gets plain ssh shells that end with the connection. **Windows hosts are not supported.** When the attach command ends with no line of the script and not with 255, the app runs one probe (`HostCheck.windowsProbe`, `echo %OS% $env:OS`: `Windows_NT` in cmd.exe and PowerShell). If it answers, the connect fails with `Failure.windowsHost` and the pane says so. That failure gets no plain shells, because the plain-shell command is POSIX. The probe never reads the host's error text, which is in the host's language.
 - **A remote session whose pane closed while no connection was up stays on the host.** Nothing reaps remote sessions.
 - **A second window on the same tab shows a mirror**. It is dimmed where the pty has the size of the other view. You cannot declare `pane mirror` panes in layouts, so Save Layout and Apply Layout split one into two sessions.
 - **Adaptive background inference depends on the private renderer layout of ghostty** (BGRA8 IOSurface). It fails closed. Selections that a program renders (helix, or vim under mouse capture) remain a gap that we have not closed.
