@@ -801,7 +801,7 @@ private struct PaletteFailureNotice: View {
                 .foregroundStyle(MactermTheme.fg)
             if let detail = failure.detail {
                 Text(detail)
-                    .font(.terminal(size: 11))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(MactermTheme.fgMuted)
                     .multilineTextAlignment(.center)
                     .lineLimit(4)
@@ -931,7 +931,7 @@ private struct CommandPaletteRow: View {
             // Defensive fallback: an item with a joined keybind but no split
             // symbols (command items always supply symbols).
             Text(keybind)
-                .font(.terminal(size: 12))
+                .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(MactermTheme.fgDim)
         }
     }

@@ -260,7 +260,7 @@ struct ProjectMemoryPanel: View {
             HStack(spacing: 6) {
                 outcomeGlyph(.failure)
                 Text(verbatim: entry.command ?? "")
-                    .font(.terminal(.callout))
+                    .font(.callout.monospaced())
                     .lineLimit(2)
                     .truncationMode(.middle)
             }
@@ -271,7 +271,7 @@ struct ProjectMemoryPanel: View {
             }
             if let tail = entry.failureTail {
                 Text(verbatim: tail)
-                    .font(.terminal(.caption))
+                    .font(.caption.monospaced())
                     .foregroundStyle(MactermTheme.fgMuted)
                     .lineLimit(6)
                     .truncationMode(.head)
@@ -296,7 +296,7 @@ struct ProjectMemoryPanel: View {
                     // A command's middle is its distinctive part; the
                     // reason is a sentence and reads from its start.
                     Text(verbatim: action.title)
-                        .font(.terminal(.callout))
+                        .font(.callout.monospaced())
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if let subtitle = action.subtitle {
@@ -375,7 +375,7 @@ struct ProjectMemoryPanel: View {
                     .font(.caption)
                     .foregroundStyle(MactermTheme.fgMuted)
                 Text(verbatim: branch.name)
-                    .font(.terminal(.caption, weight: isCurrent ? .semibold : .regular))
+                    .font(.caption.monospaced().weight(isCurrent ? .semibold : .regular))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
@@ -436,7 +436,7 @@ struct ProjectMemoryPanel: View {
             HStack(spacing: 6) {
                 outcomeGlyph(entry.outcome)
                 Text(verbatim: entry.command ?? String(localized: "Unknown command"))
-                    .font(.terminal(.caption))
+                    .font(.caption.monospaced())
                     .foregroundStyle(entry.command == nil ? MactermTheme.fgDim : MactermTheme.fg)
                     .lineLimit(1)
                     .truncationMode(.middle)
