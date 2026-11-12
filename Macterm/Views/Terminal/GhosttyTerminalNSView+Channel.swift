@@ -176,12 +176,18 @@ final class SurfaceChannelHost: PaneSessionHost, @unchecked Sendable {
     func paneLeadership(_: Bool) {}
 
     func paneExited(code _: UInt8?, signal _: UInt8?) {
-        DispatchQueue.main.async { [weak view] in view?.onProcessExit?() }
+        DispatchQueue.main.async { [weak view] in
+            view?.sessionEnded = true
+            view?.onProcessExit?()
+        }
     }
 
     func paneLinkLost() {}
 
     func paneGone() {
-        DispatchQueue.main.async { [weak view] in view?.onProcessExit?() }
+        DispatchQueue.main.async { [weak view] in
+            view?.sessionEnded = true
+            view?.onProcessExit?()
+        }
     }
 }

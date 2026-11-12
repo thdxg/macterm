@@ -154,6 +154,10 @@ final class GhosttyTerminalNSView: NSView {
     /// freed.
     nonisolated(unsafe) var channelRuntime: ChannelRuntime?
 
+    /// The pane's session ended (its shell exited, or it is gone). Set on the
+    /// main actor before `onProcessExit` runs.
+    var sessionEnded = false
+
     /// Heap buffers backing the `const char*` fields of the surface config —
     /// notably `initial_input`, which libghostty writes to the pty
     /// asynchronously after the child spawns, so the buffer must outlive
@@ -1115,7 +1119,9 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     func needsConfirmQuit() -> Bool {
-        guard let surface else { return false }
+        // A pane whose session ended runs nothing: a manual surface has no
+        // child for libghostty to see exit.
+        guard let surface, !sessionEnded else { return false }
         return ghostty_surface_needs_confirm_quit(surface)
     }
 
@@ -2413,6 +2419,7 @@ extension GhosttyTerminalNSView {
     /// Whether libghostty considers the child process exited.
     var processExited: Bool {
         guard let surface else { return false }
+        if sessionEnded { return true }
         return ghostty_surface_process_exited(surface)
     }
 
