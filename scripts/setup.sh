@@ -85,7 +85,11 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # the `cursor-morph` key, a mode of `smooth-cursor`, makes a gliding block
 # cursor a comet, longer when it is faster. Other cursor shapes do not
 # change. Upstream through #15162. No C API change.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-10-341bbd1}"
+# build-2026-11-11-10b261b: + downstream patch 0022 (macterm/ghostty#49): a
+# manual surface (`manual_io`, `manual_write`, `manual_resize` on the surface
+# config, `ghostty_surface_feed`) that runs no child. C API: new fields at the
+# end of `ghostty_surface_config_s` and one new function. No renumbered enum.
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-11-11-10b261b}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.

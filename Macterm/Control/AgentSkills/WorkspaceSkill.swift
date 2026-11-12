@@ -115,7 +115,7 @@ extension AgentSkills {
         - Save records the current foreground command of each pane as its `run:`. Save while the commands that
           you want are running. You can edit the file afterwards, but the next `layout save` writes it again.
         - Its first line names the schema:
-          `https://raw.githubusercontent.com/macterm/macterm/main/assets/project.schema.json`.
+          `https://macterm.thdxg.dev/schemas/project.schema.json`.
 
         ```sh
         macterm layout apply --project api
