@@ -90,18 +90,12 @@ jobs:
     needs: [changes, server, server-retry]
     # !cancelled(), not the default success(): a failed server build must
     # fail this job (at the artifact download), not skip it. A skipped job
-    # passes a required check.
+    # passes a required check. A skipped server-retry does not skip it.
     if: >-
       !cancelled()
       && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.extensions == 'true')
     runs-on: xcode-27
     steps:
-      - name: Check the Server Build
-        if: ${{ needs.server.result != 'success' && needs.server-retry.result != 'success' }}
-        run: |
-          echo "::error::Server / Build did not make the server artifact (result: ${{ needs.server.result }}, retry: ${{ needs.server-retry.result }}). A cancelled build with no steps is a runner that did not start: run the failed jobs again."
-          exit 1
-
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -250,12 +244,6 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
-      - name: Check the Server Build
-        if: ${{ needs.server.result != 'success' && needs.server-retry.result != 'success' }}
-        run: |
-          echo "::error::Server / Build did not make the server artifact (result: ${{ needs.server.result }}, retry: ${{ needs.server-retry.result }}). A cancelled build with no steps is a runner that did not start: run the failed jobs again."
-          exit 1
-
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -343,12 +331,6 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.swift == 'true' }}
     runs-on: xcode-27
     steps:
-      - name: Check the Server Build
-        if: ${{ needs.server.result != 'success' && needs.server-retry.result != 'success' }}
-        run: |
-          echo "::error::Server / Build did not make the server artifact (result: ${{ needs.server.result }}, retry: ${{ needs.server-retry.result }}). A cancelled build with no steps is a runner that did not start: run the failed jobs again."
-          exit 1
-
       - name: Checkout
         uses: actions/checkout@v7
         with:
