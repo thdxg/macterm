@@ -507,11 +507,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         repairMissingWindow(attempt: 0)
 
-        // Tell libghostty when we stop/start being the active app so idle
-        // surfaces stop blinking the cursor and animating while backgrounded.
-        // Visible terminals keep rendering real output (that's gated by
-        // per-surface occlusion, not app focus), so watching a running command
-        // from another app still updates.
+        // App focus gates non-global keybinds. Each terminal view sends
+        // surface focus separately when its window gains or loses key status.
         let focusCenter = NotificationCenter.default
         appFocusObservers = [
             focusCenter.addObserver(
