@@ -143,8 +143,15 @@ actor LocalSessions {
         }
     }
 
+    /// The connection to the server, made when there is none or when the
+    /// last one ended. A pane opens its channel on it.
+    func channelConnection() async throws -> ServerConnection {
+        try await connected()
+    }
+
     private func connected() async throws -> ServerConnection {
-        if let connection { return connection }
+        if let connection, connection.isOpen { return connection }
+        if let connection { drop(connection) }
         if let connecting { return try await connecting.value }
         guard let server else { throw ServerClientError.noAnswer }
         let task = Task { try await server.connect() }

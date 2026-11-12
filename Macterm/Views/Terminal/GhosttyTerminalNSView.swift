@@ -121,7 +121,7 @@ final class GhosttyTerminalNSView: NSView {
     /// app quit and the same name re-attaches the live daemon on relaunch.
     /// For a remote pane the same name identifies the session on the REMOTE
     /// host's daemon instead.
-    private let sessionName: String
+    let sessionName: String
     /// Stable identity for view-lifetime coordination. Unlike an object address,
     /// this cannot be reused when a surface is destroyed and recreated.
     let paneID: UUID
@@ -147,6 +147,12 @@ final class GhosttyTerminalNSView: NSView {
     /// the resolver-cache retry: only wrapped panes are expected to appear in
     /// `zmx ls`.
     private(set) var isZmxWrapped = false
+
+    /// The channel that feeds this surface, when it runs from one
+    /// (`startChannel`). Read on libghostty's io thread by the manual
+    /// callbacks: set before the first byte, cleared before the surface is
+    /// freed.
+    nonisolated(unsafe) var channelRuntime: ChannelRuntime?
 
     /// Heap buffers backing the `const char*` fields of the surface config —
     /// notably `initial_input`, which libghostty writes to the pty
@@ -731,10 +737,14 @@ final class GhosttyTerminalNSView: NSView {
         // budget) → no wrapper, a plain unpersisted shell.
         // The argv element buffers come from `cString` (freed in
         // destroySurface); the pointer array is bound around the spawn below.
-        var wrapper = remoteSpec != nil ? Self.remoteClientArgv(client: Self.remotePaneClientPath) ?? [] : ZmxAttach.wrapperArgv(
+        let sessionWrapper = remoteSpec != nil ? Self.remoteClientArgv(client: Self.remotePaneClientPath) ?? [] : ZmxAttach.wrapperArgv(
             executablePath: ZmxClient.live.executableURL()?.path,
             sessionID: sessionName
         )
+        // A local pane whose session can be made runs from a channel
+        // (`startChannel`): no client on a pty, so no session wrapper.
+        let channelMode = Self.usesChannelPanes && remoteSpec == nil && !sessionWrapper.isEmpty
+        var wrapper = channelMode ? [] : sessionWrapper
 
         // A palette `run:` action's command, carried in the environment
         // (`CustomPaletteLaunch`): run before the shell by the bundled CLI,
@@ -778,17 +788,26 @@ final class GhosttyTerminalNSView: NSView {
             }
         }
 
-        /// Sets env on the config and spawns. Split out so the optional
-        /// command-wrapper buffer scope (below) wraps both env-present and
-        /// env-absent paths without four-way nesting.
+        // Sets env on the config and spawns. Split out so the optional
+        // command-wrapper buffer scope (below) wraps both env-present and
+        // env-absent paths without four-way nesting.
+        var channelLaunch: PaneSession.Launch?
+        func newSurface() {
+            if channelMode {
+                channelLaunch = Self.resolveLaunch(app: app, config: &config)
+                guard channelLaunch != nil else { return }
+                Self.enableManualIO(&config)
+            }
+            surface = ghostty_surface_new(app, &config)
+        }
         func makeSurface() {
             if envVars.isEmpty {
-                surface = ghostty_surface_new(app, &config)
+                newSurface()
             } else {
                 envVars.withUnsafeMutableBufferPointer { buf in
                     config.env_vars = buf.baseAddress
                     config.env_var_count = buf.count
-                    surface = ghostty_surface_new(app, &config)
+                    newSurface()
                 }
             }
         }
@@ -806,6 +825,12 @@ final class GhosttyTerminalNSView: NSView {
             }
         }
         guard let surface else { return }
+
+        if let channelLaunch {
+            isZmxWrapped = true
+            startChannel(surface: surface, launch: channelLaunch, widthPx: initialWidthPx, heightPx: initialHeightPx)
+            NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+        }
 
         // A wrapped spawn created (or reattached) a zmx session — the
         // resolver's name→leader-pid cache needs a refresh to see it. (The
@@ -890,6 +915,7 @@ final class GhosttyTerminalNSView: NSView {
 
     func destroySurface() {
         isDestroyed = true
+        stopChannel()
         clearCommandSubmissionEvidence()
         // The selection dies with the surface; the mode must not outlive it.
         copyMode.reset()
@@ -929,6 +955,7 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     deinit {
+        stopChannel()
         if let surface { ghostty_surface_free(surface) }
         configCStrings.forEach { free($0) }
         for token in windowObservers {
@@ -2364,6 +2391,10 @@ extension GhosttyTerminalNSView {
         guard let size = surfaceSize, size.columns > 0, size.rows > 0,
               claimReadiness.hasOutput
         else { return false }
+        if let runtime = channelRuntime {
+            runtime.session.claim()
+            return true
+        }
         return sendControlSequence(ZmxLeadership.claimSequence)
     }
 

@@ -68,6 +68,10 @@ final class PaneSession: @unchecked Sendable {
     private var channel: PaneChannel?
     private var task: Task<Void, Never>?
     private var stopped = false
+    /// Input that came before the first channel (a layout's `run:`), sent
+    /// after the first attach. Over 1 MiB the rest is dropped.
+    private var pendingInput = Data()
+    private var attached = false
     private let output = DispatchQueue(label: "PaneSession.input")
 
     init(name: String, launch: Launch?, wantsForeground: Bool, host: any PaneSessionHost, connect: @escaping Connect) {
@@ -103,21 +107,28 @@ final class PaneSession: @unchecked Sendable {
     /// Keys, pastes and terminal replies. Dropped while there is no channel,
     /// as a terminal drops keys while its link is down.
     func sendInput(_ data: Data) {
+        lock.lock()
+        if !attached {
+            if pendingInput.count + data.count <= 1 << 20 { pendingInput.append(data) }
+            lock.unlock()
+            return
+        }
+        lock.unlock()
         send { try $0.sendInput(data) }
     }
 
     /// Takes the lead: this client's size becomes the pty's.
-    func claim() {
+    func claim(grid: PaneGrid? = nil) {
         send { channel in
             try channel.send(MactermProtocol.Claim())
         }
-        sendSize()
+        sendSize(grid)
     }
 
     /// Tells the session the surface's size. Only the leader's size reaches
     /// the pty.
-    func sendSize() {
-        let grid = host.paneGrid()
+    func sendSize(_ known: PaneGrid? = nil) {
+        let grid = known ?? host.paneGrid()
         send { try $0.send(MactermProtocol.Resize(
             cols: grid.cols,
             rows: grid.rows,
@@ -181,6 +192,8 @@ final class PaneSession: @unchecked Sendable {
                     host.paneFeed(Self.resetScreen)
                     firstAttach = false
                 }
+                let early = markAttached()
+                if !early.isEmpty { output.async { try? channel.sendInput(early) } }
                 if await read(channel, reconnected: reconnected) { return }
                 reconnected = true
                 host.paneLinkLost()
@@ -269,5 +282,15 @@ final class PaneSession: @unchecked Sendable {
         lock.lock()
         channel = nil
         lock.unlock()
+    }
+
+    /// The first attach went out: later input goes straight to the channel.
+    /// Returns what waited.
+    private func markAttached() -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        attached = true
+        defer { pendingInput = Data() }
+        return pendingInput
     }
 }
