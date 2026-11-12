@@ -9,7 +9,7 @@ struct PaneSessionTests {
     @Test
     func a_session_is_made_fed_and_ends_with_the_exit_status() async throws {
         try await withServer { server in
-            let host = RecordingHost()
+            let host = RecordingPaneHost()
             let session = PaneSession(
                 name: "ps-\(UInt32.random(in: 0 ... .max))",
                 launch: .init(
@@ -35,7 +35,7 @@ struct PaneSessionTests {
     @Test
     func the_size_goes_to_the_session_when_the_client_claims() async throws {
         try await withServer { server in
-            let host = RecordingHost(grid: PaneGrid(cols: 91, rows: 17))
+            let host = RecordingPaneHost(grid: PaneGrid(cols: 91, rows: 17))
             let session = PaneSession(
                 name: "ps-size-\(UInt32.random(in: 0 ... .max))",
                 launch: .init(cwd: NSTemporaryDirectory(), argv: ["/bin/sh", "-c", "sleep 1; stty size; sleep 30"], env: []),
@@ -44,7 +44,7 @@ struct PaneSessionTests {
                 connect: { try await server.connect() }
             )
             session.start()
-            session.claim()
+            session.claim(grid: nil)
             try await host.waitFor { $0.screen.contains("17 91") }
             session.stop()
         }
@@ -53,7 +53,7 @@ struct PaneSessionTests {
     @Test
     func a_lost_connection_is_made_again_and_the_screen_is_drawn_again() async throws {
         try await withServer { server in
-            let host = RecordingHost()
+            let host = RecordingPaneHost()
             let connections = ConnectionBox()
             let session = PaneSession(
                 name: "ps-lost-\(UInt32.random(in: 0 ... .max))",
@@ -96,72 +96,6 @@ struct PaneSessionTests {
         }
     }
 
-    final class RecordingHost: PaneSessionHost, @unchecked Sendable {
-        struct State {
-            var screen = ""
-            var exit: (code: UInt8?, signal: UInt8?)?
-            var linkLost = 0
-            var resets = 0
-        }
-
-        private let lock = NSLock()
-        private var state = State()
-        private let grid: PaneGrid
-
-        init(grid: PaneGrid = PaneGrid(cols: 80, rows: 24)) {
-            self.grid = grid
-        }
-
-        func snapshot() -> State {
-            lock.lock()
-            defer { lock.unlock() }
-            return state
-        }
-
-        /// Polls until `condition` holds, or fails after 20 s.
-        func waitFor(_ condition: (State) -> Bool) async throws {
-            let deadline = Date().addingTimeInterval(20)
-            while Date() < deadline {
-                if condition(snapshot()) { return }
-                try await Task.sleep(for: .milliseconds(25))
-            }
-            Issue.record("timed out: \(snapshot().screen.debugDescription)")
-        }
-
-        func paneFeed(_ data: Data) {
-            lock.lock()
-            defer { lock.unlock() }
-            if data == PaneSession.resetScreen {
-                state.resets += 1
-                state.screen = ""
-            } else {
-                state.screen += String(decoding: data, as: UTF8.self)
-            }
-        }
-
-        func paneGrid() -> PaneGrid {
-            grid
-        }
-
-        func paneSnapshot(started _: Bool) {}
-        func paneForeground(_: MactermProtocol.Foreground) {}
-        func paneLeadership(_: Bool) {}
-
-        func paneExited(code: UInt8?, signal: UInt8?) {
-            lock.lock()
-            state.exit = (code, signal)
-            lock.unlock()
-        }
-
-        func paneLinkLost() {
-            lock.lock()
-            state.linkLost += 1
-            lock.unlock()
-        }
-
-        func paneGone() {}
-    }
-
     private func withServer(_ body: (LocalServer) async throws -> Void) async throws {
         let bundled = try #require(LocalServer.bundled, "zmx/zmx missing from the built bundle. Run `mise run setup`.")
         let root = URL(fileURLWithPath: "/tmp", isDirectory: true)
@@ -186,5 +120,12 @@ struct PaneSessionTests {
         }
         _ = try? await connection.call(MactermProtocol.ServerExit.self, .init())
         connection.close()
+    }
+}
+
+struct RemotePaneDriverTests {
+    @Test
+    func a_line_of_macterm_starts_on_a_line_of_its_own_and_ends_with_cr_lf() {
+        #expect(RemotePaneDriver.paneText("box refuses.\nPress a key.") == "\r\nbox refuses.\r\nPress a key.\r\n")
     }
 }

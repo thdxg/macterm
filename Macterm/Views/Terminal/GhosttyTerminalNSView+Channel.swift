@@ -18,12 +18,15 @@ extension GhosttyTerminalNSView {
     /// The session and its host, for the callbacks that libghostty makes on
     /// its io thread.
     final class ChannelRuntime: @unchecked Sendable {
-        let session: PaneSession
+        let route: any PaneInputRoute
         let host: SurfaceChannelHost
+        /// Ends the reading: the session, or the driver.
+        let stop: @Sendable () -> Void
 
-        init(session: PaneSession, host: SurfaceChannelHost) {
-            self.session = session
+        init(route: any PaneInputRoute, host: SurfaceChannelHost, stop: @escaping @Sendable () -> Void) {
+            self.route = route
             self.host = host
+            self.stop = stop
         }
     }
 
@@ -64,7 +67,7 @@ extension GhosttyTerminalNSView {
         config.manual_write = { userdata, bytes, count in
             guard let userdata else { return }
             let view = Unmanaged<GhosttyTerminalNSView>.fromOpaque(userdata).takeUnretainedValue()
-            view.channelRuntime?.session.sendInput(Data(bytes: bytes, count: count))
+            view.channelRuntime?.route.sendInput(Data(bytes: bytes, count: count))
         }
         config.manual_resize = { userdata, columns, rows, widthPx, heightPx in
             guard let userdata else { return }
@@ -72,7 +75,7 @@ extension GhosttyTerminalNSView {
             guard let runtime = view.channelRuntime else { return }
             let grid = PaneGrid(cols: columns, rows: rows, widthPx: widthPx, heightPx: heightPx)
             runtime.host.setGrid(grid)
-            runtime.session.sendSize(grid)
+            runtime.route.sendSize(grid)
         }
     }
 
@@ -91,8 +94,25 @@ extension GhosttyTerminalNSView {
             host: host,
             connect: { try await LocalSessions.shared.channelConnection() }
         )
-        channelRuntime = ChannelRuntime(session: session, host: host)
+        channelRuntime = ChannelRuntime(route: session, host: host, stop: { session.stop() })
         session.start()
+    }
+
+    /// Starts the driver of a remote pane. The surface exists.
+    func startRemoteChannel(surface: ghostty_surface_t, widthPx: UInt32, heightPx: UInt32) {
+        let size = ghostty_surface_size(surface)
+        let host = SurfaceChannelHost(surface: surface, view: self)
+        host.setGrid(PaneGrid(
+            cols: size.columns, rows: size.rows,
+            widthPx: widthPx > 0 ? widthPx : size.width_px, heightPx: heightPx > 0 ? heightPx : size.height_px
+        ))
+        let driver = RemotePaneDriver(name: sessionName, surface: host)
+        channelRuntime = ChannelRuntime(
+            route: driver,
+            host: host,
+            stop: { DispatchQueue.main.async { MainActor.assumeIsolated { driver.stop() } } }
+        )
+        driver.start()
     }
 
     /// Ends the reading and cuts the host from the surface, before the
@@ -101,7 +121,7 @@ extension GhosttyTerminalNSView {
         guard let runtime = channelRuntime else { return }
         channelRuntime = nil
         runtime.host.invalidate()
-        runtime.session.stop()
+        runtime.stop()
     }
 }
 

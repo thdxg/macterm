@@ -382,22 +382,7 @@ final class GhosttyTerminalNSView: NSView {
     /// pane's program runs behind the daemon's pty, not this view's, and this
     /// view has no back-reference to its pane. See `KeybindPassthrough`.
     var yieldsToProgram: ((NSEvent) -> Bool)?
-    /// The bundled CLI that a remote pane's surface runs (`macterm
-    /// remote-pane`). nil without a bundled CLI: the pane gets a plain local
-    /// shell.
-    static let remotePaneClientPath: String? = Bundle.main.resourceURL.map {
-        $0.appendingPathComponent("bin/macterm").path
-    }.flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
-
-    /// The command wrapper of a remote pane's surface: the client, with the
-    /// command that libghostty resolved after `--`, which the client takes
-    /// and does not run. nil without a client, and in the unit-test host.
-    static func remoteClientArgv(client: String?, bypass: ZmxBypass? = ZmxClient.liveBypass) -> [String]? {
-        guard let client, bypass != .unitTestHost else { return nil }
-        return [client, "remote-pane", "--"]
-    }
-
-    /// A remote pane with no client: one line, then a wait for the close.
+    /// A remote pane in the unit-test host: one line, then a wait for the close.
     static let noRemoteClientCommand =
         "/bin/sh -c 'echo \"macterm: this build cannot connect remote panes\"; exec cat >/dev/null'"
 
@@ -675,29 +660,18 @@ final class GhosttyTerminalNSView: NSView {
             return UnsafePointer(p)
         }
 
-        if let remoteSpec {
-            // Remote pane (#104, 0057): the surface runs the bundled
-            // `macterm remote-pane`, which asks the app for the ssh of this
-            // pane's session (`RemoteHosts`) and runs it over the host's one
-            // connection. Persistence lives in the host's server; the local
-            // process is disposable, so no zmx wrapper and no local working
-            // directory. The declared `shell:` doesn't apply either: the host
-            // session runs the remote user's login shell. Logins go to a
-            // sheet (`SSHLoginPrompts`), never to the pane.
-            //
-            // The client is the surface's command wrapper (`remoteClientArgv`),
-            // so the command that libghostty resolves after it, login(1) and
-            // a shell, never runs, and no local "Last login" line shows.
-            //
-            // Without the client (and in the unit-test host, which restores
-            // the developer's panes, `ZmxBypass.unitTestHost`) the pane says
-            // so and waits. Fail closed: never a local shell in a remote
-            // project, and never an exit, which would end the session.
-            if Self.remoteClientArgv(client: Self.remotePaneClientPath) == nil {
-                config.command = cString(Self.noRemoteClientCommand)
-            } else {
-                config.disable_shell_integration = true
-            }
+        // A remote pane runs from a channel on the host's link
+        // (`startRemoteChannel`). Without a server to ask (the unit-test
+        // host) it keeps the fixed line below.
+        let remoteChannel = remoteSpec != nil && ZmxClient.liveBypass != .unitTestHost
+        if remoteChannel {
+            // Nothing to set: no command and no environment on this Mac.
+        } else if remoteSpec != nil {
+            // The unit-test host restores the developer's panes and must not
+            // connect to their hosts: the pane says so and waits. Fail
+            // closed: never a local shell in a remote project, and never an
+            // exit, which would end the session.
+            config.command = cString(Self.noRemoteClientCommand)
         } else {
             // Canonicalize before libghostty sees it: the string is exported
             // VERBATIM as the shell's $PWD, and a trailing slash there is
@@ -737,7 +711,7 @@ final class GhosttyTerminalNSView: NSView {
         // budget) → no wrapper, a plain unpersisted shell.
         // The argv element buffers come from `cString` (freed in
         // destroySurface); the pointer array is bound around the spawn below.
-        let sessionWrapper = remoteSpec != nil ? Self.remoteClientArgv(client: Self.remotePaneClientPath) ?? [] : ZmxAttach.wrapperArgv(
+        let sessionWrapper = remoteSpec != nil ? [] : ZmxAttach.wrapperArgv(
             executablePath: ZmxClient.live.executableURL()?.path,
             sessionID: sessionName
         )
@@ -793,6 +767,7 @@ final class GhosttyTerminalNSView: NSView {
         // env-absent paths without four-way nesting.
         var channelLaunch: PaneSession.Launch?
         func newSurface() {
+            if remoteChannel { Self.enableManualIO(&config) }
             if channelMode {
                 channelLaunch = Self.resolveLaunch(app: app, config: &config)
                 guard channelLaunch != nil else { return }
@@ -830,6 +805,8 @@ final class GhosttyTerminalNSView: NSView {
             isZmxWrapped = true
             startChannel(surface: surface, launch: channelLaunch, widthPx: initialWidthPx, heightPx: initialHeightPx)
             NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+        } else if remoteChannel {
+            startRemoteChannel(surface: surface, widthPx: initialWidthPx, heightPx: initialHeightPx)
         }
 
         // A wrapped spawn created (or reattached) a zmx session — the
@@ -2392,7 +2369,7 @@ extension GhosttyTerminalNSView {
               claimReadiness.hasOutput
         else { return false }
         if let runtime = channelRuntime {
-            runtime.session.claim()
+            runtime.route.claim(grid: nil)
             return true
         }
         return sendControlSequence(ZmxLeadership.claimSequence)

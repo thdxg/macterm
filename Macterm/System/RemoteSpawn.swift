@@ -215,6 +215,22 @@ enum RemoteSpawn {
         return "\(remoteShell) \(shellQuote(script))"
     }
 
+    /// What a new remote session needs from the host, in one command that the
+    /// host's server runs (`command.run`): the first line says if the folder
+    /// is there (`ok`) or the pane falls back to the home folder (`home`),
+    /// the second is the folder's physical path, and the rest is the
+    /// environment after the same settling of `TERM`, `COLORTERM` and
+    /// `TERM_PROGRAM` that a pane's script did. Never sources a profile.
+    /// `session.create` has no shell to expand a `~`, so the host resolves it.
+    static func createProbeScript(directory: String) -> String {
+        // No ssh pty gave the server a TERM. A shell may set a `dumb` one that
+        // it does not export: replace it, and export the result.
+        "case \"$TERM\" in \"\"|dumb) TERM=xterm-256color; infocmp xterm-ghostty >/dev/null 2>&1 && TERM=xterm-ghostty;; esac; "
+            + "export TERM; "
+            + remoteTermPreamble + remoteColorPreamble + remoteTerminalProgramPreamble
+            + "if cd \(quoteRemoteDirectory(directory)) 2>/dev/null; then echo ok; else echo home; cd; fi; pwd -P; env"
+    }
+
     /// True for a folder that may go into a host command: a path (absolute,
     /// or from `~`) with no control character, no backslash and no single
     /// quote. A folder that the host reported (OSC 7) is the host's text: a

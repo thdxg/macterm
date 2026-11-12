@@ -31,6 +31,15 @@ protocol PaneSessionHost: AnyObject, Sendable {
     func paneGone()
 }
 
+/// Where a surface sends what the user does: keys, pastes, replies, the size
+/// and the lead. A `PaneSession`, or the driver of a remote pane, which
+/// answers some keys itself while the pane waits.
+protocol PaneInputRoute: AnyObject, Sendable {
+    func sendInput(_ data: Data)
+    func claim(grid: PaneGrid?)
+    func sendSize(_ grid: PaneGrid?)
+}
+
 /// One pane's session on a server: it makes the session when a `launch` is
 /// given, opens a channel, attaches, and feeds the host from the channel.
 /// Input, claims and sizes go back on the same channel, in order, from a
@@ -39,7 +48,7 @@ protocol PaneSessionHost: AnyObject, Sendable {
 /// A channel that ends with no exit is a lost link: the session connects
 /// again (`connect` gives a connection that is up), attaches again, and the
 /// snapshot that follows draws the pane over a cleared screen.
-final class PaneSession: @unchecked Sendable {
+final class PaneSession: PaneInputRoute, @unchecked Sendable {
     /// What a new session runs: the launch that libghostty resolved for the
     /// pane (`ghostty_launch_resolve`), or nothing for a remote pane, whose
     /// session runs the user's login shell on the host.
@@ -63,6 +72,9 @@ final class PaneSession: @unchecked Sendable {
     private let connect: Connect
     private let launch: Launch?
     private let wantsForeground: Bool
+    /// A lost link is tried again (a local server that restarted). A remote\n    /// pane's driver connects again itself, with the app's
+    /// backoff.
+    private let reconnects: Bool
 
     private let lock = NSLock()
     private var channel: PaneChannel?
@@ -74,10 +86,18 @@ final class PaneSession: @unchecked Sendable {
     private var attached = false
     private let output = DispatchQueue(label: "PaneSession.input")
 
-    init(name: String, launch: Launch?, wantsForeground: Bool, host: any PaneSessionHost, connect: @escaping Connect) {
+    init(
+        name: String,
+        launch: Launch?,
+        wantsForeground: Bool,
+        reconnects: Bool = true,
+        host: any PaneSessionHost,
+        connect: @escaping Connect
+    ) {
         self.name = name
         self.launch = launch
         self.wantsForeground = wantsForeground
+        self.reconnects = reconnects
         self.host = host
         self.connect = connect
     }
@@ -118,7 +138,7 @@ final class PaneSession: @unchecked Sendable {
     }
 
     /// Takes the lead: this client's size becomes the pty's.
-    func claim(grid: PaneGrid? = nil) {
+    func claim(grid: PaneGrid?) {
         send { channel in
             try channel.send(MactermProtocol.Claim())
         }
@@ -127,7 +147,7 @@ final class PaneSession: @unchecked Sendable {
 
     /// Tells the session the surface's size. Only the leader's size reaches
     /// the pty.
-    func sendSize(_ known: PaneGrid? = nil) {
+    func sendSize(_ known: PaneGrid?) {
         let grid = known ?? host.paneGrid()
         let resize = MactermProtocol.Resize(
             cols: grid.cols, rows: grid.rows,
@@ -196,6 +216,7 @@ final class PaneSession: @unchecked Sendable {
                 if await read(channel, reconnected: reconnected) { return }
                 reconnected = true
                 host.paneLinkLost()
+                if !reconnects { return }
             } catch is CancellationError {
                 return
             } catch {
@@ -203,6 +224,10 @@ final class PaneSession: @unchecked Sendable {
             }
             uninstall()
             tries += 1
+            if !reconnects {
+                host.paneLinkLost()
+                return
+            }
             if tries > Self.reconnectTries {
                 host.paneGone()
                 return
@@ -233,7 +258,7 @@ final class PaneSession: @unchecked Sendable {
             case let .lead(leader):
                 host.paneLeadership(leader)
                 // A client that starts to lead sends its size.
-                if leader { sendSize() }
+                if leader { sendSize(nil) }
             case let .foreground(foreground):
                 host.paneForeground(foreground)
             case let .exit(exit):

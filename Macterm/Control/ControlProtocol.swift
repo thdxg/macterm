@@ -175,9 +175,6 @@ struct ControlArgs: Codable, Equatable {
     var confirm: Bool?
     /// An ssh destination (`[user@]host`), for the debug-only `host.*` verbs.
     var host: String?
-    /// What a remote pane's client reports (`remote.pane`): a
-    /// `RemotePaneEvent` raw value.
-    var event: String?
 
     init(
         project: String? = nil,
@@ -332,8 +329,6 @@ struct ControlData: Codable {
     var host: ControlHostState?
     /// A host's server (debug-only `host.server`).
     var hostServer: ControlHostServerState?
-    /// What a remote pane's client does next (`remote.pane`).
-    var remotePane: ControlRemotePane?
 
     init(
         status: ControlStatusInfo? = nil,
@@ -353,8 +348,7 @@ struct ControlData: Codable {
         palettes: [ControlPaletteInfo]? = nil,
         askpass: ControlAskpassReply? = nil,
         host: ControlHostState? = nil,
-        hostServer: ControlHostServerState? = nil,
-        remotePane: ControlRemotePane? = nil
+        hostServer: ControlHostServerState? = nil
     ) {
         self.status = status
         self.projects = projects
@@ -374,7 +368,6 @@ struct ControlData: Codable {
         self.askpass = askpass
         self.host = host
         self.hostServer = hostServer
-        self.remotePane = remotePane
     }
 }
 
@@ -391,30 +384,6 @@ struct ControlHostState: Codable, Equatable {
     var usersOwn: Bool
     /// The logins to this host in this run of the app.
     var logins: Int
-}
-
-/// What a remote pane's client does next (`remote.pane`, 0057). Both ends
-/// are in one bundle, so the shape changes with the app.
-struct ControlRemotePane: Codable, Equatable {
-    /// `wait`, `run`, `ended` or `close` (`RemotePaneAnswer`).
-    var action: String
-    /// The Darwin notification that wakes a client that waits.
-    var wake: String
-    /// The ssh argv for `run`.
-    var arguments: [String]?
-    /// Clear the screen and the scrollback before `run`.
-    var clear: Bool?
-    /// A line for the pane, before the action.
-    var message: String?
-
-    /// `message` as the client writes it into the pane: on a new line when
-    /// the cursor is not at the start of one (an ssh leaves it after the
-    /// prompt), and each line ends with CR LF, because the tty can be raw
-    /// after an ssh. Pure.
-    static func paneText(_ message: String, atLineStart: Bool) -> String {
-        let body = message.replacingOccurrences(of: "\n", with: "\r\n") + "\r\n"
-        return atLineStart ? body : "\r\n" + body
-    }
 }
 
 /// The server that answers on a host (debug-only `host.server`).
