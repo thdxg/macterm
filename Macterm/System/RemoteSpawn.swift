@@ -157,15 +157,6 @@ enum RemoteSpawn {
     /// only sessions created from here on pick it up.
     static let remoteTerminalProgramPreamble = terminalProgramPreamble(version: GhosttyApp.version)
 
-    /// Prepended to the pane script only: asks the host's zmx to push the
-    /// session's foreground into the pane's output (`ZmxForegroundEvents`).
-    /// The fork's client reads the variable and removes it before the
-    /// session starts, so the shell never sees it; an upstream zmx ignores
-    /// it, and the pane keeps the probe. Background operations never attach,
-    /// so they do not carry it.
-    static let remoteForegroundEventsPreamble =
-        "\(ZmxForegroundEvents.environmentVariable)=1; export \(ZmxForegroundEvents.environmentVariable); "
-
     /// Testable core of `remoteTerminalProgramPreamble`. The version is
     /// dropped unless it is all `[A-Za-z0-9.+_-]`, so nothing from it can
     /// reach the shell as syntax; `TERM_PROGRAM` is exported regardless.
@@ -181,38 +172,6 @@ enum RemoteSpawn {
     /// Where the host's server lives (`server/host/attach.sh`, `d` and `b`).
     static func hostServerBinary(key: String) -> String {
         "$HOME/.local/share/macterm/bin/macterm-\(key)"
-    }
-
-    /// What a remote pane runs on the host: the host server's own client of
-    /// the session (`macterm-<key> connect <name>`), on the tty of the
-    /// pane's ssh channel (0057). `create` adds `--`, so a missing session is
-    /// made in `directory` with the user's login shell; without it, a
-    /// missing session is an error, never a new shell. Delivered as
-    /// `sh -c '<script>'` (see `remoteShell`).
-    ///
-    /// Exit 255 means only "the connection stopped", as ssh's own 255: the
-    /// pane then waits. A shell that exits 255 itself reaches the pane as
-    /// 254, so its pane closes. A binary that is not there (the host lost
-    /// its files after the check) exits 255 too, so the next connect installs
-    /// again. A folder that is not there prints a line and starts the session
-    /// in the home folder, so the shell still persists.
-    static func sessionCommand(key: String, sessionName: String, create directory: String?) -> String {
-        let binary = posixDoubleQuote(hostServerBinary(key: key)).replacingOccurrences(of: "\\$HOME", with: "$HOME")
-        var steps = [
-            remoteTermPreamble + remoteColorPreamble + remoteTerminalProgramPreamble + remoteForegroundEventsPreamble
-                + "b=\(binary)",
-            "[ -x \"$b\" ] || exit 255",
-        ]
-        var connect = "\"$b\" connect \(posixDoubleQuote(sessionName))"
-        if let directory {
-            let quoted = quoteRemoteDirectory(directory)
-            steps.append("cd \(quoted) || { echo \"macterm: cannot cd to\" \(quoted) >&2; cd; }")
-            connect += " --"
-        }
-        steps.append(connect)
-        steps.append("s=$?; [ \"$s\" -ne 255 ] || s=254; exit \"$s\"")
-        let script = assertSingleQuoteFree(steps.joined(separator: "; "))
-        return "\(remoteShell) \(shellQuote(script))"
     }
 
     /// What a new remote session needs from the host, in one command that the

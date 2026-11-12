@@ -84,6 +84,8 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
     /// after the first attach. Over 1 MiB the rest is dropped.
     private var pendingInput = Data()
     private var attached = false
+    /// A claim that came before the first attach.
+    private var claimPending = false
     private let output = DispatchQueue(label: "PaneSession.input")
 
     init(
@@ -139,6 +141,13 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
 
     /// Takes the lead: this client's size becomes the pty's.
     func claim(grid: PaneGrid?) {
+        lock.lock()
+        if !attached {
+            claimPending = true
+            lock.unlock()
+            return
+        }
+        lock.unlock()
         send { channel in
             try channel.send(MactermProtocol.Claim())
         }
@@ -211,8 +220,9 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
                     host.paneFeed(Self.resetScreen)
                     firstAttach = false
                 }
-                let early = markAttached()
+                let (early, claimed) = markAttached()
                 if !early.isEmpty { output.async { try? channel.sendInput(early) } }
+                if claimed { claim(grid: nil) }
                 if await read(channel, reconnected: reconnected) { return }
                 reconnected = true
                 host.paneLinkLost()
@@ -310,11 +320,14 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
 
     /// The first attach went out: later input goes straight to the channel.
     /// Returns what waited.
-    private func markAttached() -> Data {
+    private func markAttached() -> (input: Data, claimed: Bool) {
         lock.lock()
         defer { lock.unlock() }
         attached = true
-        defer { pendingInput = Data() }
-        return pendingInput
+        defer {
+            pendingInput = Data()
+            claimPending = false
+        }
+        return (pendingInput, claimPending)
     }
 }

@@ -269,12 +269,7 @@ final class GhosttyTerminalNSView: NSView {
     /// decisions belong to `TerminalExecutionTracker.markOutputActivity`, not
     /// here; this method forwards only the total row count that decision needs.
     func surfaceDidOutputActivity(total: UInt64, offset _: UInt64, len _: UInt64) {
-        if claimReadiness.noteOutput() { onSurfaceSized?() }
         onOutputActivity?(total)
-    }
-
-    func surfaceDidReceiveUnknownAPC(_ payload: String) {
-        onUnknownAPC?(payload)
     }
 
     /// Apply the pointer shape libghostty computed for the current mouse
@@ -358,7 +353,6 @@ final class GhosttyTerminalNSView: NSView {
     /// it). Fires at the first size, and again at the first output (the claim waits for it).
     var onSurfaceSized: (() -> Void)?
     private var hasReportedSurfaceSize = false
-    private var claimReadiness = LeadershipClaimReadiness()
     /// Bool is best-effort evidence that the submitted prompt contained text.
     ///
     /// CALL ORDER: every path that reports a submission fires `onInteraction`
@@ -426,10 +420,10 @@ final class GhosttyTerminalNSView: NSView {
     /// current total row count. Occlusion-independent — see
     /// `surfaceDidOutputActivity`.
     var onOutputActivity: ((UInt64) -> Void)?
-    /// An APC that no protocol of libghostty knows (`GHOSTTY_ACTION_UNKNOWN_APC`,
-    /// fork patch 0020), without its framing: a foreground report of the zmx
-    /// fork (`ZmxForegroundEvents`).
-    var onUnknownAPC: ((String) -> Void)?
+    /// A snapshot of the pane's session starts (true) or ends (false).
+    var onSnapshotMark: ((Bool) -> Void)?
+    /// The host's session reports the pane's foreground (`PaneChannelEvent`).
+    var onRemoteForeground: ((RemoteForeground) -> Void)?
     /// The link URL under the mouse (`GHOSTTY_ACTION_MOUSE_OVER_LINK`), nil
     /// when the pointer leaves it. Drives the pane's hover-URL banner.
     var onLinkHover: ((String?) -> Void)?
@@ -711,14 +705,10 @@ final class GhosttyTerminalNSView: NSView {
         // budget) → no wrapper, a plain unpersisted shell.
         // The argv element buffers come from `cString` (freed in
         // destroySurface); the pointer array is bound around the spawn below.
-        let sessionWrapper = remoteSpec != nil ? [] : ZmxAttach.wrapperArgv(
-            executablePath: ZmxClient.live.executableURL()?.path,
-            sessionID: sessionName
-        )
         // A local pane whose session can be made runs from a channel
         // (`startChannel`): no client on a pty, so no session wrapper.
-        let channelMode = Self.usesChannelPanes && remoteSpec == nil && !sessionWrapper.isEmpty
-        var wrapper = channelMode ? [] : sessionWrapper
+        let channelMode = remoteSpec == nil && ZmxClient.live.executableURL() != nil
+        var wrapper: [String] = []
 
         // A palette `run:` action's command, carried in the environment
         // (`CustomPaletteLaunch`): run before the shell by the bundled CLI,
@@ -750,14 +740,6 @@ final class GhosttyTerminalNSView: NSView {
         if let env, !env.isEmpty {
             for (key, value) in env {
                 guard let k = cString(key), let v = cString(value) else { continue }
-                envVars.append(ghostty_env_var_s(key: k, value: v))
-            }
-        }
-        if remoteSpec == nil, !wrapperArgv.isEmpty, let dir = ZmxSocketBudget.socketDir() {
-            // Pin the runtime dir for `zmx connect`, so that it finds the
-            // server and the sessions where the app's `LocalSessions` looks
-            // and where the budget probe measured.
-            if let k = cString(LocalServer.directoryVariable), let v = cString(dir) {
                 envVars.append(ghostty_env_var_s(key: k, value: v))
             }
         }
@@ -1092,7 +1074,6 @@ final class GhosttyTerminalNSView: NSView {
         ghostty_surface_set_size(surface, widthPx, heightPx)
         if !hasReportedSurfaceSize {
             hasReportedSurfaceSize = true
-            claimReadiness.noteSized()
             onSurfaceSized?()
         }
     }
@@ -2365,14 +2346,9 @@ extension GhosttyTerminalNSView {
     /// claim freely rather than tracking whether it is needed.
     @discardableResult
     func sendLeadershipClaim() -> Bool {
-        guard let size = surfaceSize, size.columns > 0, size.rows > 0,
-              claimReadiness.hasOutput
-        else { return false }
-        if let runtime = channelRuntime {
-            runtime.route.claim(grid: nil)
-            return true
-        }
-        return sendControlSequence(ZmxLeadership.claimSequence)
+        guard let size = surfaceSize, size.columns > 0, size.rows > 0, let runtime = channelRuntime else { return false }
+        runtime.route.claim(grid: nil)
+        return true
     }
 
     /// Write raw bytes straight to the pty, recording NONE of the
@@ -2586,26 +2562,5 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
         let viewPt = NSPoint(x: x, y: bounds.height - y)
         let screenPt = window?.convertPoint(toScreen: convert(viewPt, to: nil)) ?? viewPt
         return NSRect(x: screenPt.x, y: screenPt.y - h, width: w, height: h)
-    }
-}
-
-/// When a pane may send the zmx leadership claim. The claim is input, and the
-/// pty echoes input until the `zmx connect` client sets raw mode. The client
-/// writes its first output right after that, so the first output is the
-/// signal that a claim is safe.
-struct LeadershipClaimReadiness: Equatable {
-    private(set) var isSized = false
-    private(set) var hasOutput = false
-
-    mutating func noteSized() {
-        isSized = true
-    }
-
-    /// Returns true when this output is the first one and the surface already
-    /// has a size: the caller reports the size again, so the claim goes out.
-    mutating func noteOutput() -> Bool {
-        guard !hasOutput else { return false }
-        hasOutput = true
-        return isSized
     }
 }

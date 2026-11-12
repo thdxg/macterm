@@ -284,27 +284,8 @@ enum ZmxEnvironment {
     }
 }
 
-/// zmx's leadership protocol (#345).
-///
-/// A session may have several attached clients but only one **leader**, whose
-/// window size drives the pty; zmx drops a non-leader's resize outright. The
-/// daemon hands leadership to any client that sends real user input, which
-/// suits a human at a keyboard but gives Macterm no way to say "size the pty
-/// from this pane" when the user merely clicks it — typing would reach their
-/// running program.
-///
-/// So the client watches its stdin for this APC string and turns it into an
-/// IPC Claim instead of forwarding it (zmx's `util.ClaimFilter`). APC because
-/// no keyboard produces one and terminals discard unknown APC, so a stray
-/// sequence reaching a program is inert.
-enum ZmxLeadership {
-    /// Must match `ClaimFilter.sequence` in the zmx fork exactly — it is a wire
-    /// contract between the two, not a local constant.
-    static let claimSequence = "\u{1b}_zmx;claim\u{1b}\\"
-}
-
 /// One remote session's foreground, from the host's report
-/// (`ZmxForegroundEvents`): the short process name (`comm`, feeds tab
+/// (`PaneChannelEvent.foreground`): the short process name (`comm`, feeds tab
 /// naming), the host's own idle verdict (`isIdle`, feeds the busy-close
 /// policy), and — when the host's `ps` gave it — the foreground's full
 /// command line (`args`, feeds Save Layout's `run:` capture, the remote
@@ -336,77 +317,12 @@ struct RemoteForeground: Equatable {
         self.isShell = isShell
         self.command = command
     }
-}
 
-/// The foreground reports of the zmx fork (`src/foreground.zig` there, patch
-/// 0010): a daemon that a client asked tells it which process group holds
-/// the pty, before the first output that follows each change, and the
-/// client writes the report into its output as an APC. libghostty raises
-/// an APC it does not know as `GHOSTTY_ACTION_UNKNOWN_APC` (fork patch
-/// 0020), and `Pane.receiveUnknownAPC` applies it as a foreground sample.
-/// Both constants are a wire contract with the fork, not local choices.
-///
-/// Only a client started with the variable asks, so only Macterm's remote
-/// panes get reports. A remote pane is a session of its host's server
-/// (0057), whose client asks for them; a pane with no server on its host (a
-/// plain shell) gets none, and no other source names it.
-enum ZmxForegroundEvents {
-    /// Exported by `RemoteSpawn.paneCommand` before `zmx attach`. The client
-    /// removes it from its environment before the session starts.
-    static let environmentVariable = "ZMX_FOREGROUND_EVENTS"
-
-    /// `zmx;foreground;<idle>;<shell>;<comm>;<args>`: the host's idle
-    /// verdict (the foreground is the session's own shell), its shell
-    /// verdict (`comm` is in its `/etc/shells`; empty when it has none), the
-    /// process name and the command line, which is last because it may
-    /// contain `;`.
-    static let reportPrefix = "zmx;foreground;"
-
-    /// The same client writes these around the snapshot that the session
-    /// replays at an attach (`snapshot_start_apc` and `snapshot_end_apc` in
-    /// `server/src/attach.zig`). A title in the replay is old, and nothing
-    /// says who set it (`Pane.receiveReportedTitle`).
-    static let snapshotStart = "zmx;snapshot;start"
-    static let snapshotEnd = "zmx;snapshot;end"
-
-    /// The report as a `RemoteForeground`, or nil for an APC that is not a
-    /// report. Pure.
-    nonisolated static func parse(_ payload: String) -> RemoteForeground? {
-        guard payload.hasPrefix(reportPrefix) else { return nil }
-        let fields = payload.dropFirst(reportPrefix.count)
-            .split(separator: ";", maxSplits: 3, omittingEmptySubsequences: false)
-        guard fields.count == 4 else { return nil }
-        func flag(_ field: Substring) -> Bool? {
-            switch field {
-            case "1": true
-            case "0": false
-            default: nil
-            }
-        }
-        guard let isIdle = flag(fields[0]) else { return nil }
-        let comm = fields[2].trimmingCharacters(in: .whitespaces)
+    /// The session's `foreground` message. nil for a report with no name.
+    init?(_ message: MactermProtocol.Foreground) {
+        let comm = String(decoding: message.comm.bytes, as: UTF8.self).trimmingCharacters(in: .whitespaces)
         guard !comm.isEmpty else { return nil }
-        let args = fields[3].trimmingCharacters(in: .whitespaces)
-        return RemoteForeground(comm: comm, isIdle: isIdle, isShell: flag(fields[1]), command: args.isEmpty ? nil : args)
-    }
-}
-
-/// Resolves how a surface launches under zmx.
-enum ZmxAttach {
-    /// The `command-wrapper` argv that runs a surface's shell in its v2
-    /// session: `[zmx, connect, macterm-<id>, --]`, put before ghostty's
-    /// fully-resolved command, so the real shell (shell-integrated, under
-    /// login(1)) is the session's command when the session is new, with the
-    /// surface's folder and environment. A session that exists is attached,
-    /// and the command is not run. Empty when `executablePath` is nil (zmx
-    /// unbundled or over the socket-path budget) → the surface launches a
-    /// plain, unpersisted shell.
-    ///
-    /// A declared `run:` is NOT folded in here — the surface types it into the
-    /// wrapped shell via `initial_input`, preserving the same semantics as a
-    /// non-persisted run.
-    static func wrapperArgv(executablePath: String?, sessionID: String) -> [String] {
-        guard let executablePath else { return [] }
-        return [executablePath, "connect", sessionID, "--"]
+        let args = String(decoding: message.args.bytes, as: UTF8.self).trimmingCharacters(in: .whitespaces)
+        self.init(comm: comm, isIdle: message.idle, isShell: message.shell, command: args.isEmpty ? nil : args)
     }
 }

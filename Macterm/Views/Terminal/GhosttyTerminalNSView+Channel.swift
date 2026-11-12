@@ -11,10 +11,6 @@ private let logger = Logger(subsystem: appBundleID, category: "SurfaceChannel")
 /// (`ghostty_launch_resolve`, fork patch 0023); its bytes are fed to the
 /// surface, and the surface's input, size and claims go back on the channel.
 extension GhosttyTerminalNSView {
-    /// Local panes run from channels. `MACTERM_CHANNEL_PANES=0` turns it off
-    /// while the cut-over is under test.
-    static let usesChannelPanes = ProcessInfo.processInfo.environment["MACTERM_CHANNEL_PANES"] != "0"
-
     /// The session and its host, for the callbacks that libghostty makes on
     /// its io thread.
     final class ChannelRuntime: @unchecked Sendable {
@@ -169,14 +165,12 @@ final class SurfaceChannelHost: PaneSessionHost, @unchecked Sendable {
     }
 
     func paneSnapshot(started: Bool) {
-        sendAPC(started ? ZmxForegroundEvents.snapshotStart : ZmxForegroundEvents.snapshotEnd)
+        DispatchQueue.main.async { [weak view] in view?.onSnapshotMark?(started) }
     }
 
     func paneForeground(_ foreground: MactermProtocol.Foreground) {
-        let comm = String(decoding: foreground.comm.bytes, as: UTF8.self)
-        let args = String(decoding: foreground.args.bytes, as: UTF8.self)
-        let shell = foreground.shell.map { $0 ? "1" : "0" } ?? ""
-        sendAPC("\(ZmxForegroundEvents.reportPrefix)\(foreground.idle ? "1" : "0");\(shell);\(comm);\(args)")
+        guard let report = RemoteForeground(foreground) else { return }
+        DispatchQueue.main.async { [weak view] in view?.onRemoteForeground?(report) }
     }
 
     func paneLeadership(_: Bool) {}
@@ -189,9 +183,5 @@ final class SurfaceChannelHost: PaneSessionHost, @unchecked Sendable {
 
     func paneGone() {
         DispatchQueue.main.async { [weak view] in view?.onProcessExit?() }
-    }
-
-    private func sendAPC(_ payload: String) {
-        DispatchQueue.main.async { [weak view] in view?.onUnknownAPC?(payload) }
     }
 }

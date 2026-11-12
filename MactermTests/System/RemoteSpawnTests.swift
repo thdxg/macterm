@@ -10,47 +10,11 @@ struct RemoteSpawnTests {
     private let key = "0123abcd"
 
     private func attach(_ session: String = "macterm-api-abc123") -> String {
-        RemoteSpawn.sessionCommand(key: key, sessionName: session, create: nil)
+        RemoteSpawn.createProbeScript(directory: "~/dev/api")
     }
 
     private func create(_ directory: String = "~/dev/api") -> String {
-        RemoteSpawn.sessionCommand(key: key, sessionName: "macterm-api-abc123", create: directory)
-    }
-
-    @Test
-    func a_pane_runs_the_host_servers_own_client_of_its_session() {
-        // The remote side is `sh -c '<script>'` with a single-quote-free
-        // script — the one form every login shell (bash/zsh/fish/nu)
-        // tokenizes identically before POSIX sh takes over.
-        let attach = attach()
-        #expect(attach.hasPrefix("sh -c '"))
-        #expect(attach.contains("b=\"$HOME/.local/share/macterm/bin/macterm-0123abcd\""))
-        #expect(attach.contains("\"$b\" connect \"macterm-api-abc123\"; "))
-        // An attach never makes a session: a missing one is an error, never
-        // a new shell in silence.
-        #expect(!attach.contains(" --"))
-        #expect(!attach.contains("cd "))
-        // A create goes to the folder, and `--` makes the missing session.
-        let create = create()
-        #expect(create.contains("cd ~/\"dev/api\""))
-        #expect(create.contains("\"$b\" connect \"macterm-api-abc123\" --; "))
-    }
-
-    @Test
-    func a_missing_binary_is_a_lost_connection_and_a_bad_folder_still_persists() {
-        // A host that lost its files after the check: exit 255 makes the
-        // pane wait, and the next connect installs again. A folder that is
-        // not there starts the session in the home folder, so it persists.
-        #expect(attach().contains("[ -x \"$b\" ] || exit 255"))
-        // 255 is only a lost connection: a shell's own 255 reaches the pane
-        // as 254, so its pane closes.
-        #expect(attach().hasSuffix("s=$?; [ \"$s\" -ne 255 ] || s=254; exit \"$s\"'"))
-        let create = create()
-        #expect(create.contains("cannot cd to"))
-        #expect(create.contains(">&2; cd; }"))
-        // The folder is one quoted word in the line, never inside another
-        // pair of quotes, where its text would be live.
-        #expect(create.contains("echo \"macterm: cannot cd to\" ~/\"dev/api\" >&2"))
+        RemoteSpawn.createProbeScript(directory: directory)
     }
 
     @Test
@@ -149,18 +113,6 @@ struct RemoteSpawnTests {
     }
 
     @Test
-    func pane_command_asks_the_host_for_foreground_reports() throws {
-        // The client reads the variable (`ZmxForegroundEvents`) and removes
-        // it before the session starts. Background operations never attach,
-        // so they carry nothing.
-        let cmd = attach()
-        #expect(cmd.contains("ZMX_FOREGROUND_EVENTS=1; export ZMX_FOREGROUND_EVENTS; "))
-        #expect(try #require(cmd.range(of: "ZMX_FOREGROUND_EVENTS")?.lowerBound) < cmd.range(of: "connect")!.lowerBound)
-        let probe = RemoteSpawn.gitProbeScript(directory: "~/dev/api")
-        #expect(!probe.contains("ZMX_FOREGROUND_EVENTS"))
-    }
-
-    @Test
     func terminal_program_preamble_drops_a_version_that_is_not_plain() {
         for version in [nil, "", "1.3; rm -rf ~", "1.3 beta", "1.3\"", "$(id)"] {
             let preamble = RemoteSpawn.terminalProgramPreamble(version: version)
@@ -187,16 +139,8 @@ struct RemoteSpawnTests {
     func pane_command_script_is_single_quote_free() {
         // Single quotes in the script would break the `sh -c '<script>'`
         // wrapper on a non-POSIX login shell: the only two wrap it.
-        for cmd in [attach(), create(), RemoteSpawn.plainShellCommand(directory: "/srv/app")] {
-            #expect(cmd.count { $0 == "'" } == 2)
-        }
-    }
-
-    @Test
-    func pane_commands_go_through_sh_c() {
-        // sh -c (NOT sh -lc): the login flag is unportable — older dash rejects
-        // it and drops to an interactive shell.
-        #expect(RemoteSpawn.remoteShell == "sh -c")
+        let cmd = RemoteSpawn.plainShellCommand(directory: "/srv/app")
+        #expect(cmd.count { $0 == "'" } == 2)
     }
 
     // MARK: - Quoting
@@ -278,18 +222,6 @@ struct RemoteSpawnTests {
         #expect(!result.contains("'"))
         #expect(result.contains("unsupported single quote"))
         #expect(result.contains("exec ${SHELL:-/bin/sh}"))
-    }
-
-    @Test
-    func pane_command_with_single_quote_in_directory_stays_quote_free() {
-        // End-to-end: a `'` in the remote directory must not survive into the
-        // shipped `sh -c '<script>'` (its `'` would break the outer quoting).
-        // The pane gets the diagnostic and a shell, never a silent close.
-        for cmd in [create("~/it's"), RemoteSpawn.plainShellCommand(directory: "~/it's")] {
-            #expect(cmd.contains("unsupported single quote"))
-            #expect(!cmd.contains("connect"))
-            #expect(cmd.count { $0 == "'" } == 2)
-        }
     }
 
     @Test
