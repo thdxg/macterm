@@ -62,7 +62,13 @@ final class RemotePaneDriver: PaneInputRoute {
         generation += 1
         let mine = generation
         Task { @MainActor in
-            let answer = await hosts.answer(event, session: name, panes: hosts.panes(name))
+            // A pane that restores before the app has installed its state
+            // waits: no panes would read as "the pane closed".
+            while hosts.panes == nil {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard mine == generation else { return }
+            }
+            let answer = await hosts.answer(event, session: name, panes: hosts.panes?(name) ?? [])
             guard mine == generation else { return }
             apply(answer, generation: mine)
         }

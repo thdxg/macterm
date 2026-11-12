@@ -130,7 +130,7 @@ final class RemoteHosts {
     /// The remote panes that show a session (`AppState.remotePanes`), set
     /// when the app starts: a pane's driver asks with them, so the host and
     /// the folder come from the user's own panes.
-    @ObservationIgnored var panes: @MainActor (String) -> [Pane] = { _ in [] }
+    @ObservationIgnored var panes: (@MainActor (String) -> [Pane])?
 
     @ObservationIgnored private var hosts: [String: Host] = [:]
     /// The sessions that wait for their host to be ready.
