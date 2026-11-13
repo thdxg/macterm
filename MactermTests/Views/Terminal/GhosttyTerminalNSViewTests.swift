@@ -335,36 +335,4 @@ struct GhosttyTerminalNSViewTests {
     func commandQ_onACyrillicKey_isGhosttysQuitOnceItCarriesItsText() throws {
         #expect(try defaultKeybindsClaimCommand(keyCode: 12, unshifted: "\u{0439}", text: "q"))
     }
-
-    @Test
-    func a_remote_pane_runs_the_client_as_its_command_wrapper() {
-        // The command that libghostty resolves (login(1), a shell) goes
-        // after `--`, and the client does not run it.
-        #expect(GhosttyTerminalNSView.remoteClientArgv(client: "/bin/macterm", bypass: nil) == ["/bin/macterm", "remote-pane", "--"])
-        #expect(GhosttyTerminalNSView.remoteClientArgv(client: "/bin/macterm", bypass: .unitTestHost) == nil)
-        #expect(GhosttyTerminalNSView.remoteClientArgv(client: nil, bypass: nil) == nil)
-    }
-}
-
-struct LeadershipClaimReadinessTests {
-    @Test
-    func output_after_the_size_asks_for_a_new_claim_once() {
-        var readiness = LeadershipClaimReadiness()
-        readiness.noteSized()
-        #expect(!readiness.hasOutput)
-        let first = readiness.noteOutput()
-        let second = readiness.noteOutput()
-        #expect(first)
-        #expect(readiness.hasOutput)
-        #expect(!second)
-    }
-
-    @Test
-    func output_before_the_size_asks_for_nothing() {
-        var readiness = LeadershipClaimReadiness()
-        let early = readiness.noteOutput()
-        #expect(!early)
-        readiness.noteSized()
-        #expect(readiness.hasOutput)
-    }
 }

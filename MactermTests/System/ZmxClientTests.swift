@@ -151,20 +151,6 @@ struct ZmxReaperTests {
     }
 }
 
-struct ZmxAttachTests {
-    @Test
-    func wrapperArgvWrapsTheShellWhenExecutablePresent() {
-        let argv = ZmxAttach.wrapperArgv(executablePath: "/path/to/zmx", sessionID: "macterm-1")
-        #expect(argv == ["/path/to/zmx", "connect", "macterm-1", "--"])
-    }
-
-    @Test
-    func noExecutableYieldsEmptyArgv() {
-        // nil executable (zmx unbundled or over budget) → no wrapper, plain shell.
-        #expect(ZmxAttach.wrapperArgv(executablePath: nil, sessionID: "macterm-1").isEmpty)
-    }
-}
-
 /// Touches process-global `ZMX_SESSION`; serialized so a concurrent test can't
 /// observe the mutation mid-flight, and the prior value is restored after.
 @Suite(.serialized)
@@ -188,95 +174,24 @@ struct ZmxEnvironmentTests {
 }
 
 @MainActor
-struct ZmxLeadershipTests {
+struct RemoteForegroundTests {
     @Test
-    func claimSequenceMatchesTheZmxWireContract() {
-        // A wire contract with the zmx fork's `util.ClaimFilter.sequence`, not
-        // a local constant: the client scans stdin for these exact bytes, so a
-        // drift here means claims are silently typed into the user's shell
-        // instead of switching leadership.
-        #expect(ZmxLeadership.claimSequence == "\u{1b}_zmx;claim\u{1b}\\")
-        // APC, so no keyboard can produce it and terminals discard it unknown.
-        #expect(ZmxLeadership.claimSequence.hasPrefix("\u{1b}_"))
-        #expect(ZmxLeadership.claimSequence.hasSuffix("\u{1b}\\"))
-    }
-}
-
-@MainActor
-struct ZmxForegroundEventsTests {
-    @Test
-    func theVariableAndThePrefixMatchTheZmxWireContract() {
-        // `foreground.env_var` and `foreground.prefix` in the fork: the
-        // client reads the one and the daemon writes the other.
-        #expect(ZmxForegroundEvents.environmentVariable == "ZMX_FOREGROUND_EVENTS")
-        #expect(ZmxForegroundEvents.reportPrefix == "zmx;foreground;")
-    }
-
-    /// The APCs that the v2 attach client writes for the session's
-    /// `foreground` message (`server/schema/foreground.json`, written by
-    /// `writeForegroundFixtures` in `server/src/attach.zig`). libghostty
-    /// gives the app the APC without `ESC _` and `ESC \`.
-    @Test
-    func theV2AttachClientsAPCsParse() throws {
-        struct Fixture: Decodable {
-            let name: String
-            let apc: String
-        }
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent() // System
-            .deletingLastPathComponent() // MactermTests
-            .deletingLastPathComponent() // repo root
-            .appendingPathComponent("server/schema/foreground.json")
-        let fixtures = try JSONDecoder().decode([Fixture].self, from: Data(contentsOf: url))
-        var parsed: [String: RemoteForeground] = [:]
-        for fixture in fixtures {
-            var bytes: [UInt8] = []
-            var index = fixture.apc.startIndex
-            while index < fixture.apc.endIndex {
-                let next = fixture.apc.index(index, offsetBy: 2)
-                try bytes.append(#require(UInt8(fixture.apc[index ..< next], radix: 16)))
-                index = next
-            }
-            #expect(bytes.starts(with: [0x1B, 0x5F]), "\(fixture.name)")
-            #expect(bytes.suffix(2) == [0x1B, 0x5C], "\(fixture.name)")
-            let payload = try #require(String(bytes: bytes.dropFirst(2).dropLast(2), encoding: .utf8))
-            parsed[fixture.name] = ZmxForegroundEvents.parse(payload)
-        }
-        #expect(parsed == [
-            "program": RemoteForeground(comm: "/usr/bin/hx", isIdle: false, isShell: false, command: "hx a;b.md"),
-            "idle shell": RemoteForeground(comm: "-zsh", isIdle: true, isShell: true, command: nil),
-            "no /etc/shells": RemoteForeground(comm: "claude", isIdle: false, isShell: nil, command: "claude --resume"),
-            "control bytes": RemoteForeground(comm: "ev il", isIdle: false, isShell: false, command: "printf ' \\'"),
-        ])
+    func a_foreground_message_gives_the_same_shape_as_a_probe_line() {
+        let message = MactermProtocol.Foreground(
+            idle: false, shell: false, comm: ProtocolBin(Data("/usr/bin/hx".utf8)), args: ProtocolBin(Data("hx a;b.md".utf8))
+        )
+        #expect(RemoteForeground(message) == RemoteForeground(comm: "/usr/bin/hx", isIdle: false, isShell: false, command: "hx a;b.md"))
     }
 
     @Test
-    func aReportParsesIntoTheSameShapeAsAProbeLine() {
-        let report = ZmxForegroundEvents.parse("zmx;foreground;0;0;/usr/bin/hx;hx --vsplit README.md")
-        #expect(report == RemoteForeground(comm: "/usr/bin/hx", isIdle: false, isShell: false, command: "hx --vsplit README.md"))
+    func an_idle_shell_with_no_shell_verdict_and_no_command_line() {
+        let message = MactermProtocol.Foreground(idle: true, shell: nil, comm: ProtocolBin(Data("-zsh".utf8)), args: ProtocolBin(Data()))
+        #expect(RemoteForeground(message) == RemoteForeground(comm: "-zsh", isIdle: true, isShell: nil, command: nil))
     }
 
     @Test
-    func theCommandLineIsTheLastFieldAndKeepsItsSemicolons() {
-        let report = ZmxForegroundEvents.parse("zmx;foreground;0;0;bash;bash -c echo a; echo b")
-        #expect(report?.command == "bash -c echo a; echo b")
-    }
-
-    @Test
-    func anIdleShellWithNoShellVerdictAndNoCommandLine() {
-        let report = ZmxForegroundEvents.parse("zmx;foreground;1;;-zsh;")
-        #expect(report == RemoteForeground(comm: "-zsh", isIdle: true, isShell: nil, command: nil))
-    }
-
-    @Test
-    func anythingElseIsNotAReport() {
-        // Another program's APC, a report with a field missing, and one
-        // with no name: none may become a sample.
-        #expect(ZmxForegroundEvents.parse("Gi=31,s=1,v=1;AAAA") == nil)
-        #expect(ZmxForegroundEvents.parse("zmx;claim") == nil)
-        #expect(ZmxForegroundEvents.parse("zmx;foreground;0;0;hx") == nil)
-        #expect(ZmxForegroundEvents.parse("zmx;foreground;x;0;hx;hx") == nil)
-        #expect(ZmxForegroundEvents.parse("zmx;foreground;0;0;;hx") == nil)
-        #expect(ZmxForegroundEvents.parse("") == nil)
+    func a_message_with_no_name_is_not_a_sample() {
+        let message = MactermProtocol.Foreground(idle: false, shell: false, comm: ProtocolBin(Data()), args: ProtocolBin(Data("hx".utf8)))
+        #expect(RemoteForeground(message) == nil)
     }
 }

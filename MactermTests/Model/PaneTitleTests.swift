@@ -195,11 +195,11 @@ struct PaneTitleTests {
         // After a restart, `top` holds the pty and the replay carries the
         // shell's last title from before `top` started.
         let pane = makeRemotePane()
-        pane.receiveUnknownAPC("zmx;foreground;0;0;top;top")
-        pane.receiveUnknownAPC(ZmxForegroundEvents.snapshotStart)
+        pane.applyRemoteForeground(RemoteForeground(comm: "top", isIdle: false, isShell: false, command: "top"))
+        pane.receiveRemoteSnapshot(started: true)
         pane.receiveReportedTitle("dev@box: ~/work")
         #expect(pane.programTitle == nil)
-        pane.receiveUnknownAPC(ZmxForegroundEvents.snapshotEnd)
+        pane.receiveRemoteSnapshot(started: false)
         #expect(pane.programTitle == nil)
         #expect(pane.foregroundProcessName == "top")
         // A title after the replay is new output, and counts.

@@ -147,8 +147,11 @@ extension Pane {
             refreshForegroundProcess()
             markOutputActivity(totalRows: total)
         }
-        view.onUnknownAPC = { [weak self] payload in
-            self?.receiveUnknownAPC(payload)
+        view.onSnapshotMark = { [weak self] started in
+            self?.receiveRemoteSnapshot(started: started)
+        }
+        view.onRemoteForeground = { [weak self] foreground in
+            self?.applyRemoteForeground(foreground)
         }
         view.onBackgroundColorChange = { [weak view] color in
             guard let view else { return }

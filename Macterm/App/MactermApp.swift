@@ -858,6 +858,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // A benchmark or an e2e run reads no network, as for Sparkle.
             appState.performWhenRestored { appState.extensionAutoUpdater.start() }
         }
+        RemoteHosts.shared.panes = { [weak appState] in appState?.remotePanes(session: $0) ?? [] }
         let handler = ControlHandler(appState: appState, projectStore: projectStore)
         controlHandler = handler
         controlServer.attach { raw, peer in await handler.handle(raw, peerPID: peer) }

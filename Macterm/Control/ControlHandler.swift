@@ -110,7 +110,6 @@ final class ControlHandler {
         case "host.server": return try await hostServer(args)
         #endif
         case "ssh.askpass": return try await sshAskpass(args, peerPID: peerPID)
-        case "remote.pane": return try await remotePane(args)
         case "grid": return try grid(args)
         case "session.list": return try await sessionList()
         case "session.info": return try await sessionInfo(args)
@@ -1762,37 +1761,6 @@ final class ControlHandler {
             table[pane.sessionName, default: []].append(pane.id.uuidString)
         }
         return table
-    }
-}
-
-// MARK: - Remote panes
-
-extension ControlHandler {
-    /// `macterm remote-pane`: the client on a remote pane's tty asks what to
-    /// do next (`RemoteHosts`, 0057). The host and the folder come from the
-    /// panes that show the session, never from the request: a process can
-    /// only make Macterm connect to a host of the user's own remote panes.
-    func remotePane(_ args: ControlArgs) async throws -> ControlData {
-        guard let session = args.session, let event = args.event.flatMap(RemotePaneEvent.init(rawValue:)) else {
-            throw ControlError(code: .badRequest, message: "remote.pane needs a session and an event")
-        }
-        let answer = await RemoteHosts.shared.answer(event, session: session, panes: appState.remotePanes(session: session))
-        return ControlData(remotePane: ControlRemotePane(answer, wake: RemoteHosts.wakeName(for: session)))
-    }
-}
-
-extension ControlRemotePane {
-    init(_ answer: RemotePaneAnswer, wake: String) {
-        switch answer {
-        case let .wait(message):
-            self.init(action: "wait", wake: wake, message: message)
-        case let .run(arguments, clear, message):
-            self.init(action: "run", wake: wake, arguments: arguments, clear: clear, message: message)
-        case let .ended(message):
-            self.init(action: "ended", wake: wake, message: message)
-        case .close:
-            self.init(action: "close", wake: wake)
-        }
     }
 }
 

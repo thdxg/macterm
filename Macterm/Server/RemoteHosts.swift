@@ -16,20 +16,20 @@ enum RemotePaneEvent: String, Codable {
     case create
 }
 
-/// The app's answer to a remote pane's client.
-enum RemotePaneAnswer: Equatable {
+/// The app's answer to a remote pane's driver (`RemotePaneDriver`).
+enum RemotePaneAnswer {
     /// Wait for the wake notification or a key. `message` goes into the pane
     /// first.
     case wait(message: String?)
-    /// Run this ssh on the pane's tty, after `message`. `clear`: clear the
-    /// screen and the scrollback first: an attach replays the session's
-    /// own, and a new session or a plain shell starts on an empty pane. No
-    /// line of Macterm's from before (a failure, "the session ended") stays
-    /// above it.
-    case run(arguments: [String], clear: Bool, message: String?)
+    /// Open a channel to the session on the host's link. `create`: the
+    /// session does not run: make it in this folder first.
+    case attach(link: RemoteServers.Link, create: String?)
+    /// No server on the host: a plain ssh shell over the master (`ssh`
+    /// arguments), after `message`.
+    case plain(arguments: [String], message: String?)
     /// The pane's session is gone (the host restarted). Ask for Return.
     case ended(message: String)
-    /// No pane has the session any more: the client ends.
+    /// No pane has the session any more: the pane ends.
     case close
 }
 
@@ -126,6 +126,11 @@ final class RemoteHosts {
         /// No server: plain shells.
         case plain(SSHConnections.Route)
     }
+
+    /// The remote panes that show a session (`AppState.remotePanes`), set
+    /// when the app starts: a pane's driver asks with them, so the host and
+    /// the folder come from the user's own panes.
+    @ObservationIgnored var panes: (@MainActor (String) -> [Pane])?
 
     @ObservationIgnored private var hosts: [String: Host] = [:]
     /// The sessions that wait for their host to be ready.
@@ -301,15 +306,14 @@ final class RemoteHosts {
             return .wait(message: nil)
         case let .plain(route):
             mark(panes, lost: false)
-            return .run(
+            return .plain(
                 arguments: connections.ttyArguments(
                     route, destination, RemoteSpawn.plainShellCommand(directory: target.directory)
                 ),
-                clear: true,
                 message: RemotePaneText.plainShell(host: target.host)
             )
-        case let .ready(route, link):
-            return await decide(session, panes: panes, target: target, route: route, link: link)
+        case let .ready(_, link):
+            return await decide(session, panes: panes, target: target, link: link)
         }
     }
 
@@ -317,11 +321,10 @@ final class RemoteHosts {
         _ session: String,
         panes: [Pane],
         target: Target,
-        route: SSHConnections.Route,
         link: RemoteServers.Link
     ) async -> RemotePaneAnswer {
         let destination = target.destination
-        guard let key = configuration.key else { return .close }
+        guard configuration.key != nil else { return .close }
         guard let sessions = await Self.list(over: link) else {
             // The link broke. Only a failure on the host's current link
             // counts, and drops it: another request may have made a new one
@@ -363,8 +366,7 @@ final class RemoteHosts {
             for pane in panes where pane.hostSessionDirectory == nil {
                 pane.hostSessionDirectory = target.directory
             }
-            let command = RemoteSpawn.sessionCommand(key: key, sessionName: session, create: nil)
-            return .run(arguments: connections.ttyArguments(route, destination, command), clear: true, message: nil)
+            return .attach(link: link, create: nil)
         case let .create(directory):
             mark(panes, lost: false)
             created[session] = Date()
@@ -375,8 +377,7 @@ final class RemoteHosts {
             if ended.remove(session) != nil || panes.count > 1 {
                 configuration.post(Self.wakeName(for: session))
             }
-            let command = RemoteSpawn.sessionCommand(key: key, sessionName: session, create: directory)
-            return .run(arguments: connections.ttyArguments(route, destination, command), clear: true, message: nil)
+            return .attach(link: link, create: directory)
         case .ended:
             logger.info("remote pane: session=\(session, privacy: .public) ended on \(destination, privacy: .public)")
             ended.insert(session)
@@ -527,6 +528,37 @@ final class RemoteHosts {
     private func undecline(_ destination: String) {
         guard declined.remove(destination) != nil else { return }
         configuration.declines.write(declined.sorted())
+    }
+
+    /// What a new session on a host runs in: the folder, and the host's
+    /// environment settled for a terminal. The line is Macterm's note for the
+    /// pane when the folder was not there. nil when the host did not answer.
+    func createLaunch(link: RemoteServers.Link, directory: String) async -> (launch: PaneSession.Launch, note: String?)? {
+        guard let result = await Self.run(
+            ["/bin/sh", "-c", RemoteSpawn.createProbeScript(directory: directory)],
+            timeout: .seconds(10), over: link
+        ), result.code == 0
+        else { return nil }
+        return Self.parseCreateProbe(String(decoding: result.output.bytes, as: UTF8.self), directory: directory)
+    }
+
+    /// Pure. The lines of `RemoteSpawn.createProbeScript`'s output.
+    nonisolated static func parseCreateProbe(_ output: String, directory: String) -> (launch: PaneSession.Launch, note: String?)? {
+        var lines = output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard lines.count >= 3, lines[1].hasPrefix("/") else { return nil }
+        let found = lines[0] == "ok"
+        let cwd = lines[1]
+        lines.removeFirst(2)
+        let env = lines.filter { line in
+            guard let equals = line.firstIndex(of: "="), equals != line.startIndex else { return false }
+            let name = line[..<equals]
+            // The server's environment is the one of the pane that started
+            // it: the login of that ssh does not belong to a new session.
+            guard !name.hasPrefix("SSH_") else { return false }
+            return name.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
+        }
+        let launch = PaneSession.Launch(cwd: cwd, argv: nil, env: env)
+        return (launch, found ? nil : "macterm: cannot cd to \(directory)")
     }
 
     // MARK: - The link

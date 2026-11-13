@@ -140,6 +140,13 @@ final class ServerConnection: @unchecked Sendable {
         return try response.result(of: method)
     }
 
+    /// False once the connection ended.
+    var isOpen: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return !isClosed
+    }
+
     /// Opens a pane channel to `session` (design/003 §1): the server joins
     /// it to the session, and every frame of the channel comes through the
     /// returned object. The pane sends `attach` first, to get output.

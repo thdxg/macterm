@@ -37,10 +37,10 @@ struct RemoteHostsTests {
     @Test
     func a_pane_that_closed_gets_close() async {
         let hosts = RemoteHosts(connections: .shared, servers: .shared, configuration: .init(key: "k", declines: .memory()))
-        #expect(await hosts.answer(.ask, session: "macterm-x-1", panes: []) == .close)
+        #expect(await hosts.answer(.ask, session: "macterm-x-1", panes: []).isClose)
         // A local pane has no host.
         let local = Pane(projectPath: "/tmp", projectID: UUID())
-        #expect(await hosts.answer(.ask, session: local.sessionName, panes: [local]) == .close)
+        #expect(await hosts.answer(.ask, session: local.sessionName, panes: [local]).isClose)
     }
 
     // MARK: - Against a local sshd
@@ -50,27 +50,22 @@ struct RemoteHostsTests {
         try await withSSHDHost { host in
             let fixture = Fixture(host)
             let panes = (0 ..< 3).map { _ in fixture.pane() }
-            var running: [PTYProcess] = []
-            defer { running.forEach { $0.terminate() } }
+            var running: [Fixture.Running] = []
+            defer { running.forEach { $0.stop() } }
             for pane in panes {
-                let arguments = try await fixture.run(pane)
-                let process = try PTYProcess(arguments)
-                running.append(process)
-                process.type("printf 'ready-%s\\n' \(pane.sessionName)\n")
-                #expect(await process.wait(for: "ready-\(pane.sessionName)"))
+                let session = try await fixture.start(pane)
+                running.append(session)
+                session.type("printf 'ready-%s\\n' \(pane.sessionName)\n")
+                try await session.host.waitFor { $0.screen.contains("ready-\(pane.sessionName)") }
                 #expect(pane.hostSessionDirectory == fixture.directory)
             }
             #expect(host.sshd.acceptedLogins() == 1)
             #expect(host.connections.logins["box"] == 1)
 
-            // The host pushes the foreground of the session into the pane's
-            // output (`ZmxForegroundEvents`), so a program names the tab and
-            // shows its logo with no probe.
-            let first = running[0]
-            first.type("sleep 30\n")
-            #expect(await first.wait(for: "sleep 30\u{1B}\\"))
-            let report = try #require(first.output.components(separatedBy: "\u{1B}_zmx;foreground;").last)
-            #expect(report.hasPrefix("0;"))
+            // The host pushes the foreground of the session on the channel,
+            // so a program names the tab and shows its logo with no probe.
+            running[0].type("sleep 30\n")
+            try await running[0].host.waitFor { $0.foreground?.idle == false }
         }
     }
 
@@ -82,7 +77,7 @@ struct RemoteHostsTests {
             #expect(await fixture.hosts.run(["/bin/sh", "-c", "true"], destination: "box", timeout: .seconds(5)) == nil)
             #expect(host.sshd.acceptedLogins() == 0)
 
-            _ = try await fixture.run(fixture.pane())
+            _ = try await fixture.attach(fixture.pane())
             #expect(fixture.ready == ["box"])
             let result = try #require(
                 await fixture.hosts.run(["/bin/sh", "-c", "printf read-%s ok; exit 3"], destination: "box", timeout: .seconds(5))
@@ -98,30 +93,28 @@ struct RemoteHostsTests {
         try await withSSHDHost { host in
             let fixture = Fixture(host)
             let pane = fixture.pane()
-            let first = try await PTYProcess(fixture.run(pane))
-            defer { first.terminate() }
+            let first = try await fixture.start(pane)
+            defer { first.stop() }
             first.type("printf 'before-%s\\n' drop\n")
-            #expect(await first.wait(for: "before-drop"))
+            try await first.host.waitFor { $0.screen.contains("before-drop") }
 
-            // The link drops: the channel's ssh exits 255, and the client
-            // reports it.
+            // The link drops: the channel ends, and the driver reports it.
             host.sshd.dropConnections()
-            #expect(await first.waitForExit() == 255)
-            #expect(await fixture.hosts.answer(.lost, session: pane.sessionName, panes: [pane]) == .wait(message: nil))
+            try await first.host.waitFor { $0.linkLost > 0 }
+            #expect(await fixture.hosts.answer(.lost, session: pane.sessionName, panes: [pane]).isWait(message: nil))
             #expect(pane.isRemoteLinkLost)
             #expect(pane.isDisconnected)
             // No trigger yet: the pane keeps waiting.
-            #expect(await fixture.hosts.answer(.ask, session: pane.sessionName, panes: [pane]) == .wait(message: nil))
+            #expect(await fixture.hosts.answer(.ask, session: pane.sessionName, panes: [pane]).isWait(message: nil))
 
             // A trigger wakes the pane; it logs in again and attaches to the
             // same session, which replays its screen.
             fixture.woken.removeAll()
             fixture.hosts.reconnect([pane.sessionName])
             #expect(fixture.woken == [RemoteHosts.wakeName(for: pane.sessionName)])
-            let again = try await fixture.run(pane, clear: true)
-            let second = try PTYProcess(again)
-            defer { second.terminate() }
-            #expect(await second.wait(for: "before-drop"))
+            let second = try await fixture.start(pane)
+            defer { second.stop() }
+            try await second.host.waitFor { $0.screen.contains("before-drop") }
             #expect(!pane.isRemoteLinkLost)
             #expect(host.sshd.acceptedLogins() == 2)
         }
@@ -133,18 +126,18 @@ struct RemoteHostsTests {
             let fixture = Fixture(host)
             let left = fixture.pane()
             let right = fixture.pane()
-            let first = try await PTYProcess(fixture.run(left))
-            defer { first.terminate() }
-            let second = try await PTYProcess(fixture.run(right))
-            defer { second.terminate() }
+            let first = try await fixture.start(left)
+            defer { first.stop() }
+            let second = try await fixture.start(right)
+            defer { second.stop() }
             second.type("printf 'right-%s\\n' up\n")
-            #expect(await second.wait(for: "right-up"))
+            try await second.host.waitFor { $0.screen.contains("right-up") }
 
             host.sshd.dropConnections()
-            #expect(await first.waitForExit() == 255)
-            #expect(await second.waitForExit() == 255)
+            try await first.host.waitFor { $0.linkLost > 0 }
+            try await second.host.waitFor { $0.linkLost > 0 }
             for pane in [left, right] {
-                #expect(await fixture.hosts.answer(.lost, session: pane.sessionName, panes: [pane]) == .wait(message: nil))
+                #expect(await fixture.hosts.answer(.lost, session: pane.sessionName, panes: [pane]).isWait(message: nil))
                 // Blurred: no line of Macterm's is on it.
                 #expect(pane.isRemoteLinkLost && !pane.showsRemoteLinkMessage)
             }
@@ -154,14 +147,15 @@ struct RemoteHostsTests {
             // with no key and no second login.
             fixture.woken.removeAll()
             let logins = fixture.connected.count
-            _ = try await fixture.run(left, event: .retry, clear: true)
+            let again = try await fixture.start(left, event: .retry)
+            defer { again.stop() }
             #expect(fixture.connected.dropFirst(logins) == ["box"])
             #expect(!fixture.woken.contains(RemoteHosts.wakeName(for: right.sessionName)))
             fixture.hosts.reconnect([right.sessionName])
             #expect(fixture.woken.contains(RemoteHosts.wakeName(for: right.sessionName)))
-            let again = try await PTYProcess(fixture.run(right, clear: true))
-            defer { again.terminate() }
-            #expect(await again.wait(for: "right-up"))
+            let rightAgain = try await fixture.start(right)
+            defer { rightAgain.stop() }
+            try await rightAgain.host.waitFor { $0.screen.contains("right-up") }
             #expect(!right.isRemoteLinkLost)
             #expect(host.sshd.acceptedLogins() == 2)
         }
@@ -173,10 +167,10 @@ struct RemoteHostsTests {
             // The host restarts at once: no grace for a new session.
             let fixture = Fixture(host, creationGrace: 0)
             let pane = fixture.pane()
-            let first = try await PTYProcess(fixture.run(pane))
+            let first = try await fixture.start(pane)
             first.type("printf 'up-%s\\n' 1\n")
-            #expect(await first.wait(for: "up-1"))
-            first.terminate()
+            try await first.host.waitFor { $0.screen.contains("up-1") }
+            first.stop()
 
             // The host restarts: its server and sessions are gone.
             try await host.stopServer()
@@ -186,9 +180,8 @@ struct RemoteHostsTests {
             }
             #expect(message.contains("ended"))
             // Return: a new shell in the same folder.
-            // The new shell starts on an empty pane: the line goes.
-            let arguments = try await fixture.run(pane, event: .create, clear: true)
-            #expect(arguments.last?.contains("connect \"\(pane.sessionName)\" --") == true)
+            let (_, create) = try await fixture.attach(pane, event: .create)
+            #expect(create == fixture.directory)
         }
     }
 
@@ -197,13 +190,31 @@ struct RemoteHostsTests {
         try await withSSHDHost { host in
             let fixture = Fixture(host)
             let pane = fixture.pane()
-            _ = try await fixture.run(pane)
+            _ = try await fixture.attach(pane)
             #expect(pane.hostSessionDirectory == fixture.directory)
-            // The first client has not started its ssh yet: the host has no
+            // The first pane has not made its session yet: the host has no
             // session. A second window's view of the pane asks now.
             let mirror = Pane(mirroring: pane)
-            let arguments = try await fixture.run(mirror)
-            #expect(arguments.last?.contains("connect \"\(pane.sessionName)\" --") == true)
+            let (_, create) = try await fixture.attach(mirror)
+            #expect(create == fixture.directory)
+        }
+    }
+
+    @Test(.enabled(if: LocalSSHD.isAvailable), .timeLimit(.minutes(3)))
+    func a_new_session_gets_the_folder_and_the_settled_terminal_environment_from_the_host() async throws {
+        try await withSSHDHost { host in
+            let fixture = Fixture(host)
+            let pane = fixture.pane()
+            let (link, create) = try await fixture.attach(pane)
+            let directory = try #require(create)
+            let made = try #require(await fixture.hosts.createLaunch(link: link, directory: directory))
+            #expect(made.note == nil)
+            #expect(made.launch.cwd?.hasPrefix("/") == true)
+            #expect(made.launch.env.contains("COLORTERM=truecolor"))
+            #expect(made.launch.env.contains("TERM_PROGRAM=ghostty"))
+            #expect(made.launch.env.contains { $0.hasPrefix("TERM=") })
+            let missing = try #require(await fixture.hosts.createLaunch(link: link, directory: "/no/such/folder/here"))
+            #expect(missing.note == "macterm: cannot cd to /no/such/folder/here")
         }
     }
 
@@ -214,7 +225,7 @@ struct RemoteHostsTests {
             for _ in 0 ..< 2 {
                 let pane = fixture.pane()
                 let answer = await fixture.settle(pane)
-                guard case let .run(arguments, _, message) = answer else {
+                guard case let .plain(arguments, message) = answer else {
                     Issue.record("no plain shell: \(answer)")
                     return
                 }
@@ -224,6 +235,22 @@ struct RemoteHostsTests {
             #expect(host.asked == ["box"])
             #expect(fixture.hosts.declined == ["box"])
         }
+    }
+
+    // MARK: - The probe of a new session
+
+    @Test
+    func the_probe_output_gives_the_folder_the_environment_and_a_note_when_the_folder_is_missing() throws {
+        let found = try #require(RemoteHosts.parseCreateProbe(
+            "ok\n/srv/app\nTERM=xterm-256color\nHOME=/home/a\nnoise\n",
+            directory: "~/app"
+        ))
+        #expect(found.launch.cwd == "/srv/app")
+        #expect(found.launch.env == ["TERM=xterm-256color", "HOME=/home/a"])
+        #expect(found.note == nil)
+        let home = try #require(RemoteHosts.parseCreateProbe("home\n/home/a\nTERM=x\n", directory: "~/gone"))
+        #expect(home.note == "macterm: cannot cd to ~/gone")
+        #expect(RemoteHosts.parseCreateProbe("ok\nrelative\nTERM=x\n", directory: "~") == nil)
     }
 
     // MARK: - Fixture
@@ -268,7 +295,7 @@ struct RemoteHostsTests {
         func settle(_ pane: Pane, event: RemotePaneEvent = .ask) async -> RemotePaneAnswer {
             var answer = await hosts.answer(event, session: pane.sessionName, panes: [pane])
             let deadline = Date().addingTimeInterval(60)
-            while answer == .wait(message: nil), Date() < deadline {
+            while answer.isWait(message: nil), Date() < deadline {
                 try? await Task.sleep(for: .milliseconds(100))
                 answer = await hosts.answer(.ask, session: pane.sessionName, panes: [pane])
             }
@@ -279,19 +306,59 @@ struct RemoteHostsTests {
             await settle(pane)
         }
 
-        /// The ssh that the pane's client runs.
-        func run(_ pane: Pane, event: RemotePaneEvent = .ask, clear: Bool? = nil) async throws -> [String] {
+        /// The link that the pane attaches over, and the folder when it
+        /// makes its session.
+        func attach(_ pane: Pane, event: RemotePaneEvent = .ask) async throws -> (link: RemoteServers.Link, create: String?) {
             let answer = await settle(pane, event: event)
-            guard case let .run(arguments, cleared, _) = answer else {
+            guard case let .attach(link, create) = answer else {
                 throw Unexpected(answer: answer)
             }
-            if let clear { #expect(cleared == clear) }
-            return arguments
+            return (link, create)
+        }
+
+        struct Running {
+            let session: PaneSession
+            let host: RecordingPaneHost
+
+            func type(_ text: String) {
+                session.sendInput(Data(text.utf8))
+            }
+
+            func stop() {
+                session.stop()
+            }
+        }
+
+        /// What the pane's driver does: the session on the host's link, with
+        /// no reconnect of its own.
+        func start(_ pane: Pane, event: RemotePaneEvent = .ask) async throws -> Running {
+            let (link, create) = try await attach(pane, event: event)
+            var launch: PaneSession.Launch?
+            if let create {
+                launch = try #require(await hosts.createLaunch(link: link, directory: create)).launch
+            }
+            let host = RecordingPaneHost()
+            let session = PaneSession(
+                name: pane.sessionName, launch: launch, wantsForeground: true, reconnects: false,
+                host: host, connect: { link.connection }
+            )
+            session.start()
+            return Running(session: session, host: host)
         }
 
         struct Unexpected: Error {
             var answer: RemotePaneAnswer
         }
+    }
+}
+
+extension RemotePaneAnswer {
+    var isClose: Bool {
+        if case .close = self { true } else { false }
+    }
+
+    func isWait(message expected: String?) -> Bool {
+        if case let .wait(message) = self { message == expected } else { false }
     }
 }
 

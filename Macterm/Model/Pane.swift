@@ -245,24 +245,11 @@ final class Pane: Identifiable {
     /// would slip past them all.
     private(set) var completionFailed = false
 
-    /// An APC that libghostty did not know (`GhosttyTerminalNSView.onUnknownAPC`).
-    /// A foreground report of the host's session (`ZmxForegroundEvents`) is
-    /// applied as a sample; anything else is dropped. Local panes attach
-    /// without the request, so a report can only reach a remote pane, and a
-    /// local one is ignored either way. The report is the only source of a
-    /// remote pane's foreground: a pane with no server on its host (a plain
-    /// shell) gets none.
-    func receiveUnknownAPC(_ payload: String) {
+    /// A snapshot of the remote pane's session starts or ends
+    /// (`PaneChannelEvent`). Its replay is not new output.
+    func receiveRemoteSnapshot(started: Bool) {
         guard isRemote else { return }
-        switch payload {
-        case ZmxForegroundEvents.snapshotStart:
-            isReceivingRemoteSnapshot = true
-        case ZmxForegroundEvents.snapshotEnd:
-            isReceivingRemoteSnapshot = false
-        default:
-            guard let report = ZmxForegroundEvents.parse(payload) else { return }
-            applyRemoteForeground(report)
-        }
+        isReceivingRemoteSnapshot = started
     }
 
     /// Between the two snapshot marks of a remote pane: the output is the
@@ -984,7 +971,8 @@ final class Pane: Identifiable {
         view.onBackgroundColorChange = nil
         view.onAdaptiveBackgroundChange = nil
         view.onOutputActivity = nil
-        view.onUnknownAPC = nil
+        view.onSnapshotMark = nil
+        view.onRemoteForeground = nil
         isReceivingRemoteSnapshot = false
         // A remote pane's report described the connection that goes now.
         // The next connection's session reports again; until then nothing

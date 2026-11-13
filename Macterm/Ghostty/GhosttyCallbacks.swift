@@ -121,20 +121,6 @@ final class GhosttyCallbacks: @unchecked Sendable {
             let s = action.action.output_activity
             DispatchQueue.main.async { view.surfaceDidOutputActivity(total: s.total, offset: s.offset, len: s.len) }
             return true
-        case GHOSTTY_ACTION_UNKNOWN_APC:
-            // Fork patch 0020: an APC that no protocol of libghostty knows,
-            // without its framing. The zmx fork reports a session's
-            // foreground this way (`ZmxForegroundEvents`). The bytes are
-            // valid for the action only, so they are copied before the hop
-            // to the main queue. A payload cut at libghostty's limit is not
-            // ours: a report is a few hundred bytes.
-            guard let view = surfaceView(from: target) else { return true }
-            let apc = action.action.unknown_apc
-            guard !apc.truncated, apc.len > 0 else { return true }
-            let bytes = UnsafeRawBufferPointer(start: UnsafeRawPointer(apc.data), count: Int(apc.len))
-            let payload = String(decoding: bytes, as: UTF8.self)
-            DispatchQueue.main.async { view.surfaceDidReceiveUnknownAPC(payload) }
-            return true
         case GHOSTTY_ACTION_RELOAD_CONFIG:
             // libghostty fires this (with soft = true) when a surface's
             // conditional state changes — notably on set_color_scheme, which

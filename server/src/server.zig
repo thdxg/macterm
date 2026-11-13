@@ -266,6 +266,8 @@ const Channel = struct {
     /// The client closed it. Its input that waits still goes to the session,
     /// then the channel goes.
     closed: bool = false,
+    /// The client got the session's `exit`, or the channel's stand-in for it.
+    exited: bool = false,
 
     fn deinit(ch: *Channel, gpa: std.mem.Allocator) void {
         if (ch.fd >= 0) lib_posix.close(ch.fd);
@@ -509,7 +511,7 @@ const Server = struct {
                 if (c.ch.fd < 0 or c.peer.dead) continue;
                 if (pfd.revents & lib_posix.POLL.OUT != 0) s.writeChannel(c.peer, c.ch);
                 if (c.ch.fd >= 0 and pfd.revents & lib_posix.POLL.IN == 0 and
-                    pfd.revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) s.channelGone(c.peer, c.ch);
+                    pfd.revents & (lib_posix.POLL.HUP | lib_posix.POLL.ERR | lib_posix.POLL.NVAL) != 0) s.channelEnded(c.peer, c.ch);
             }
             for (s.runs.items[0..nruns], fds.items[2 + npeers + nentries + chans.items.len ..][0..nruns]) |r, pfd| {
                 if (r.out_fd >= 0 and pfd.revents != 0) s.readRun(r);
@@ -1585,9 +1587,9 @@ const Server = struct {
         var buf: [16 * 1024]u8 = undefined;
         const n = lib_posix.read(ch.fd, &buf) catch |err| switch (err) {
             error.WouldBlock => return,
-            else => return s.channelGone(p, ch),
+            else => return s.channelEnded(p, ch),
         };
-        if (n == 0) return s.channelGone(p, ch);
+        if (n == 0) return s.channelEnded(p, ch);
         ch.in.appendSlice(s.gpa, buf[0..n]) catch return s.channelGone(p, ch);
 
         const t = s.now();
@@ -1639,6 +1641,7 @@ const Server = struct {
                 const msg = msgpack.decodeSlice(m.PaneMessage, arena, f.body) catch return s.channelGone(p, ch);
                 if (std.mem.eql(u8, msg.t, m.SnapshotStart.name)) break :blk .snapshot_start;
                 if (std.mem.eql(u8, msg.t, m.SnapshotEnd.name)) break :blk .snapshot_end;
+                if (std.mem.eql(u8, msg.t, m.Exit.name)) ch.exited = true;
                 break :blk .message;
             },
             .bytes => if (ch.flow.in_snapshot) .snapshot else .output,
@@ -1684,6 +1687,22 @@ const Server = struct {
 
     /// The session closed the channel's connection. The frames that wait
     /// still go to the client (a last `exit`), then the channel goes.
+    /// The session closed its end of the channel with no `exit` (it was
+    /// killed, or it crashed): the client gets an `exit` with no status, as
+    /// the end of the channel. A failure of the relay itself (`channelGone`)
+    /// is not an exit.
+    fn channelEnded(s: *Server, p: *Peer, ch: *Channel) void {
+        if (ch.fd >= 0 and ch.greeted and !ch.closed and !ch.exited) {
+            ch.exited = true;
+            var out: std.Io.Writer.Allocating = .init(s.gpa);
+            defer out.deinit();
+            if (m.encodePane(&out.writer, m.Exit, .{})) {
+                ch.q.push(s.gpa, ch.id, .msg, out.written(), s.now(), .message) catch {};
+            } else |_| {}
+        }
+        s.channelGone(p, ch);
+    }
+
     fn channelGone(s: *Server, p: *Peer, ch: *Channel) void {
         if (ch.open_re) |re| s.replyError(p.id, re, "unavailable", "The session closed the connection.");
         ch.open_re = null;
