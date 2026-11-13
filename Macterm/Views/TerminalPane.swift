@@ -1,18 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// The window that draws a pane tree, for the surface of each pane in it. nil
-/// for the hosts that are no terminal window: the quick terminal and the
-/// desktop widgets.
-private struct PaneHostKey: EnvironmentKey {
-    static let defaultValue: UUID? = nil
-}
-
 extension EnvironmentValues {
-    var paneHostID: UUID? {
-        get { self[PaneHostKey.self] }
-        set { self[PaneHostKey.self] = newValue }
-    }
+    @Entry var paneHostID: UUID?
 }
 
 struct TerminalPane: View {

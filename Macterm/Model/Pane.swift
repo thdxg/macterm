@@ -825,7 +825,9 @@ final class Pane: Identifiable {
     }
 
     /// The preferred surface's view, for the callers with no window in hand.
-    func ensureNSView() -> GhosttyTerminalNSView { preferredSurface.ensureNSView() }
+    func ensureNSView() -> GhosttyTerminalNSView {
+        preferredSurface.ensureNSView()
+    }
 
     var nsView: GhosttyTerminalNSView? { preferredSurface.nsView }
 
@@ -874,7 +876,9 @@ final class Pane: Identifiable {
         )
     }
 
-    func ensureScrollView() -> SurfaceScrollView { preferredSurface.ensureScrollView() }
+    func ensureScrollView() -> SurfaceScrollView {
+        preferredSurface.ensureScrollView()
+    }
 
     var scrollView: SurfaceScrollView? { preferredSurface.scrollView }
 

@@ -1676,9 +1676,7 @@ final class AppState {
         // background window must not repoint polling at it.
         if window == nil || keyWindowID == window?.id {
             // The didSet of `activeProjectID` moves the key window to the
-            // project, aligns its tab and reconciles. A key window that already
-            // showed the project would skip all three, and get no shadow of a
-            // tab that another window owns.
+            // project, aligns its tab and settles the windows' surfaces.
             selectProject(project)
         } else {
             window?.activeProjectID = project.id

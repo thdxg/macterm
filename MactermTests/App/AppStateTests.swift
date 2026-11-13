@@ -380,7 +380,7 @@ struct AppStateTests {
         // focus report — mouseDown fires two per click — is a visible cost.
         let state = makeAppState()
         var sent: [UUID] = []
-        state.sendClaim = { sent.append($0.id)
+        state.sendClaim = { sent.append($0.pane.id)
             return true
         }
         let p = seedProject(state)
@@ -407,7 +407,7 @@ struct AppStateTests {
         // from `noteUserInput`.
         let state = makeAppState()
         var sent: [UUID] = []
-        state.sendClaim = { sent.append($0.id)
+        state.sendClaim = { sent.append($0.pane.id)
             return true
         }
         let p = seedProject(state, name: "box", path: "me@box:/srv")
@@ -421,7 +421,7 @@ struct AppStateTests {
         #expect(sent.isEmpty)
         #expect(state.isLeader(source))
 
-        state.noteUserInput(in: mirrored)
+        state.noteUserInput(in: mirrored.preferredSurface)
         #expect(state.isLeader(mirrored))
     }
 
@@ -433,7 +433,7 @@ struct AppStateTests {
         // claims from the survivor.
         let state = makeAppState()
         var sent: [UUID] = []
-        state.sendClaim = { sent.append($0.id)
+        state.sendClaim = { sent.append($0.pane.id)
             return true
         }
         let p = seedProject(state)
@@ -455,7 +455,7 @@ struct AppStateTests {
     func closing_a_non_leader_mirror_hands_nothing_over() throws {
         let state = makeAppState()
         var sent: [UUID] = []
-        state.sendClaim = { sent.append($0.id)
+        state.sendClaim = { sent.append($0.pane.id)
             return true
         }
         let p = seedProject(state)

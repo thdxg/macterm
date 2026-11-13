@@ -43,7 +43,7 @@ struct FocusRestorationTests {
         // Asked for while the view is in no window at all, exactly as the
         // representable asks for it.
         #expect(view.window == nil)
-        FocusRestoration.restoreFocusWhenAttached(to: pane.id, finder: { pane })
+        FocusRestoration.restoreFocusWhenAttached(pane.surfaces[0])
 
         window.contentView?.addSubview(view)
         await settle { window.firstResponder === view }
