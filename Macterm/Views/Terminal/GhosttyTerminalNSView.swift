@@ -512,7 +512,7 @@ final class GhosttyTerminalNSView: NSView {
         secureInputScoped = wanted
         let id = ObjectIdentifier(self)
         if wanted {
-            SecureInput.shared.setScoped(id, focused: hasKeyboardFocus)
+            SecureInput.shared.setScoped(id, focused: hasSecureInputFocus)
         } else {
             SecureInput.shared.removeScoped(id)
         }
@@ -520,6 +520,17 @@ final class GhosttyTerminalNSView: NSView {
 
     private var hasKeyboardFocus: Bool {
         window?.firstResponder === self
+    }
+
+    /// Secure input shields typing only where typing goes: this view is first
+    /// responder in the key window. A window that loses key keeps its first
+    /// responder.
+    private var hasSecureInputFocus: Bool {
+        secureInputFocus(hasKeyboardFocus)
+    }
+
+    private func secureInputFocus(_ firstResponder: Bool) -> Bool {
+        firstResponder && window?.isKeyWindow == true
     }
 
     private var lastScrollbarSnapshot: ScrollbarSnapshot?
@@ -1013,6 +1024,7 @@ final class GhosttyTerminalNSView: NSView {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.syncSurfaceFocus(self.hasKeyboardFocus)
+                self.syncSecureInputFocus(self.hasKeyboardFocus)
             }
         }
         let becameKey = NotificationCenter.default.addObserver(
@@ -1202,9 +1214,9 @@ final class GhosttyTerminalNSView: NSView {
     /// Secure input for a password prompt applies only while this view holds
     /// keyboard focus — a prompt sitting in a background pane must not shield
     /// (and so break) typing that's going elsewhere.
-    private func syncSecureInputFocus(_ focused: Bool) {
+    private func syncSecureInputFocus(_ firstResponder: Bool) {
         guard secureInputScoped else { return }
-        SecureInput.shared.setScoped(ObjectIdentifier(self), focused: focused)
+        SecureInput.shared.setScoped(ObjectIdentifier(self), focused: secureInputFocus(firstResponder))
     }
 
     // MARK: - Tracking area
