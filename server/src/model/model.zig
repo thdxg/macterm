@@ -184,6 +184,12 @@ pub const Model = struct {
         return m.zoomed.get(tab_id);
     }
 
+    /// True when a pane or a split has this id. Panes and splits share one
+    /// namespace, as `validate` checks it.
+    fn nodeIdInUse(m: *const Model, id: []const u8) bool {
+        return m.paneInUse(id) or m.splitInUse(id);
+    }
+
     fn splitInUse(m: *const Model, id: []const u8) bool {
         for (m.data.workspaces) |*w| {
             for (w.tabs) |*t| if (tree.findSplit(&t.root, id) != null) return true;
@@ -198,9 +204,11 @@ pub const Model = struct {
     /// Fails with `DuplicateId` when a pane or a split of `node` has an id
     /// that the model has, or that the node has twice.
     fn checkFreshIds(m: *Model, node: *const Node, other: ?*const Node) Error!void {
-        const a = m.alloc();
+        // Scratch memory: a check leaves nothing in the model's arena.
+        var scratch: std.heap.ArenaAllocator = .init(m.arena.child_allocator);
+        defer scratch.deinit();
         var seen: std.StringHashMapUnmanaged(void) = .empty;
-        try m.checkFreshIn(a, node, &seen, other);
+        try m.checkFreshIn(scratch.allocator(), node, &seen, other);
     }
 
     fn checkFreshIn(
@@ -217,13 +225,15 @@ pub const Model = struct {
         if (id.len == 0) return error.BadRequest;
         const gop = try seen.getOrPut(a, id);
         if (gop.found_existing) return error.DuplicateId;
+        // An id that the model has is fresh only inside `ignoring` (the tree
+        // that this one replaces).
+        if (m.nodeIdInUse(id) and (ignoring == null or !(tree.contains(ignoring.?, id) or tree.findSplit(ignoring.?, id) != null))) {
+            return error.DuplicateId;
+        }
         switch (node.*) {
-            .pane => {
-                const holder = m.findPaneTab(id);
-                if (holder != null and (ignoring == null or &holder.?.root != ignoring.?)) return error.DuplicateId;
-            },
+            .pane => |p| if (p.session.len == 0) return error.BadRequest,
             .split => |s| {
-                if (m.splitInUse(id) and (ignoring == null or tree.findSplit(ignoring.?, id) == null)) return error.DuplicateId;
+                if (!(s.ratio > 0 and s.ratio < 1)) return error.BadRequest;
                 try m.checkFreshIn(a, &s.first, seen, ignoring);
                 try m.checkFreshIn(a, &s.second, seen, ignoring);
             },
@@ -441,8 +451,9 @@ pub const Model = struct {
         const tab = m.findTab(tab_id) orelse return error.NotFound;
         if (!tree.contains(&tab.root, target)) return error.NotFound;
         if (new_pane.id.len == 0 or split_id.len == 0) return error.BadRequest;
+        if (new_pane.session.len == 0) return error.BadRequest;
         if (std.mem.eql(u8, new_pane.id, split_id)) return error.DuplicateId;
-        if (m.paneInUse(new_pane.id) or m.splitInUse(split_id)) return error.DuplicateId;
+        if (m.nodeIdInUse(new_pane.id) or m.nodeIdInUse(split_id)) return error.DuplicateId;
         const pane = try tree.clonePane(a, new_pane);
         const sid = try a.dupe(u8, split_id);
         _ = try tree.insertBeside(a, &tab.root, target, .{ .pane = pane }, sid, dir, position);
@@ -516,7 +527,9 @@ pub const Model = struct {
     pub fn focusNext(m: *Model, tab_id: []const u8, backward: bool) Error![]const u8 {
         const tab = m.findTab(tab_id) orelse return error.NotFound;
         const cur = tab.focused orelse tree.firstPane(&tab.root).id;
-        const next = (try tree.nextPane(m.alloc(), &tab.root, cur, backward)) orelse return error.BadRequest;
+        var scratch: std.heap.ArenaAllocator = .init(m.arena.child_allocator);
+        defer scratch.deinit();
+        const next = (try tree.nextPane(scratch.allocator(), &tab.root, cur, backward)) orelse return error.BadRequest;
         try m.focusIn(tab, next);
         return tab.focused.?;
     }
@@ -576,7 +589,7 @@ pub const Model = struct {
         const src = m.findPaneTab(pane_id) orelse return error.NotFound;
         const dst = m.findPaneTab(dest) orelse return error.NotFound;
         if (split_id.len == 0) return error.BadRequest;
-        if (m.splitInUse(split_id) or std.mem.eql(u8, split_id, pane_id)) return error.DuplicateId;
+        if (m.nodeIdInUse(split_id)) return error.DuplicateId;
         const pane = tree.findPane(&src.root, pane_id).?.*;
         const sid = try a.dupe(u8, split_id);
         const src_id = src.id;
@@ -611,9 +624,10 @@ pub const Model = struct {
         const pane = tree.findPane(&src.root, pane_id).?.*;
         const at = if (ws == src_loc.ws) src_loc.index + 1 else ws.tabs.len;
         const new_tab: Tab = .{ .id = try a.dupe(u8, tab_id), .root = .{ .pane = pane }, .focused = pane.id };
-        const grown = try insertAt(Tab, a, ws.tabs, at, new_tab);
+        // Take the pane out first: `src` points into `ws.tabs`, and a copy of
+        // that slice made before the change would hold the old tab.
         try m.takeOut(src, pane_id);
-        ws.tabs = grown;
+        ws.tabs = try insertAt(Tab, a, ws.tabs, at, new_tab);
         try m.activate(ws, new_tab.id);
     }
 
@@ -636,7 +650,7 @@ pub const Model = struct {
         const dst0 = m.findTab(dst_id) orelse return error.NotFound;
         if (target) |t| if (!tree.contains(&dst0.root, t)) return error.NotFound;
         if (split_id.len == 0) return error.BadRequest;
-        if (m.splitInUse(split_id)) return error.DuplicateId;
+        if (m.nodeIdInUse(split_id)) return error.DuplicateId;
         const sid = try a.dupe(u8, split_id);
         const moved = src_loc.ws.tabs[src_loc.index].root;
         try m.detachTab(src_loc);
@@ -652,7 +666,7 @@ pub const Model = struct {
     }
 
     /// Splits pane `source` into a `rows` x `columns` grid (see
-    /// `tree.makeGrid`). Returns the new panes' ids. The source keeps the
+    /// `tree.makeGrid`). Returns the new panes' ids. The source gets the
     /// focus. The new ids come from `gen`; a new id that is in use fails with
     /// `DuplicateId` and changes nothing.
     pub fn makeGrid(

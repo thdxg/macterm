@@ -31,7 +31,7 @@ struct ModelTreeFixtureTests {
         let object = try #require(value as? [String: Any])
         let first = try node(#require(object["first"]), names: &names)
         let second = try node(#require(object["second"]), names: &names)
-        return .split(SplitBranch(
+        return try .split(SplitBranch(
             direction: direction(#require(object["dir"] as? String)),
             ratio: CGFloat(#require(object["ratio"] as? Double)),
             first: first,
@@ -95,7 +95,7 @@ struct ModelTreeFixtureTests {
             switch op {
             case "split":
                 let target = try #require(ids[#require(fixture["target"] as? String)])
-                let result = root.splitting(
+                let result = try root.splitting(
                     paneID: target,
                     direction: Self.direction(#require(fixture["dir"] as? String)),
                     position: fixture["position"] as? String == "first" ? .first : .second,

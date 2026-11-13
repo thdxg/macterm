@@ -604,6 +604,49 @@ test "attention and rename" {
     try testing.expectEqual(@as(?[]const u8, null), m.findTab("t1").?.custom_title);
 }
 
+test "separate a pane that is a direct child of the root, and the focused one" {
+    var m = try newModel();
+    defer m.deinit();
+    try threePaneTab(&m, "t1", "a", "b", "c", "s1", "s2");
+    try m.focusPane("a");
+    try m.separatePane("a", "t2", null);
+    try expectOrder(&m, "t1", &.{ "b", "c" });
+    try expectOrder(&m, "t2", &.{"a"});
+    try expectFocus(&m, "t1", "b");
+    try expectValid(&m);
+    try m.focusPane("c");
+    try m.separatePane("c", "t3", null);
+    try expectOrder(&m, "t1", &.{"b"});
+    try expectFocus(&m, "t1", "b");
+    try expectValid(&m);
+}
+
+test "a pane id and a split id never match" {
+    var m = try newModel();
+    defer m.deinit();
+    try threePaneTab(&m, "t1", "a", "b", "c", "s1", "s2");
+    try testing.expectError(error.DuplicateId, m.splitPane("t1", "a", mkPane("s1"), "s9", .horizontal, .second, null, true, false));
+    try testing.expectError(error.DuplicateId, m.splitPane("t1", "a", mkPane("d"), "b", .horizontal, .second, null, true, false));
+    try m.createTab("p", "t2", null, pane("x"), null, false);
+    try testing.expectError(error.DuplicateId, m.movePane("x", "a", .left, "c", false));
+    try testing.expectError(error.DuplicateId, m.mergeTab("t2", "t1", "a", .left, "a", false));
+    try testing.expectError(error.DuplicateId, m.createTab("p", "t3", null, pane("s2"), null, false));
+    try expectOrder(&m, "t1", &.{ "a", "b", "c" });
+    try expectValid(&m);
+}
+
+test "input that validate would refuse is refused" {
+    var m = try newModel();
+    defer m.deinit();
+    const arena = m.arena.allocator();
+    try testing.expectError(error.BadRequest, m.createTab("p", "t1", null, .{ .pane = .{ .id = "a", .session = "" } }, null, true));
+    try testing.expectError(error.BadRequest, m.createTab("p", "t1", null, try split(arena, "s", .horizontal, 7.0, pane("a"), pane("b")), null, true));
+    try m.createTab("p", "t1", null, pane("a"), null, true);
+    try testing.expectError(error.BadRequest, m.splitPane("t1", "a", .{ .id = "d", .session = "" }, "s9", .horizontal, .second, null, true, false));
+    try testing.expectEqual(@as(usize, 1), m.findWorkspace("p").?.tabs.len);
+    try expectValid(&m);
+}
+
 // ── Validation ──────────────────────────────────────────────────────────────
 
 fn faultOf(json: []const u8) ![]const u8 {
