@@ -306,8 +306,10 @@ extension Pane {
         guard surfaces.count > 1, let index = surfaces.firstIndex(where: { $0 === surface }) else { return }
         surface.captureClosingSnapshot()
         surfaces.remove(at: index)
-        if index == 0, let view = surfaces[0].nsView {
-            connectViewCallbacks(view, isFeed: true)
+        if index == 0 {
+            // The old feed may have gone between the two snapshot marks.
+            receiveRemoteSnapshot(started: false)
+            if let view = surfaces[0].nsView { connectViewCallbacks(view, isFeed: true) }
         }
         // Deferred: a retire can come from inside a SwiftUI update while the
         // view is still in a hierarchy.

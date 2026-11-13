@@ -60,7 +60,7 @@ MactermApp (SwiftUI @main)
                  └─ SplitTreeView      recursive
                       └─ TerminalPane
                            └─ TerminalSurface (NSViewRepresentable)
-                                └─ GhosttyTerminalNSView   owned by Pane, not SwiftUI
+                                └─ GhosttyTerminalNSView   owned by PaneSurface, not SwiftUI
 ```
 
 ### Pane and PaneSurface

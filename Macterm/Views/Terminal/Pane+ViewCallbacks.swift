@@ -38,7 +38,6 @@ extension Pane {
         view.onCommandSubmitted = { [weak self, weak view] hasContent in
             guard let self else { return }
             // Before the tracker leaves the prompt: memory captures the line
-            // only while the shell is at its prompt.
             // only while the shell is at its prompt. A mirror pane sees the
             // same shell; the other pane records for both.
             if !isMirror { ProjectMemory.shared.commandSubmitted(pane: self, view: view) }

@@ -736,7 +736,7 @@ final class AppState {
               let tab = selectedTab(for: projectID, in: key),
               let sized = allClients().first(where: { $0.id == surfaceID })
         else { return }
-        if sized.windowID == key.id, tab.splitRoot.findPane(id: sized.pane.id) != nil {
+        if sized.windowID == nil || sized.windowID == key.id, tab.splitRoot.findPane(id: sized.pane.id) != nil {
             if !isMirrored(sized.pane) { assertSessionLeadership(sized) }
         } else if isMirrored(sized.pane) {
             // A surface coming up ELSEWHERE matters too: its zmx client has
@@ -2027,11 +2027,21 @@ final class AppState {
         clients(of: pane.sessionName).count > 1
     }
 
-    /// Whether `pane` drives its session's pty size, as its first surface does
-    /// (the one the CLI reads).
+    /// The surface that stands for a pane where one answer is needed (the CLI):
+    /// the one in the window opened first, else the first surface. The same
+    /// answer however the key window changes.
+    private func referenceSurface(of pane: Pane) -> PaneSurface {
+        for window in windows {
+            if let surface = pane.existingSurface(for: window.id) { return surface }
+        }
+        return pane.surfaces[0]
+    }
+
+    /// Whether `pane` drives its session's pty size, as its reference surface
+    /// does.
     /// An unmirrored pane is trivially the leader — it is the only client.
     func isLeader(_ pane: Pane) -> Bool {
-        isLeader(pane.surfaces[0])
+        isLeader(referenceSurface(of: pane))
     }
 
     /// Whether `surface` is the one driving its session's pty size.
@@ -2059,7 +2069,7 @@ final class AppState {
 
     /// `isLeader(_:)` of a pane against a precomputed attachment list.
     func isLeader(_ pane: Pane, among attached: [PaneSurface]) -> Bool {
-        isLeader(pane.surfaces[0], among: attached)
+        isLeader(referenceSurface(of: pane), among: attached)
     }
 
     /// Every client grouped by session name, from ONE traversal.

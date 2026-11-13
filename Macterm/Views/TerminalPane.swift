@@ -58,7 +58,7 @@ struct TerminalPane: View {
                 isNonLeaderMirror: isNonLeaderMirror,
                 // Read here (not just passed through) so the observation
                 // dependency registers: an orphaned-with-no-host bump must
-                // re-render this subtree — see Pane.surfaceReattachTick.
+                // re-render this subtree — see PaneSurface.reattachTick.
                 reattachTick: surface.reattachTick,
                 onFocus: onFocus,
                 onProcessExit: onProcessExit,
