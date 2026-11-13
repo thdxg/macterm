@@ -39,6 +39,10 @@ struct ModelTreeFixtureTests {
         ))
     }
 
+    private static func string(_ object: [String: Any], _ key: String) throws -> String {
+        try #require(object[key] as? String)
+    }
+
     private static func direction(_ text: String) -> SplitDirection {
         text == "horizontal" ? .horizontal : .vertical
     }
@@ -94,7 +98,7 @@ struct ModelTreeFixtureTests {
 
             switch op {
             case "split":
-                let target = try #require(ids[#require(fixture["target"] as? String)])
+                let target = try #require(ids[Self.string(fixture, "target")])
                 let result = try root.splitting(
                     paneID: target,
                     direction: Self.direction(#require(fixture["dir"] as? String)),
@@ -106,7 +110,7 @@ struct ModelTreeFixtureTests {
                 try ids[#require(fixture["new"] as? String)] = try #require(result.newPaneID)
             case "remove":
                 let want = try #require(fixture["result"] as? String)
-                let target = try #require(ids[#require(fixture["pane"] as? String)])
+                let target = try #require(ids[Self.string(fixture, "pane")])
                 if let removed = root.removing(paneID: target) {
                     root = removed
                     #expect(want != "only_pane", "\(name)")
@@ -117,15 +121,15 @@ struct ModelTreeFixtureTests {
             case "rebalance":
                 root.rebalanced()
             case "swap":
-                let x = try #require(ids[#require(fixture["x"] as? String)])
-                let y = try #require(ids[#require(fixture["y"] as? String)])
+                let x = try #require(ids[Self.string(fixture, "x")])
+                let y = try #require(ids[Self.string(fixture, "y")])
                 root = root.swappingPanes(x, y)
             case "insert":
                 var fresh: [String: UUID] = [:]
                 let inserted = try Self.node(#require(fixture["node"]), names: &fresh)
                 ids.merge(fresh) { current, _ in current }
                 let zone = try Self.zone(#require(fixture["zone"] as? String))
-                let dest = try #require(ids[#require(fixture["dest"] as? String)])
+                let dest = try #require(ids[Self.string(fixture, "dest")])
                 let result = root.inserting(
                     node: inserted,
                     at: dest,
@@ -135,7 +139,7 @@ struct ModelTreeFixtureTests {
                 #expect(result.inserted, "\(name)")
                 root = result.node
             case "grid":
-                let source = try #require(ids[#require(fixture["source"] as? String)])
+                let source = try #require(ids[Self.string(fixture, "source")])
                 let tab = TerminalTab(id: UUID(), splitRoot: root, focusedPaneID: source)
                 let created = try tab.makeGrid(
                     paneID: source,
