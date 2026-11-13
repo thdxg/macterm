@@ -60,13 +60,31 @@ enum FocusRestoration {
     /// focus back — miss it and the window is on screen, frontmost, and typing
     /// nowhere until the user clicks a pane. A pane's view lives in one
     /// hierarchy, so "whichever window it lands in" is exactly the caller's.
-    static func restoreFocusWhenAttached(to paneID: UUID, finder: @escaping () -> Pane?) {
-        restoreFocus(to: paneID, finder: finder, window: { finder()?.nsView?.window }, attempt: 0)
+    static func restoreFocusWhenAttached(_ surface: PaneSurface) {
+        restoreFocus(
+            viewIn: { _ in surface.nsView },
+            window: { surface.nsView?.window },
+            attempt: 0
+        )
     }
 
     private static func restoreFocus(
         to paneID: UUID,
         finder: @escaping () -> Pane?,
+        window resolve: @escaping () -> NSWindow?,
+        attempt: Int
+    ) {
+        // A pane has one view in each window that draws it: the one that is in
+        // the target window is the one to focus.
+        restoreFocus(
+            viewIn: { window in finder()?.surfaces.compactMap(\.nsView).first { $0.window === window } },
+            window: resolve,
+            attempt: attempt
+        )
+    }
+
+    private static func restoreFocus(
+        viewIn find: @escaping (NSWindow) -> GhosttyTerminalNSView?,
         window resolve: @escaping () -> NSWindow?,
         attempt: Int
     ) {
@@ -78,14 +96,14 @@ enum FocusRestoration {
         if isEditingInlineName, (window?.firstResponder as? NSTextView)?.isFieldEditor == true {
             return
         }
-        if let window, let pane = finder(), let view = pane.nsView, view.window === window {
+        if let window, let view = find(window), view.window === window {
             window.makeFirstResponder(view)
             view.notifySurfaceFocused()
             return
         }
         guard attempt < maxAttempts else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + retryInterval) {
-            restoreFocus(to: paneID, finder: finder, window: resolve, attempt: attempt + 1)
+            restoreFocus(viewIn: find, window: resolve, attempt: attempt + 1)
         }
     }
 }

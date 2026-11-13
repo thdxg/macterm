@@ -502,6 +502,9 @@ final class GhosttyTerminalNSView: NSView {
     /// from the focused view and needs the pane's session and command).
     weak var owningPane: Pane?
 
+    /// The surface that owns this view: one window's view of the pane.
+    weak var owningSurface: PaneSurface?
+
     /// Whether this view is registered with the `SecureInput` manager, which
     /// shields keystrokes from event taps while a focused prompt is showing.
     private var secureInputScoped = false

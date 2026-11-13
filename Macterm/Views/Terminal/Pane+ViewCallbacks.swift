@@ -2,27 +2,35 @@ import AppKit
 
 extension Pane {
     /// Connect the view's callbacks that feed the pane's own state: execution
-    /// tracking, titles, search, bells, notifications and project memory.
-    /// `ensureNSView` calls this when it makes the view, so the callbacks work
+    /// tracking, titles, bells, notifications and project memory.
+    /// `PaneSurface.ensureNSView` calls this when it makes the view, so the callbacks work
     /// before any window draws the pane. A pane in a `tab new --no-focus` tab,
     /// or in a background tab that a launch warmed, otherwise recorded no
     /// submission and no output, and `pane list` showed its run as idle.
     /// The callbacks that need the window that draws the pane (focus, splits,
     /// zoom, process exit, tab titles, links, the adaptive background, and
     /// `onRunEnded`) stay in `TerminalSurface.configure`.
-    func connectViewCallbacks(_ view: GhosttyTerminalNSView) {
+    ///
+    /// Every surface of a pane parses the same output, so only the feed
+    /// surface (the first) gets the callbacks that read it: titles, runs,
+    /// bells, notifications and project memory. A second window's surface
+    /// gets the ones that its own user and its own view cause: typing, size,
+    /// chrome. `PaneSurface` sets the search, copy mode, link and read-only
+    /// callbacks.
+    func connectViewCallbacks(_ view: GhosttyTerminalNSView, isFeed: Bool) {
         view.onInteraction = { [weak self] in
             self?.recordUserInteraction()
         }
         // Typed input is what zmx moves leadership on, local or remote. The
-        // report carries the pane (see `.terminalUserInput`).
-        view.onUserInput = { [weak self] in
-            guard let self else { return }
-            NotificationCenter.default.post(name: .terminalUserInput, object: id)
+        // report carries the surface, the client that the user typed in (see
+        // `.terminalUserInput`).
+        view.onUserInput = { [weak view] in
+            guard let surface = view?.owningSurface else { return }
+            NotificationCenter.default.post(name: .terminalUserInput, object: surface.id)
         }
-        view.onSurfaceSized = { [weak self] in
-            guard let self else { return }
-            NotificationCenter.default.post(name: .terminalSurfaceSized, object: id)
+        view.onSurfaceSized = { [weak view] in
+            guard let surface = view?.owningSurface else { return }
+            NotificationCenter.default.post(name: .terminalSurfaceSized, object: surface.id)
         }
         // Order matters: `onInteraction` clears the tracker's in-place start
         // arming that `onCommandSubmitted` sets, and the view calls them in
@@ -30,8 +38,9 @@ extension Pane {
         view.onCommandSubmitted = { [weak self, weak view] hasContent in
             guard let self else { return }
             // Before the tracker leaves the prompt: memory captures the line
-            // only while the shell is at its prompt. A mirror sees the same
-            // shell; the real pane records for both.
+            // only while the shell is at its prompt.
+            // only while the shell is at its prompt. A mirror pane sees the
+            // same shell; the other pane records for both.
             if !isMirror { ProjectMemory.shared.commandSubmitted(pane: self, view: view) }
             recordCommandSubmission(hasContent: hasContent)
         }
@@ -43,59 +52,21 @@ extension Pane {
             guard let self else { return false }
             return KeybindPassthrough.yields(event: event, pane: self)
         }
+        view.titleProvider = { [weak self] in self?.displayTitle }
+        // Chrome and password prompts follow each view, not the pane.
+        view.onTerminalRender = { [weak view] in
+            guard let view else { return }
+            AdaptiveTerminalChrome.shared.terminalDidRender(view)
+        }
+        view.onBackgroundColorChange = { [weak view] color in
+            guard let view else { return }
+            AdaptiveTerminalChrome.shared.terminalBackgroundDidChange(color, in: view)
+        }
+        guard isFeed else { return }
         // Each OSC title is a command-boundary signal that re-reads the
         // foreground process, and — when a real program (not the shell) holds
         // the foreground — becomes the pane's display title.
         view.onTitleChange = { [weak self] title in self?.receiveReportedTitle(title) }
-        view.titleProvider = { [weak self] in self?.displayTitle }
-
-        view.copyMode.onLabelChange = { [weak self] label in self?.copyModeLabel = label }
-
-        view.onSearchStart = { [weak self, weak view] needle in
-            guard let self else { return }
-            // Cmd+F toggles: if the search bar is already open, a second
-            // start_search closes it (and returns focus to the terminal),
-            // mirroring the close button rather than re-opening.
-            if searchState.isVisible {
-                guard let view else { return }
-                view.endSearch()
-                // Closing the search bar is a reshape — route focus through
-                // FocusRestoration, not a bare makeFirstResponder (see onClose).
-                FocusRestoration.restoreFocus(to: id, finder: { [weak self] in self }, in: view.window)
-                return
-            }
-            if let needle, !needle.isEmpty { searchState.needle = needle }
-            searchState.isVisible = true
-            searchState.startPublishing { [weak self, weak view] q in
-                view?.sendSearchQuery(q)
-                // The tick scan must run against the needle the core actually
-                // searched, not the live (possibly newer) field text.
-                self?.scrollView?.noteSearchNeedle(q)
-            }
-            if !searchState.needle.isEmpty { searchState.pushNeedle() }
-        }
-        view.onSearchEnd = { [weak self] in
-            guard let self else { return }
-            searchState.stopPublishing()
-            searchState.isVisible = false
-            searchState.needle = ""
-            searchState.total = nil
-            searchState.selected = nil
-            scrollView?.clearSearchTicks()
-        }
-        view.onSearchTotal = { [weak self] total in
-            guard let self else { return }
-            searchState.total = total
-            if total == nil {
-                scrollView?.clearSearchTicks()
-            } else {
-                scrollView?.refreshSearchTicks()
-            }
-        }
-        view.onSearchSelected = { [weak self] sel in
-            self?.searchState.selected = sel
-            self?.scrollView?.setSearchSelected(sel)
-        }
         view.onDesktopNotification = { [weak self, weak view] title, body in
             guard let self else { return }
             guard !(NSApp.isActive && view?.isFocused == true) else { return }
@@ -117,16 +88,6 @@ extension Pane {
             refreshForegroundProcess()
             markProgressFinished(failed: failed)
             view?.onRunEnded?()
-        }
-        view.onLinkHover = { [weak self] url in
-            self?.hoverURL = url
-        }
-        view.onReadOnlyChange = { [weak self] isReadOnly in
-            self?.isReadOnly = isReadOnly
-        }
-        view.onTerminalRender = { [weak view] in
-            guard let view else { return }
-            AdaptiveTerminalChrome.shared.terminalDidRender(view)
         }
         view.onOutputActivity = { [weak self, weak view] total in
             if let view {
@@ -153,10 +114,6 @@ extension Pane {
         view.onRemoteForeground = { [weak self] foreground in
             self?.applyRemoteForeground(foreground)
         }
-        view.onBackgroundColorChange = { [weak view] color in
-            guard let view else { return }
-            AdaptiveTerminalChrome.shared.terminalBackgroundDidChange(color, in: view)
-        }
         view.onCommandFinished = { [weak self, weak view] exitCode, durationNs, command in
             guard let self else { return }
             // A command boundary is exactly when the pane's identity changes —
@@ -169,8 +126,7 @@ extension Pane {
             // `notePromptReturned` feeds the naming gate.
             notePromptReturned()
             refreshForegroundProcess()
-            // Project memory: off unless the user turned it on, macOS 26+. A
-            // mirror parses the same OSC 133;D; only the real pane records.
+            // Project memory: off unless the user turned it on, macOS 26+.
             if !isMirror {
                 ProjectMemory.shared.commandFinished(
                     pane: self, view: view, exitCode: exitCode, durationNs: durationNs, reportedCommand: command

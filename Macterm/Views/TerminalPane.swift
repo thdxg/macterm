@@ -1,6 +1,20 @@
 import AppKit
 import SwiftUI
 
+/// The window that draws a pane tree, for the surface of each pane in it. nil
+/// for the hosts that are no terminal window: the quick terminal and the
+/// desktop widgets.
+private struct PaneHostKey: EnvironmentKey {
+    static let defaultValue: UUID? = nil
+}
+
+extension EnvironmentValues {
+    var paneHostID: UUID? {
+        get { self[PaneHostKey.self] }
+        set { self[PaneHostKey.self] = newValue }
+    }
+}
+
 struct TerminalPane: View {
     let pane: Pane
     let focused: Bool
@@ -16,18 +30,23 @@ struct TerminalPane: View {
     let onZoomRequest: () -> Void
     @Environment(AppState.self)
     private var appState: AppState?
+    @Environment(\.paneHostID)
+    private var hostID
 
     var body: some View {
+        // This window's view of the pane: its own search, copy mode and
+        // read-only state, its own view, its own client of the session.
+        let surface = pane.surface(for: hostID)
         // The search bar sits above the terminal surface in a VStack, so showing
         // it pushes the terminal content down rather than overlaying it.
         VStack(spacing: 0) {
-            if pane.searchState.isVisible {
+            if surface.searchState.isVisible {
                 TerminalSearchBar(
-                    searchState: pane.searchState,
-                    onNavigateNext: { pane.nsView?.navigateSearch(direction: .next) },
-                    onNavigatePrevious: { pane.nsView?.navigateSearch(direction: .previous) },
+                    searchState: surface.searchState,
+                    onNavigateNext: { surface.nsView?.navigateSearch(direction: .next) },
+                    onNavigatePrevious: { surface.nsView?.navigateSearch(direction: .previous) },
                     onClose: {
-                        guard let view = pane.nsView else { return }
+                        guard let view = surface.nsView else { return }
                         view.endSearch()
                         // Return focus to the terminal so typing resumes without
                         // a click. Closing the search bar removes it from the
@@ -42,6 +61,7 @@ struct TerminalPane: View {
 
             TerminalSurface(
                 pane: pane,
+                surface: surface,
                 focused: focused,
                 isZoomed: isZoomed,
                 isSplit: isSplit,
@@ -49,7 +69,7 @@ struct TerminalPane: View {
                 // Read here (not just passed through) so the observation
                 // dependency registers: an orphaned-with-no-host bump must
                 // re-render this subtree — see Pane.surfaceReattachTick.
-                reattachTick: pane.surfaceReattachTick,
+                reattachTick: surface.reattachTick,
                 onFocus: onFocus,
                 onProcessExit: onProcessExit,
                 onCommandFinished: onCommandFinished,
@@ -60,7 +80,7 @@ struct TerminalPane: View {
             // Overlays anchor to the surface, not the VStack, so the search
             // bar (above) never shifts them.
             .overlay(alignment: .bottomLeading) {
-                if let url = pane.hoverURL {
+                if let url = surface.hoverURL {
                     LinkHoverBanner(url: url)
                 }
             }
@@ -73,25 +93,25 @@ struct TerminalPane: View {
                 HStack(spacing: 6) {
                     // Read-Only pill: libghostty sends no input to the pty.
                     // A click turns read-only off.
-                    if pane.isReadOnly {
+                    if surface.isReadOnly {
                         ModePill(
                             title: String(localized: "Read-Only"),
                             systemImage: "eye",
                             help: String(localized: "Turn off read-only")
-                        ) { [weak pane] in
-                            pane?.nsView?.sendBindingAction("toggle_readonly")
+                        ) { [weak surface] in
+                            surface?.nsView?.sendBindingAction("toggle_readonly")
                         }
                     }
                     // Copy-mode pill: the pane's keys move the selection, not
                     // the shell. The Zoomed pill's chrome, since both are
                     // modes that one click leaves. Per pane, since the mode is.
-                    if let label = pane.copyModeLabel {
+                    if let label = surface.copyModeLabel {
                         ModePill(
                             title: label,
                             systemImage: "character.cursor.ibeam",
                             help: String(localized: "Leave copy mode")
-                        ) { [weak pane] in
-                            pane?.nsView?.copyMode.exit()
+                        ) { [weak surface] in
+                            surface?.nsView?.copyMode.exit()
                         }
                     }
                     // Outdated-session pill: the session runs from an older
@@ -122,7 +142,7 @@ struct TerminalPane: View {
             }
         }
         .background {
-            if let color = pane.adaptiveBackgroundColor {
+            if let color = surface.adaptiveBackgroundColor {
                 Color(cgColor: color)
             }
         }
@@ -173,6 +193,7 @@ private struct SecureInputBadge: View {
 /// don't destroy the underlying ghostty surface.
 private struct TerminalSurface: NSViewRepresentable {
     let pane: Pane
+    let surface: PaneSurface
     let focused: Bool
     let isZoomed: Bool
     let isSplit: Bool
@@ -235,7 +256,7 @@ private struct TerminalSurface: NSViewRepresentable {
 
     func makeNSView(context: Context) -> SurfaceHost {
         let host = SurfaceHost()
-        let scroll = pane.ensureScrollView()
+        let scroll = surface.ensureScrollView()
         attach(scroll, to: host)
         let view = scroll.surfaceView
         configure(view)
@@ -243,7 +264,7 @@ private struct TerminalSurface: NSViewRepresentable {
         // Metal layer needs a non-zero size to initialize. The re-attach also
         // runs after the whole SwiftUI transaction, so it repairs the
         // teardown-order yank described on `SurfaceHost`.
-        DispatchQueue.main.async { [pane] in
+        DispatchQueue.main.async { [surface] in
             attach(scroll, to: host)
             if view.surface == nil, view.window != nil {
                 view.createSurface()
@@ -252,7 +273,7 @@ private struct TerminalSurface: NSViewRepresentable {
                 AdaptiveTerminalChrome.shared.focusDidChange(to: view)
                 // Not `in: view.window`: the host may not be in the window yet
                 // (see restoreFocusWhenAttached).
-                FocusRestoration.restoreFocusWhenAttached(to: pane.id, finder: { pane })
+                FocusRestoration.restoreFocusWhenAttached(surface)
             }
         }
         context.coordinator.wasFocused = focused
@@ -265,7 +286,7 @@ private struct TerminalSurface: NSViewRepresentable {
     /// while `host` is off-window so a dying container can't steal the view.
     private func attach(_ scroll: SurfaceScrollView, to host: SurfaceHost) {
         host.scroll = scroll
-        scroll.onOrphaned = { [weak pane] in pane?.requestSurfaceReattach() }
+        scroll.onOrphaned = { [weak surface] in surface?.requestReattach() }
         // Adopt (and point `reattachHost` at this host) only when the host is
         // already in the window, or the scroll has no home at all. A host
         // that is off-window while the scroll lives elsewhere must NOT
@@ -279,7 +300,7 @@ private struct TerminalSurface: NSViewRepresentable {
     }
 
     func updateNSView(_ host: SurfaceHost, context: Context) {
-        let scroll = pane.ensureScrollView()
+        let scroll = surface.ensureScrollView()
         attach(scroll, to: host)
         let view = scroll.surfaceView
         configure(view)
@@ -302,7 +323,7 @@ private struct TerminalSurface: NSViewRepresentable {
             // a surface's notifications — and its bell — from (`focusDidChange`).
             NotificationHandler.shared.clearDelivered(paneID: pane.id)
             pane.acknowledgeBell()
-            FocusRestoration.restoreFocusWhenAttached(to: pane.id, finder: { [pane] in pane })
+            FocusRestoration.restoreFocusWhenAttached(surface)
         } else if !focused, wasFocused {
             view.notifySurfaceUnfocused()
         }
@@ -321,7 +342,11 @@ private struct TerminalSurface: NSViewRepresentable {
     /// work before any window draws it.
     private func configure(_ view: GhosttyTerminalNSView) {
         view.onFocus = onFocus
-        view.onProcessExit = onProcessExit
+        // Every surface of the pane gets the session's exit. Only the feed's
+        // ends the pane: another window's client that dies alone is a detach.
+        view.onProcessExit = { [weak surface] in
+            if surface?.isFeed ?? true { onProcessExit() }
+        }
         view.onSplitRequest = onSplitRequest
         view.onZoomRequest = onZoomRequest
         view.isZoomed = isZoomed

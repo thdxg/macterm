@@ -1021,10 +1021,9 @@ struct WorkspaceView: View {
     let project: Project
     @Environment(AppState.self)
     private var appState
-    /// This window's own view of the project (#345). Never `ws.activeTab`:
-    /// that is the KEY window's, and a pane's one NSView can only be in one
-    /// window — so when another window owns the selected tab this renders a
-    /// mirror of it, and every callback maps back onto the real tab.
+    /// This window's own selection (#345). Never `ws.activeTab`: that is the
+    /// KEY window's. Every window that selects a tab draws the same panes,
+    /// each with a surface of its own (`Pane.surface(for:)`).
     @Environment(WindowState.self)
     private var windowState
     /// The pane currently dragged by its grab handle, bubbled up via
@@ -1037,8 +1036,8 @@ struct WorkspaceView: View {
     private var dropResolution: TabDropResolution?
 
     var body: some View {
-        if let view = appState.viewTab(for: project.id, in: windowState) {
-            if standsAside(view) {
+        if let tab = appState.selectedTab(for: project.id, in: windowState) {
+            if standsAside(tab) {
                 // Nothing rendered, not a blurred copy: a blur over live panes
                 // read as a slab that did not match the window chrome around
                 // it. With no panes in the hierarchy the tab shows the plain
@@ -1047,7 +1046,7 @@ struct WorkspaceView: View {
                 // which claims the tab and brings the panes back.
                 MirroredTabNotice()
             } else {
-                workspace(view)
+                workspace(tab)
             }
         }
     }
@@ -1058,32 +1057,28 @@ struct WorkspaceView: View {
     /// its panes even while they are non-leaders, because its claim can only
     /// land once the surfaces exist and have a size; hiding them would leave
     /// the claim refused and the notice up forever.
-    private func standsAside(_ view: AppState.WindowTabView) -> Bool {
+    private func standsAside(_ tab: TerminalTab) -> Bool {
         guard appState.keyWindowID != windowState.id else { return false }
-        let panes = view.tab.splitRoot.allPanes()
-        return !panes.isEmpty && appState.nonLeaderPaneIDs(in: view.tab).count == panes.count
+        let panes = tab.splitRoot.allPanes()
+        return !panes.isEmpty && appState.nonLeaderPaneIDs(in: tab, window: windowState.id).count == panes.count
     }
 
     @ViewBuilder
-    private func workspace(_ view: AppState.WindowTabView) -> some View {
-        let tab = view.tab
-        let real = view.real
-        // Position maps the real tab's focus and zoom onto the view (an
-        // identity for the real view); callbacks map view panes back.
-        let focusedPaneID = real.focusedPaneID.flatMap { appState.viewPaneID(forReal: $0, in: view) }
-        let zoomedPaneID = real.zoomedPaneID.flatMap { appState.viewPaneID(forReal: $0, in: view) }
-        let renderedNode = renderedNode(of: tab, zoomedPaneID: zoomedPaneID)
+    private func workspace(_ tab: TerminalTab) -> some View {
+        let renderedNode = renderedNode(of: tab)
         SplitRootView(
             tabID: tab.id,
             root: tab.splitRoot,
-            focusedPaneID: focusedPaneID,
-            zoomedPaneID: zoomedPaneID,
+            focusedPaneID: tab.focusedPaneID,
+            zoomedPaneID: tab.zoomedPaneID,
             isActiveProject: true,
             projectID: project.id,
             resizeGeneration: tab.animatedResizeGeneration,
-            nonLeaderPaneIDs: appState.nonLeaderPaneIDs(in: tab),
-            onFocusPane: { paneID in focus(paneID, in: view) },
-            onSplit: { paneID, dir, position in split(paneID, direction: dir, position: position, in: view) },
+            nonLeaderPaneIDs: appState.nonLeaderPaneIDs(in: tab, window: windowState.id),
+            onFocusPane: { paneID in
+                appState.focusPane(paneID, projectID: project.id, windowID: windowState.id)
+            },
+            onSplit: { paneID, dir, position in split(paneID, direction: dir, position: position) },
             // This closure is the PROCESS-EXIT path only (SplitTreeView
             // wires it to the surface's onProcessExit; the user's Cmd+W
             // goes through Responders → requestClosePane directly).
@@ -1091,18 +1086,17 @@ struct WorkspaceView: View {
             // (drop → keep for the reconnect sweep, #281) and routes a
             // real end through paneProcessExited, where a pinned tab's
             // last pane unloads the tab instead of closing it (#285).
-            //
-            // A mirror's exit is NOT routed: its client dying alone is a
-            // detach, and when the session itself ends the real pane's
-            // own exit closes the tab, taking this view with it.
-            onClosePane: { paneID in
-                if !view.isMirror { appState.handleProcessExit(paneID, projectID: project.id) }
+            onClosePane: { paneID in appState.handleProcessExit(paneID, projectID: project.id) },
+            onCommandFinished: { paneID in
+                appState.acknowledgeFinishedCommandIfActive(paneID: paneID, projectID: project.id)
             },
-            onCommandFinished: { paneID in acknowledge(paneID, in: view) },
-            onAdaptiveBackgroundChange: { paneID, color in adopt(color, paneID: paneID, in: view) },
-            onToggleZoom: { paneID in toggleZoom(paneID, in: view) },
-            paneDrop: dropContext(for: view, renderedNode: renderedNode)
+            onAdaptiveBackgroundChange: { paneID, color in
+                appState.setAdaptiveBackgroundColor(color, paneID: paneID, projectID: project.id, windowID: windowState.id)
+            },
+            onToggleZoom: { paneID in tab.toggleZoom(paneID: paneID) },
+            paneDrop: dropContext(for: tab, renderedNode: renderedNode)
         )
+        .environment(\.paneHostID, windowState.id)
         // Pane grab-handle drags and sidebar tab drags are both captured
         // per leaf (see LeafDropDelegate for why there is no whole-area
         // target), sharing one resolution rendered here (#227). Uses
@@ -1122,25 +1116,16 @@ struct WorkspaceView: View {
         }
     }
 
-    private func renderedNode(of tab: TerminalTab, zoomedPaneID: UUID?) -> SplitNode {
-        if let zoomedPaneID, let pane = tab.splitRoot.findPane(id: zoomedPaneID) {
+    private func renderedNode(of tab: TerminalTab) -> SplitNode {
+        if let zoomedPaneID = tab.zoomedPaneID, let pane = tab.splitRoot.findPane(id: zoomedPaneID) {
             return .pane(pane)
         }
         return tab.splitRoot
     }
 
-    private func focus(_ paneID: UUID, in view: AppState.WindowTabView) {
-        if view.isMirror {
-            appState.focusMirroredPane(paneID, in: view)
-        } else {
-            appState.focusPane(paneID, projectID: project.id)
-        }
-    }
-
-    private func split(_ paneID: UUID, direction: SplitDirection, position: SplitPosition, in view: AppState.WindowTabView) {
-        guard let realID = appState.realPaneID(for: paneID, in: view) else { return }
+    private func split(_ paneID: UUID, direction: SplitDirection, position: SplitPosition) {
         appState.splitPane(
-            realID,
+            paneID,
             direction: direction,
             position: position,
             projectID: project.id,
@@ -1148,35 +1133,13 @@ struct WorkspaceView: View {
         )
     }
 
-    private func acknowledge(_ paneID: UUID, in view: AppState.WindowTabView) {
-        guard let realID = appState.realPaneID(for: paneID, in: view) else { return }
-        appState.acknowledgeFinishedCommandIfActive(paneID: realID, projectID: project.id)
-    }
-
-    private func adopt(_ color: CGColor?, paneID: UUID, in view: AppState.WindowTabView) {
-        if view.isMirror {
-            appState.setAdaptiveBackgroundColor(color, paneID: paneID, in: view.tab)
-        } else {
-            appState.setAdaptiveBackgroundColor(color, paneID: paneID, projectID: project.id)
-        }
-    }
-
-    private func toggleZoom(_ paneID: UUID, in view: AppState.WindowTabView) {
-        guard let realID = appState.realPaneID(for: paneID, in: view) else { return }
-        view.real.toggleZoom(paneID: realID)
-    }
-
-    /// Rearranging happens on the real tab; a mirror view follows its shape
-    /// but accepts no drops of its own.
-    private func dropContext(for view: AppState.WindowTabView, renderedNode: SplitNode) -> PaneDropContext {
-        let tab = view.tab
-        var context = PaneDropContext(
+    private func dropContext(for tab: TerminalTab, renderedNode: SplitNode) -> PaneDropContext {
+        PaneDropContext(
             root: renderedNode,
             resolution: $dropResolution,
             draggedPaneID: draggedPaneID,
-            renderedTabID: view.real.id,
+            renderedTabID: tab.id,
             onMovePane: { paneID, target in
-                guard !view.isMirror else { return }
                 if tab.movePane(paneID, to: target) {
                     appState.saveWorkspaces()
                 }
@@ -1190,8 +1153,6 @@ struct WorkspaceView: View {
                 )
             }
         )
-        if view.isMirror { context.onMergeTab = nil }
-        return context
     }
 }
 

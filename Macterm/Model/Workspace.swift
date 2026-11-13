@@ -22,11 +22,6 @@ final class TerminalTab: Identifiable {
     /// pointer, and a script that sets a ratio then reads pane widths must
     /// see the geometry it asked for. In memory only, never persisted.
     var animatedResizeGeneration = 0
-    /// For a mirror view of another tab (#345): the `shapeSignature` of the
-    /// real tab it was built from, so `AppState.refreshShadow(of:for:)` can
-    /// tell a still-matching mirror from one the real tab has outgrown.
-    @ObservationIgnored
-    var mirrorShape: String?
     /// Most-recent-first stack of previously focused pane IDs
     /// (excludes the currently focused pane).
     @ObservationIgnored
