@@ -1036,7 +1036,9 @@ struct WorkspaceView: View {
     private var dropResolution: TabDropResolution?
 
     var body: some View {
-        if let tab = appState.selectedTab(for: project.id, in: windowState) {
+        if appState.windowDraws(windowState),
+           let tab = appState.selectedTab(for: project.id, in: windowState)
+        {
             if standsAside(tab) {
                 // Nothing rendered, not a blurred copy: a blur over live panes
                 // read as a slab that did not match the window chrome around

@@ -617,6 +617,13 @@ final class AppState {
         return false
     }
 
+    /// Whether `window` draws tabs now. A window that closed can keep its
+    /// SwiftUI view alive; it must draw nothing, or each pane would make a
+    /// surface and a client of the session for it.
+    func windowDraws(_ window: WindowState) -> Bool {
+        renderingWindows.contains { $0.id == window.id }
+    }
+
     /// The size `pane` is drawn at in the window the user is working in: the
     /// view in the key window, else a visible one, else any.
     func displayedSize(of pane: Pane) -> CGSize {
@@ -2020,11 +2027,11 @@ final class AppState {
         clients(of: pane.sessionName).count > 1
     }
 
-    /// Whether `pane` drives its session's pty size: one of its surfaces does.
+    /// Whether `pane` drives its session's pty size, as its first surface does
+    /// (the one the CLI reads).
     /// An unmirrored pane is trivially the leader — it is the only client.
     func isLeader(_ pane: Pane) -> Bool {
-        let attached = clients(of: pane.sessionName)
-        return pane.surfaces.contains { isLeader($0, among: attached) }
+        isLeader(pane.surfaces[0])
     }
 
     /// Whether `surface` is the one driving its session's pty size.
@@ -2052,7 +2059,7 @@ final class AppState {
 
     /// `isLeader(_:)` of a pane against a precomputed attachment list.
     func isLeader(_ pane: Pane, among attached: [PaneSurface]) -> Bool {
-        pane.surfaces.contains { isLeader($0, among: attached) }
+        isLeader(pane.surfaces[0], among: attached)
     }
 
     /// Every client grouped by session name, from ONE traversal.
