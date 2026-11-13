@@ -110,7 +110,8 @@ struct ModelTreeFixtureTests {
                 try ids[#require(fixture["new"] as? String)] = try #require(result.newPaneID)
             case "remove":
                 let want = try #require(fixture["result"] as? String)
-                let target = try #require(ids[Self.string(fixture, "pane")])
+                // An unknown name is a pane that is not in the tree.
+                let target = try ids[Self.string(fixture, "pane")] ?? UUID()
                 if let removed = root.removing(paneID: target) {
                     root = removed
                     #expect(want != "only_pane", "\(name)")
