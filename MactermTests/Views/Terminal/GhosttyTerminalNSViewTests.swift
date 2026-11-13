@@ -169,6 +169,7 @@ struct GhosttyTerminalNSViewTests {
             input.disableHook = oldDisable
             input.isAppActive = oldActive
         }
+        input.setGlobal(false)
         let window = makeFocusWindow()
         let view = makeView()
         defer {
