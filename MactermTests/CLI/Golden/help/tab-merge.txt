@@ -1,0 +1,16 @@
+OVERVIEW: [debug] Merge a tab into the active tab, next to a pane (--dest) or
+at the edge of the workspace.
+
+USAGE: macterm tab merge --tab <tab> --zone <zone> [--dest <dest>] [--project <project>] [--socket <socket>] [--json]
+
+OPTIONS:
+  --tab <tab>             Source tab (title, UUID, or index).
+  --zone <zone>           Side to land on: left, right, top, or bottom.
+  --dest <dest>           Destination pane in the active tab (UUID or index).
+                          Leave it out for the edge of the workspace.
+  --project <project>     Project (name, UUID, or index). The default is the
+                          active project.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

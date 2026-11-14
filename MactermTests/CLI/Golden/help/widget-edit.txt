@@ -1,0 +1,13 @@
+OVERVIEW: Unlock a widget, so it takes input and you can move it and change its
+size. You can edit one widget at a time.
+
+USAGE: macterm widget edit <widget> [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <widget>                Widget (index, widget:N, or id).
+
+OPTIONS:
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

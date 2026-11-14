@@ -1,0 +1,17 @@
+OVERVIEW: [debug] Read a pane's Explain Output popover, or start or close it.
+
+USAGE: macterm pane explain [<action>] [--project <project>] [--tab <tab>] [--pane <pane>] [--session <session>] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <action>                start or close. Omit it to read the state.
+
+OPTIONS:
+  --project <project>     Project scope (name, UUID, or index). The default is
+                          the active project.
+  --tab <tab>             Tab scope (title, UUID, or index).
+  --pane <pane>           Target pane by UUID, or index within the tab (pane:2).
+  --session <session>     Target pane by zmx session name (restart-stable).
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

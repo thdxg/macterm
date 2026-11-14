@@ -1,0 +1,18 @@
+OVERVIEW: [debug] Move a pane, next to another pane (--dest) or to the edge of
+the workspace.
+
+USAGE: macterm pane move --zone <zone> [--dest <dest>] [--project <project>] [--tab <tab>] [--pane <pane>] [--session <session>] [--socket <socket>] [--json]
+
+OPTIONS:
+  --zone <zone>           Side to land on: left, right, top, or bottom.
+  --dest <dest>           Destination pane (UUID or index, same tab). Leave it
+                          out for the edge of the workspace.
+  --project <project>     Project scope (name, UUID, or index). The default is
+                          the active project.
+  --tab <tab>             Tab scope (title, UUID, or index).
+  --pane <pane>           Target pane by UUID, or index within the tab (pane:2).
+  --session <session>     Target pane by zmx session name (restart-stable).
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

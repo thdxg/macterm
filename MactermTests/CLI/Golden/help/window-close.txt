@@ -1,0 +1,11 @@
+OVERVIEW: Close a window. The last visible window hides instead.
+
+USAGE: macterm window close [--window <window>] [--socket <socket>] [--json]
+
+OPTIONS:
+  --window <window>       Window to close (index or id). The default is the
+                          focused window.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

@@ -1,0 +1,40 @@
+OVERVIEW: List, inspect, split, focus and close panes, and run commands in them.
+
+USAGE: macterm pane <subcommand>
+
+OPTIONS:
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  list (default)          List panes. The default is the active project.
+  inspect                 Show the live terminal state of a pane: grid,
+                          scrollback and foreground process.
+  dump                    Print the terminal text of a pane: the viewport, or
+                          the full scrollback with --scrollback.
+  split                   Split a pane. The default is the focused pane, or the
+                          pane that you are in.
+  mirror                  Mirror a pane. Show the same session in a second pane.
+  focus                   Focus a pane, or its neighbor in a direction. This
+                          selects its tab and brings the window forward.
+  close                   Close a pane. This kills its zmx session.
+  run                     Type a command into the shell of a live pane. Add a
+                          newline.
+  key                     Send a single key press to a live pane.
+  zoom                    Turn zoom on or off for a pane. While zoomed, the tab
+                          shows only that pane.
+  resize-split            Set the ratio of the nearest split around a pane,
+                          from 0.15 to 0.85.
+  resize                  [debug] Change the size of the surface of a pane to
+                          COLS×ROWS, with no layout.
+  move                    [debug] Move a pane, next to another pane (--dest) or
+                          to the edge of the workspace.
+  password                [debug] Read a pane's password-prompt state, or
+                          answer its bubble.
+  copy-mode               [debug] Read a pane's copy-mode state, or enter or
+                          exit the mode.
+  read-only               [debug] Toggle read-only on a pane. Read the state
+                          with pane inspect.
+  explain                 [debug] Read a pane's Explain Output popover, or
+                          start or close it.
+
+  See 'macterm help pane <subcommand>' for detailed help.

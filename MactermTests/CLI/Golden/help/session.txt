@@ -1,0 +1,14 @@
+OVERVIEW: Inspect and kill terminal sessions that zmx runs.
+
+USAGE: macterm session <subcommand>
+
+OPTIONS:
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  list (default)          List live zmx sessions.
+  info                    Show one zmx session.
+  kill                    Kill a zmx session. Its shell ends, and the shell of
+                          a connected pane exits.
+
+  See 'macterm help session <subcommand>' for detailed help.

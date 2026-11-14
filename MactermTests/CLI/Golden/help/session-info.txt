@@ -1,0 +1,12 @@
+OVERVIEW: Show one zmx session.
+
+USAGE: macterm session info <name> [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <name>                  Session name (macterm-<slug>-<hex>).
+
+OPTIONS:
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

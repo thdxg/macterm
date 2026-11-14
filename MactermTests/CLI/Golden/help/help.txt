@@ -1,0 +1,31 @@
+OVERVIEW: Control a running Macterm: projects, tabs, panes, zmx sessions.
+
+USAGE: macterm <subcommand>
+
+OPTIONS:
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  status                  Show whether Macterm is running and which project is
+                          active.
+  project                 List, create, select, rename, and remove projects.
+  tab                     List, create, select, reorder, and close tabs.
+  window                  List, open and close terminal windows.
+  widget                  List, add, edit and remove desktop widgets.
+  palette                 List the palettes of the installed extensions and
+                          show if Macterm can read each one.
+  pane                    List, inspect, split, focus and close panes, and run
+                          commands in them.
+  grid                    Split a pane into an equal ROWSxCOLS grid.
+  session                 Inspect and kill terminal sessions that zmx runs.
+  layout                  Apply or save the declarative layout file of a
+                          project.
+  tutor                   Print a short tutorial. It uses your current keybinds.
+  ssh                     Run ssh with terminfo install and environment
+                          forwarding. It works with no running app.
+  skills                  Print skills that teach AI coding agents to use
+                          Macterm. It works with no running app.
+  host                    [debug] Open or end a host's ssh connection, or reach
+                          its server.
+
+  See 'macterm help <subcommand>' for detailed help.

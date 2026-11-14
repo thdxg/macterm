@@ -1,0 +1,43 @@
+OVERVIEW: Type a command into the shell of a live pane. Add a newline.
+
+Pastes a command line into an existing pane's shell and submits it.
+
+Put the command line after `--`: everything after it is typed verbatim, dashes
+included, so `macterm pane run --session X -- ls -la` types `ls -la` into X.
+Before `--`, this command's flags are parsed wherever they appear and words
+with no leading dash are typed, so `macterm pane run ls` needs no `--`. Any
+other dash-prefixed word before `--` is an error and nothing is typed: `macterm
+pane run ls -la` refuses rather than guess whose flag `-la` is. `--help` or
+`-h` before `--` shows this help.
+
+`--no-submit` withholds the trailing newline, so the text lands on the prompt
+unsubmitted — pre-filling a command for a human to inspect, or feeding a TUI
+that submits on its own terms. Follow it with `macterm pane key return` to
+execute; that Return registers as a real command submission, exactly as if the
+text had been typed.
+
+Both forms ride the terminal's paste path. Reach for `pane key` instead when
+you need a real key *event* — a control byte (`ctrl+c`) or a named key
+(`escape`, `up`) — which no text can express.
+
+With no pane/tab/session selector it targets the current pane via
+$MACTERM_SESSION.
+
+USAGE: macterm pane run [<options>] [--] <command> ...
+
+ARGUMENTS:
+  <command>               The command line to type, after `--`, exactly as you
+                          wrote it.
+
+OPTIONS:
+  --no-submit             Leave the text at the shell prompt. Do not run it.
+                          (This leaves out the newline at the end.)
+  --project <project>     Project scope (name, UUID, or index). The default is
+                          the active project.
+  --tab <tab>             Tab scope (title, UUID, or index).
+  --pane <pane>           Target pane by UUID, or index within the tab (pane:2).
+  --session <session>     Target pane by zmx session name (restart-stable).
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

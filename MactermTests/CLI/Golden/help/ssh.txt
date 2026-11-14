@@ -1,0 +1,34 @@
+OVERVIEW: Run ssh with terminfo install and environment forwarding. It works
+with no running app.
+
+Installs the bundled xterm-ghostty terminfo of Macterm on the destination at
+the first connection (the result is cached). Sets TERM to a value that the host
+can resolve. Requests SendEnv forwarding for COLORTERM, TERM_PROGRAM and
+TERM_PROGRAM_VERSION. Then it replaces itself with the real ssh. The flags and
+the destination of ssh pass through exactly as you wrote them:
+
+  macterm ssh user@example.com
+  macterm ssh -p 2222 -i ~/.ssh/id_ed25519 user@example.com
+  macterm ssh --terminfo=false user@example.com
+
+This is the engine behind the ssh wrapper of the shell integration (the ssh-env
+and ssh-terminfo features). It mirrors `ghostty +ssh`.
+
+USAGE: macterm ssh [--forward-env <forward-env>] [--terminfo <terminfo>] [--cache <cache>] [--ssh <ssh>] [--verbose] [<ssh-args> ...]
+
+ARGUMENTS:
+  <ssh-args>              Arguments for ssh, exactly as you wrote them (flags,
+                          destination, command).
+
+OPTIONS:
+  --forward-env <forward-env>
+                          Set TERM and request SendEnv forwarding. (default:
+                          true)
+  --terminfo <terminfo>   Install the bundled xterm-ghostty terminfo at the
+                          first connection. (default: true)
+  --cache <cache>         Use the terminfo install cache. (default: true)
+  --ssh <ssh>             Path to the ssh binary. The default is the first
+                          `ssh` in PATH. (default: ssh)
+  --verbose               Print status lines to stderr.
+  -h, --help              Show help information.
+

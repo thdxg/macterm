@@ -1,0 +1,18 @@
+OVERVIEW: List, create, select, rename, and remove projects.
+
+USAGE: macterm project <subcommand>
+
+OPTIONS:
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  list (default)          List all projects.
+  create                  Add a project for a local directory or a remote spec.
+                          Each run adds a new project.
+  select                  Make a project active.
+  rename                  Rename a project.
+  remove                  Remove a project. This kills the zmx sessions of its
+                          panes.
+  memory                  [debug] Read a project's memory, or change it.
+
+  See 'macterm help project <subcommand>' for detailed help.

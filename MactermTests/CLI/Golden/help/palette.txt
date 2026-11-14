@@ -1,0 +1,14 @@
+OVERVIEW: List the palettes of the installed extensions and show if Macterm can
+read each one.
+
+USAGE: macterm palette <subcommand>
+
+OPTIONS:
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  list (default)          List the palettes of the extensions in
+                          ~/.config/macterm/extensions with their name, state
+                          and any error.
+
+  See 'macterm help palette <subcommand>' for detailed help.

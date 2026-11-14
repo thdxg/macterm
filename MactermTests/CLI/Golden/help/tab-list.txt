@@ -1,0 +1,11 @@
+OVERVIEW: List tabs. The default is the active project.
+
+USAGE: macterm tab list [--project <project>] [--socket <socket>] [--json]
+
+OPTIONS:
+  --project <project>     Project to list (name, UUID, or index). The default
+                          is the active project.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

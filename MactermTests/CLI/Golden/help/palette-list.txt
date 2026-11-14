@@ -1,0 +1,10 @@
+OVERVIEW: List the palettes of the extensions in ~/.config/macterm/extensions
+with their name, state and any error.
+
+USAGE: macterm palette list [--socket <socket>] [--json]
+
+OPTIONS:
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+
