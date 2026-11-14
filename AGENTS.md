@@ -164,7 +164,7 @@ A pane that asks for a password gets a native `NSPopover` at the cursor (`Passwo
   - `pane run` and `pane key` feed the same capture (`viewDidSendText` and `viewDidSendKey`). This is how the e2e suite answers prompts. The monitor fences off its own autofill typing (`isInjecting`).
   - Everything that the monitor reads or drives goes through `PasswordPromptMonitor.Probes`. `PasswordPromptMonitorStateTests` therefore runs the whole machine without a surface.
   - A sighting must hold for 200 ms, unless the user types at it. A script that drops echo to read a reply of the terminal is not a prompt.
-  - Prompts on a remote host *inside* ssh are invisible, because the local ssh client is raw. The own ssh login of a remote project asks in a sheet (`SSHLoginPrompts`), not in the pane.
+  - Prompts of a host's session (`sudo` on a host) are seen through `tty_mode` (see "Prompts on a host"). Prompts inside an `ssh` that you typed by hand stay invisible, because the local ssh client is raw. The own ssh login of a remote project asks in a sheet (`SSHLoginPrompts`), not in the pane.
 - **The identity is the command and the prompt line** (`PasswordEntryID`). The command is the foreground command, named by the **real path of its executable** (`ProcessInspector.passwordAsker`: `proc_pidpath` and argv without argv[0]). The prompt line is the last viewport line that is not empty.
   - Never use argv[0]. A process sets it for itself. `exec -a ssh ./fake prod` would collect the password that Macterm saved for the real ssh.
   - `runningCommand` (the capture of `run:` for a layout) still uses argv. Do not change it.
@@ -211,6 +211,11 @@ A pane that asks for a password gets a native `NSPopover` at the cursor (`Passwo
 - **`pane password` (DEBUG only)** reads the phase, prompt, command and bubble of a pane. It never reads a secret. `--answer accept|dismiss|autofill` presses the buttons of the bubble. `scripts/e2e/test_passwords.py` drives the whole flow with it against a `stty -echo; read` script.
 - **Never** add a CLI verb, an App Intent or a log line that carries a secret. Any process in a pane can call `macterm`.
   - Autofill Password is an `AppCommand` (default ⌥⌘F). Its action is nil unless the focused pane is at a saved prompt. As for every chord with a nil action, `isAppShortcut` then swallows it in `keyDown`. It does nothing, and it does not reach libghostty (which has no default on `super+alt+f`).
+
+**Prompts on a host** (design/006 section 6, Ethan: B). A remote pane attaches with `tty: true`. The host's session reads the pty's `ICANON` and `ECHO` and sends `tty_mode` when they change and to a client that connects (`Session.checkTty`). The app keeps the mode in `Pane.remoteLineMode`, and the monitor's probes read it for a remote pane. Line capture and the judge stay in the app: no secret goes to a host.
+
+- **A host entry has a scope** (`PasswordEntryID.host`): the ssh destination as `ssh -G` resolves it (`RemotePasswordScope`, read again after 60 s). With no scope yet, or after a failure, the asker is `.unknown`: nothing is filled or offered.
+- **Nothing a host reports is protected.** There is no shared `sudo` entry and no shared key passphrase entry on a host: each is filed under the host's command line. A process on a host can print any prompt and rewrite its own argv, so the host's word is a hint only.
 
 ### Copy mode (fork patches 0013 to 0018)
 
@@ -1370,4 +1375,4 @@ Macterm-side settings go through `Preferences`. Settings that have the shape of 
 - **`macos-hidden = always` costs the menu bar**. Settings, Quit, About and Check for Updates have no route while it is on. Set the own preferences of Macterm before you switch it on.
 - **Pane IDs are not stable across restarts.**
 - **Desktop widgets are not in the widget gallery of the system**. See Desktop widgets. They also do not take the monochrome look of the system while an app is in front.
-- **Macterm detects password prompts only where it can read the tty that prompts**. This means local panes. It does not see `sudo` on a remote host, or anything behind an `ssh` that you typed by hand. It does not see prompts in raw mode that draw their own `*` mask either.
+- **Macterm detects password prompts only where it can read the tty that prompts**. This means local panes, and remote panes whose host session reports its tty (`tty_mode`, protocol level 3). It does not see anything behind an `ssh` that you typed by hand. It does not see prompts in raw mode that draw their own `*` mask either.

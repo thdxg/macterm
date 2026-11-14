@@ -4,7 +4,7 @@ import Foundation
 /// Do not edit. Run `mise run protocol` after a change to the Zig schema.
 enum MactermProtocol {
     /// The level that this build speaks. It counts additions to the protocol.
-    static let level: UInt32 = 2
+    static let level: UInt32 = 3
     /// The lowest level that this build accepts from a peer.
     static let minLevel: UInt32 = 1
 
@@ -1422,6 +1422,7 @@ extension MactermProtocol {
         var xpixel: UInt16 = 0
         var ypixel: UInt16 = 0
         var foreground: Bool = false
+        var tty: Bool = false
         var resumeEpoch: UInt64?
         var resumeOffset: UInt64?
     }
@@ -1434,6 +1435,7 @@ extension MactermProtocol.Attach: ProtocolValue {
         var xpixel: UInt16?
         var ypixel: UInt16?
         var foreground: Bool?
+        var tty: Bool?
         var resumeEpoch: UInt64?
         var resumeOffset: UInt64?
         try reader.readMap { key, reader in
@@ -1443,6 +1445,7 @@ extension MactermProtocol.Attach: ProtocolValue {
             case "xpixel": xpixel = try UInt16(from: &reader)
             case "ypixel": ypixel = try UInt16(from: &reader)
             case "foreground": foreground = try Bool(from: &reader)
+            case "tty": tty = try Bool(from: &reader)
             case "resume_epoch": resumeEpoch = try reader.readOptional(UInt64.self)
             case "resume_offset": resumeOffset = try reader.readOptional(UInt64.self)
             default: return false
@@ -1454,12 +1457,13 @@ extension MactermProtocol.Attach: ProtocolValue {
         self.xpixel = xpixel ?? 0
         self.ypixel = ypixel ?? 0
         self.foreground = foreground ?? false
+        self.tty = tty ?? false
         self.resumeEpoch = resumeEpoch
         self.resumeOffset = resumeOffset
     }
 
     func encode(to writer: inout MessagePackWriter) {
-        var keyCount = 5
+        var keyCount = 6
         if resumeEpoch != nil { keyCount += 1 }
         if resumeOffset != nil { keyCount += 1 }
         writer.writeMapHeader(keyCount)
@@ -1473,6 +1477,8 @@ extension MactermProtocol.Attach: ProtocolValue {
         ypixel.encode(to: &writer)
         writer.writeString("foreground")
         foreground.encode(to: &writer)
+        writer.writeString("tty")
+        tty.encode(to: &writer)
         if let resumeEpoch {
             writer.writeString("resume_epoch")
             resumeEpoch.encode(to: &writer)
@@ -2227,6 +2233,38 @@ extension MactermProtocol.Resumed: ProtocolValue {
     }
 }
 
+extension MactermProtocol {
+    struct TtyMode: Equatable {
+        var canonical: Bool
+        var echo: Bool
+    }
+}
+
+extension MactermProtocol.TtyMode: ProtocolValue {
+    init(from reader: inout MessagePackReader) throws {
+        var canonical: Bool?
+        var echo: Bool?
+        try reader.readMap { key, reader in
+            switch key {
+            case "canonical": canonical = try Bool(from: &reader)
+            case "echo": echo = try Bool(from: &reader)
+            default: return false
+            }
+            return true
+        }
+        self.canonical = try MessagePackReader.required(canonical, "canonical")
+        self.echo = try MessagePackReader.required(echo, "echo")
+    }
+
+    func encode(to writer: inout MessagePackWriter) {
+        writer.writeMapHeader(2)
+        writer.writeString("canonical")
+        canonical.encode(to: &writer)
+        writer.writeString("echo")
+        echo.encode(to: &writer)
+    }
+}
+
 extension MactermProtocol.Hello: ProtocolMessage {
     static let name = "hello"
     static let since: UInt32 = 1
@@ -2386,5 +2424,11 @@ extension MactermProtocol.Seen: ProtocolMessage {
 extension MactermProtocol.Resumed: ProtocolMessage {
     static let name = "resumed"
     static let since: UInt32 = 2
+    static let senders: [MactermProtocol.Trust] = [.session]
+}
+
+extension MactermProtocol.TtyMode: ProtocolMessage {
+    static let name = "tty_mode"
+    static let since: UInt32 = 3
     static let senders: [MactermProtocol.Trust] = [.session]
 }

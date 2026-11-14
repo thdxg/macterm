@@ -53,6 +53,7 @@ final class RecordingPaneHost: PaneSessionHost, @unchecked Sendable {
     }
 
     func paneSnapshot(started _: Bool) {}
+    func paneTtyMode(_: MactermProtocol.TtyMode) {}
     func paneForeground(_ foreground: MactermProtocol.Foreground) {
         lock.lock()
         state.foreground = foreground

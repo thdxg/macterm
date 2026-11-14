@@ -141,10 +141,10 @@ class Client:
     def pane(self, t, **a):
         self.send_msg(PANE, {"t": t, "a": a})
 
-    def attach(self, cols=80, rows=24, foreground=False, resume=None):
+    def attach(self, cols=80, rows=24, foreground=False, resume=None, tty=False):
         """`resume` is (epoch, offset): ask to resume (design/003 section 7)."""
         extra = {} if resume is None else {"resume_epoch": resume[0], "resume_offset": resume[1]}
-        self.pane("attach", cols=cols, rows=rows, foreground=foreground, **extra)
+        self.pane("attach", cols=cols, rows=rows, foreground=foreground, tty=tty, **extra)
 
     def epoch(self):
         """The `epoch` of the peer's hello."""

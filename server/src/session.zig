@@ -279,6 +279,8 @@ const Client = struct {
     attached: bool = false,
     /// Its `attach` asked for `foreground` messages.
     wants_foreground: bool = false,
+    /// Its `attach` asked for `tty_mode` messages.
+    wants_tty: bool = false,
     /// Its output was dropped. It gets a snapshot when it can take data.
     behind: bool = false,
     /// Close it when its queue is empty (after a refusal).
@@ -341,6 +343,8 @@ const Session = struct {
     foreground_pgid: ?lib_posix.pid_t = null,
     foreground_read_at: i64 = 0,
     foreground_hash: u64 = 0,
+    /// The last tty mode sent (`ttyModeOf`), or null before the first read.
+    tty_mode: ?m.TtyMode = null,
     etc_shells: ?[]const u8 = null,
     etc_shells_loaded: bool = false,
     etc_shells_buf: [4096]u8 = undefined,
@@ -416,6 +420,7 @@ const Session = struct {
             // while the pty was quiet.
             s.watch.flush(s.nowMs());
             s.checkForeground(null);
+            s.checkTty(null);
             s.sendEvents();
 
             if (fds.items[2].revents & lib_posix.POLL.IN != 0) {
@@ -546,6 +551,7 @@ const Session = struct {
         // A foreground change goes before the output: a report that the
         // shell is back lands before the shell's prompt (zmx 0010).
         s.checkForeground(null);
+        s.checkTty(null);
         // Each event goes between the output before the sequence that gave
         // it and the output after: a client that reads its screen at an end
         // mark has the command's last line. The terminal parses up to the
@@ -708,6 +714,10 @@ const Session = struct {
             if (a.foreground and !c.wants_foreground) {
                 c.wants_foreground = true;
                 s.checkForeground(c);
+            }
+            if (a.tty and !c.wants_tty) {
+                c.wants_tty = true;
+                s.checkTty(c);
             }
         } else if (std.mem.eql(u8, msg.t, m.Resize.name)) {
             // Only a client that shows the pane has a size that counts.
@@ -948,7 +958,7 @@ const Session = struct {
     }
 
     fn pollTimeout(s: *const Session) i32 {
-        return pollTimeoutFor(foreground.supported and s.hasForegroundClient(), s.watch.deadline(), s.nowMs());
+        return pollTimeoutFor((foreground.supported and s.hasForegroundClient()) or s.hasTtyClient(), s.watch.deadline(), s.nowMs());
     }
 
     /// A live client asked for `foreground` messages. With none, the
@@ -956,6 +966,41 @@ const Session = struct {
     fn hasForegroundClient(s: *const Session) bool {
         for (s.clients.items) |c| if (c.wants_foreground and !c.dead) return true;
         return false;
+    }
+
+    /// A live client asked for `tty_mode` messages.
+    fn hasTtyClient(s: *const Session) bool {
+        for (s.clients.items) |c| if (c.wants_tty and !c.dead) return true;
+        return false;
+    }
+
+    /// Reads the pty's line modes and sends `tty_mode` to the clients that
+    /// asked for it when they changed. A program that reads a password puts
+    /// the tty in canonical mode with echo off, and the GUI cannot read this
+    /// tty when the session is on another machine. With `new_client`, that
+    /// client alone gets the current mode. Nothing is read with no such
+    /// client. The message carries two flags, never any input.
+    fn checkTty(s: *Session, new_client: ?*Client) void {
+        if (s.pty_closed or !s.hasTtyClient()) return;
+        var t: cross.termios = undefined;
+        if (cross.tcgetattr(s.pty_fd, &t) != 0) return;
+        const now = ttyModeOf(t.c_lflag);
+        if (s.tty_mode) |last| if (last.canonical == now.canonical and last.echo == now.echo) {
+            if (new_client) |c| s.sendPane(c, m.TtyMode, now);
+            return;
+        };
+        s.tty_mode = now;
+        var out: std.Io.Writer.Allocating = .init(s.gpa);
+        defer out.deinit();
+        m.encodePane(&out.writer, m.TtyMode, now) catch return;
+        for (s.clients.items) |c| {
+            if (!c.wants_tty or c.dead or c.behind) continue;
+            c.out.append(s.gpa, m.pane_channel, .msg, out.written(), true) catch {
+                s.dropClient(c);
+                continue;
+            };
+            s.checkHardCap(c);
+        }
     }
 
     /// Reads the pty's foreground process group and, when it changed, sends
@@ -1045,6 +1090,7 @@ const Session = struct {
     /// to a client that asked for it at its `attach`.
     fn sendCurrent(s: *Session, c: *Client) void {
         if (c.wants_foreground) s.checkForeground(c);
+        if (c.wants_tty) s.checkTty(c);
 
         var list: std.ArrayList(events.Event) = .empty;
         defer list.deinit(s.gpa);
@@ -1098,6 +1144,14 @@ const Session = struct {
         s.dropClient(c);
     }
 };
+
+/// The line modes of a pty from its `c_lflag`.
+fn ttyModeOf(lflag: anytype) m.TtyMode {
+    return .{
+        .canonical = lflag & cross.ICANON != 0,
+        .echo = lflag & cross.ECHO != 0,
+    };
+}
 
 /// The index after the next string terminator (BEL, or ESC \) at or after
 /// `from`, or the end of `data`.

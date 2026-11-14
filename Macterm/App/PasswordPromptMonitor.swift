@@ -63,14 +63,23 @@ final class PasswordPromptMonitor {
 
     /// The monitor's reads of and writes to the world, injectable for tests.
     struct Probes {
-        var isReadingPassword: @MainActor (Pane) -> Bool = ProcessInspector.terminalIsReadingPassword(forPane:)
-        var isNonCanonical: @MainActor (Pane) -> Bool = ProcessInspector.terminalIsNonCanonical(forPane:)
+        var isReadingPassword: @MainActor (Pane) -> Bool = {
+            $0.isRemote ? $0.remoteLineMode == .password : ProcessInspector.terminalIsReadingPassword(forPane: $0)
+        }
+
+        var isNonCanonical: @MainActor (Pane) -> Bool = {
+            $0.isRemote ? $0.remoteLineMode == .raw : ProcessInspector.terminalIsNonCanonical(forPane: $0)
+        }
+
         var screenText: @MainActor (GhosttyTerminalNSView) -> String? = { $0.readText(scrollback: false) }
         /// The screen with its scrollback, so a submission's output is
         /// measured from where the transcript ended at Return.
         var transcript: @MainActor (GhosttyTerminalNSView) -> String? = { $0.readText(scrollback: true) }
         var asker: @MainActor (Pane) -> PasswordAsker = PasswordPromptMonitor.asker(for:)
-        var foregroundIsLocalShell: @MainActor (Pane) -> Bool = ProcessInspector.foregroundProcessIsShell(forPane:)
+        var foregroundIsLocalShell: @MainActor (Pane) -> Bool = {
+            $0.isRemote ? $0.remoteForegroundIsShell : ProcessInspector.foregroundProcessIsShell(forPane: $0)
+        }
+
         var anchor: @MainActor (GhosttyTerminalNSView) -> NSRect? = { view in
             PasswordPromptMonitor.isShowing(view) ? view.cursorCellRect() : nil
         }
@@ -85,7 +94,12 @@ final class PasswordPromptMonitor {
         }
 
         var isAppActive: @MainActor () -> Bool = { NSApp.isActive }
-        var lineMode: @MainActor (Pane) -> TerminalLineMode? = ProcessInspector.terminalLineMode(forPane:)
+        /// nil for a remote pane: its mode is a report that is as old as the
+        /// last poll, so an on-demand fill there never presses Return.
+        var lineMode: @MainActor (Pane) -> TerminalLineMode? = {
+            $0.isRemote ? nil : ProcessInspector.terminalLineMode(forPane: $0)
+        }
+
         /// Types a secret for an on-demand fill: the text path minus
         /// command-submission evidence; ⌃U before and Return after only at a
         /// verified read.
@@ -772,13 +786,15 @@ final class PasswordPromptMonitor {
     /// client's executable, as for any other program.
     static func asker(for pane: Pane) -> PasswordAsker {
         if pane.isRemote {
-            guard case let .remote(user, host, _)? = ProjectPath.parse(pane.projectPath) else { return .unknown }
-            let client = ProcessInspector.surfaceExecutable(forPane: pane)
-            return .program(
-                path: client?.path ?? "",
-                command: PasswordPromptIdentity.remoteCommand(user: user, host: host),
-                isProtected: client?.isProtected ?? false
-            )
+            // A prompt a host's session reported: filed under the ssh
+            // destination as the Mac resolves it. With no destination yet, or
+            // no foreground report, nobody can say who asks.
+            guard let destination = pane.remoteDestination,
+                  let scope = RemotePasswordScope.scope(for: destination),
+                  let report = pane.remoteForegroundReport
+            else { return .unknown }
+            let isShell = report.isIdle ?? pane.remoteForegroundIsShell
+            return .remote(scope: scope, command: isShell ? nil : (report.command ?? report.comm))
         }
         return ProcessInspector.passwordAsker(forPane: pane)
     }

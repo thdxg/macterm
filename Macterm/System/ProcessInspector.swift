@@ -121,15 +121,6 @@ enum ProcessInspector {
         }
     }
 
-    /// The executable of a remote project's local ssh client — the surface's
-    /// own foreground, since a remote pane has no zmx hop — as `passwordAsker`
-    /// would judge it. Nil when the surface has no readable foreground.
-    @MainActor
-    static func surfaceExecutable(forPane pane: Pane) -> (path: String, isProtected: Bool)? {
-        guard let pid = pane.nsView?.foregroundPID, let path = executablePath(pid: pid) else { return nil }
-        return (path, isProtectedExecutable(atPath: path))
-    }
-
     /// The parent of `pid` (`proc_pidinfo`), or nil when the process is gone.
     nonisolated static func parentPID(of pid: pid_t) -> pid_t? {
         var info = proc_bsdinfo()

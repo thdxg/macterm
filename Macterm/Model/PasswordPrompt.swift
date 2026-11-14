@@ -25,13 +25,23 @@ import Foundation
 struct PasswordEntryID: Hashable, Codable {
     let command: String?
     let prompt: String
+    /// The ssh destination as the Mac resolves it (`user@hostname:port`), for
+    /// a prompt that a host's session reported. nil for this Mac. A host's
+    /// entry never matches an entry of this Mac or of another host.
+    var host: String?
 
     /// The Keychain account string. Readable in Keychain Access, deterministic
     /// for a lookup, and never parsed back — the entry's metadata is.
     var account: String {
-        if prompt.isEmpty { return "\(command ?? "") — on demand" }
-        if let command { return "\(command) — \(prompt)" }
-        return prompt
+        let base: String = if prompt.isEmpty {
+            "\(command ?? "") — on demand"
+        } else if let command {
+            "\(command) — \(prompt)"
+        } else {
+            prompt
+        }
+        guard let host else { return base }
+        return "\(host) › \(base)"
     }
 
     /// Filled only from the palette, never offered at a prompt.
@@ -39,7 +49,10 @@ struct PasswordEntryID: Hashable, Codable {
 
     /// What a person reads as "which one": the command, or the prompt when
     /// the entry is command-independent.
-    var title: String { displayCommand ?? prompt }
+    var title: String {
+        let base = displayCommand ?? prompt
+        return host.map { "\(base) (\($0))" } ?? base
+    }
 
     /// The command as shown: the process table reports the program the
     /// command resolved to (`python3` runs `/opt/homebrew/…/Python`), so a
@@ -59,7 +72,9 @@ struct PasswordEntryID: Hashable, Codable {
         guard let program = parts.first else { return command }
         let path = String(program)
         let name = path.contains("/") ? (path as NSString).lastPathComponent : path
-        if name == "sudo", path.contains("/") {
+        // On a host nothing is protected and the entry names its host, so a
+        // path there is only how the host named the program.
+        if name == "sudo", path.contains("/"), host == nil {
             return (path as NSString).abbreviatingWithTildeInPath + (parts.count > 1 ? " \(parts[1])" : "")
         }
         guard parts.count > 1 else { return name }
@@ -106,6 +121,15 @@ enum PasswordPromptIdentity {
             return nil
         case .shell:
             return PasswordEntryID(command: nil, prompt: prompt)
+        case let .remote(scope, command):
+            // The host's word is all there is: nothing is protected, so no
+            // entry is shared across programs or hosts.
+            guard let command else { return PasswordEntryID(command: nil, prompt: prompt, host: scope) }
+            // A key passphrase is filed under the command like any prompt: a
+            // process on the host can print any prompt, and the host cannot
+            // prove which program asks.
+            let normalized = normalize(command)
+            return PasswordEntryID(command: normalized.isEmpty ? nil : normalized, prompt: prompt, host: scope)
         case let .program(path, command, isProtected):
             let command = normalize(command)
             if isKeyPassphrase(prompt) {
@@ -158,24 +182,21 @@ enum PasswordPromptIdentity {
         let first = command.split(separator: " ", maxSplits: 1).first.map(String.init) ?? ""
         return (first as NSString).lastPathComponent == "sudo"
     }
-
-    /// What a remote project's own pane is running when its ssh asks for a
-    /// password: Macterm's spawn wrapper is an implementation detail, so the
-    /// entry is filed under the connection it makes.
-    static func remoteCommand(user: String?, host: String) -> String {
-        if let user, !user.isEmpty { "ssh \(user)@\(host)" } else { "ssh \(host)" }
-    }
 }
 
 /// Who is reading a password, as far as the process table can vouch for it.
 enum PasswordAsker: Equatable {
     /// A program. `path` is its executable's real path (`proc_pidpath`),
-    /// `command` that path plus its arguments — or, for a remote project's own
-    /// login, the connection it makes (`ssh user@host`). `isProtected`: the
+    /// `command` that path plus its arguments. `isProtected`: the
     /// executable and every directory above it belong to root and aren't
     /// writable by the user (`ProcessInspector.isProtectedExecutable`), so no
     /// process of the user's can have put it there or changed it.
     case program(path: String, command: String, isProtected: Bool)
+    /// A program on a host, as the host's session reported it. `scope` is the
+    /// ssh destination as the Mac resolves it. `command` is the foreground's
+    /// command line, nil for the host's idle shell. The host cannot prove
+    /// that a program is the real `sudo`, so nothing here is protected.
+    case remote(scope: String, command: String?)
     /// The pane's own idle shell, reading with a builtin (`read -s`).
     case shell
     /// The foreground couldn't be read.
@@ -195,8 +216,10 @@ enum TerminalLineMode: Equatable {
     case raw
 
     init(localModes flags: tcflag_t) {
-        let canonical = flags & tcflag_t(ICANON) != 0
-        let echo = flags & tcflag_t(ECHO) != 0
+        self.init(canonical: flags & tcflag_t(ICANON) != 0, echo: flags & tcflag_t(ECHO) != 0)
+    }
+
+    init(canonical: Bool, echo: Bool) {
         self = canonical ? (echo ? .echoing : .password) : .raw
     }
 }

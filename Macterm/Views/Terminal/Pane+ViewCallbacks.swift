@@ -153,6 +153,9 @@ extension Pane {
         view.onRemoteForeground = { [weak self] foreground in
             self?.applyRemoteForeground(foreground)
         }
+        view.onRemoteTtyMode = { [weak self] mode in
+            self?.remoteLineMode = mode
+        }
         view.onBackgroundColorChange = { [weak view] color in
             guard let view else { return }
             AdaptiveTerminalChrome.shared.terminalBackgroundDidChange(color, in: view)

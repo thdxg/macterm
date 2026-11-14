@@ -12,7 +12,9 @@ import SwiftUI
 /// hands key straight back to the terminal's window (`returnKey`), so the
 /// next keystroke lands in the pane. Return and Escape reach it through the
 /// terminal's own key path (`PasswordPromptMonitor`), never as popover
-/// shortcuts, which is why the buttons carry no key hints.
+/// shortcuts, which is why the buttons carry no key hints. The primary button
+/// is the default action, so it draws as the default and the secondary ones
+/// never take a focus ring.
 @MainActor
 class PasswordBubble: NSObject, NSPopoverDelegate {
     enum Content: Equatable {
@@ -102,6 +104,16 @@ class PasswordBubble: NSObject, NSPopoverDelegate {
         self.popover = popover
         anchorView = view
         returnKey(to: view)
+        // The popover's window becomes key a moment after `show`, so the
+        // call above can find the terminal's window still key and do nothing.
+        // Two later looks give key back before the user types: the first
+        // characters of a command that follows the bubble must not be lost.
+        for delay in [0.0, 0.15] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak view] in
+                guard let self, let view, isShown else { return }
+                returnKey(to: view)
+            }
+        }
     }
 
     /// Take the popover down. Overridden by the test double.
@@ -129,6 +141,8 @@ class PasswordBubble: NSObject, NSPopoverDelegate {
         let popoverWindow = popover?.contentViewController?.view.window
         guard NSApp.keyWindow == nil || NSApp.keyWindow === popoverWindow else { return }
         window.makeKey()
+        // The terminal gets the keys again, not only its window.
+        if window.firstResponder !== view, view.acceptsFirstResponder { window.makeFirstResponder(view) }
     }
 
     private func wrapped(_ actions: Actions) -> Actions {
@@ -176,8 +190,10 @@ private struct PasswordBubbleView: View {
                 HStack {
                     Spacer()
                     Button("Not Now") { model.actions.dismiss() }
+                        .focusable(false)
                     Button("Autofill") { model.actions.autofill() }
                         .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
                         .disabled(busy)
                 }
             case let .rejected(id):
@@ -189,9 +205,11 @@ private struct PasswordBubbleView: View {
                 entry(id)
                 HStack {
                     Button("Remove Saved Password", role: .destructive) { model.actions.removeSaved() }
+                        .focusable(false)
                     Spacer()
                     Button("OK") { model.actions.primary() }
                         .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
                 }
             case let .save(id, isUpdate, problem):
                 header(
@@ -210,8 +228,10 @@ private struct PasswordBubbleView: View {
                 HStack {
                     Spacer()
                     Button("Cancel") { model.actions.dismiss() }
+                        .focusable(false)
                     Button(isUpdate ? "Update" : "Save") { model.actions.primary() }
                         .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
                 }
             case nil:
                 EmptyView()

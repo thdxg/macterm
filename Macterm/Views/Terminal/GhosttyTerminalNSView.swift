@@ -441,6 +441,8 @@ final class GhosttyTerminalNSView: NSView {
     var onSnapshotMark: ((Bool) -> Void)?
     /// The host's session reports the pane's foreground (`PaneChannelEvent`).
     var onRemoteForeground: ((RemoteForeground) -> Void)?
+    /// The host's session reports how the pane's pty reads input.
+    var onRemoteTtyMode: ((TerminalLineMode) -> Void)?
     /// The link URL under the mouse (`GHOSTTY_ACTION_MOUSE_OVER_LINK`), nil
     /// when the pointer leaves it. Drives the pane's hover-URL banner.
     var onLinkHover: ((String?) -> Void)?

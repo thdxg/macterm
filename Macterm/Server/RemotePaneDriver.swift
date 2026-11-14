@@ -111,7 +111,7 @@ final class RemotePaneDriver: PaneInputRoute {
                 if let note = made.note { surface.paneFeed(Data(Self.paneText(note).utf8)) }
             }
             let session = PaneSession(
-                name: name, launch: launch, wantsForeground: true, reconnects: false,
+                name: name, launch: launch, wantsForeground: true, wantsTty: true, reconnects: false,
                 host: Forward(driver: self, generation: mine, surface: surface),
                 connect: { link.connection }
             )
@@ -252,6 +252,10 @@ final class RemotePaneDriver: PaneInputRoute {
 
         func paneForeground(_ foreground: MactermProtocol.Foreground) {
             surface.paneForeground(foreground)
+        }
+
+        func paneTtyMode(_ mode: MactermProtocol.TtyMode) {
+            surface.paneTtyMode(mode)
         }
 
         func paneExited(code: UInt8?, signal: UInt8?) {
