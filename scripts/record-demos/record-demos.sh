@@ -445,7 +445,8 @@ demo2() {  # sidebar toggle, including over a full-screen TUI, across tabs
 # Demo 3 opens a directory as a new project from the palette. Everything it
 # cleans up is matched by that directory's PATH, never by name: a project of
 # yours may share the name (a `website` of your own was nearly removed once).
-D3_DIR="$HOME/dev/macterm/docs"
+# The docs folder of the website checkout (MACTERM_WEBSITE_DIR, a full path).
+D3_DIR="${MACTERM_WEBSITE_DIR:-$HOME/dev/macterm-website}/docs"
 D3_NAME="$(basename "$D3_DIR")"
 d3_cleanup() {
   local n
