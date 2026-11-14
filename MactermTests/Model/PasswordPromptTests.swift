@@ -443,4 +443,41 @@ struct OnDemandPasswordTests {
         #expect(!OnDemandPasswordFill(mode: .echoing).isVerified)
         #expect(!OnDemandPasswordFill(mode: nil).isVerified, "an unreadable tty is not a password read")
     }
+
+    @Test
+    func a_host_entry_is_scoped_to_its_destination() {
+        let a = PasswordPromptIdentity.entryID(
+            prompt: "[sudo] password for ethan:", asker: .remote(scope: "ethan@a.example:22", command: "sudo apt update")
+        )
+        let b = PasswordPromptIdentity.entryID(
+            prompt: "[sudo] password for ethan:", asker: .remote(scope: "ethan@b.example:22", command: "sudo apt update")
+        )
+        let local = PasswordPromptIdentity.entryID(prompt: "[sudo] password for ethan:", asker: program("/usr/bin/sudo apt update"))
+        #expect(a != b)
+        #expect(a != local)
+        #expect(a?.host == "ethan@a.example:22")
+        #expect(a?.account.hasPrefix("ethan@a.example:22 › ") == true)
+        #expect(local?.account.hasPrefix("ethan@a.example:22") == false)
+    }
+
+    @Test
+    func a_host_program_never_shares_a_sudo_entry() {
+        // The host cannot prove that its sudo is the real one.
+        let id = PasswordPromptIdentity.entryID(prompt: "Password:", asker: .remote(scope: "u@h:22", command: "/tmp/sudo x"))
+        #expect(id?.command == "/tmp/sudo x")
+        #expect(id?.host == "u@h:22")
+    }
+
+    @Test
+    func a_host_shell_files_by_prompt_and_host() {
+        let id = PasswordPromptIdentity.entryID(prompt: "Secret:", asker: .remote(scope: "u@h:22", command: nil))
+        #expect(id == PasswordEntryID(command: nil, prompt: "Secret:", host: "u@h:22"))
+    }
+
+    @Test
+    func a_reported_tty_mode_is_a_line_mode() {
+        #expect(TerminalLineMode(canonical: true, echo: false) == .password)
+        #expect(TerminalLineMode(canonical: true, echo: true) == .echoing)
+        #expect(TerminalLineMode(canonical: false, echo: false) == .raw)
+    }
 }

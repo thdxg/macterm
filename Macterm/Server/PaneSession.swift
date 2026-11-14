@@ -21,6 +21,8 @@ protocol PaneSessionHost: AnyObject, Sendable {
     /// A snapshot of the pane starts or ends. Titles inside it are old.
     func paneSnapshot(started: Bool)
     func paneForeground(_ foreground: MactermProtocol.Foreground)
+    /// The pty's line modes, when the session was asked for them.
+    func paneTtyMode(_ mode: MactermProtocol.TtyMode)
     /// The shell exited. The session ended.
     func paneExited(code: UInt8?, signal: UInt8?)
     /// The channel ended with no exit. The session tries to connect again,
@@ -74,6 +76,7 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
     private let connect: Connect
     private let launch: Launch?
     private let wantsForeground: Bool
+    private let wantsTty: Bool
     /// A lost link is tried again (a local server that restarted). A remote\n    /// pane's driver connects again itself, with the app's
     /// backoff.
     private let reconnects: Bool
@@ -94,6 +97,7 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
         name: String,
         launch: Launch?,
         wantsForeground: Bool,
+        wantsTty: Bool = false,
         reconnects: Bool = true,
         host: any PaneSessionHost,
         connect: @escaping Connect
@@ -101,6 +105,7 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
         self.name = name
         self.launch = launch
         self.wantsForeground = wantsForeground
+        self.wantsTty = wantsTty
         self.reconnects = reconnects
         self.host = host
         self.connect = connect
@@ -209,7 +214,8 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
                 try channel.send(MactermProtocol.Attach(
                     cols: grid.cols, rows: grid.rows,
                     xpixel: Self.clamp(grid.widthPx), ypixel: Self.clamp(grid.heightPx),
-                    foreground: wantsForeground
+                    foreground: wantsForeground,
+                    tty: wantsTty
                 ))
                 if firstAttach {
                     host.paneFeed(Self.resetScreen)
@@ -269,6 +275,8 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
                 if leader { sendSize(nil) }
             case let .foreground(foreground):
                 host.paneForeground(foreground)
+            case let .ttyMode(mode):
+                host.paneTtyMode(mode)
             case let .exit(exit):
                 host.paneExited(code: exit.code, signal: exit.signal)
                 return true

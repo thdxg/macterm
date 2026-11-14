@@ -310,3 +310,27 @@ assert a.messages("program_status")[-1]["a"]["records"] == []
 assert last < kinds.index("exit"), kinds
 PY
 }
+
+@test "tty_mode: a client that asks gets the pty's line modes when they change" {
+  "$ZMX" session s1 -- /bin/sh
+  python3 - <<'PY'
+from v2client import Client
+c = Client("s1")
+c.attach(tty=True)
+# The shell's own line editor is not line mode with echo off.
+first = c.wait_msg("tty_mode")
+assert not (first["canonical"] and not first["echo"]), first
+c.type("stty -echo icanon; printf 'noecho-%s\\n' 1\r")
+c.wait_output("noecho-1")
+c.wait(lambda: {"canonical": True, "echo": False} in [v["a"] for v in c.messages("tty_mode")], 10, "password mode")
+# The shell's line editor takes the tty back when it draws its prompt.
+c.wait(lambda: not c.messages("tty_mode")[-1]["a"]["canonical"], 10, "raw again")
+# A client that did not ask gets none.
+d = Client("s1")
+d.attach()
+d.wait_msg("state")
+d.type("printf 'quiet-%s\\n' 1\r")
+d.wait_output("quiet-1")
+assert d.messages("tty_mode") == []
+PY
+}

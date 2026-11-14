@@ -186,6 +186,11 @@ final class SurfaceChannelHost: PaneSessionHost, @unchecked Sendable {
         DispatchQueue.main.async { [weak view] in view?.onRemoteForeground?(report) }
     }
 
+    func paneTtyMode(_ mode: MactermProtocol.TtyMode) {
+        let lineMode = TerminalLineMode(canonical: mode.canonical, echo: mode.echo)
+        DispatchQueue.main.async { [weak view] in view?.onRemoteTtyMode?(lineMode) }
+    }
+
     func paneExited(code _: UInt8?, signal _: UInt8?) {
         sessionEnded()
     }

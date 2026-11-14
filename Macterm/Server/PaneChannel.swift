@@ -18,6 +18,7 @@ enum PaneChannelEvent: Equatable {
     case exit(MactermProtocol.Exit)
     case title(Data)
     case foreground(MactermProtocol.Foreground)
+    case ttyMode(MactermProtocol.TtyMode)
     case other(String)
 
     init?(_ frame: ProtocolFrame) {
@@ -45,7 +46,7 @@ enum PaneChannelEvent: Equatable {
     private static let known: Set<String> = [
         MactermProtocol.State.name, MactermProtocol.Lead.name, MactermProtocol.SnapshotStart.name,
         MactermProtocol.SnapshotEnd.name, MactermProtocol.Resumed.name, MactermProtocol.Exit.name,
-        MactermProtocol.Title.name, MactermProtocol.Foreground.name,
+        MactermProtocol.Title.name, MactermProtocol.Foreground.name, MactermProtocol.TtyMode.name,
     ]
 
     private static func decode(_ message: MactermProtocol.PaneMessage) -> PaneChannelEvent? {
@@ -66,6 +67,8 @@ enum PaneChannelEvent: Equatable {
             (try? message.message(of: MactermProtocol.Title.self)).map { .title($0.title.bytes) }
         case MactermProtocol.Foreground.name:
             (try? message.message(of: MactermProtocol.Foreground.self)).map(PaneChannelEvent.foreground)
+        case MactermProtocol.TtyMode.name:
+            (try? message.message(of: MactermProtocol.TtyMode.self)).map(PaneChannelEvent.ttyMode)
         default:
             nil
         }

@@ -739,10 +739,18 @@ final class Pane: Identifiable {
         if icon != agentIcon { agentIcon = icon }
     }
 
+    /// How the host's pty reads input, from the session's `tty_mode`. nil
+    /// until the first report, and for a pane with no host session.
+    @ObservationIgnored
+    var remoteLineMode: TerminalLineMode?
+
     /// The latest report's shell verdict on the foreground (see
     /// `applyRemoteForeground`).
     @ObservationIgnored
-    private var remoteForegroundIsShell = false
+    private(set) var remoteForegroundIsShell = false
+
+    /// The latest report, for the password asker.
+    var remoteForegroundReport: RemoteForeground? { lastAppliedRemoteForeground }
 
     /// The report the agent logo was last matched against.
     @ObservationIgnored
@@ -973,6 +981,8 @@ final class Pane: Identifiable {
         view.onOutputActivity = nil
         view.onSnapshotMark = nil
         view.onRemoteForeground = nil
+        view.onRemoteTtyMode = nil
+        remoteLineMode = nil
         isReceivingRemoteSnapshot = false
         // A remote pane's report described the connection that goes now.
         // The next connection's session reports again; until then nothing
