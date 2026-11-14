@@ -180,7 +180,6 @@ enum PasswordPromptIdentity {
         let first = command.split(separator: " ", maxSplits: 1).first.map(String.init) ?? ""
         return (first as NSString).lastPathComponent == "sudo"
     }
-    }
 }
 
 /// Who is reading a password, as far as the process table can vouch for it.
