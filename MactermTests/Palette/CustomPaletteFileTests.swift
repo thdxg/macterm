@@ -316,7 +316,7 @@ struct CustomPaletteFileTests {
     /// Every complete palette file the docs show: a fenced `yaml` block
     /// captioned with a path in the `palettes/` folder of an extension in
     /// `~/.config/macterm/extensions/`, keyed by the file's stem. Read from
-    /// the source tree, like `DocsLinkTests`, so a copy-pasted example that
+    /// a checkout of macterm/website, like `DocsLinkTests`, so a copy-pasted example that
     /// no longer reads fails here first.
     static func docsExamples() throws -> [String: String] {
         try captionedBlocks(#/^```yaml title="~/\.config/macterm/extensions/[a-z0-9-]+/palettes/([a-z0-9-]+)\.yaml"$/#)
@@ -328,11 +328,7 @@ struct CustomPaletteFileTests {
     }
 
     private static func captionedBlocks(_ caption: Regex<(Substring, Substring)>) throws -> [String: String] {
-        let pages = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent() // Palette
-            .deletingLastPathComponent() // MactermTests
-            .deletingLastPathComponent() // repo root
-            .appendingPathComponent("docs")
+        let pages = try WebsiteDocs.requireDirectory()
         var examples: [String: String] = [:]
         for file in try FileManager.default.contentsOfDirectory(at: pages, includingPropertiesForKeys: nil)
             where file.pathExtension == "md"
@@ -445,7 +441,7 @@ struct CustomPaletteFileTests {
         }
     }
 
-    @Test
+    @Test(.enabled(if: WebsiteDocs.canRun, "needs a checkout of macterm/website: set MACTERM_WEBSITE_DIR"))
     func every_extension_manifest_in_the_docs_reads() throws {
         let manifests = try Self.docsManifests()
         #expect(!manifests.isEmpty)
@@ -456,7 +452,7 @@ struct CustomPaletteFileTests {
         }
     }
 
-    @Test
+    @Test(.enabled(if: WebsiteDocs.canRun, "needs a checkout of macterm/website: set MACTERM_WEBSITE_DIR"))
     func every_palette_file_in_the_docs_reads() throws {
         let examples = try Self.docsExamples()
         #expect(Set(examples.keys) == ["git", "docker", "ssh"])

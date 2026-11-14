@@ -82,9 +82,38 @@ jobs:
       !cancelled()
       && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.extensions == 'true')
     runs-on: xcode-27
+    env:
+      # Xcode passes only TEST_RUNNER_ variables to the test host. The tests
+      # that read the docs fail, and do not skip, when CI is set and the
+      # checkout of macterm/website is missing (WebsiteDocs).
+      TEST_RUNNER_CI: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # The docs pages are in the website repository. DocsLinkTests,
+      # TextFileDefaultsTests and CustomPaletteFileTests read them from
+      # ./website (WebsiteDocs).
+      # The website branch with the same name as this branch, if there is one,
+      # so that a feature and its docs pass together. Otherwise main.
+      - name: Pick the Website Ref
+        id: website-ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          ref=main
+          if [[ -n "$BRANCH" ]] && gh api "repos/macterm/website/branches/$BRANCH" --silent 2>/dev/null; then
+            ref="$BRANCH"
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Check Out the Website
+        uses: actions/checkout@v7
+        with:
+          repository: macterm/website
+          ref: ${{ steps.website-ref.outputs.ref }}
+          path: website
 
       - uses: jdx/mise-action@v5.2.7
 

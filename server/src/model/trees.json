@@ -1,0 +1,120 @@
+{
+  "comment": "Split trees for the model's tree operations (design/010 §10). Zig (server/src/model/tests.zig) and Swift (MactermTests/Model/ModelTreeFixtureTests.swift) both apply each case's op to `before` and compare with `after`. A tree is a pane name (a string) or {dir, ratio, first, second}; dir is horizontal or vertical. Panes that an op makes are named n1, n2, ... in creation order; a case with \"erase_names\" compares the shape and the ratios only, because the Swift side cannot name its new panes. Ratios are compared to 1e-9.",
+  "cases": [
+    {
+      "name": "split a pane to the right",
+      "op": "split", "target": "a", "new": "b", "dir": "horizontal", "position": "second",
+      "before": "a",
+      "after": {"dir": "horizontal", "ratio": 0.5, "first": "a", "second": "b"}
+    },
+    {
+      "name": "split a pane above",
+      "op": "split", "target": "a", "new": "b", "dir": "vertical", "position": "first",
+      "before": "a",
+      "after": {"dir": "vertical", "ratio": 0.5, "first": "b", "second": "a"}
+    },
+    {
+      "name": "split a nested pane keeps the other ratios",
+      "op": "split", "target": "b", "new": "d", "dir": "horizontal", "position": "second",
+      "before": {"dir": "horizontal", "ratio": 0.3, "first": "a", "second": {"dir": "vertical", "ratio": 0.7, "first": "b", "second": "c"}},
+      "after": {"dir": "horizontal", "ratio": 0.3, "first": "a", "second": {"dir": "vertical", "ratio": 0.7,
+        "first": {"dir": "horizontal", "ratio": 0.5, "first": "b", "second": "d"}, "second": "c"}}
+    },
+    {
+      "name": "close one of two panes",
+      "op": "remove", "pane": "a", "result": "removed",
+      "before": {"dir": "horizontal", "ratio": 0.4, "first": "a", "second": "b"},
+      "after": "b"
+    },
+    {
+      "name": "close a nested pane",
+      "op": "remove", "pane": "c", "result": "removed",
+      "before": {"dir": "horizontal", "ratio": 0.3, "first": "a", "second": {"dir": "vertical", "ratio": 0.7, "first": "b", "second": "c"}},
+      "after": {"dir": "horizontal", "ratio": 0.3, "first": "a", "second": "b"}
+    },
+    {
+      "name": "close the first pane of a nested split",
+      "op": "remove", "pane": "a", "result": "removed",
+      "before": {"dir": "vertical", "ratio": 0.6, "first": {"dir": "horizontal", "ratio": 0.2, "first": "a", "second": "b"}, "second": "c"},
+      "after": {"dir": "vertical", "ratio": 0.6, "first": "b", "second": "c"}
+    },
+    {
+      "name": "the only pane stays",
+      "op": "remove", "pane": "a", "result": "only_pane",
+      "before": "a",
+      "after": "a"
+    },
+    {
+      "name": "an unknown pane changes nothing",
+      "op": "remove", "pane": "z", "result": "not_found",
+      "before": {"dir": "horizontal", "ratio": 0.4, "first": "a", "second": "b"},
+      "after": {"dir": "horizontal", "ratio": 0.4, "first": "a", "second": "b"}
+    },
+    {
+      "name": "rebalance a skewed pair",
+      "op": "rebalance",
+      "before": {"dir": "horizontal", "ratio": 0.2, "first": "a", "second": "b"},
+      "after": {"dir": "horizontal", "ratio": 0.5, "first": "a", "second": "b"}
+    },
+    {
+      "name": "rebalance a chain on one axis gives each pane a share",
+      "op": "rebalance",
+      "before": {"dir": "horizontal", "ratio": 0.5, "first": {"dir": "horizontal", "ratio": 0.5, "first": {"dir": "horizontal", "ratio": 0.9, "first": "a", "second": "b"}, "second": "c"}, "second": "d"},
+      "after": {"dir": "horizontal", "ratio": 0.75, "first": {"dir": "horizontal", "ratio": 0.6666666666666666, "first": {"dir": "horizontal", "ratio": 0.5, "first": "a", "second": "b"}, "second": "c"}, "second": "d"}
+    },
+    {
+      "name": "rebalance counts a split on the other axis as one cell",
+      "op": "rebalance",
+      "before": {"dir": "horizontal", "ratio": 0.8, "first": "a", "second": {"dir": "vertical", "ratio": 0.1, "first": "b", "second": {"dir": "vertical", "ratio": 0.9, "first": "c", "second": "d"}}},
+      "after": {"dir": "horizontal", "ratio": 0.5, "first": "a", "second": {"dir": "vertical", "ratio": 0.3333333333333333, "first": "b", "second": {"dir": "vertical", "ratio": 0.5, "first": "c", "second": "d"}}}
+    },
+    {
+      "name": "swap keeps the shape and the ratios",
+      "op": "swap", "x": "a", "y": "c",
+      "before": {"dir": "horizontal", "ratio": 0.4, "first": "a", "second": {"dir": "vertical", "ratio": 0.3, "first": "b", "second": "c"}},
+      "after": {"dir": "horizontal", "ratio": 0.4, "first": "c", "second": {"dir": "vertical", "ratio": 0.3, "first": "b", "second": "a"}}
+    },
+    {
+      "name": "insert a tree on the left of a pane",
+      "op": "insert", "dest": "b", "zone": "left",
+      "node": {"dir": "vertical", "ratio": 0.5, "first": "x", "second": "y"},
+      "before": {"dir": "horizontal", "ratio": 0.5, "first": "a", "second": "b"},
+      "after": {"dir": "horizontal", "ratio": 0.5, "first": "a", "second": {"dir": "horizontal", "ratio": 0.5,
+        "first": {"dir": "vertical", "ratio": 0.5, "first": "x", "second": "y"}, "second": "b"}}
+    },
+    {
+      "name": "insert a pane below a pane",
+      "op": "insert", "dest": "a", "zone": "bottom", "node": "x",
+      "before": {"dir": "horizontal", "ratio": 0.4, "first": "a", "second": "b"},
+      "after": {"dir": "horizontal", "ratio": 0.4, "first": {"dir": "vertical", "ratio": 0.5, "first": "a", "second": "x"}, "second": "b"}
+    },
+    {
+      "name": "a grid of two by two",
+      "op": "grid", "source": "a", "rows": 2, "columns": 2, "erase_names": true,
+      "before": "a",
+      "after": {"dir": "vertical", "ratio": 0.5,
+        "first": {"dir": "horizontal", "ratio": 0.5, "first": "a", "second": "n2"},
+        "second": {"dir": "horizontal", "ratio": 0.5, "first": "n1", "second": "n3"}}
+    },
+    {
+      "name": "a grid of one row and three columns",
+      "op": "grid", "source": "a", "rows": 1, "columns": 3, "erase_names": true,
+      "before": "a",
+      "after": {"dir": "horizontal", "ratio": 0.3333333333333333, "first": "a",
+        "second": {"dir": "horizontal", "ratio": 0.5, "first": "n1", "second": "n2"}}
+    },
+    {
+      "name": "a grid of three rows and one column",
+      "op": "grid", "source": "a", "rows": 3, "columns": 1, "erase_names": true,
+      "before": "a",
+      "after": {"dir": "vertical", "ratio": 0.3333333333333333, "first": "a",
+        "second": {"dir": "vertical", "ratio": 0.5, "first": "n1", "second": "n2"}}
+    },
+    {
+      "name": "a grid inside a split keeps the rest",
+      "op": "grid", "source": "b", "rows": 1, "columns": 2, "erase_names": true,
+      "before": {"dir": "horizontal", "ratio": 0.5, "first": "a", "second": "b"},
+      "after": {"dir": "horizontal", "ratio": 0.3333333333333333, "first": "a", "second": {"dir": "horizontal", "ratio": 0.5, "first": "b", "second": "n1"}}
+    }
+  ]
+}
