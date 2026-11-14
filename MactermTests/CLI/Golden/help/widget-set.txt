@@ -1,0 +1,13 @@
+OVERVIEW: Resize a desktop widget. It snaps to the desktop grid.
+
+USAGE: macterm widget set <widget> [--size <size>] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <widget>                Widget (index, widget:N, or id).
+
+OPTIONS:
+  --size <size>           Size as a grid span, COLUMNSxROWS, for example 3x2.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

@@ -1,0 +1,13 @@
+OVERVIEW: Rename a project.
+
+USAGE: macterm project rename <project> <name> [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <project>               Project name, UUID, or index.
+  <name>                  New name for the project.
+
+OPTIONS:
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

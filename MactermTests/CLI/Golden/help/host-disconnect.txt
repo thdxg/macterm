@@ -1,0 +1,12 @@
+OVERVIEW: [debug] End Macterm's ssh connection to a host.
+
+USAGE: macterm host disconnect <host> [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <host>                  The ssh destination: [user@]host.
+
+OPTIONS:
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

@@ -1,0 +1,19 @@
+OVERVIEW: List, add, edit and remove desktop widgets.
+
+USAGE: macterm widget <subcommand>
+
+OPTIONS:
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  list (default)          List desktop widgets.
+  new                     Add a locked desktop widget that runs your login
+                          shell, in the middle of the desktop.
+  set                     Resize a desktop widget. It snaps to the desktop grid.
+  edit                    Unlock a widget, so it takes input and you can move
+                          it and change its size. You can edit one widget at a
+                          time.
+  done                    Lock the widget being edited.
+  remove                  Remove a desktop widget and end its shell and session.
+
+  See 'macterm help widget <subcommand>' for detailed help.

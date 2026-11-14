@@ -24,6 +24,9 @@ Macterm.xcodeproj/
 # (see Configs/Debug.xcconfig).
 Configs/Local.xcconfig
 
+# A checkout of macterm/website. The unit tests read its docs/ (WebsiteDocs).
+/website/
+
 
 .env*
 !.env.example

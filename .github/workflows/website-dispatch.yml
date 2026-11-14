@@ -1,9 +1,10 @@
 name: Website Dispatch
 
-# The site (macterm/website) renders docs/ and serves assets/ of this
-# repository, and its changelog shows the release notes. This workflow tells it
-# to build again when one of them changes. The site's own workflow checks out
-# this repository at main, so the build always reads what main has.
+# The site (macterm/website) serves assets/ of this repository, and its
+# changelog shows the release notes. This workflow tells it to build again when
+# one of them changes. The site's own workflow checks out this repository at
+# main, so the build always reads what main has. The docs pages are in the
+# website repository.
 #
 # Events that GITHUB_TOKEN raises start no runs, so only a person's action on a
 # release fires this: publishing a release, editing its notes, promoting a
@@ -13,7 +14,6 @@ on:
   push:
     branches: [main]
     paths:
-      - "docs/**"
       - "assets/**"
   release:
     types: [published, edited, deleted]

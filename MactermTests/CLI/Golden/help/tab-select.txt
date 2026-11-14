@@ -1,0 +1,15 @@
+OVERVIEW: Make a tab active.
+
+USAGE: macterm tab select <tab> [--project <project>] [--window <window>] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <tab>                   Tab title, UUID, or index (tab:3).
+
+OPTIONS:
+  --project <project>     Project scope. The default is the active project.
+  --window <window>       Window to select it in (index or id). The default is
+                          the focused window.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

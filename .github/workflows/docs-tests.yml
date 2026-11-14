@@ -1,0 +1,65 @@
+name: Docs Tests
+
+# The unit tests that read the docs pages of macterm/website. A pull request in
+# the website repository calls this workflow with its own commit, so that a page
+# that breaks one of them fails there. The Unit job of test.yml runs the same
+# tests against main of the website, on a pull request in this repository.
+
+on:
+  workflow_call:
+    inputs:
+      website_ref:
+        description: The commit of macterm/website that holds the pages to test.
+        required: true
+        type: string
+      app_ref:
+        description: >-
+          The ref of macterm/macterm with the tests. Use the branch of the app
+          change that goes with the docs change, so that both pass together.
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  docs-tests:
+    name: Docs Tests
+    runs-on: xcode-27
+    env:
+      # Xcode passes only TEST_RUNNER_ variables to the test host. With CI set,
+      # a missing checkout of the website fails the tests (WebsiteDocs).
+      TEST_RUNNER_CI: "true"
+    steps:
+      - name: Check Out Macterm
+        uses: actions/checkout@v7
+        with:
+          repository: macterm/macterm
+          ref: ${{ inputs.app_ref }}
+
+      - name: Check Out the Website
+        uses: actions/checkout@v7
+        with:
+          repository: macterm/website
+          ref: ${{ inputs.website_ref }}
+          path: website
+
+      - uses: jdx/mise-action@v5.2.7
+
+      - name: Select Xcode
+        uses: ./.github/actions/select-xcode
+
+      # setup.sh takes the prebuilt server of main for this tree. A server
+      # change that no prebuilt covers yet needs a Zig build.
+      - name: Setup GhosttyKit
+        run: mise run setup --verbose
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test
+        run: >-
+          ./scripts/test.sh
+          -only-testing:MactermTests/DocsLinkTests
+          -only-testing:MactermTests/TextFileDefaultsTests
+          -only-testing:MactermTests/CustomPaletteFileTests

@@ -403,6 +403,14 @@ These rules for the pane scripts come from tests against a real host:
 - **The newest install wins** (`shouldReplace`). A proxy of this build can reach a server that another build started. The app sends that server `server.exit`, once for each connect, and connects again; the sessions keep running and keep their build (design/002). It does this for a lower level, and at the same level only right after this connect installed its own build: builds of one level have no order. A server of a higher level stays: an app never downgrades a host. So two apps of one level on one host (a Debug and a Release build) share the server of the later install, and do not take turns replacing it.
 - **The server removes old builds** (`pruneBuilds` in `server.zig`): the files `macterm-<key>` in its own folder whose key no session reports, never its own, and none of the last minute (`fresh_build_ms`: an install whose proxy has not started yet). It does this when every session settled at start and after each session ends. It fails closed: only a server that runs from a `macterm-<own key>` file does it (not the Mac's bundle, not a file that an install replaced under it), and nothing while a session's build has no key. A temp file of an install is not a build.
 
+### The roaming link (design/009, issue 0201)
+
+A UDP link that carries a host's frames after sleep or a network change, with no login. The ssh connection stays the way in and the standby. The link is built in three parts. Only the app part changes what a user sees.
+
+- **The packet layer is the first part** (`server/src/link/packet.zig`, `Macterm/Link/LinkPacket.swift`). It has no cipher of ours: ChaCha20-Poly1305 from the Zig standard library and CryptoKit. A packet is `key_id u32`, `counter u64` (bit 63 is the direction), the sealed payload and the 16 byte tag. The nonce is 4 zero bytes and the counter. The 12 byte header is the associated data.
+- **The roam rule:** `open` says if a counter is the newest. A caller may move the peer's address only on a packet that authenticates *and* is the newest. The replay window is 64 packets. It moves only after the tag is good.
+- **A packet that does not authenticate gets no reply.** The two sides must make the same bytes: the vector in `packet.zig` is checked again in `LinkPacketTests`. `zig build fuzz-link --fuzz=…` fuzzes the parser, and CI runs it (`server.yml`).
+
 ### Session daemons and macOS attribution (#419)
 
 macOS attributes work that needs privacy permission (Local Network, TCC) to the *responsible process* of a process. The value is fixed when the process starts, and the process inherits it from its parent.
@@ -1066,7 +1074,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
 - `IconRenderer/`: `macterm-icon-renderer`, the adaptive icon's helper (`main.swift`), and `PrivateInterfaces/` (the hand-written IconRendering interface, the CoreUI header, and the two link stubs).
 - `CLI/`: the `macterm` binary. `MactermCommand` (the ArgumentParser tree), `ControlClient`, `Output`, `SSHCommand`, `TutorCommand`, `SkillsCommand`, `WidgetCommand`, `PaletteCommand` (`palette list`, and the hidden runner `palette exec`), `AskpassCommand` (the hidden `askpass`, and the debug-only `host`),.
 - `scripts/`: `setup.sh`, `build-server.sh` (the server builds and their key), `build.sh`, `_lib.sh` (version mapping, update channel), `publish-appcast.sh`, `_harness.py` (`MactermHarness`, for e2e) and `session_bench.py` (the session layer benchmark). It also has `e2e.sh` with `e2e/` (the pytest suite), `ghosttykit-api-diff.sh`, `ghostty-shim.sh` and `record-demos/` (the demo clips of the website).
-- `docs/` has the user docs, one Markdown page for each topic. The site that renders them is the `macterm/website` repository (see "The website").
+- The user docs (`docs/*.md`, one Markdown page for each topic) are in the `macterm/website` repository (see "The website"). References to `docs/…` pages in this file name those pages.
 
 ## Tests
 
@@ -1143,7 +1151,7 @@ The script has these rules. We learned each one with the real app:
 - **The tab switcher needs a HELD modifier**. The overlay lives exactly as long as the modifier of the recent-tab chord is down (`commitTabCycle` fires on the flags-changed event when the modifier drops). System Events cannot hold a modifier across statements. `hold.js` posts the key events at the level of CGEvent from osascript. The script reads the chord from `macterm.hotkey.recent_tab` at run time. It does not assume it.
 - **The script records the quick terminal with the window parked off screen, not closed**. The panel does not activate the app. With no window at all, Macterm cannot be the frontmost app. Every keystroke that is meant for the panel then lands in whatever app is in front. `qt_ready` refuses to type unless the panel is up *and* Macterm is frontmost. Finder renames files with stray keystrokes.
 - **`guard_repo` restores only the files that a demo opens** (`AGENTS.md`), in the checkout of the macterm *project* (`shown_repo`). This is the checkout in which its panes open files. It does not have to be the checkout that the script runs from. Helix saves automatically on loss of focus, so a keystroke that lands in an editor pane is written to disk. A blanket list reverts unrelated work as a side effect.
-- **Cleanup matches by path, never by name**. Demo 3 opens `~/dev/macterm/docs`. It removes only the project and the layout file that point there. If it removed "the project with the name website", it nearly took a project of the developer.
+- **Cleanup matches by path, never by name**. Demo 3 opens the `docs` folder of the website checkout (`MACTERM_WEBSITE_DIR`, default `~/dev/macterm-website`). It removes only the project and the layout file that point there. If it removed "the project with the name website", it nearly took a project of the developer.
 - **Programs that interrupt themselves get an instruction not to**. opencode (demos 2 and 6) runs with `OPENCODE_DISABLE_AUTOUPDATE=1`. Without it, an update dialog lands over the TUI in the middle of a take.
 - **Demos 5 and 10 build their own host.**
   - It is a podman container with sshd, vim and zmx (compiled from source, because the fork ships only binaries for macOS). It is published on 127.0.0.1:2222. A marked `Host demo-box` block is put at the start of `~/.ssh/config` (`HostName localhost`, which is what the password prompt of ssh names).
@@ -1175,15 +1183,17 @@ The script has these rules. We learned each one with the real app:
 
 The site at `macterm.thdxg.dev` (landing page, docs, changelog, and the proxy of the update feed) is the `macterm/website` repository. This repository keeps what the site renders and serves:
 
-- `docs/*.md`, the user docs. A feature and its docs page land in one PR here. `TextFileDefaultsTests`, `CustomPaletteFileTests` and `DocsLinkTests` read the pages.
 - `assets/`: the JSON schemas and the icons. The demo clips are in `macterm/website`.
   - **The schemas are served at `https://macterm.thdxg.dev/schemas/<name>.schema.json`.** That is the `$id`, and the `$schema` line that the app writes. The website build copies the files from here, so this folder stays their one source and the unit tests keep reading it.
   - **The old address `https://raw.githubusercontent.com/macterm/macterm/main/assets/<name>.schema.json` must keep answering.** Files that users and the extensions of the repository wrote name it. Never delete or rename a schema file here. The extensions keep the old line, because a change to a file of an extension makes each installed copy look outdated.
 
-The site build checks out this repository at `main` and reads `docs/` and `assets/` from it.
+The docs pages (`docs/*.md`) are in `macterm/website`, with the site that renders them. The site build checks out this repository at `main` and reads `assets/` from it.
 
-- **`website-dispatch.yml` starts the site build.** It sends a `repository_dispatch` (`macterm-content`) to `macterm/website` on a push to `main` that changes `docs/**` or `assets/**`, and on a release that a person publishes, edits or deletes. Events that `GITHUB_TOKEN` raises start no runs, so a release that a workflow publishes does not start a build. The dispatch uses a token of the org's `macterm-ci` GitHub App (org variable `MACTERM_APP_CLIENT_ID`, org secret `MACTERM_APP_PRIVATE_KEY`), for `macterm/website` only.
-- **`Docs / Site Build` runs the site build on a pull request that changes `docs/**` or `assets/**`**, against `macterm/website` at `main`. A page that breaks the build fails here, before it reaches `main`.
+- **A feature and its docs are two PRs.** The docs PR goes to `macterm/website`, and you file it with the feature PR. The feature PR names the docs PR, and the docs PR names the feature PR. A feature that needs no docs change says so in its PR text. Merge the docs PR with the feature PR.
+- **Three unit test suites read the docs pages**: `DocsLinkTests` (each Settings help button finds its heading), `TextFileDefaultsTests` (the table of file types) and `CustomPaletteFileTests` (each captioned example reads through the validator). They read `docs/` of a checkout of `macterm/website` (`WebsiteDocs`): `MACTERM_WEBSITE_DIR`, else `./website` in this checkout (git ignores it). **Without a checkout, a test is off with a message. On CI (`CI` is set) it fails**, so a missing checkout never passes. A local run without `./website` therefore does not cover the docs checks. The Unit job of `test.yml` checks out the website branch with the name of the PR branch if there is one, else `main`. A PR in the website repository calls `docs-tests.yml` with its own commit and an `app_ref` (the branch of the app change that goes with it, default `main`), which runs only these three suites. Use the same branch name in both repositories.
+
+- **`website-dispatch.yml` starts the site build.** It sends a `repository_dispatch` (`macterm-content`) to `macterm/website` on a push to `main` that changes `assets/**`, and on a release that a person publishes, edits or deletes. Events that `GITHUB_TOKEN` raises start no runs, so a release that a workflow publishes does not start a build. The dispatch uses a token of the org's `macterm-ci` GitHub App (org variable `MACTERM_APP_CLIENT_ID`, org secret `MACTERM_APP_PRIVATE_KEY`), for `macterm/website` only.
+- **`Docs / Site Build` runs the site build on a pull request that changes `assets/**`**, against `macterm/website` at `main`. An asset that breaks the build fails here, before it reaches `main`.
 
 ## Releasing
 
@@ -1313,6 +1323,8 @@ The GUI text is in three String Catalogs: `Macterm/Localizable.xcstrings` (the a
 - **A ghostty key covers it**. Read the key live from the loaded config (see the config pipeline) and add **no Settings UI**. Where the default of Macterm must be different from the default of ghostty, that departure is a line in `MactermConfig.defaultsBody`. It is never a fallback in `Preferences`. Naming the key can be the whole answer. Say so, and do not build.
 - **Ghostty can express it as a custom shader or a fork patch**. Prefer that to a reimplementation in Swift. Land it in Settings → Animations first, off by default.
 - **It is a concept of Macterm itself** (projects, tabs for each project, the sidebar, layouts, windows, the CLI, sessions). Build it here and follow *Adding a new setting*.
+
+A feature that changes what a user reads in the docs also gets a docs PR in `macterm/website`, filed with the feature PR (see "The website").
 
 ### Extensions are a compatibility promise
 

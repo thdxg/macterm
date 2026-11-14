@@ -1,0 +1,12 @@
+OVERVIEW: Change the workspace to match the layout file of the project.
+
+USAGE: macterm layout apply [--project <project>] [--force] [--socket <socket>] [--json]
+
+OPTIONS:
+  --project <project>     Project (name, UUID, or index). The default is the
+                          active project.
+  --force                 Apply even when it would close panes.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

@@ -1,0 +1,17 @@
+OVERVIEW: Set the ratio of the nearest split around a pane, from 0.15 to 0.85.
+
+USAGE: macterm pane resize-split --axis <axis> --ratio <ratio> [--project <project>] [--tab <tab>] [--pane <pane>] [--session <session>] [--socket <socket>] [--json]
+
+OPTIONS:
+  --axis <axis>           Split axis to resize: horizontal or vertical.
+  --ratio <ratio>         Exact ratio for the first child of the split, from
+                          0.15 to 0.85.
+  --project <project>     Project scope (name, UUID, or index). The default is
+                          the active project.
+  --tab <tab>             Tab scope (title, UUID, or index).
+  --pane <pane>           Target pane by UUID, or index within the tab (pane:2).
+  --session <session>     Target pane by zmx session name (restart-stable).
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

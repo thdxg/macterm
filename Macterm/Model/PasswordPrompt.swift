@@ -126,8 +126,8 @@ enum PasswordPromptIdentity {
             // A key passphrase is filed under the command like any prompt: a
             // process on the host can print any prompt, and the host cannot
             // prove which program asks.
-            let command = normalize(command)
-            return PasswordEntryID(command: command.isEmpty ? nil : command, prompt: prompt, host: scope)
+            let normalized = normalize(command)
+            return PasswordEntryID(command: normalized.isEmpty ? nil : normalized, prompt: prompt, host: scope)
         case let .program(path, command, isProtected):
             let command = normalize(command)
             if isKeyPassphrase(prompt) {

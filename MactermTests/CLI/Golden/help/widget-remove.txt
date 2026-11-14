@@ -1,0 +1,13 @@
+OVERVIEW: Remove a desktop widget and end its shell and session.
+
+USAGE: macterm widget remove <widget> [--force] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <widget>                Widget (index, widget:N, or id).
+
+OPTIONS:
+  --force                 Remove even if a program is running in it.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

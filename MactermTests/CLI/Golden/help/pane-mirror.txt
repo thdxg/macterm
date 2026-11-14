@@ -1,0 +1,16 @@
+OVERVIEW: Mirror a pane. Show the same session in a second pane.
+
+USAGE: macterm pane mirror [--direction <direction>] [--project <project>] [--tab <tab>] [--pane <pane>] [--session <session>] [--socket <socket>] [--json]
+
+OPTIONS:
+  --direction <direction> right, left, down, up, or auto (longer on-screen
+                          axis). (default: auto)
+  --project <project>     Project scope (name, UUID, or index). The default is
+                          the active project.
+  --tab <tab>             Tab scope (title, UUID, or index).
+  --pane <pane>           Target pane by UUID, or index within the tab (pane:2).
+  --session <session>     Target pane by zmx session name (restart-stable).
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

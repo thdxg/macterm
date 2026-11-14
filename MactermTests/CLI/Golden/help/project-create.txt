@@ -1,0 +1,17 @@
+OVERVIEW: Add a project for a local directory or a remote spec. Each run adds a
+new project.
+
+USAGE: macterm project create <path> [--name <name>] [--select] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <path>                  Project directory (absolute or ~-prefixed), or a
+                          remote [user@]host:dir.
+
+OPTIONS:
+  --name <name>           Display name. The default is the name of the
+                          directory.
+  --select                Select the project too.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

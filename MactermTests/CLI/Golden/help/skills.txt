@@ -1,0 +1,32 @@
+OVERVIEW: Print skills that teach AI coding agents to use Macterm. It works
+with no running app.
+
+Prints Agent Skills: SKILL.md files that Claude Code, Codex, OpenCode, Gemini
+CLI, Cursor and other agents load from a skills directory. They teach an agent
+to run commands in panes and read their output, to build a workspace that
+persists, to run sub-agents in panes of their own, and to write extensions that
+add screens to the command palette. There is no installer. The agent installs
+them itself. To set one up, give it this prompt:
+
+  Run `macterm skills` and install each skill it prints into your skills
+  directory as <name>/SKILL.md, exactly as printed. Then tell me what you
+  installed and where. (Outside a Macterm pane, `macterm` is
+  /Applications/Macterm.app/Contents/Resources/bin/macterm.)
+
+With no arguments, it prints every skill after a short header about the
+install. A line with its path introduces each skill (==> <name>/SKILL.md <==).
+With a name, it prints only that SKILL.md, exactly as it is, ready to redirect
+into place.
+
+USAGE: macterm skills [<name>] [--list] [--json]
+
+ARGUMENTS:
+  <name>                  Print only the SKILL.md of this skill, exactly as it
+                          is.
+
+OPTIONS:
+  --list                  List the names and descriptions of the skills instead.
+  --json                  Print JSON: the name, description, path and (without
+                          --list) text of each skill.
+  -h, --help              Show help information.
+

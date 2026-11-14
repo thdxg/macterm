@@ -1,0 +1,16 @@
+OVERVIEW: List, open and close terminal windows.
+
+USAGE: macterm window <subcommand>
+
+OPTIONS:
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  list (default)          List the open windows and the project that each
+                          window shows.
+  new                     Open another window.
+  focus                   Bring a window to the front. It becomes the key
+                          window.
+  close                   Close a window. The last visible window hides instead.
+
+  See 'macterm help window <subcommand>' for detailed help.
