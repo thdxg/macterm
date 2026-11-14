@@ -66,7 +66,9 @@ pub const Opened = struct {
 };
 
 /// One end of a link: the key, the counter of what it sends and the window of
-/// what it received.
+/// what it received. One `Link` for each key, for the life of that key: a
+/// second `Link` that starts at counter 1 on the same key repeats nonces, and
+/// so does a copy of one. Pass it by pointer.
 pub const Link = struct {
     key: [key_len]u8,
     key_id: u32,
@@ -104,7 +106,7 @@ pub const Link = struct {
 
     /// Opens `packet` in place. The payload is a slice of `packet`. The
     /// window moves only after the tag is good, so a forged packet changes
-    /// nothing.
+    /// no state. After an error the bytes of `packet` are unspecified.
     pub fn open(l: *Link, packet: []u8) Error!Opened {
         if (packet.len < overhead or packet.len > max_packet) return error.Malformed;
         if (std.mem.readInt(u32, packet[0..4], .little) != l.key_id) return error.Rejected;
@@ -288,6 +290,30 @@ test "a spent counter stops the sender" {
     l.next = counter_limit;
     var buf: [max_packet]u8 = undefined;
     try testing.expectError(error.Exhausted, l.seal(&buf, "x"));
+}
+
+test "the window agrees with a plain model" {
+    var prng = std.Random.DefaultPrng.init(42);
+    const rand = prng.random();
+    var p = pair();
+    var bufs: [300][max_packet]u8 = undefined;
+    var lens: [300]usize = undefined;
+    for (0..300) |i| lens[i] = (try p.client.seal(&bufs[i], "x")).len;
+    var got: [300]bool = @splat(false);
+    var max: u64 = 0;
+    for (0..2000) |_| {
+        const i = rand.uintLessThan(usize, 300);
+        const n: u64 = i + 1;
+        var copy: [max_packet]u8 = undefined;
+        @memcpy(copy[0..lens[i]], bufs[i][0..lens[i]]);
+        const expect_ok = !got[i] and (n > max or max - n < window_bits);
+        if (p.host.open(copy[0..lens[i]])) |r| {
+            try testing.expect(expect_ok);
+            try testing.expectEqual(n > max, r.newest);
+            got[i] = true;
+            if (n > max) max = n;
+        } else |_| try testing.expect(!expect_ok);
+    }
 }
 
 test "fuzz: no input opens, and the window never moves" {

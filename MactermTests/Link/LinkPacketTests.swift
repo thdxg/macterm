@@ -2,7 +2,7 @@ import Foundation
 @testable import Macterm
 import Testing
 
-/// The same cases as the tests of `server/src/link/packet.zig`, and its
+/// The cases of `server/src/link/packet.zig`, and its
 /// test vector: the two sides must make the same bytes.
 struct LinkPacketTests {
     private static let key = Data((0 ..< 32).map { UInt8($0) })
@@ -11,8 +11,8 @@ struct LinkPacketTests {
         data.map { String(format: "%02x", $0) }.joined()
     }
 
-    private func pair() -> (client: LinkPacketCodec, host: LinkPacketCodec) {
-        (
+    private func pair() throws -> (client: LinkPacketCodec, host: LinkPacketCodec) {
+        try (
             LinkPacketCodec(key: Self.key, keyID: 7, sends: .clientToHost),
             LinkPacketCodec(key: Self.key, keyID: 7, sends: .hostToClient)
         )
@@ -20,14 +20,14 @@ struct LinkPacketTests {
 
     @Test
     func the_shared_test_vector() throws {
-        var link = LinkPacketCodec(key: Self.key, keyID: 0x0102_0304, sends: .clientToHost)
+        let link = try LinkPacketCodec(key: Self.key, keyID: 0x0102_0304, sends: .clientToHost)
         let packet = try link.seal(Data("macterm link".utf8))
         #expect(Self.hex(packet) == "040302010100000000000000f236902bd058c23845dfc037c34bd5dd6f6bddfca6442b095c60b507")
     }
 
     @Test
     func a_packet_goes_through_both_ways() throws {
-        var (client, host) = pair()
+        let (client, host) = try pair()
         let opened = try host.open(client.seal(Data("hello".utf8)))
         #expect(opened.payload == Data("hello".utf8))
         #expect(opened.newest)
@@ -38,7 +38,7 @@ struct LinkPacketTests {
 
     @Test
     func a_flipped_bit_is_rejected() throws {
-        var (client, host) = pair()
+        let (client, host) = try pair()
         let packet = try client.seal(Data("hello".utf8))
         for i in 0 ..< packet.count {
             var copy = packet
@@ -50,7 +50,7 @@ struct LinkPacketTests {
 
     @Test
     func replays_and_reflections_are_refused() throws {
-        var (client, host) = pair()
+        let (client, host) = try pair()
         let packet = try client.seal(Data("x".utf8))
         #expect(throws: LinkPacketCodec.Failure.wrongDirection) { _ = try client.open(packet) }
         _ = try host.open(packet)
@@ -59,7 +59,7 @@ struct LinkPacketTests {
 
     @Test
     func the_window_takes_late_packets_once() throws {
-        var (client, host) = pair()
+        let (client, host) = try pair()
         let packets = try (0 ..< 200).map { _ in try client.seal(Data("x".utf8)) }
         #expect(try host.open(packets[149]).newest)
         #expect(try !host.open(packets[99]).newest)
@@ -69,16 +69,16 @@ struct LinkPacketTests {
 
     @Test
     func another_key_or_key_id_is_refused() throws {
-        var (_, host) = pair()
-        var otherID = LinkPacketCodec(key: Self.key, keyID: 8, sends: .clientToHost)
+        let (_, host) = try pair()
+        let otherID = try LinkPacketCodec(key: Self.key, keyID: 8, sends: .clientToHost)
         #expect(throws: LinkPacketCodec.Failure.rejected) { _ = try host.open(otherID.seal(Data("x".utf8))) }
-        var otherKey = LinkPacketCodec(key: Data(repeating: 1, count: 32), keyID: 7, sends: .clientToHost)
+        let otherKey = try LinkPacketCodec(key: Data(repeating: 1, count: 32), keyID: 7, sends: .clientToHost)
         #expect(throws: LinkPacketCodec.Failure.rejected) { _ = try host.open(otherKey.seal(Data("x".utf8))) }
     }
 
     @Test
     func size_limits() throws {
-        var (client, host) = pair()
+        let (client, host) = try pair()
         #expect(throws: LinkPacketCodec.Failure.malformed) {
             _ = try client.seal(Data(count: LinkPacketCodec.maxPayload + 1))
         }
@@ -86,5 +86,28 @@ struct LinkPacketTests {
         let full = try client.seal(Data(count: LinkPacketCodec.maxPayload))
         #expect(full.count == LinkPacketCodec.maxPacket)
         _ = try host.open(full)
+    }
+
+    @Test
+    func a_spent_counter_stops_the_sender() throws {
+        let (client, _) = try pair()
+        client.nextCounter = LinkPacketCodec.counterLimit
+        #expect(throws: LinkPacketCodec.Failure.exhausted) { _ = try client.seal(Data("x".utf8)) }
+    }
+
+    @Test
+    func a_key_of_the_wrong_length_is_refused() {
+        #expect(throws: LinkPacketCodec.Failure.badKey) {
+            _ = try LinkPacketCodec(key: Data(count: 16), keyID: 7, sends: .clientToHost)
+        }
+    }
+
+    @Test
+    func a_packet_in_a_slice_opens() throws {
+        let (client, host) = try pair()
+        let packet = try client.seal(Data("slice".utf8))
+        let framed = Data([9, 9, 9]) + packet
+        let opened = try host.open(framed.dropFirst(3))
+        #expect(opened.payload == Data("slice".utf8))
     }
 }

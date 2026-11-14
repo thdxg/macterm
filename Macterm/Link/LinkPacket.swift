@@ -10,13 +10,19 @@ import Foundation
 /// nonce is 4 zero bytes and the counter. The associated data is the header.
 /// The cipher is CryptoKit's ChaCha20-Poly1305. This type has the nonce, the
 /// replay window and the roam rule, and nothing else: no I/O, no address.
-struct LinkPacketCodec {
+///
+/// One codec for each key, for the life of that key. It is a class so that a
+/// copy can never repeat a counter: the same counter under the same key is a
+/// nonce reuse. Never make a second codec for a key that a first one used.
+/// After `open` throws, nothing in the codec changed.
+final class LinkPacketCodec {
     enum Direction {
         case clientToHost
         case hostToClient
     }
 
     enum Failure: Error, Equatable {
+        case badKey
         case malformed
         case rejected
         case wrongDirection
@@ -44,18 +50,25 @@ struct LinkPacketCodec {
     let keyID: UInt32
     let sends: Direction
     private let key: SymmetricKey
+    /// Test only: a codec near the end of its counter.
+    var nextCounter: UInt64 {
+        get { next }
+        set { next = newValue }
+    }
+
     private var next: UInt64 = 1
     private var highest: UInt64 = 0
     /// Bit i is set when `highest - i` was accepted.
     private var seen: UInt64 = 0
 
-    init(key: Data, keyID: UInt32, sends: Direction) {
+    init(key: Data, keyID: UInt32, sends: Direction) throws {
+        guard key.count == 32 else { throw Failure.badKey }
         self.key = SymmetricKey(data: key)
         self.keyID = keyID
         self.sends = sends
     }
 
-    mutating func seal(_ payload: Data) throws -> Data {
+    func seal(_ payload: Data) throws -> Data {
         guard payload.count <= Self.maxPayload else { throw Failure.malformed }
         guard next < Self.counterLimit else { throw Failure.exhausted }
         let counter = next | (sends == .hostToClient ? Self.directionBit : 0)
@@ -67,7 +80,7 @@ struct LinkPacketCodec {
         return header + box.ciphertext + box.tag
     }
 
-    mutating func open(_ packet: Data) throws -> Opened {
+    func open(_ packet: Data) throws -> Opened {
         let bytes = Data(packet)
         guard bytes.count >= Self.overhead, bytes.count <= Self.maxPacket else { throw Failure.malformed }
         guard bytes.readLittleEndian(UInt32.self, at: 0) == keyID else { throw Failure.rejected }
@@ -99,7 +112,7 @@ struct LinkPacketCodec {
         return (seen >> UInt64(back)) & 1 == 1
     }
 
-    private mutating func accept(_ n: UInt64) {
+    private func accept(_ n: UInt64) {
         if n > highest {
             let shift = n - highest
             seen = shift >= Self.windowBits ? 0 : seen << UInt64(shift)
@@ -118,7 +131,7 @@ struct LinkPacketCodec {
 }
 
 private extension Data {
-    mutating func append(littleEndian value: some FixedWidthInteger) {
+    func append(littleEndian value: some FixedWidthInteger) {
         Swift.withUnsafeBytes(of: value.littleEndian) { append(contentsOf: $0) }
     }
 

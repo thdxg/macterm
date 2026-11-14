@@ -130,8 +130,11 @@ jobs:
 
       # The fuzz target for the packet parser of the roaming link (design/009).
       # A forged packet must never open, and must never move the window.
+      # macOS only: on Linux, Zig 0.17.1 stops with "corrupted coverage file …
+      # pcs_len was zero" (run 132269908310). The unit tests of the parser run
+      # on every leg.
       - name: Fuzz the Link Packet Parser
-        if: steps.changes.outputs.server == 'true'
+        if: steps.changes.outputs.server == 'true' && runner.os == 'macOS'
         run: ../scripts/server-zig.sh build fuzz-link --fuzz=500K
 
       - name: Build
