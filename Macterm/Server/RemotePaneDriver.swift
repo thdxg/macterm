@@ -207,14 +207,30 @@ final class RemotePaneDriver: PaneInputRoute {
         switch state {
         case let .running(session): session.sendInput(data)
         case let .plain(shell): shell.sendInput(data)
-        case .waiting: step(.retry)
+        case .waiting:
+            // The key waits for the new session. It is never dropped.
+            keep(data)
+            step(.retry)
         case .ended: if data.contains(0x0D) { step(.create) }
         case .idle:
             // The `initial_input` of a layout, written while the surface
             // starts: it goes to the session when one runs.
-            if earlyInput.count + data.count <= 1 << 20 { earlyInput.append(data) }
+            keep(data)
         case .closed: break
         }
+    }
+
+    fileprivate func keepUndelivered(_ data: Data) {
+        // A pane that ended or closed has no later attach.
+        switch state {
+        case .closed,
+             .ended: break
+        default: keep(data)
+        }
+    }
+
+    private func keep(_ data: Data) {
+        if earlyInput.count + data.count <= 1 << 20 { earlyInput.append(data) }
     }
 
     /// Macterm's line, on a line of its own: each line ends with CR LF,
@@ -265,6 +281,12 @@ final class RemotePaneDriver: PaneInputRoute {
                     guard let driver, driver.generation == mine, case .running = driver.state else { return }
                     driver.linkStopped()
                 }
+            }
+        }
+
+        func paneInputUndelivered(_ data: Data) {
+            DispatchQueue.main.async { [weak driver] in
+                MainActor.assumeIsolated { driver?.keepUndelivered(data) }
             }
         }
 

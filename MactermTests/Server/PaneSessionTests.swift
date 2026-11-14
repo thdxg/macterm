@@ -72,6 +72,29 @@ struct PaneSessionTests {
     }
 
     @Test
+    func input_after_a_lost_link_is_handed_back_and_not_dropped() async throws {
+        try await withServer { server in
+            let host = RecordingPaneHost()
+            let connections = ConnectionBox()
+            let session = PaneSession(
+                name: "ps-keep-\(UInt32.random(in: 0 ... .max))",
+                launch: .init(cwd: NSTemporaryDirectory(), argv: ["/bin/sh", "-c", "printf up-%s ok; sleep 60"], env: []),
+                wantsForeground: false,
+                reconnects: false,
+                host: host,
+                connect: { try await connections.next(server) }
+            )
+            session.start()
+            try await host.waitFor { $0.screen.contains("up-ok") }
+            connections.current?.close()
+            try await host.waitFor { $0.linkLost > 0 }
+            session.sendInput(Data("k".utf8))
+            try await host.waitFor { $0.undelivered == Data("k".utf8) }
+            session.stop()
+        }
+    }
+
+    @Test
     func a_session_that_was_killed_ends_the_pane_and_is_not_made_again() async throws {
         try await withServer { server in
             let host = RecordingPaneHost()

@@ -26,6 +26,9 @@ protocol PaneSessionHost: AnyObject, Sendable {
     /// The channel ended with no exit. The session tries to connect again,
     /// unless it was made with no reconnect.
     func paneLinkLost()
+    /// Input that the channel could not take (the link is down). The host
+    /// keeps it for the next attach: a key never goes away with no sign.
+    func paneInputUndelivered(_ data: Data)
     /// The session did not come back. The pane has nothing to show.
     func paneGone()
 }
@@ -41,6 +44,7 @@ protocol PaneInputRoute: AnyObject, Sendable {
 
 extension PaneSessionHost {
     func paneLinkLost() {}
+    func paneInputUndelivered(_: Data) {}
 }
 
 /// One pane's session on a server: it makes the session when a `launch` is
@@ -138,7 +142,17 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
             return
         }
         lock.unlock()
-        send { try $0.sendInput(data) }
+        guard let channel = currentChannel() else {
+            host.paneInputUndelivered(data)
+            return
+        }
+        output.async { [host] in
+            do { try channel.sendInput(data) } catch {
+                logger.info("pane \(self.name, privacy: .public): input not sent: \(String(describing: error), privacy: .public)")
+                host.paneInputUndelivered(data)
+                host.paneLinkLost()
+            }
+        }
     }
 
     /// Takes the lead: this client's size becomes the pty's.
