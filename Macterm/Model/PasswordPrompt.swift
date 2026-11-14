@@ -180,20 +180,13 @@ enum PasswordPromptIdentity {
         let first = command.split(separator: " ", maxSplits: 1).first.map(String.init) ?? ""
         return (first as NSString).lastPathComponent == "sudo"
     }
-
-    /// What a remote project's own pane is running when its ssh asks for a
-    /// password: Macterm's spawn wrapper is an implementation detail, so the
-    /// entry is filed under the connection it makes.
-    static func remoteCommand(user: String?, host: String) -> String {
-        if let user, !user.isEmpty { "ssh \(user)@\(host)" } else { "ssh \(host)" }
     }
 }
 
 /// Who is reading a password, as far as the process table can vouch for it.
 enum PasswordAsker: Equatable {
     /// A program. `path` is its executable's real path (`proc_pidpath`),
-    /// `command` that path plus its arguments — or, for a remote project's own
-    /// login, the connection it makes (`ssh user@host`). `isProtected`: the
+    /// `command` that path plus its arguments. `isProtected`: the
     /// executable and every directory above it belong to root and aren't
     /// writable by the user (`ProcessInspector.isProtectedExecutable`), so no
     /// process of the user's can have put it there or changed it.

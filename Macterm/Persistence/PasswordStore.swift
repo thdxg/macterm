@@ -54,6 +54,8 @@ struct KeychainPasswordStore: PasswordStoring {
     private struct Metadata: Codable {
         let command: String?
         let prompt: String
+        /// An entry of a host's prompt. Absent for this Mac and for items saved before hosts.
+        let host: String?
     }
 
     private func baseQuery(_ id: PasswordEntryID? = nil) -> [String: Any] {
@@ -79,7 +81,7 @@ struct KeychainPasswordStore: PasswordStoring {
                   let meta = try? JSONDecoder().decode(Metadata.self, from: data)
             else { return nil }
             return SavedPassword(
-                id: PasswordEntryID(command: meta.command, prompt: meta.prompt),
+                id: PasswordEntryID(command: meta.command, prompt: meta.prompt, host: meta.host),
                 modified: item[kSecAttrModificationDate as String] as? Date
             )
         }
@@ -98,7 +100,7 @@ struct KeychainPasswordStore: PasswordStoring {
 
     func save(_ password: String, for id: PasswordEntryID) throws {
         let secret = Data(password.utf8)
-        let meta = try JSONEncoder().encode(Metadata(command: id.command, prompt: id.prompt))
+        let meta = try JSONEncoder().encode(Metadata(command: id.command, prompt: id.prompt, host: id.host))
         let attributes: [String: Any] = [
             kSecValueData as String: secret,
             kSecAttrGeneric as String: meta,

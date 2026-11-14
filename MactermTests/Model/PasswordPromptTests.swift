@@ -151,12 +151,6 @@ struct PasswordPromptIdentityTests {
         #expect(!PasswordPromptIdentity.isOneTimeCode("ethan@host's password:"))
         #expect(!PasswordPromptIdentity.isOneTimeCode("Enter passphrase for key '/k':"))
     }
-
-    @Test
-    func remote_command_names_the_connection() {
-        #expect(PasswordPromptIdentity.remoteCommand(user: "ethan", host: "prod") == "ssh ethan@prod")
-        #expect(PasswordPromptIdentity.remoteCommand(user: nil, host: "prod") == "ssh prod")
-    }
 }
 
 struct PasswordLineCaptureTests {

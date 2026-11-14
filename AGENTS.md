@@ -164,7 +164,7 @@ A pane that asks for a password gets a native `NSPopover` at the cursor (`Passwo
   - `pane run` and `pane key` feed the same capture (`viewDidSendText` and `viewDidSendKey`). This is how the e2e suite answers prompts. The monitor fences off its own autofill typing (`isInjecting`).
   - Everything that the monitor reads or drives goes through `PasswordPromptMonitor.Probes`. `PasswordPromptMonitorStateTests` therefore runs the whole machine without a surface.
   - A sighting must hold for 200 ms, unless the user types at it. A script that drops echo to read a reply of the terminal is not a prompt.
-  - Prompts on a remote host *inside* ssh are invisible, because the local ssh client is raw. The own ssh login of a remote project asks in a sheet (`SSHLoginPrompts`), not in the pane.
+  - Prompts of a host's session (`sudo` on a host) are seen through `tty_mode` (see "Prompts on a host"). Prompts inside an `ssh` that you typed by hand stay invisible, because the local ssh client is raw. The own ssh login of a remote project asks in a sheet (`SSHLoginPrompts`), not in the pane.
 - **The identity is the command and the prompt line** (`PasswordEntryID`). The command is the foreground command, named by the **real path of its executable** (`ProcessInspector.passwordAsker`: `proc_pidpath` and argv without argv[0]). The prompt line is the last viewport line that is not empty.
   - Never use argv[0]. A process sets it for itself. `exec -a ssh ./fake prod` would collect the password that Macterm saved for the real ssh.
   - `runningCommand` (the capture of `run:` for a layout) still uses argv. Do not change it.

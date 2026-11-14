@@ -94,8 +94,10 @@ final class PasswordPromptMonitor {
         }
 
         var isAppActive: @MainActor () -> Bool = { NSApp.isActive }
+        /// nil for a remote pane: its mode is a report that is as old as the
+        /// last poll, so an on-demand fill there never presses Return.
         var lineMode: @MainActor (Pane) -> TerminalLineMode? = {
-            $0.isRemote ? $0.remoteLineMode : ProcessInspector.terminalLineMode(forPane: $0)
+            $0.isRemote ? nil : ProcessInspector.terminalLineMode(forPane: $0)
         }
 
         /// Types a secret for an on-demand fill: the text path minus
