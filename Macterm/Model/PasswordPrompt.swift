@@ -72,7 +72,9 @@ struct PasswordEntryID: Hashable, Codable {
         guard let program = parts.first else { return command }
         let path = String(program)
         let name = path.contains("/") ? (path as NSString).lastPathComponent : path
-        if name == "sudo", path.contains("/") {
+        // On a host nothing is protected and the entry names its host, so a
+        // path there is only how the host named the program.
+        if name == "sudo", path.contains("/"), host == nil {
             return (path as NSString).abbreviatingWithTildeInPath + (parts.count > 1 ? " \(parts[1])" : "")
         }
         guard parts.count > 1 else { return name }

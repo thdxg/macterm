@@ -471,6 +471,14 @@ struct OnDemandPasswordTests {
     }
 
     @Test
+    func a_host_entry_shows_the_short_program_name() {
+        let id = PasswordEntryID(command: "/usr/bin/sudo apt update", prompt: "Password:", host: "u@h:22")
+        #expect(id.displayCommand == "sudo apt update")
+        // A path to a program called sudo on this Mac still shows in full.
+        #expect(PasswordEntryID(command: "/Users/e/bin/sudo x", prompt: "Password:").displayCommand?.contains("bin/sudo") == true)
+    }
+
+    @Test
     func a_host_shell_files_by_prompt_and_host() {
         let id = PasswordPromptIdentity.entryID(prompt: "Secret:", asker: .remote(scope: "u@h:22", command: nil))
         #expect(id == PasswordEntryID(command: nil, prompt: "Secret:", host: "u@h:22"))
