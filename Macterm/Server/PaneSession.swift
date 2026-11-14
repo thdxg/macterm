@@ -26,6 +26,9 @@ protocol PaneSessionHost: AnyObject, Sendable {
     /// The channel ended with no exit. The session tries to connect again,
     /// unless it was made with no reconnect.
     func paneLinkLost()
+    /// Input that the channel could not take (the link is down). The host
+    /// keeps it for the next attach: a key never goes away with no sign.
+    func paneInputUndelivered(_ data: Data)
     /// The session did not come back. The pane has nothing to show.
     func paneGone()
 }
@@ -41,6 +44,7 @@ protocol PaneInputRoute: AnyObject, Sendable {
 
 extension PaneSessionHost {
     func paneLinkLost() {}
+    func paneInputUndelivered(_: Data) {}
 }
 
 /// One pane's session on a server: it makes the session when a `launch` is
@@ -128,8 +132,9 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
 
     // MARK: - Input
 
-    /// Keys, pastes and terminal replies. Dropped while there is no channel,
-    /// as a terminal drops keys while its link is down.
+    /// Keys, pastes and terminal replies. Input that the channel cannot take
+    /// goes back to the host (`paneInputUndelivered`). Input that waits for
+    /// the first attach is returned by `takePendingInput`.
     func sendInput(_ data: Data) {
         lock.lock()
         if !attached {
@@ -138,7 +143,29 @@ final class PaneSession: PaneInputRoute, @unchecked Sendable {
             return
         }
         lock.unlock()
-        send { try $0.sendInput(data) }
+        guard let channel = currentChannel() else {
+            host.paneInputUndelivered(data)
+            return
+        }
+        output.async { [host] in
+            do { try channel.sendInput(data) } catch ProtocolFrame.FrameError.tooLarge {
+                // A paste over the frame limit never fits: the link is fine.
+                logger.info("pane \(self.name, privacy: .public): input too large")
+            } catch {
+                logger.info("pane \(self.name, privacy: .public): input not sent: \(String(describing: error), privacy: .public)")
+                host.paneInputUndelivered(data)
+                host.paneLinkLost()
+            }
+        }
+    }
+
+    /// The input that never reached a channel. Call it after `stop()`.
+    func takePendingInput() -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        let kept = pendingInput
+        pendingInput = Data()
+        return kept
     }
 
     /// Takes the lead: this client's size becomes the pty's.

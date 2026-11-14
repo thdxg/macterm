@@ -304,6 +304,10 @@ final class RemoteServers {
         switch result {
         case let .success(connection):
             stderr.discard()
+            // When ssh exits (its master died), the panes learn it at once,
+            // not at their next write.
+            process.terminationHandler = { _ in connection.close() }
+            if !process.isRunning { connection.close() }
             return .connected(connection, process)
         case .failure(ServerClientError.noAnswer):
             let status = await Self.exitStatus(of: process, within: .seconds(5))
