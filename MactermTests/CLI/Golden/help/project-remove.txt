@@ -1,0 +1,13 @@
+OVERVIEW: Remove a project. This kills the zmx sessions of its panes.
+
+USAGE: macterm project remove <project> [--force] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <project>               Project name, UUID, or index.
+
+OPTIONS:
+  --force                 Remove even if a pane has a running program.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

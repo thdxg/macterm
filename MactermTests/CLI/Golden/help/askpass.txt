@@ -1,0 +1,10 @@
+OVERVIEW: Ask Macterm what an ssh login asks. ssh runs it; you do not.
+
+USAGE: macterm askpass [<prompt>]
+
+ARGUMENTS:
+  <prompt>                The prompt that ssh gives.
+
+OPTIONS:
+  -h, --help              Show help information.
+

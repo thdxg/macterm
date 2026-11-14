@@ -1,0 +1,21 @@
+OVERVIEW: List, create, select, reorder, and close tabs.
+
+USAGE: macterm tab <subcommand>
+
+OPTIONS:
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  list (default)          List tabs. The default is the active project.
+  new                     Open a new tab. It becomes active, unless you use
+                          --no-focus.
+  select                  Make a tab active.
+  move                    Move a tab to a slot. The slot is the final position
+                          of the tab in the `tab list` order, counted from 1.
+  rename                  Rename a tab, or use --reset to restore its automatic
+                          title.
+  close                   Close a tab. This kills the zmx sessions of its panes.
+  merge                   [debug] Merge a tab into the active tab, next to a
+                          pane (--dest) or at the edge of the workspace.
+
+  See 'macterm help tab <subcommand>' for detailed help.

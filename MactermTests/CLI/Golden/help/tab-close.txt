@@ -1,0 +1,14 @@
+OVERVIEW: Close a tab. This kills the zmx sessions of its panes.
+
+USAGE: macterm tab close <tab> [--project <project>] [--force] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <tab>                   Tab title, UUID, or index (tab:3).
+
+OPTIONS:
+  --project <project>     Project scope. The default is the active project.
+  --force                 Close even if a pane has a running program.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

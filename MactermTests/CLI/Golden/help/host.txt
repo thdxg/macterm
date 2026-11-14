@@ -1,0 +1,14 @@
+OVERVIEW: [debug] Open or end a host's ssh connection, or reach its server.
+
+USAGE: macterm host <subcommand>
+
+OPTIONS:
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  connect                 [debug] Log in to a host, or reuse its connection.
+  server                  [debug] Connect to a host's Macterm server. Install
+                          it first when it is not there.
+  disconnect              [debug] End Macterm's ssh connection to a host.
+
+  See 'macterm help host <subcommand>' for detailed help.

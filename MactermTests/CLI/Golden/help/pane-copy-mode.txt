@@ -1,0 +1,19 @@
+OVERVIEW: [debug] Read a pane's copy-mode state, or enter or exit the mode.
+
+USAGE: macterm pane copy-mode [<action>] [--keymap <keymap>] [--project <project>] [--tab <tab>] [--pane <pane>] [--session <session>] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <action>                enter or exit. Omit it to read the state.
+
+OPTIONS:
+  --keymap <keymap>       The keymap for enter: helix or vim. The default is
+                          the setting.
+  --project <project>     Project scope (name, UUID, or index). The default is
+                          the active project.
+  --tab <tab>             Tab scope (title, UUID, or index).
+  --pane <pane>           Target pane by UUID, or index within the tab (pane:2).
+  --session <session>     Target pane by zmx session name (restart-stable).
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

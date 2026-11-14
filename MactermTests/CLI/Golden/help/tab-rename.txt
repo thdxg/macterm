@@ -1,0 +1,15 @@
+OVERVIEW: Rename a tab, or use --reset to restore its automatic title.
+
+USAGE: macterm tab rename <tab> [<title>] [--reset] [--project <project>] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <tab>                   Tab title, UUID, or index (tab:3).
+  <title>                 New title for the tab.
+
+OPTIONS:
+  --reset                 Restore the automatic title.
+  --project <project>     Project scope. The default is the active project.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

@@ -1,0 +1,14 @@
+OVERVIEW: Open a new tab. It becomes active, unless you use --no-focus.
+
+USAGE: macterm tab new [--project <project>] [--run <run>] [--no-focus] [--socket <socket>] [--json]
+
+OPTIONS:
+  --project <project>     Project (name, UUID, or index). The default is the
+                          active project.
+  --run <run>             Command to run in the new tab's shell.
+  --no-focus              Start the tab in the background. Do not change the
+                          selection.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

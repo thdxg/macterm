@@ -1,0 +1,17 @@
+OVERVIEW: [debug] Read a project's memory, or change it.
+
+USAGE: macterm project memory <project> [--set <set>] [--panel <panel>] [--summary <summary>] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <project>               Project name, UUID, or index.
+
+OPTIONS:
+  --set <set>             on or off (the setting), or forget (delete this
+                          project's records).
+  --panel <panel>         show or hide the key window's project memory panel.
+  --summary <summary>     write: write the summary now, as the panel's button
+                          does.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

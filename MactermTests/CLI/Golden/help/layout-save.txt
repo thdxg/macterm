@@ -1,0 +1,11 @@
+OVERVIEW: Save the live workspace as the project's layout file.
+
+USAGE: macterm layout save [--project <project>] [--socket <socket>] [--json]
+
+OPTIONS:
+  --project <project>     Project (name, UUID, or index). The default is the
+                          active project.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

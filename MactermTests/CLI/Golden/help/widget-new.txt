@@ -1,0 +1,16 @@
+OVERVIEW: Add a locked desktop widget that runs your login shell, in the middle
+of the desktop.
+
+USAGE: macterm widget new [--size <size>] [--name <name>] [--run <run>] [--socket <socket>] [--json]
+
+OPTIONS:
+  --size <size>           Size as a grid span, COLUMNSxROWS, for example 3x2.
+                          The default is 3x3.
+  --name <name>           A name for the widget. Settings and widgets.yaml show
+                          it.
+  --run <run>             Command to type into the shell of the widget each
+                          time that it starts a shell.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

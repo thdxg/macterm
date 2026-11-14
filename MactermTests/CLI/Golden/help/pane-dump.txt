@@ -1,0 +1,17 @@
+OVERVIEW: Print the terminal text of a pane: the viewport, or the full
+scrollback with --scrollback.
+
+USAGE: macterm pane dump [--scrollback] [--project <project>] [--tab <tab>] [--pane <pane>] [--session <session>] [--socket <socket>] [--json]
+
+OPTIONS:
+  --scrollback            Include the full scrollback, not only the visible
+                          viewport.
+  --project <project>     Project scope (name, UUID, or index). The default is
+                          the active project.
+  --tab <tab>             Tab scope (title, UUID, or index).
+  --pane <pane>           Target pane by UUID, or index within the tab (pane:2).
+  --session <session>     Target pane by zmx session name (restart-stable).
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

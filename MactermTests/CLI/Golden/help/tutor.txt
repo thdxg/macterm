@@ -1,0 +1,15 @@
+OVERVIEW: Print a short tutorial. It uses your current keybinds.
+
+Topics: project (projects, tabs, splits and the CLI) and pinned (what the
+pinned row above the projects is for). The default is project.
+
+USAGE: macterm tutor [<topic>] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <topic>                 Tutorial topic: project or pinned. (default: project)
+
+OPTIONS:
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

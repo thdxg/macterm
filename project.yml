@@ -299,7 +299,10 @@ targets:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - MactermTests
+      - path: MactermTests
+        # CLIContractTests reads these through #filePath.
+        excludes:
+          - CLI/Golden/**
     dependencies:
       - target: Macterm
     settings:

@@ -1,0 +1,3238 @@
+[
+  {
+    "arguments" : [
+      "status"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "command" : "status",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "status" : {
+        "data" : {
+          "status" : {
+            "activeProject" : "api",
+            "activeProjectID" : "P1",
+            "pid" : 4242,
+            "version" : "1.34.0"
+          }
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "Macterm 1.34.0 (pid 4242) — active project: api\n"
+  },
+  {
+    "arguments" : [
+      "status",
+      "--json"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "command" : "status",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "status" : {
+        "data" : {
+          "status" : {
+            "activeProject" : "api",
+            "activeProjectID" : "P1",
+            "pid" : 4242,
+            "version" : "1.34.0"
+          }
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "{\n  \"status\" : {\n    \"activeProject\" : \"api\",\n    \"activeProjectID\" : \"P1\",\n    \"pid\" : 4242,\n    \"version\" : \"1.34.0\"\n  }\n}\n"
+  },
+  {
+    "arguments" : [
+      "status"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "command" : "status",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "status" : {
+        "data" : {
+          "status" : {
+            "pid" : 4242,
+            "version" : "1.34.0"
+          }
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "Macterm 1.34.0 (pid 4242)\n"
+  },
+  {
+    "arguments" : [
+      "project",
+      "list"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "command" : "project.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "project.list" : {
+        "data" : {
+          "projects" : [
+            {
+              "active" : true,
+              "id" : "P1",
+              "index" : 1,
+              "loaded" : true,
+              "name" : "api",
+              "path" : "\/tmp\/api",
+              "tabCount" : 2
+            },
+            {
+              "active" : false,
+              "id" : "P2",
+              "index" : 2,
+              "loaded" : false,
+              "name" : "web",
+              "path" : "me@box:\/srv\/web"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "project:1  *  api  2 tabs      \/tmp\/api\nproject:2     web  not loaded  me@box:\/srv\/web\n"
+  },
+  {
+    "arguments" : [
+      "project",
+      "list",
+      "--json"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "command" : "project.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "project.list" : {
+        "data" : {
+          "projects" : [
+            {
+              "active" : true,
+              "id" : "P1",
+              "index" : 1,
+              "loaded" : true,
+              "name" : "api",
+              "path" : "\/tmp\/api",
+              "tabCount" : 2
+            },
+            {
+              "active" : false,
+              "id" : "P2",
+              "index" : 2,
+              "loaded" : false,
+              "name" : "web",
+              "path" : "me@box:\/srv\/web"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "{\n  \"projects\" : [\n    {\n      \"active\" : true,\n      \"id\" : \"P1\",\n      \"index\" : 1,\n      \"loaded\" : true,\n      \"name\" : \"api\",\n      \"path\" : \"\\\/tmp\\\/api\",\n      \"tabCount\" : 2\n    },\n    {\n      \"active\" : false,\n      \"id\" : \"P2\",\n      \"index\" : 2,\n      \"loaded\" : false,\n      \"name\" : \"web\",\n      \"path\" : \"me@box:\\\/srv\\\/web\"\n    }\n  ]\n}\n"
+  },
+  {
+    "arguments" : [
+      "project",
+      "create",
+      "\/tmp\/api",
+      "--name",
+      "api",
+      "--select"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "name" : "api",
+          "path" : "\/tmp\/api",
+          "select" : true
+        },
+        "command" : "project.create",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "project.create" : {
+        "data" : {
+          "projects" : [
+            {
+              "active" : true,
+              "id" : "P1",
+              "index" : 1,
+              "loaded" : true,
+              "name" : "api",
+              "path" : "\/tmp\/api",
+              "tabCount" : 2
+            },
+            {
+              "active" : false,
+              "id" : "P2",
+              "index" : 2,
+              "loaded" : false,
+              "name" : "web",
+              "path" : "me@box:\/srv\/web"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "project:1  *  api  2 tabs      \/tmp\/api\nproject:2     web  not loaded  me@box:\/srv\/web\n"
+  },
+  {
+    "arguments" : [
+      "project",
+      "create",
+      "\/tmp\/api"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "path" : "\/tmp\/api",
+          "select" : false
+        },
+        "command" : "project.create",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "project.create" : {
+        "data" : {
+          "projects" : [
+            {
+              "active" : true,
+              "id" : "P1",
+              "index" : 1,
+              "loaded" : true,
+              "name" : "api",
+              "path" : "\/tmp\/api",
+              "tabCount" : 2
+            },
+            {
+              "active" : false,
+              "id" : "P2",
+              "index" : 2,
+              "loaded" : false,
+              "name" : "web",
+              "path" : "me@box:\/srv\/web"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "project:1  *  api  2 tabs      \/tmp\/api\nproject:2     web  not loaded  me@box:\/srv\/web\n"
+  },
+  {
+    "arguments" : [
+      "project",
+      "select",
+      "api"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "project" : "api"
+        },
+        "command" : "project.select",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "project.select" : {
+        "data" : {
+          "projects" : [
+            {
+              "active" : true,
+              "id" : "P1",
+              "index" : 1,
+              "loaded" : true,
+              "name" : "api",
+              "path" : "\/tmp\/api",
+              "tabCount" : 2
+            },
+            {
+              "active" : false,
+              "id" : "P2",
+              "index" : 2,
+              "loaded" : false,
+              "name" : "web",
+              "path" : "me@box:\/srv\/web"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "project:1  *  api  2 tabs      \/tmp\/api\nproject:2     web  not loaded  me@box:\/srv\/web\n"
+  },
+  {
+    "arguments" : [
+      "project",
+      "select",
+      "api",
+      "--window",
+      "2"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "project" : "api",
+          "window" : "2"
+        },
+        "command" : "project.select",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "project.select" : {
+        "data" : {
+          "projects" : [
+            {
+              "active" : true,
+              "id" : "P1",
+              "index" : 1,
+              "loaded" : true,
+              "name" : "api",
+              "path" : "\/tmp\/api",
+              "tabCount" : 2
+            },
+            {
+              "active" : false,
+              "id" : "P2",
+              "index" : 2,
+              "loaded" : false,
+              "name" : "web",
+              "path" : "me@box:\/srv\/web"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "project:1  *  api  2 tabs      \/tmp\/api\nproject:2     web  not loaded  me@box:\/srv\/web\n"
+  },
+  {
+    "arguments" : [
+      "project",
+      "rename",
+      "api",
+      "backend"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "name" : "backend",
+          "project" : "api"
+        },
+        "command" : "project.rename",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "project.rename" : {
+        "data" : {
+          "projects" : [
+            {
+              "active" : true,
+              "id" : "P1",
+              "index" : 1,
+              "loaded" : true,
+              "name" : "api",
+              "path" : "\/tmp\/api",
+              "tabCount" : 2
+            },
+            {
+              "active" : false,
+              "id" : "P2",
+              "index" : 2,
+              "loaded" : false,
+              "name" : "web",
+              "path" : "me@box:\/srv\/web"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "project:1  *  api  2 tabs      \/tmp\/api\nproject:2     web  not loaded  me@box:\/srv\/web\n"
+  },
+  {
+    "arguments" : [
+      "project",
+      "remove",
+      "api",
+      "--force"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "force" : true,
+          "project" : "api"
+        },
+        "command" : "project.remove",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "project.remove" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "project",
+      "remove",
+      "api"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "args" : {
+          "force" : false,
+          "project" : "api"
+        },
+        "command" : "project.remove",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "project.remove" : {
+        "error" : {
+          "action" : "pass --force",
+          "code" : "busy",
+          "message" : "a pane in api runs a program"
+        },
+        "ok" : false
+      }
+    },
+    "stderr" : "macterm: a pane in api runs a program\n  hint: pass --force\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "tab",
+      "list"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "tab.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tab.list" : {
+        "data" : {
+          "tabs" : [
+            {
+              "active" : true,
+              "id" : "T1",
+              "index" : 1,
+              "paneCount" : 1,
+              "title" : "zsh"
+            },
+            {
+              "active" : false,
+              "id" : "T2",
+              "index" : 2,
+              "paneCount" : 3,
+              "title" : "build"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  *  zsh    1 pane\ntab:2     build  3 panes\n"
+  },
+  {
+    "arguments" : [
+      "tab",
+      "list",
+      "--project",
+      "api",
+      "--json"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "project" : "api"
+        },
+        "command" : "tab.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tab.list" : {
+        "data" : {
+          "tabs" : [
+            {
+              "active" : true,
+              "id" : "T1",
+              "index" : 1,
+              "paneCount" : 1,
+              "title" : "zsh"
+            },
+            {
+              "active" : false,
+              "id" : "T2",
+              "index" : 2,
+              "paneCount" : 3,
+              "title" : "build"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "{\n  \"tabs\" : [\n    {\n      \"active\" : true,\n      \"id\" : \"T1\",\n      \"index\" : 1,\n      \"paneCount\" : 1,\n      \"title\" : \"zsh\"\n    },\n    {\n      \"active\" : false,\n      \"id\" : \"T2\",\n      \"index\" : 2,\n      \"paneCount\" : 3,\n      \"title\" : \"build\"\n    }\n  ]\n}\n"
+  },
+  {
+    "arguments" : [
+      "tab",
+      "new",
+      "--project",
+      "api",
+      "--run",
+      "npm test"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "project" : "api",
+          "run" : "npm test"
+        },
+        "command" : "tab.new",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tab.new" : {
+        "data" : {
+          "tabs" : [
+            {
+              "active" : true,
+              "id" : "T1",
+              "index" : 1,
+              "paneCount" : 1,
+              "title" : "zsh"
+            },
+            {
+              "active" : false,
+              "id" : "T2",
+              "index" : 2,
+              "paneCount" : 3,
+              "title" : "build"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  *  zsh    1 pane\ntab:2     build  3 panes\n"
+  },
+  {
+    "arguments" : [
+      "tab",
+      "new",
+      "--no-focus"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "command" : "status",
+        "id" : "-",
+        "v" : 1
+      },
+      {
+        "args" : {
+          "focus" : false
+        },
+        "command" : "tab.new",
+        "id" : "-",
+        "v" : 2
+      }
+    ],
+    "responses" : {
+      "tab.new" : {
+        "data" : {
+          "tabs" : [
+            {
+              "active" : true,
+              "id" : "T1",
+              "index" : 1,
+              "paneCount" : 1,
+              "title" : "zsh"
+            },
+            {
+              "active" : false,
+              "id" : "T2",
+              "index" : 2,
+              "paneCount" : 3,
+              "title" : "build"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  *  zsh    1 pane\ntab:2     build  3 panes\n"
+  },
+  {
+    "arguments" : [
+      "tab",
+      "select",
+      "2"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "tab" : "2"
+        },
+        "command" : "tab.select",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tab.select" : {
+        "data" : {
+          "tabs" : [
+            {
+              "active" : true,
+              "id" : "T1",
+              "index" : 1,
+              "paneCount" : 1,
+              "title" : "zsh"
+            },
+            {
+              "active" : false,
+              "id" : "T2",
+              "index" : 2,
+              "paneCount" : 3,
+              "title" : "build"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  *  zsh    1 pane\ntab:2     build  3 panes\n"
+  },
+  {
+    "arguments" : [
+      "tab",
+      "rename",
+      "2",
+      "build"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "reset" : false,
+          "tab" : "2",
+          "title" : "build"
+        },
+        "command" : "tab.rename",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tab.rename" : {
+        "data" : {
+          "tabs" : [
+            {
+              "active" : true,
+              "id" : "T1",
+              "index" : 1,
+              "paneCount" : 1,
+              "title" : "zsh"
+            },
+            {
+              "active" : false,
+              "id" : "T2",
+              "index" : 2,
+              "paneCount" : 3,
+              "title" : "build"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  *  zsh    1 pane\ntab:2     build  3 panes\n"
+  },
+  {
+    "arguments" : [
+      "tab",
+      "rename",
+      "2",
+      "--reset"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "reset" : true,
+          "tab" : "2"
+        },
+        "command" : "tab.rename",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tab.rename" : {
+        "data" : {
+          "tabs" : [
+            {
+              "active" : true,
+              "id" : "T1",
+              "index" : 1,
+              "paneCount" : 1,
+              "title" : "zsh"
+            },
+            {
+              "active" : false,
+              "id" : "T2",
+              "index" : 2,
+              "paneCount" : 3,
+              "title" : "build"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  *  zsh    1 pane\ntab:2     build  3 panes\n"
+  },
+  {
+    "arguments" : [
+      "tab",
+      "move",
+      "2",
+      "1"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "slot" : 1,
+          "tab" : "2"
+        },
+        "command" : "tab.move",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tab.move" : {
+        "data" : {
+          "tabs" : [
+            {
+              "active" : true,
+              "id" : "T1",
+              "index" : 1,
+              "paneCount" : 1,
+              "title" : "zsh"
+            },
+            {
+              "active" : false,
+              "id" : "T2",
+              "index" : 2,
+              "paneCount" : 3,
+              "title" : "build"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  *  zsh    1 pane\ntab:2     build  3 panes\n"
+  },
+  {
+    "arguments" : [
+      "tab",
+      "close",
+      "2",
+      "--force"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "force" : true,
+          "tab" : "2"
+        },
+        "command" : "tab.close",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tab.close" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "tab",
+      "close",
+      "9"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "args" : {
+          "force" : false,
+          "tab" : "9"
+        },
+        "command" : "tab.close",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tab.close" : {
+        "error" : {
+          "code" : "not_found",
+          "message" : "no tab 9"
+        },
+        "ok" : false
+      }
+    },
+    "stderr" : "macterm: no tab 9\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "list"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "pane.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.list" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "list",
+      "--json"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "pane.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.list" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "{\n  \"panes\" : [\n    {\n      \"cwd\" : \"\\\/tmp\\\/api\",\n      \"focused\" : true,\n      \"id\" : \"A1\",\n      \"index\" : 1,\n      \"process\" : \"vim\",\n      \"session\" : \"macterm-api-8f327ce4a3f8\",\n      \"state\" : \"running\",\n      \"tabID\" : \"T1\",\n      \"tabIndex\" : 1,\n      \"title\" : \"zsh\"\n    },\n    {\n      \"focused\" : false,\n      \"id\" : \"A2\",\n      \"index\" : 2,\n      \"session\" : \"macterm-api-0a1b2c3d4e5f\",\n      \"tabID\" : \"T1\",\n      \"tabIndex\" : 1,\n      \"title\" : \"zsh\"\n    }\n  ]\n}\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "inspect"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "pane.inspect",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.inspect" : {
+        "data" : {
+          "inspect" : {
+            "altScreen" : false,
+            "cellHeightPx" : 34,
+            "cellWidthPx" : 16,
+            "cols" : 120,
+            "contentScale" : 2,
+            "foregroundArgv" : [
+              "vim",
+              "a.txt"
+            ],
+            "foregroundPID" : 901,
+            "heightPx" : 1360,
+            "id" : "A1",
+            "needsConfirmQuit" : true,
+            "processExited" : false,
+            "readOnly" : false,
+            "rows" : 40,
+            "scrollbackLen" : 40,
+            "scrollbackOffset" : 460,
+            "scrollbackTotal" : 500,
+            "session" : "macterm-api-8f327ce4a3f8",
+            "widthPx" : 1920
+          }
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "session             macterm-api-8f327ce4a3f8\ngrid                120×40\ncell px             16×34\nsurface px          1920×1360\nscrollback          500 total, 460 offset, 40 len\nalt-screen          false\ncontent scale       2.0\nforeground          901 (vim a.txt)\nprocess exited      false\nneeds confirm quit  true\nread-only           false\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "inspect",
+      "--json"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "pane.inspect",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.inspect" : {
+        "data" : {
+          "inspect" : {
+            "altScreen" : false,
+            "cellHeightPx" : 34,
+            "cellWidthPx" : 16,
+            "cols" : 120,
+            "contentScale" : 2,
+            "foregroundArgv" : [
+              "vim",
+              "a.txt"
+            ],
+            "foregroundPID" : 901,
+            "heightPx" : 1360,
+            "id" : "A1",
+            "needsConfirmQuit" : true,
+            "processExited" : false,
+            "readOnly" : false,
+            "rows" : 40,
+            "scrollbackLen" : 40,
+            "scrollbackOffset" : 460,
+            "scrollbackTotal" : 500,
+            "session" : "macterm-api-8f327ce4a3f8",
+            "widthPx" : 1920
+          }
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "{\n  \"inspect\" : {\n    \"altScreen\" : false,\n    \"cellHeightPx\" : 34,\n    \"cellWidthPx\" : 16,\n    \"cols\" : 120,\n    \"contentScale\" : 2,\n    \"foregroundArgv\" : [\n      \"vim\",\n      \"a.txt\"\n    ],\n    \"foregroundPID\" : 901,\n    \"heightPx\" : 1360,\n    \"id\" : \"A1\",\n    \"needsConfirmQuit\" : true,\n    \"processExited\" : false,\n    \"readOnly\" : false,\n    \"rows\" : 40,\n    \"scrollbackLen\" : 40,\n    \"scrollbackOffset\" : 460,\n    \"scrollbackTotal\" : 500,\n    \"session\" : \"macterm-api-8f327ce4a3f8\",\n    \"widthPx\" : 1920\n  }\n}\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "dump"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "scrollback" : false
+        },
+        "command" : "pane.dump",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.dump" : {
+        "data" : {
+          "dump" : {
+            "bytes" : 22,
+            "id" : "A1",
+            "scrollback" : false,
+            "session" : "macterm-api-8f327ce4a3f8",
+            "text" : "$ ls\nREADME.md  src\n$ "
+          }
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "$ ls\nREADME.md  src\n$ \n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "dump",
+      "--scrollback",
+      "--session",
+      "macterm-api-8f327ce4a3f8"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "scrollback" : true,
+          "session" : "macterm-api-8f327ce4a3f8"
+        },
+        "command" : "pane.dump",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.dump" : {
+        "data" : {
+          "dump" : {
+            "bytes" : 22,
+            "id" : "A1",
+            "scrollback" : false,
+            "session" : "macterm-api-8f327ce4a3f8",
+            "text" : "$ ls\nREADME.md  src\n$ "
+          }
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "$ ls\nREADME.md  src\n$ \n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "dump",
+      "--json"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "scrollback" : false
+        },
+        "command" : "pane.dump",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.dump" : {
+        "data" : {
+          "dump" : {
+            "bytes" : 22,
+            "id" : "A1",
+            "scrollback" : false,
+            "session" : "macterm-api-8f327ce4a3f8",
+            "text" : "$ ls\nREADME.md  src\n$ "
+          }
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "{\n  \"dump\" : {\n    \"bytes\" : 22,\n    \"id\" : \"A1\",\n    \"scrollback\" : false,\n    \"session\" : \"macterm-api-8f327ce4a3f8\",\n    \"text\" : \"$ ls\\nREADME.md  src\\n$ \"\n  }\n}\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "split",
+      "--direction",
+      "right",
+      "--run",
+      "htop"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "direction" : "right",
+          "run" : "htop"
+        },
+        "command" : "pane.split",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.split" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "split",
+      "--no-focus"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "command" : "status",
+        "id" : "-",
+        "v" : 1
+      },
+      {
+        "args" : {
+          "direction" : "auto",
+          "focus" : false
+        },
+        "command" : "pane.split",
+        "id" : "-",
+        "v" : 2
+      }
+    ],
+    "responses" : {
+      "pane.split" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "mirror",
+      "--direction",
+      "down"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "direction" : "down"
+        },
+        "command" : "pane.mirror",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.mirror" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "focus",
+      "--pane",
+      "2"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "pane" : "2"
+        },
+        "command" : "pane.focus",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.focus" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "focus",
+      "--direction",
+      "left"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "direction" : "left"
+        },
+        "command" : "pane.focus",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.focus" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "close",
+      "--pane",
+      "2",
+      "--force"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "force" : true,
+          "pane" : "2"
+        },
+        "command" : "pane.close",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.close" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "run",
+      "ls"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "run" : "ls"
+        },
+        "command" : "pane.run",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.run" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "run",
+      "--no-submit",
+      "--",
+      "git",
+      "commit",
+      "-h"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "run" : "git commit -h",
+          "submit" : false
+        },
+        "command" : "pane.run",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.run" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "run",
+      "ls"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "args" : {
+          "run" : "ls"
+        },
+        "command" : "pane.run",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.run" : {
+        "error" : {
+          "code" : "read_only",
+          "message" : "the pane is read-only"
+        },
+        "ok" : false
+      }
+    },
+    "stderr" : "macterm: the pane is read-only\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "key",
+      "ctrl+c"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "key" : "ctrl+c"
+        },
+        "command" : "pane.key",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.key" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "key",
+      "escape",
+      "--session",
+      "macterm-api-8f327ce4a3f8"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "key" : "escape",
+          "session" : "macterm-api-8f327ce4a3f8"
+        },
+        "command" : "pane.key",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.key" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "zoom"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "pane.zoom",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.zoom" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "resize-split",
+      "--axis",
+      "horizontal",
+      "--ratio",
+      "0.3"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "axis" : "horizontal",
+          "ratio" : 0.29999999999999999
+        },
+        "command" : "pane.resize-split",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.resize-split" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "grid",
+      "2x3"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "cols" : 3,
+          "rows" : 2
+        },
+        "command" : "grid",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "grid" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "session",
+      "list"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "command" : "session.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "session.list" : {
+        "data" : {
+          "sessions" : [
+            {
+              "clients" : 1,
+              "leaderPID" : 777,
+              "name" : "macterm-api-8f327ce4a3f8",
+              "paneID" : "A1"
+            },
+            {
+              "clients" : 0,
+              "name" : "macterm-old-000000000000"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "macterm-api-8f327ce4a3f8  clients:1  pid:777  attached-pane\nmacterm-old-000000000000  clients:0  pid:-    orphan\n"
+  },
+  {
+    "arguments" : [
+      "session",
+      "list",
+      "--json"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "command" : "session.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "session.list" : {
+        "data" : {
+          "sessions" : [
+            {
+              "clients" : 1,
+              "leaderPID" : 777,
+              "name" : "macterm-api-8f327ce4a3f8",
+              "paneID" : "A1"
+            },
+            {
+              "clients" : 0,
+              "name" : "macterm-old-000000000000"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "{\n  \"sessions\" : [\n    {\n      \"clients\" : 1,\n      \"leaderPID\" : 777,\n      \"name\" : \"macterm-api-8f327ce4a3f8\",\n      \"paneID\" : \"A1\"\n    },\n    {\n      \"clients\" : 0,\n      \"name\" : \"macterm-old-000000000000\"\n    }\n  ]\n}\n"
+  },
+  {
+    "arguments" : [
+      "session",
+      "info",
+      "macterm-api-8f327ce4a3f8"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "session" : "macterm-api-8f327ce4a3f8"
+        },
+        "command" : "session.info",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "session.info" : {
+        "data" : {
+          "sessions" : [
+            {
+              "clients" : 1,
+              "leaderPID" : 777,
+              "name" : "macterm-api-8f327ce4a3f8",
+              "paneID" : "A1"
+            },
+            {
+              "clients" : 0,
+              "name" : "macterm-old-000000000000"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "macterm-api-8f327ce4a3f8  clients:1  pid:777  attached-pane\nmacterm-old-000000000000  clients:0  pid:-    orphan\n"
+  },
+  {
+    "arguments" : [
+      "session",
+      "kill",
+      "macterm-api-8f327ce4a3f8"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "session" : "macterm-api-8f327ce4a3f8"
+        },
+        "command" : "session.kill",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "session.kill" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "layout",
+      "apply",
+      "--project",
+      "api"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "force" : false,
+          "project" : "api"
+        },
+        "command" : "layout.apply",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "layout.apply" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "layout",
+      "apply",
+      "--force"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "force" : true
+        },
+        "command" : "layout.apply",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "layout.apply" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "layout",
+      "save",
+      "--project",
+      "api"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "project" : "api"
+        },
+        "command" : "layout.save",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "layout.save" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "window",
+      "list"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "window.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "window.list" : {
+        "data" : {
+          "windows" : [
+            {
+              "focused" : true,
+              "id" : "W1",
+              "index" : 1,
+              "project" : "api",
+              "projectID" : "P1"
+            },
+            {
+              "focused" : false,
+              "id" : "W2",
+              "index" : 2
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "window:1  *  api\nwindow:2     (no project)\n"
+  },
+  {
+    "arguments" : [
+      "window",
+      "list",
+      "--json"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "window.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "window.list" : {
+        "data" : {
+          "windows" : [
+            {
+              "focused" : true,
+              "id" : "W1",
+              "index" : 1,
+              "project" : "api",
+              "projectID" : "P1"
+            },
+            {
+              "focused" : false,
+              "id" : "W2",
+              "index" : 2
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "{\n  \"windows\" : [\n    {\n      \"focused\" : true,\n      \"id\" : \"W1\",\n      \"index\" : 1,\n      \"project\" : \"api\",\n      \"projectID\" : \"P1\"\n    },\n    {\n      \"focused\" : false,\n      \"id\" : \"W2\",\n      \"index\" : 2\n    }\n  ]\n}\n"
+  },
+  {
+    "arguments" : [
+      "window",
+      "new"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "window.new",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "window.new" : {
+        "data" : {
+          "windows" : [
+            {
+              "focused" : true,
+              "id" : "W1",
+              "index" : 1,
+              "project" : "api",
+              "projectID" : "P1"
+            },
+            {
+              "focused" : false,
+              "id" : "W2",
+              "index" : 2
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "window:1  *  api\nwindow:2     (no project)\n"
+  },
+  {
+    "arguments" : [
+      "window",
+      "focus",
+      "2"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "window" : "2"
+        },
+        "command" : "window.focus",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "window.focus" : {
+        "data" : {
+          "windows" : [
+            {
+              "focused" : true,
+              "id" : "W1",
+              "index" : 1,
+              "project" : "api",
+              "projectID" : "P1"
+            },
+            {
+              "focused" : false,
+              "id" : "W2",
+              "index" : 2
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "window:1  *  api\nwindow:2     (no project)\n"
+  },
+  {
+    "arguments" : [
+      "window",
+      "close",
+      "--window",
+      "2"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "window" : "2"
+        },
+        "command" : "window.close",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "window.close" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "widget",
+      "list"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "widget.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "widget.list" : {
+        "data" : {
+          "widgets" : [
+            {
+              "columns" : 3,
+              "command" : "btop",
+              "editing" : false,
+              "id" : "G1",
+              "index" : 1,
+              "name" : "load",
+              "rows" : 3,
+              "session" : "macterm-widget-1",
+              "size" : "3x3",
+              "x" : 10,
+              "y" : 20
+            },
+            {
+              "columns" : 2,
+              "editing" : true,
+              "id" : "G2",
+              "index" : 2,
+              "rows" : 2,
+              "session" : "macterm-widget-2",
+              "size" : "2x2",
+              "x" : 0,
+              "y" : 0
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "widget:1  load  3x3  locked   macterm-widget-1  btop\nwidget:2  -     2x2  editing  macterm-widget-2  -\n"
+  },
+  {
+    "arguments" : [
+      "widget",
+      "list",
+      "--json"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "widget.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "widget.list" : {
+        "data" : {
+          "widgets" : [
+            {
+              "columns" : 3,
+              "command" : "btop",
+              "editing" : false,
+              "id" : "G1",
+              "index" : 1,
+              "name" : "load",
+              "rows" : 3,
+              "session" : "macterm-widget-1",
+              "size" : "3x3",
+              "x" : 10,
+              "y" : 20
+            },
+            {
+              "columns" : 2,
+              "editing" : true,
+              "id" : "G2",
+              "index" : 2,
+              "rows" : 2,
+              "session" : "macterm-widget-2",
+              "size" : "2x2",
+              "x" : 0,
+              "y" : 0
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "{\n  \"widgets\" : [\n    {\n      \"columns\" : 3,\n      \"command\" : \"btop\",\n      \"editing\" : false,\n      \"id\" : \"G1\",\n      \"index\" : 1,\n      \"name\" : \"load\",\n      \"rows\" : 3,\n      \"session\" : \"macterm-widget-1\",\n      \"size\" : \"3x3\",\n      \"x\" : 10,\n      \"y\" : 20\n    },\n    {\n      \"columns\" : 2,\n      \"editing\" : true,\n      \"id\" : \"G2\",\n      \"index\" : 2,\n      \"rows\" : 2,\n      \"session\" : \"macterm-widget-2\",\n      \"size\" : \"2x2\",\n      \"x\" : 0,\n      \"y\" : 0\n    }\n  ]\n}\n"
+  },
+  {
+    "arguments" : [
+      "widget",
+      "new",
+      "--size",
+      "3x3",
+      "--run",
+      "btop"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "run" : "btop",
+          "size" : "3x3"
+        },
+        "command" : "widget.new",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "widget.new" : {
+        "data" : {
+          "widgets" : [
+            {
+              "columns" : 3,
+              "command" : "btop",
+              "editing" : false,
+              "id" : "G1",
+              "index" : 1,
+              "name" : "load",
+              "rows" : 3,
+              "session" : "macterm-widget-1",
+              "size" : "3x3",
+              "x" : 10,
+              "y" : 20
+            },
+            {
+              "columns" : 2,
+              "editing" : true,
+              "id" : "G2",
+              "index" : 2,
+              "rows" : 2,
+              "session" : "macterm-widget-2",
+              "size" : "2x2",
+              "x" : 0,
+              "y" : 0
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "widget:1  load  3x3  locked   macterm-widget-1  btop\nwidget:2  -     2x2  editing  macterm-widget-2  -\n"
+  },
+  {
+    "arguments" : [
+      "widget",
+      "set",
+      "1",
+      "--size",
+      "4x4"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "size" : "4x4",
+          "widget" : "1"
+        },
+        "command" : "widget.set",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "widget.set" : {
+        "data" : {
+          "widgets" : [
+            {
+              "columns" : 3,
+              "command" : "btop",
+              "editing" : false,
+              "id" : "G1",
+              "index" : 1,
+              "name" : "load",
+              "rows" : 3,
+              "session" : "macterm-widget-1",
+              "size" : "3x3",
+              "x" : 10,
+              "y" : 20
+            },
+            {
+              "columns" : 2,
+              "editing" : true,
+              "id" : "G2",
+              "index" : 2,
+              "rows" : 2,
+              "session" : "macterm-widget-2",
+              "size" : "2x2",
+              "x" : 0,
+              "y" : 0
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "widget:1  load  3x3  locked   macterm-widget-1  btop\nwidget:2  -     2x2  editing  macterm-widget-2  -\n"
+  },
+  {
+    "arguments" : [
+      "widget",
+      "edit",
+      "1"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "widget" : "1"
+        },
+        "command" : "widget.edit",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "widget.edit" : {
+        "data" : {
+          "widgets" : [
+            {
+              "columns" : 3,
+              "command" : "btop",
+              "editing" : false,
+              "id" : "G1",
+              "index" : 1,
+              "name" : "load",
+              "rows" : 3,
+              "session" : "macterm-widget-1",
+              "size" : "3x3",
+              "x" : 10,
+              "y" : 20
+            },
+            {
+              "columns" : 2,
+              "editing" : true,
+              "id" : "G2",
+              "index" : 2,
+              "rows" : 2,
+              "session" : "macterm-widget-2",
+              "size" : "2x2",
+              "x" : 0,
+              "y" : 0
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "widget:1  load  3x3  locked   macterm-widget-1  btop\nwidget:2  -     2x2  editing  macterm-widget-2  -\n"
+  },
+  {
+    "arguments" : [
+      "widget",
+      "done"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "widget.done",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "widget.done" : {
+        "data" : {
+          "widgets" : [
+            {
+              "columns" : 3,
+              "command" : "btop",
+              "editing" : false,
+              "id" : "G1",
+              "index" : 1,
+              "name" : "load",
+              "rows" : 3,
+              "session" : "macterm-widget-1",
+              "size" : "3x3",
+              "x" : 10,
+              "y" : 20
+            },
+            {
+              "columns" : 2,
+              "editing" : true,
+              "id" : "G2",
+              "index" : 2,
+              "rows" : 2,
+              "session" : "macterm-widget-2",
+              "size" : "2x2",
+              "x" : 0,
+              "y" : 0
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "widget:1  load  3x3  locked   macterm-widget-1  btop\nwidget:2  -     2x2  editing  macterm-widget-2  -\n"
+  },
+  {
+    "arguments" : [
+      "widget",
+      "remove",
+      "1"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "force" : false,
+          "widget" : "1"
+        },
+        "command" : "widget.remove",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "widget.remove" : {
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "palette",
+      "list"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "palette.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "palette.list" : {
+        "data" : {
+          "palettes" : [
+            {
+              "file" : "branches.yaml",
+              "id" : "git\/branches",
+              "keybind" : "cmd+shift+b",
+              "name" : "Git Branches"
+            },
+            {
+              "error" : "line 3: no such key",
+              "file" : "broken.yaml",
+              "id" : "mine\/broken"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "git\/branches  cmd+shift+b  Git Branches\nmine\/broken   -            error: line 3: no such key\n"
+  },
+  {
+    "arguments" : [
+      "palette",
+      "list",
+      "--json"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "palette.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "palette.list" : {
+        "data" : {
+          "palettes" : [
+            {
+              "file" : "branches.yaml",
+              "id" : "git\/branches",
+              "keybind" : "cmd+shift+b",
+              "name" : "Git Branches"
+            },
+            {
+              "error" : "line 3: no such key",
+              "file" : "broken.yaml",
+              "id" : "mine\/broken"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "{\n  \"palettes\" : [\n    {\n      \"file\" : \"branches.yaml\",\n      \"id\" : \"git\\\/branches\",\n      \"keybind\" : \"cmd+shift+b\",\n      \"name\" : \"Git Branches\"\n    },\n    {\n      \"error\" : \"line 3: no such key\",\n      \"file\" : \"broken.yaml\",\n      \"id\" : \"mine\\\/broken\"\n    }\n  ]\n}\n"
+  },
+  {
+    "arguments" : [
+      "palette",
+      "list"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+
+        },
+        "command" : "palette.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "palette.list" : {
+        "data" : {
+          "palettes" : [
+
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "No palettes. Install an extension in Settings → Extensions.\n"
+  },
+  {
+    "arguments" : [
+      "tutor",
+      "project"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "styled" : false,
+          "topic" : "project"
+        },
+        "command" : "tutor.render",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tutor.render" : {
+        "data" : {
+          "tutorial" : {
+            "text" : "Welcome to projects.\nPress ⌘N for a tab.",
+            "topic" : "project"
+          }
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "Welcome to projects.\nPress ⌘N for a tab.\n"
+  },
+  {
+    "arguments" : [
+      "status"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "command" : "status",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "status" : {
+        "error" : {
+          "code" : "starting",
+          "message" : "Macterm is still starting"
+        },
+        "ok" : false
+      }
+    },
+    "stderr" : "macterm: Macterm is still starting\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "status"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "command" : "status",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "status" : {
+        "error" : {
+          "action" : "see the log",
+          "code" : "internal",
+          "message" : "something broke"
+        },
+        "ok" : false
+      }
+    },
+    "stderr" : "macterm: something broke\n  hint: see the log\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "list",
+      "--project",
+      "nope"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "args" : {
+          "project" : "nope"
+        },
+        "command" : "pane.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.list" : {
+        "error" : {
+          "action" : "run: macterm project list",
+          "code" : "not_found",
+          "message" : "no project nope"
+        },
+        "ok" : false
+      }
+    },
+    "stderr" : "macterm: no project nope\n  hint: run: macterm project list\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "run",
+      "ls",
+      "-la"
+    ],
+    "exit" : 64,
+    "requests" : [
+
+    ],
+    "stderr" : "Error: `-la` is not a `pane run` option, so nothing was typed. To type it, put the command line after `--`:\n  macterm pane run -- ls -la\nUsage: macterm pane run [<options>] [--] <command> ...\n  See 'macterm pane run --help' for more information.\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "nosuchverb"
+    ],
+    "exit" : 64,
+    "requests" : [
+
+    ],
+    "stderr" : "Error: Unexpected argument 'nosuchverb'\nUsage: macterm <subcommand>\n  See 'macterm --help' for more information.\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "tab",
+      "rename"
+    ],
+    "exit" : 64,
+    "requests" : [
+
+    ],
+    "stderr" : "Error: Missing expected argument '<tab>'\nHelp:  <tab>  Tab title, UUID, or index (tab:3).\nUsage: macterm tab rename <tab> [<title>] [--reset] [--project <project>] [--socket <socket>] [--json]\n  See 'macterm tab rename --help' for more information.\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "palette",
+      "exec"
+    ],
+    "exit" : 2,
+    "requests" : [
+
+    ],
+    "stderr" : "macterm: palette exec: expected <shell> <flags…> -- <command…>\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "inspect",
+      "--project",
+      "api",
+      "--tab",
+      "2",
+      "--pane",
+      "1"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "pane" : "1",
+          "project" : "api",
+          "tab" : "2"
+        },
+        "command" : "pane.inspect",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.inspect" : {
+        "data" : {
+          "inspect" : {
+            "altScreen" : false,
+            "cellHeightPx" : 34,
+            "cellWidthPx" : 16,
+            "cols" : 120,
+            "contentScale" : 2,
+            "foregroundArgv" : [
+              "vim",
+              "a.txt"
+            ],
+            "foregroundPID" : 901,
+            "heightPx" : 1360,
+            "id" : "A1",
+            "needsConfirmQuit" : true,
+            "processExited" : false,
+            "readOnly" : false,
+            "rows" : 40,
+            "scrollbackLen" : 40,
+            "scrollbackOffset" : 460,
+            "scrollbackTotal" : 500,
+            "session" : "macterm-api-8f327ce4a3f8",
+            "widthPx" : 1920
+          }
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "session             macterm-api-8f327ce4a3f8\ngrid                120×40\ncell px             16×34\nsurface px          1920×1360\nscrollback          500 total, 460 offset, 40 len\nalt-screen          false\ncontent scale       2.0\nforeground          901 (vim a.txt)\nprocess exited      false\nneeds confirm quit  true\nread-only           false\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "split",
+      "--session",
+      "macterm-api-8f327ce4a3f8",
+      "--direction",
+      "auto"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "direction" : "auto",
+          "session" : "macterm-api-8f327ce4a3f8"
+        },
+        "command" : "pane.split",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.split" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "zoom",
+      "--project",
+      "api",
+      "--tab",
+      "1",
+      "--pane",
+      "2"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "pane" : "2",
+          "project" : "api",
+          "tab" : "1"
+        },
+        "command" : "pane.zoom",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.zoom" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "list",
+      "--project",
+      "api",
+      "--tab",
+      "2"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "project" : "api",
+          "tab" : "2"
+        },
+        "command" : "pane.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.list" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "grid",
+      "2x2",
+      "--run",
+      "htop",
+      "--project",
+      "api"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "cols" : 2,
+          "project" : "api",
+          "rows" : 2,
+          "run" : "htop"
+        },
+        "command" : "grid",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "grid" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "tab",
+      "select",
+      "2",
+      "--project",
+      "api",
+      "--window",
+      "1"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "project" : "api",
+          "tab" : "2",
+          "window" : "1"
+        },
+        "command" : "tab.select",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tab.select" : {
+        "data" : {
+          "tabs" : [
+            {
+              "active" : true,
+              "id" : "T1",
+              "index" : 1,
+              "paneCount" : 1,
+              "title" : "zsh"
+            },
+            {
+              "active" : false,
+              "id" : "T2",
+              "index" : 2,
+              "paneCount" : 3,
+              "title" : "build"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  *  zsh    1 pane\ntab:2     build  3 panes\n"
+  },
+  {
+    "arguments" : [
+      "widget",
+      "new",
+      "--name",
+      "load"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "name" : "load"
+        },
+        "command" : "widget.new",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "widget.new" : {
+        "data" : {
+          "widgets" : [
+            {
+              "columns" : 3,
+              "command" : "btop",
+              "editing" : false,
+              "id" : "G1",
+              "index" : 1,
+              "name" : "load",
+              "rows" : 3,
+              "session" : "macterm-widget-1",
+              "size" : "3x3",
+              "x" : 10,
+              "y" : 20
+            },
+            {
+              "columns" : 2,
+              "editing" : true,
+              "id" : "G2",
+              "index" : 2,
+              "rows" : 2,
+              "session" : "macterm-widget-2",
+              "size" : "2x2",
+              "x" : 0,
+              "y" : 0
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "widget:1  load  3x3  locked   macterm-widget-1  btop\nwidget:2  -     2x2  editing  macterm-widget-2  -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "dump"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "args" : {
+          "scrollback" : false
+        },
+        "command" : "pane.dump",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.dump" : {
+        "error" : {
+          "code" : "no_surface",
+          "message" : "the pane has no terminal yet"
+        },
+        "ok" : false
+      }
+    },
+    "stderr" : "macterm: the pane has no terminal yet\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "focus",
+      "--pane",
+      "1"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "args" : {
+          "pane" : "1"
+        },
+        "command" : "pane.focus",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.focus" : {
+        "error" : {
+          "code" : "ambiguous",
+          "message" : "2 panes match"
+        },
+        "ok" : false
+      }
+    },
+    "stderr" : "macterm: 2 panes match\n",
+    "stdout" : ""
+  },
+  {
+    "appVersion" : 1,
+    "arguments" : [
+      "tab",
+      "new",
+      "--no-focus"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "command" : "status",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "stderr" : "macterm: Macterm speaks control protocol v1, but this command needs v2. Update Macterm.\n",
+    "stdout" : ""
+  },
+  {
+    "appVersion" : 1,
+    "arguments" : [
+      "pane",
+      "split",
+      "--no-focus"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "command" : "status",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "stderr" : "macterm: Macterm speaks control protocol v1, but this command needs v2. Update Macterm.\n",
+    "stdout" : ""
+  }
+]

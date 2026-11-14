@@ -1,0 +1,13 @@
+OVERVIEW: Apply or save the declarative layout file of a project.
+
+USAGE: macterm layout <subcommand>
+
+OPTIONS:
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  apply                   Change the workspace to match the layout file of the
+                          project.
+  save                    Save the live workspace as the project's layout file.
+
+  See 'macterm help layout <subcommand>' for detailed help.

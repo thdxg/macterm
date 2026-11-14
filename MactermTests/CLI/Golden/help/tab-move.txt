@@ -1,0 +1,16 @@
+OVERVIEW: Move a tab to a slot. The slot is the final position of the tab in
+the `tab list` order, counted from 1.
+
+USAGE: macterm tab move <tab> <slot> [--project <project>] [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <tab>                   Tab title, UUID, or index (tab:3).
+  <slot>                  Destination slot: the position of the tab at the end,
+                          counted from 1.
+
+OPTIONS:
+  --project <project>     Project scope. The default is the active project.
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

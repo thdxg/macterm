@@ -1,0 +1,17 @@
+OVERVIEW: [debug] Change the size of the surface of a pane to COLS×ROWS, with
+no layout.
+
+USAGE: macterm pane resize --cols <cols> --rows <rows> [--project <project>] [--tab <tab>] [--pane <pane>] [--session <session>] [--socket <socket>] [--json]
+
+OPTIONS:
+  --cols <cols>           Target columns.
+  --rows <rows>           Target rows.
+  --project <project>     Project scope (name, UUID, or index). The default is
+                          the active project.
+  --tab <tab>             Tab scope (title, UUID, or index).
+  --pane <pane>           Target pane by UUID, or index within the tab (pane:2).
+  --session <session>     Target pane by zmx session name (restart-stable).
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

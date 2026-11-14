@@ -1,0 +1,12 @@
+OVERVIEW: [debug] Log in to a host, or reuse its connection.
+
+USAGE: macterm host connect <host> [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <host>                  The ssh destination: [user@]host.
+
+OPTIONS:
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

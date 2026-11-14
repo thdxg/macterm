@@ -1,0 +1,9 @@
+OVERVIEW: List all projects.
+
+USAGE: macterm project list [--socket <socket>] [--json]
+
+OPTIONS:
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

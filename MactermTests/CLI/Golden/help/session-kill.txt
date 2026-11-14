@@ -1,0 +1,13 @@
+OVERVIEW: Kill a zmx session. Its shell ends, and the shell of a connected pane
+exits.
+
+USAGE: macterm session kill <name> [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <name>                  Session name (macterm-<slug>-<hex>).
+
+OPTIONS:
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

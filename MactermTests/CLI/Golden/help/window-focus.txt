@@ -1,0 +1,12 @@
+OVERVIEW: Bring a window to the front. It becomes the key window.
+
+USAGE: macterm window focus <window> [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <window>                Window to focus (index or id).
+
+OPTIONS:
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+

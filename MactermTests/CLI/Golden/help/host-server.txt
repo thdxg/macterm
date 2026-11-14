@@ -1,0 +1,13 @@
+OVERVIEW: [debug] Connect to a host's Macterm server. Install it first when it
+is not there.
+
+USAGE: macterm host server <host> [--socket <socket>] [--json]
+
+ARGUMENTS:
+  <host>                  The ssh destination: [user@]host.
+
+OPTIONS:
+  --socket <socket>       Control socket path. It overrides discovery.
+  --json                  Print the raw JSON payload instead of a table.
+  -h, --help              Show help information.
+
