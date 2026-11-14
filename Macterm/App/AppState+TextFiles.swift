@@ -97,15 +97,6 @@ extension AppState {
         if workspaces[projectID]?.tabs.contains(where: { $0.splitRoot.findPane(id: pane.id) != nil }) == true {
             return .workspace(projectID: projectID, pane: pane)
         }
-        for window in windows {
-            for (realTabID, shadow) in window.shadowTabs where shadow.splitRoot.findPane(id: pane.id) != nil {
-                guard let real = workspaces[projectID]?.tabs.first(where: { $0.id == realTabID }),
-                      let realID = counterpartPaneID(pane.id, from: shadow, to: real),
-                      let realPane = real.splitRoot.findPane(id: realID)
-                else { return nil }
-                return .workspace(projectID: projectID, pane: realPane)
-            }
-        }
         let quickTerminal = QuickTerminalService.shared.splitState
         if let quickPane = quickTerminal.tab.splitRoot.findPane(id: pane.id) {
             return .quickTerminal(quickPane)

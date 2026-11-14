@@ -34,10 +34,10 @@ final class Pane: Identifiable {
     /// scp-style spec and its session lives on the remote host. Cached at
     /// init: the poll and title paths read it every tick.
     let isRemote: Bool
-    /// A pane of a shadow tab (`init(mirroring:)`): a second window's view of
-    /// a session that a real pane owns. It renders the same output and
-    /// parses the same shell marks, so anything that counts a command (the
-    /// project memory) reads only the real pane.
+    /// A pane that `init(mirroring:)` made: a second pane on a session that
+    /// another pane owns (`pane mirror`). It parses the same shell marks, so
+    /// anything that counts a command (the project memory) reads only the
+    /// pane that is not a mirror.
     let isMirror: Bool
     /// The remote host name for display fallback (`processTitle` shows it
     /// while no remote process name is known). nil for local panes.
@@ -146,25 +146,23 @@ final class Pane: Identifiable {
     @ObservationIgnored
     private var agentIconPID: pid_t?
 
-    let searchState = TerminalSearchState()
-    /// What the copy-mode pill of the pane says (`Copy Mode`, `Select Mode`),
-    /// nil while the mode is off. The view's `CopyModeController` owns the
-    /// mode and reports it here. Live UI state only — never persisted.
-    var copyModeLabel: String?
-    /// The surface is read-only (ghostty's `toggle_readonly`): libghostty
-    /// sends no input to the pty. Drives the Read-Only pill. A new surface
-    /// starts writable, so `destroySurface` clears it. Live UI state only —
-    /// never persisted.
-    var isReadOnly = false
-    /// Temporary full-pane fill used when a TUI owns this leaf's background in
-    /// a split. It is presentation-only, never persisted, and intentionally a
-    /// CGColor so the model remains independent of AppKit and SwiftUI.
-    var adaptiveBackgroundColor: CGColor?
+    /// One surface for each window that draws the pane, in the order that they
+    /// came. The first one is the feed: its callbacks count titles, runs,
+    /// bells and notifications for the pane, and its exit ends the pane. Never
+    /// empty. Not observed: a body may ask for a surface (`surface(for:)`).
+    @ObservationIgnored
+    var surfaces: [PaneSurface] = []
 
-    /// The OSC 8 link URL under the mouse, for the pane's hover banner
-    /// (`GHOSTTY_ACTION_MOUSE_OVER_LINK`). Live UI state only — never
-    /// persisted.
-    var hoverURL: String?
+    // The state that belongs to one window's view lives on `PaneSurface`. The
+    // forwards here read the preferred surface, for the callers with no window
+    // in hand: the CLI, intents, persistence and the quit sweep.
+    var searchState: TerminalSearchState { preferredSurface.searchState }
+    var copyModeLabel: String? { preferredSurface.copyModeLabel }
+    var isReadOnly: Bool { preferredSurface.isReadOnly }
+    var adaptiveBackgroundColor: CGColor? {
+        get { preferredSurface.adaptiveBackgroundColor }
+        set { preferredSurface.adaptiveBackgroundColor = newValue }
+    }
 
     /// The pane rang BEL and nobody has looked at it since. Set by `ringBell`
     /// (the `GHOSTTY_ACTION_RING_BELL` route), cleared by `acknowledgeBell` —
@@ -190,18 +188,6 @@ final class Pane: Identifiable {
         guard hasUnacknowledgedBell else { return false }
         hasUnacknowledgedBell = false
         return true
-    }
-
-    /// Bumped when the pane's scroll view finds itself orphaned with no
-    /// living container to heal into (#227 — SwiftUI can deallocate a
-    /// transient container outright, killing the weak re-attach pointer).
-    /// `TerminalPane` reads this, so a bump re-renders the pane's subtree and
-    /// `TerminalSurface.updateNSView` re-attaches on a container SwiftUI
-    /// guarantees is alive. The owner-of-last-resort for view attachment.
-    var surfaceReattachTick = 0
-
-    func requestSurfaceReattach() {
-        surfaceReattachTick &+= 1
     }
 
     /// Returns a local pane's cwd. Remote cwd values omit the host, so remote panes return nil.
@@ -801,30 +787,21 @@ final class Pane: Identifiable {
         programTitlePID = programPID
     }
 
-    /// The live terminal NSView for this pane. Created lazily the first time
-    /// it's requested, destroyed explicitly when the pane is removed from the
-    /// tree. Owning the view on the model (instead of in a separate cache or
-    /// inside SwiftUI) keeps the underlying ghostty surface alive across any
-    /// SwiftUI view churn: tab switches, split tree reshapes, window hide/show.
-    /// Not observed — SwiftUI should never re-render just because this changes.
-    @ObservationIgnored
-    private var _nsView: GhosttyTerminalNSView?
-
     /// True once this pane has built a surface view. `command` is a
     /// FIRST-spawn input (it becomes libghostty's `initial_input`, typed into
-    /// the fresh shell): a later rebuild — the reconnect path destroying and
-    /// respawning the surface — reattaches an EXISTING zmx session, so
-    /// retyping the command would run it a second time inside a session
-    /// already running it. Snapshot restore has the same contract for the
-    /// same reason (`PaneSnapshot` deliberately doesn't persist `command`).
+    /// the fresh shell): a later build — a reconnect, a second window —
+    /// reattaches an EXISTING session, so retyping the command would run it a
+    /// second time inside a session already running it. Snapshot restore has
+    /// the same contract for the same reason (`PaneSnapshot` deliberately
+    /// doesn't persist `command`).
     @ObservationIgnored
     private var hasBuiltSurface = false
 
-    func ensureNSView() -> GhosttyTerminalNSView {
-        if let existing = _nsView { return existing }
+    /// A new libghostty view for one of the pane's surfaces.
+    func makeView() -> GhosttyTerminalNSView {
         // Every pane's shell learns its own restart-stable address so
         // `macterm` invoked inside it can self-target (`MACTERM_SESSION`).
-        // Injected at spawn, which means a zmx-reattached shell keeps the
+        // Injected at spawn, which means a reattached shell keeps the
         // value from its original spawn — correct, because the session name
         // is persisted verbatim and survives restarts (pane UUIDs don't).
         // Our value wins over a layout-declared duplicate: this is identity,
@@ -844,14 +821,15 @@ final class Pane: Identifiable {
             remoteZmxPath: remoteZmxPath
         )
         hasBuiltSurface = true
-        view.owningPane = self
-        connectViewCallbacks(view)
-        MactermPaneEntity.annotate(view, for: self)
-        _nsView = view
         return view
     }
 
-    var nsView: GhosttyTerminalNSView? { _nsView }
+    /// The preferred surface's view, for the callers with no window in hand.
+    func ensureNSView() -> GhosttyTerminalNSView {
+        preferredSurface.ensureNSView()
+    }
+
+    var nsView: GhosttyTerminalNSView? { preferredSurface.nsView }
 
     /// Whether this remote pane's connection stopped (#281, 0057): its client
     /// (`macterm remote-pane`) waits on the pane's tty while the session
@@ -898,48 +876,15 @@ final class Pane: Identifiable {
         )
     }
 
-    /// The `NSScrollView` that hosts this pane's surface and renders the native
-    /// overlay scrollbar. Owned here (not by SwiftUI) for the same reason as
-    /// `_nsView`: it must survive tab switches and split reshapes, and it
-    /// sidesteps Ghostty's #9444 bug where the scroll wrapper isn't persisted.
-    @ObservationIgnored
-    private var _scrollView: SurfaceScrollView?
-
     func ensureScrollView() -> SurfaceScrollView {
-        if let existing = _scrollView { return existing }
-        let scroll = SurfaceScrollView(surfaceView: ensureNSView())
-        _scrollView = scroll
-        return scroll
+        preferredSurface.ensureScrollView()
     }
 
-    var scrollView: SurfaceScrollView? { _scrollView }
+    var scrollView: SurfaceScrollView? { preferredSurface.scrollView }
 
-    /// The pane's last frame, taken as its surface was torn down, for the
-    /// animated split layout to slide out in its place (`AnimatedSplitView`
-    /// ghosts). Only the model can take it: by the time SwiftUI sees the pane
-    /// leave the tree the view is gone (`destroySurface` nils it and detaches
-    /// it a tick later), and a removal transition on the live leaf would show
-    /// an empty host. Captured only while `Preferences.animatedSplits` is on,
-    /// so the default path pays nothing. nil until then; set with a nil image
-    /// when the surface never drew, which still marks the pane as closed
-    /// rather than merely moved to another tab.
-    @ObservationIgnored
-    private(set) var closingSnapshot: PanePreview?
-
-    /// Take `closingSnapshot` now, for a pane leaving the tree whose surface
-    /// is torn down later — a retired mirror, whose `destroySurface` is
-    /// deferred off the view body that retired it, after the layout has
-    /// already looked for its ghost. `destroySurface` calls it too.
-    func captureClosingSnapshot() {
-        if Preferences.shared.animatedSplits, closingSnapshot == nil, _nsView != nil {
-            closingSnapshot = PanePreviewCapture.capture(self, longEdge: nil, fillsBackground: false)
-        }
-    }
-
-    /// Tear down the ghostty surface and null out callbacks. Call when the
-    /// pane is removed from the tree. Safe to call multiple times.
+    /// Tear down every surface's ghostty view and null out callbacks. Call
+    /// when the pane is removed from the tree. Safe to call multiple times.
     func destroySurface() {
-        captureClosingSnapshot()
         // A pane with no surface has nothing left to acknowledge — an unloaded
         // pinned tab's panes stay in the tree, and their bells must not keep the
         // Dock badged for shells that no longer exist (ghostty's window-close
@@ -947,32 +892,7 @@ final class Pane: Identifiable {
         // torn down before its view ever existed still settles.
         acknowledgeBell()
         cancelHeldTitle()
-        guard let view = _nsView else { return }
-        // Null callbacks before destroy so any in-flight ghostty events
-        // triggered by destroySurface() itself can't re-enter.
-        view.onProcessExit = nil
-        view.onBell = nil
-        view.onTitleChange = nil
-        view.onSearchStart = nil
-        view.onSearchEnd = nil
-        view.onSearchTotal = nil
-        view.onSearchSelected = nil
-        view.onFocus = nil
-        view.onInteraction = nil
-        view.onCommandSubmitted = nil
-        view.onSplitRequest = nil
-        view.onOpenLink = nil
-        view.onDesktopNotification = nil
-        view.onCommandFinished = nil
-        view.onProgressStarted = nil
-        view.onProgressFinished = nil
-        view.onRunEnded = nil
-        view.onTerminalRender = nil
-        view.onBackgroundColorChange = nil
-        view.onAdaptiveBackgroundChange = nil
-        view.onOutputActivity = nil
-        view.onSnapshotMark = nil
-        view.onRemoteForeground = nil
+        guard surfaces.contains(where: { $0.nsView != nil }) else { return }
         isReceivingRemoteSnapshot = false
         // A remote pane's report described the connection that goes now.
         // The next connection's session reports again; until then nothing
@@ -983,45 +903,12 @@ final class Pane: Identifiable {
             remoteForegroundIsShell = false
             lastAppliedRemoteForeground = nil
         }
-        view.onScrollbarUpdate = nil
-        view.onLinkHover = nil
-        view.onReadOnlyChange = nil
-        isReadOnly = false
-        view.onMouseShapeChange = nil
-        view.onPromptTitle = nil
-        view.onSetTabTitle = nil
-        view.titleProvider = nil
-        // Release any secure-input scope this view holds (a pane closed
-        // mid-password-prompt must not leave the OS state stuck on).
-        view.passwordInput = false
-        view.detectedPasswordInput = false
-        // Drop any prompt, pending save or bubble this view anchors — a
-        // captured password must not outlive its pane.
-        PasswordPromptMonitor.shared.forget(view)
         // A notification whose pane no longer exists routes nowhere on tap, so
         // drop any still sitting in Notification Center. Ghostty does the same
         // when a surface is removed.
         NotificationHandler.shared.clearDelivered(paneID: id)
-        view.destroySurface()
-        let scroll = _scrollView
-        // Disarm the orphan-healing re-attach BEFORE the removal below —
-        // otherwise a destroyed pane would climb back into its old container.
-        scroll?.reattachHost = nil
-        scroll?.onOrphaned = nil
-        _scrollView = nil
-        _nsView = nil
-        // Keep the NSView (and its scroll-view host) alive for a runloop tick so
-        // any in-flight ghostty callback (which holds an unretained pointer to
-        // the view) can drain before the view is deallocated. Without this,
-        // SwiftUI can remove the view from its superview the same turn we
-        // destroy the surface, deallocating the NSView before ghostty has
-        // finished unwinding.
-        DispatchQueue.main.async {
-            _ = view
-            // Detach the scroll view from whatever still hosts it — notably the
-            // SurfaceIncubator's hidden window, which never removes warmed
-            // views itself — so the dead view pair can actually deallocate.
-            scroll?.removeFromSuperview()
+        for surface in surfaces {
+            surface.destroy()
         }
     }
 
@@ -1112,12 +999,13 @@ final class Pane: Identifiable {
         executionTracker = TerminalExecutionTracker(
             hasUserInteraction: command != nil || env?[CustomPaletteScript.commandVariable] != nil
         )
+        surfaces = [PaneSurface(pane: self, windowID: nil)]
     }
 
-    /// A second pane attached to `source`'s zmx session — the same running
-    /// shell shown twice (#345). `zmx connect` attaches to the session that
-    /// runs, and the session broadcasts output to every client, so both panes render the same live
-    /// session; only one of them (zmx's "leader") drives the pty size.
+    /// A second pane attached to `source`'s session — the same running shell
+    /// shown twice in a tab (`pane mirror`, #345). The session broadcasts
+    /// output to every client, so both panes render the same live session;
+    /// only one of them (the leader) drives the pty size.
     ///
     /// This exists as its own initializer rather than as a call-site
     /// convention because two of its arguments are hazards if a caller
@@ -1126,14 +1014,13 @@ final class Pane: Identifiable {
     /// - `command` MUST be nil. It is injected as `initial_input` on the first
     ///   surface build, and `hasBuiltSurface` is per-`Pane`, not per-session —
     ///   so a mirror carrying its source's `command` would re-type a declared
-    ///   layout `run:` into a session that is already running it. Same contract
-    ///   as snapshot restore and the #281 reconnect respawn.
+    ///   layout `run:` into a session that is already running it.
     /// - `shell` MUST be nil for the same reason: the session's shell was
     ///   chosen when it was created and the mirror only attaches to it.
     ///
     /// `env` is dropped too — it is spawn-time input, and the session's shell
     /// already has the environment it was created with (including
-    /// `MACTERM_SESSION`, which both mirrors therefore report identically).
+    /// `MACTERM_SESSION`, which both panes therefore report identically).
     convenience init(mirroring source: Pane) {
         self.init(
             projectPath: source.projectPath,

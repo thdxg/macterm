@@ -554,8 +554,8 @@ struct ControlWindowInfo: Codable, Equatable {
     var sidebarWidth: Double?
     /// The tab this window has selected in its project — per window (#345).
     var tabID: String?
-    /// Whether this window renders a mirror view of that tab because another
-    /// window owns its panes (#345): the same sessions attached a second time.
+    /// Whether a window opened before this one shows the same tab (#345): both
+    /// draw the same panes, each with a surface of its own.
     var mirrored: Bool?
 }
 

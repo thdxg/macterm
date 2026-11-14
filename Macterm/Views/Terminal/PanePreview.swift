@@ -103,9 +103,20 @@ enum PanePreviewCapture {
         longEdge: CGFloat? = thumbnailLongEdge,
         fillsBackground: Bool = true
     ) -> PanePreview {
-        let background = pane.adaptiveBackgroundColor.map { NSColor(cgColor: $0) ?? MactermTheme.nsBg }
+        capture(pane.preferredSurface, reusing: previous, longEdge: longEdge, fillsBackground: fillsBackground)
+    }
+
+    /// The frame of one window's view of a pane.
+    @MainActor
+    static func capture(
+        _ surface: PaneSurface,
+        reusing previous: PanePreview? = nil,
+        longEdge: CGFloat? = thumbnailLongEdge,
+        fillsBackground: Bool = true
+    ) -> PanePreview {
+        let background = surface.adaptiveBackgroundColor.map { NSColor(cgColor: $0) ?? MactermTheme.nsBg }
             ?? MactermTheme.nsBg
-        guard let view = pane.nsView else {
+        guard let view = surface.nsView else {
             return PanePreview(image: nil, background: background, aspectRatio: nil)
         }
 

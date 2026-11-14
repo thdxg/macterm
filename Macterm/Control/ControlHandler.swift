@@ -206,8 +206,7 @@ final class ControlHandler {
                 sidebarWidth: window.sidebarWidth,
                 tabID: window.activeProjectID
                     .flatMap { appState.selectedTab(for: $0, in: window)?.id.uuidString },
-                mirrored: window.activeProjectID
-                    .flatMap { appState.viewTab(for: $0, in: window)?.isMirror }
+                mirrored: window.activeProjectID == nil ? nil : appState.showsTabOfEarlierWindow(window)
             )
         }
         return ControlData(windows: infos)
@@ -1750,10 +1749,12 @@ final class ControlHandler {
         // every workspace per call, which made this quadratic in pane count.
         // A stable partition, not `sorted`: "leader first" is not a strict
         // weak ordering, and Swift's sort is undefined for one.
-        var table = appState.sessionAttachments().mapValues { panes in
-            let leading = panes.filter { appState.isLeader($0, among: panes) }
-            let following = panes.filter { !appState.isLeader($0, among: panes) }
-            return (leading + following).map(\.id.uuidString)
+        var table = appState.sessionAttachments().mapValues { clients in
+            let leading = clients.filter { appState.isLeader($0, among: clients) }
+            let following = clients.filter { !appState.isLeader($0, among: clients) }
+            // A pane shown in two windows has two clients and one id.
+            var seen: Set<UUID> = []
+            return (leading + following).map(\.pane.id).filter { seen.insert($0).inserted }.map(\.uuidString)
         }
         // Desktop widget panes live outside every workspace; their sessions
         // are bound all the same, never orphans.

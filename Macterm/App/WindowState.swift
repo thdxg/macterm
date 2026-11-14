@@ -52,27 +52,13 @@ final class WindowState: Identifiable {
     /// The tab this window shows for each project it has visited, keyed by
     /// project id.
     ///
-    /// Per window because a pane owns exactly one `NSView`, which can live in
-    /// one view hierarchy: two windows rendering the same tab fought over
-    /// every pane's view and the loser drew nothing. `Workspace.activeTabID`
-    /// stays the KEY window's selection — a mirror of this map, the same
-    /// shape as `AppState.activeProjectID` — so every "the tab the user is
-    /// working in" call site keeps working unchanged, and a window that loses
-    /// its tab to another window renders a mirror view of it instead
-    /// (`AppState.viewTab(for:in:)`).
+    /// Per window so that two windows can show different tabs of one project.
+    /// `Workspace.activeTabID` stays the KEY window's selection — a mirror of
+    /// this map, the same shape as `AppState.activeProjectID` — so every "the
+    /// tab the user is working in" call site keeps working unchanged. Two
+    /// windows that select one tab draw the same panes, each with a surface of
+    /// its own (`Pane.surface(for:)`).
     var activeTabIDs: [UUID: UUID] = [:]
-
-    /// Mirror views this window renders of tabs another window owns, keyed by
-    /// the real tab's id (#345). A pane's NSView lives in one window, so when
-    /// two windows select one tab the second gets a tab of mirror panes in the
-    /// same shape — the same sessions, attached a second time — built and
-    /// rebuilt by `AppState.reconcileWindowViews` as the real tab changes
-    /// shape. Only that reconcile writes it, inside the mutation, before
-    /// SwiftUI evaluates a body; `AppState.viewTab(for:in:)` only reads it.
-    /// Unobserved on purpose: the real tab's structure (which IS observed)
-    /// is what drives re-evaluation.
-    @ObservationIgnored
-    var shadowTabs: [UUID: TerminalTab] = [:]
 
     /// This window's sidebar width.
     ///
