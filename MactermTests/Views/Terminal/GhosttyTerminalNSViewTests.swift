@@ -155,6 +155,44 @@ struct GhosttyTerminalNSViewTests {
         #expect(view.surfaceIsFocused)
     }
 
+    @Test
+    func secureInput_followsTheKeyWindowAndTheFirstResponder() {
+        let input = SecureInput.shared
+        let oldEnable = input.enableHook
+        let oldDisable = input.disableHook
+        let oldActive = input.isAppActive
+        input.enableHook = { noErr }
+        input.disableHook = { noErr }
+        input.isAppActive = { true }
+        defer {
+            input.enableHook = oldEnable
+            input.disableHook = oldDisable
+            input.isAppActive = oldActive
+        }
+        input.setGlobal(false)
+        let window = makeFocusWindow()
+        let view = makeView()
+        defer {
+            view.passwordInput = false
+            view.destroySurface()
+        }
+        window.contentView?.addSubview(view)
+        #expect(window.makeFirstResponder(view))
+
+        view.passwordInput = true
+        #expect(!input.enabled)
+
+        window.setKeyForTest(true)
+        #expect(input.enabled)
+
+        window.setKeyForTest(false)
+        #expect(window.firstResponder === view)
+        #expect(!input.enabled)
+
+        window.setKeyForTest(true)
+        #expect(input.enabled)
+    }
+
     // MARK: - Progress report routing
 
     /// ERROR reaches the finish callback flagged as a failure; REMOVE and

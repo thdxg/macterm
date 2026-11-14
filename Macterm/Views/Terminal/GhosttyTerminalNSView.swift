@@ -474,6 +474,7 @@ final class GhosttyTerminalNSView: NSView {
     private(set) var surfaceIsFocused = false {
         didSet {
             if let surface { ghostty_surface_set_focus(surface, surfaceIsFocused) }
+            syncSecureInputFocus()
         }
     }
 
@@ -515,7 +516,7 @@ final class GhosttyTerminalNSView: NSView {
         secureInputScoped = wanted
         let id = ObjectIdentifier(self)
         if wanted {
-            SecureInput.shared.setScoped(id, focused: hasKeyboardFocus)
+            SecureInput.shared.setScoped(id, focused: surfaceIsFocused)
         } else {
             SecureInput.shared.removeScoped(id)
         }
@@ -1186,7 +1187,6 @@ final class GhosttyTerminalNSView: NSView {
             syncSurfaceFocus(true)
             if surface != nil { onFocus?() }
         }
-        if result { syncSecureInputFocus(true) }
         return result
     }
 
@@ -1198,16 +1198,15 @@ final class GhosttyTerminalNSView: NSView {
         discardMarkedText()
         let result = super.resignFirstResponder()
         if result { syncSurfaceFocus(false) }
-        if result { syncSecureInputFocus(false) }
         return result
     }
 
-    /// Secure input for a password prompt applies only while this view holds
-    /// keyboard focus — a prompt sitting in a background pane must not shield
-    /// (and so break) typing that's going elsewhere.
-    private func syncSecureInputFocus(_ focused: Bool) {
+    /// Secure input for a password prompt applies only while this view is
+    /// first responder in the key window (`surfaceIsFocused`): a prompt in a
+    /// background pane or window must not shield typing that goes elsewhere.
+    private func syncSecureInputFocus() {
         guard secureInputScoped else { return }
-        SecureInput.shared.setScoped(ObjectIdentifier(self), focused: focused)
+        SecureInput.shared.setScoped(ObjectIdentifier(self), focused: surfaceIsFocused)
     }
 
     // MARK: - Tracking area
