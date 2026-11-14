@@ -131,7 +131,7 @@ final class LinkPacketCodec {
 }
 
 private extension Data {
-    func append(littleEndian value: some FixedWidthInteger) {
+    mutating func append(littleEndian value: some FixedWidthInteger) {
         Swift.withUnsafeBytes(of: value.littleEndian) { append(contentsOf: $0) }
     }
 
