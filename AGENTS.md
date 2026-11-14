@@ -398,6 +398,14 @@ These rules for the pane scripts come from tests against a real host:
 - **The newest install wins** (`shouldReplace`). A proxy of this build can reach a server that another build started. The app sends that server `server.exit`, once for each connect, and connects again; the sessions keep running and keep their build (design/002). It does this for a lower level, and at the same level only right after this connect installed its own build: builds of one level have no order. A server of a higher level stays: an app never downgrades a host. So two apps of one level on one host (a Debug and a Release build) share the server of the later install, and do not take turns replacing it.
 - **The server removes old builds** (`pruneBuilds` in `server.zig`): the files `macterm-<key>` in its own folder whose key no session reports, never its own, and none of the last minute (`fresh_build_ms`: an install whose proxy has not started yet). It does this when every session settled at start and after each session ends. It fails closed: only a server that runs from a `macterm-<own key>` file does it (not the Mac's bundle, not a file that an install replaced under it), and nothing while a session's build has no key. A temp file of an install is not a build.
 
+### The roaming link (design/009, issue 0201)
+
+A UDP link that carries a host's frames after sleep or a network change, with no login. The ssh connection stays the way in and the standby. The link is built in three parts. Only the app part changes what a user sees.
+
+- **The packet layer is the first part** (`server/src/link/packet.zig`, `Macterm/Link/LinkPacket.swift`). It has no cipher of ours: ChaCha20-Poly1305 from the Zig standard library and CryptoKit. A packet is `key_id u32`, `counter u64` (bit 63 is the direction), the sealed payload and the 16 byte tag. The nonce is 4 zero bytes and the counter. The 12 byte header is the associated data.
+- **The roam rule:** `open` says if a counter is the newest. A caller may move the peer's address only on a packet that authenticates *and* is the newest. The replay window is 64 packets. It moves only after the tag is good.
+- **A packet that does not authenticate gets no reply.** The two sides must make the same bytes: the vector in `packet.zig` is checked again in `LinkPacketTests`. `zig build fuzz-link --fuzz=…` fuzzes the parser, and CI runs it (`server.yml`).
+
 ### Session daemons and macOS attribution (#419)
 
 macOS attributes work that needs privacy permission (Local Network, TCC) to the *responsible process* of a process. The value is fixed when the process starts, and the process inherits it from its parent.

@@ -107,6 +107,19 @@ pub fn build(b: *std.Build) void {
         test_step.dependOn(&run_exe_unit_tests.step);
     }
 
+    // Fuzz the roaming link's packet parser (design/009). Its own module, with
+    // no ghostty, so that the fuzzer builds fast. CI runs it with --fuzz.
+    {
+        const fuzz_step = b.step("fuzz-link", "Fuzz the link packet parser (use with --fuzz)");
+        const fuzz_module = b.createModule(.{
+            .root_source_file = b.path("src/link/packet.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        const fuzz_tests = b.addTest(.{ .root_module = fuzz_module });
+        fuzz_step.dependOn(&b.addRunArtifact(fuzz_tests).step);
+    }
+
     // Check for LSP integration
     {
         const check = b.step("check", "Check if zmx compiles");

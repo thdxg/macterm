@@ -21,5 +21,6 @@ comptime {
     _ = @import("relay.zig");
     _ = @import("ring.zig");
     _ = @import("proxy.zig");
+    _ = @import("link/packet.zig");
     _ = @import("model/tests.zig");
 }
