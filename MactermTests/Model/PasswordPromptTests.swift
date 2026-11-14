@@ -469,6 +469,14 @@ struct OnDemandPasswordTests {
     }
 
     @Test
+    func a_host_key_passphrase_files_under_the_command() {
+        let id = PasswordPromptIdentity.entryID(
+            prompt: "Enter passphrase for key '/home/u/.ssh/id_ed25519':", asker: .remote(scope: "u@h:22", command: "/tmp/fake")
+        )
+        #expect(id?.command == "/tmp/fake")
+    }
+
+    @Test
     func a_host_shell_files_by_prompt_and_host() {
         let id = PasswordPromptIdentity.entryID(prompt: "Secret:", asker: .remote(scope: "u@h:22", command: nil))
         #expect(id == PasswordEntryID(command: nil, prompt: "Secret:", host: "u@h:22"))

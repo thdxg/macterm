@@ -123,8 +123,10 @@ enum PasswordPromptIdentity {
             // The host's word is all there is: nothing is protected, so no
             // entry is shared across programs or hosts.
             guard let command else { return PasswordEntryID(command: nil, prompt: prompt, host: scope) }
+            // A key passphrase is filed under the command like any prompt: a
+            // process on the host can print any prompt, and the host cannot
+            // prove which program asks.
             let command = normalize(command)
-            if isKeyPassphrase(prompt) { return PasswordEntryID(command: nil, prompt: prompt, host: scope) }
             return PasswordEntryID(command: command.isEmpty ? nil : command, prompt: prompt, host: scope)
         case let .program(path, command, isProtected):
             let command = normalize(command)

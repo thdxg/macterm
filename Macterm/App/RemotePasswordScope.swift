@@ -12,15 +12,21 @@ private let logger = Logger(subsystem: appBundleID, category: "RemotePasswordSco
 enum RemotePasswordScope {
     /// A failed lookup is not tried again before this long.
     static let retryAfter: TimeInterval = 30
+    /// A resolved destination is read again after this long, because the ssh
+    /// config can change while Macterm runs. Until then the pane has no scope.
+    static let lifetime: TimeInterval = 60
 
-    private static var resolved: [String: String] = [:]
+    private static var resolved: [String: (value: String, at: Date)] = [:]
     private static var pending = Set<String>()
     private static var failedAt: [String: Date] = [:]
 
     /// The resolved destination, or nil while it resolves (the next ask has
     /// it) and after a failure. nil means: do not autofill, do not offer.
     static func scope(for destination: String) -> String? {
-        if let value = resolved[destination] { return value }
+        if let entry = resolved[destination] {
+            if Date().timeIntervalSince(entry.at) < lifetime { return entry.value }
+            resolved[destination] = nil
+        }
         guard !pending.contains(destination) else { return nil }
         if let failed = failedAt[destination], Date().timeIntervalSince(failed) < retryAfter { return nil }
         pending.insert(destination)
@@ -28,7 +34,7 @@ enum RemotePasswordScope {
             let value = await SSHConnections.shared.resolvedDestination(destination)
             pending.remove(destination)
             if let value {
-                resolved[destination] = value
+                resolved[destination] = (value, Date())
             } else {
                 failedAt[destination] = Date()
                 logger.info("destination did not resolve: \(destination, privacy: .public)")

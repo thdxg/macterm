@@ -68,7 +68,10 @@ final class Pane: Identifiable {
     /// key (`RemoteHosts`). Its frozen screen is blurred and dimmed, as a
     /// mirror that does not lead is, so that it does not look live. Never
     /// persisted.
-    var isRemoteLinkLost = false
+    var isRemoteLinkLost = false {
+        didSet { if isRemoteLinkLost { remoteLineMode = nil } }
+    }
+
     /// A lost pane that shows a line of Macterm's (why the connect failed,
     /// "Press a key to try again."): the leaf only dims, so that the line
     /// stays legible. Set by `RemoteHosts` with the line, cleared when the

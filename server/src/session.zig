@@ -1090,6 +1090,7 @@ const Session = struct {
     /// to a client that asked for it at its `attach`.
     fn sendCurrent(s: *Session, c: *Client) void {
         if (c.wants_foreground) s.checkForeground(c);
+        if (c.wants_tty) s.checkTty(c);
 
         var list: std.ArrayList(events.Event) = .empty;
         defer list.deinit(s.gpa);
