@@ -169,7 +169,7 @@ CI blocks your PR when one of these checks fails. Run them on your Mac first to 
 ## Docs
 
 - `CLAUDE.md` is a symlink to [`AGENTS.md`](AGENTS.md). Edit `AGENTS.md`.
-- The user docs are in `docs/` of [macterm/website](https://github.com/macterm/website). Each page is one Markdown file. A feature and its docs are two pull requests: the docs pull request goes to the website repository, and you file it with the feature pull request. Each one names the other. Some unit tests read the pages: clone the website to `website/` in this checkout, or set `MACTERM_WEBSITE_DIR`. To build and serve the site, clone the website, run `bun install` in it, and then run `MACTERM_DIR=<path of this checkout> bun run dev`. You need [Bun](https://bun.sh) and [Caddy](https://caddyserver.com).
+- The user docs are in `docs/` of [macterm/website](https://github.com/macterm/website). Each page is one Markdown file. A feature and its docs are two pull requests: the docs pull request goes to the website repository, and you file it with the feature pull request. Each one names the other. Some unit tests read the pages: clone the website to `website/` in this checkout, or set `MACTERM_WEBSITE_DIR` (a full path), and give the docs branch the same name as the feature branch. To build and serve the site, clone the website, run `bun install` in it, and then run `MACTERM_DIR=<path of this checkout> bun run dev`. You need [Bun](https://bun.sh) and [Caddy](https://caddyserver.com).
 - Write all text in ASD-STE100 style. Read [`WRITING.md`](WRITING.md) for the Macterm word list.
 
 ## Reporting issues

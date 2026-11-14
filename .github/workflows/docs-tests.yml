@@ -12,6 +12,13 @@ on:
         description: The commit of macterm/website that holds the pages to test.
         required: true
         type: string
+      app_ref:
+        description: >-
+          The ref of macterm/macterm with the tests. Use the branch of the app
+          change that goes with the docs change, so that both pass together.
+        required: false
+        default: main
+        type: string
 
 permissions:
   contents: read
@@ -29,7 +36,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: macterm/macterm
-          ref: main
+          ref: ${{ inputs.app_ref }}
 
       - name: Check Out the Website
         uses: actions/checkout@v7
@@ -43,6 +50,8 @@ jobs:
       - name: Select Xcode
         uses: ./.github/actions/select-xcode
 
+      # setup.sh takes the prebuilt server of main for this tree. A server
+      # change that no prebuilt covers yet needs a Zig build.
       - name: Setup GhosttyKit
         run: mise run setup --verbose
         env:
