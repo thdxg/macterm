@@ -128,6 +128,12 @@ jobs:
         if: steps.changes.outputs.server == 'true'
         run: ../scripts/server-zig.sh build test --summary all
 
+      # The fuzz target for the packet parser of the roaming link (design/009).
+      # A forged packet must never open, and must never move the window.
+      - name: Fuzz the Link Packet Parser
+        if: steps.changes.outputs.server == 'true'
+        run: ../scripts/server-zig.sh build fuzz-link --fuzz=500K
+
       - name: Build
         if: steps.changes.outputs.server == 'true'
         run: ../scripts/server-zig.sh build
