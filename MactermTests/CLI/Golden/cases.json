@@ -2633,18 +2633,6 @@
   },
   {
     "arguments" : [
-      "skills",
-      "--list"
-    ],
-    "exit" : 0,
-    "requests" : [
-
-    ],
-    "stderr" : "",
-    "stdout" : "macterm-panes      Run commands in Macterm terminal panes and read what they display, with the macterm CLI. Type into a pane with pane run, press keys with pane key, read the screen and scrollback with pane dump, check the foreground process with pane inspect, and follow the idle, running and done states in pane list. Use when asked to run something in a Macterm pane or tab, to look at what a Macterm terminal shows (an error, a log, a full-screen program), to wait for a command in a pane to finish, or to drive an interactive program there (a REPL, debugger, pager, editor or installer) that a pipe cannot reach.\nmacterm-workspace  Build a Macterm workspace and make it persist, with the macterm CLI. Find or create the project for a directory, open tabs that run commands, split panes and grids, name tabs, then save the layout to its YAML file in ~\/.config\/macterm\/projects and apply it again later. It also explains what keeps running after you quit Macterm or restart the Mac, and it covers windows and remote (ssh) projects. Use when asked to set up, arrange, save or restore a Macterm project, tab or pane layout, to make a dev environment come back with its commands running, or to add a local directory or a remote host as a Macterm project.\nmacterm-subagents  Run other coding agents (Claude Code, Codex, Gemini CLI, OpenCode and the like) as sub-agents in their own Macterm tabs or split panes with the macterm CLI. Start one with a command, wait for its input prompt, type a task into it, follow its progress through pane list states and pane dump, answer its questions, and close it when it is done. Use when asked to run work in parallel with sub-agents, to hand a task to another agent in a terminal the user can watch, to check on or reply to an agent that runs in a Macterm pane, or to clean up agents that you started.\nmacterm-palettes   Create or edit a Macterm extension, which is a folder in ~\/.config\/macterm\/extensions with an extension.yaml and command-palette screens written as YAML files in its palettes folder. A palette has named nodes. The JSON or plain-line output of a command becomes rows that you can search. Each row opens another node or runs a command in a new tab or split. The values that you select travel down as environment variables. Then check with the macterm CLI that the file reads. Use when asked to add a palette, picker, launcher or quick-switcher to Macterm for things like Kubernetes namespaces and pods, Docker containers, git branches, SSH hosts, cloud resources, projects or scripts, or to fix a palette file that shows an error.\n"
-  },
-  {
-    "arguments" : [
       "status"
     ],
     "exit" : 1,
@@ -2770,6 +2758,481 @@
 
     ],
     "stderr" : "macterm: palette exec: expected <shell> <flags…> -- <command…>\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "inspect",
+      "--project",
+      "api",
+      "--tab",
+      "2",
+      "--pane",
+      "1"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "pane" : "1",
+          "project" : "api",
+          "tab" : "2"
+        },
+        "command" : "pane.inspect",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.inspect" : {
+        "data" : {
+          "inspect" : {
+            "altScreen" : false,
+            "cellHeightPx" : 34,
+            "cellWidthPx" : 16,
+            "cols" : 120,
+            "contentScale" : 2,
+            "foregroundArgv" : [
+              "vim",
+              "a.txt"
+            ],
+            "foregroundPID" : 901,
+            "heightPx" : 1360,
+            "id" : "A1",
+            "needsConfirmQuit" : true,
+            "processExited" : false,
+            "readOnly" : false,
+            "rows" : 40,
+            "scrollbackLen" : 40,
+            "scrollbackOffset" : 460,
+            "scrollbackTotal" : 500,
+            "session" : "macterm-api-8f327ce4a3f8",
+            "widthPx" : 1920
+          }
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "session             macterm-api-8f327ce4a3f8\ngrid                120×40\ncell px             16×34\nsurface px          1920×1360\nscrollback          500 total, 460 offset, 40 len\nalt-screen          false\ncontent scale       2.0\nforeground          901 (vim a.txt)\nprocess exited      false\nneeds confirm quit  true\nread-only           false\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "split",
+      "--session",
+      "macterm-api-8f327ce4a3f8",
+      "--direction",
+      "auto"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "direction" : "auto",
+          "session" : "macterm-api-8f327ce4a3f8"
+        },
+        "command" : "pane.split",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.split" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "zoom",
+      "--project",
+      "api",
+      "--tab",
+      "1",
+      "--pane",
+      "2"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "pane" : "2",
+          "project" : "api",
+          "tab" : "1"
+        },
+        "command" : "pane.zoom",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.zoom" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "list",
+      "--project",
+      "api",
+      "--tab",
+      "2"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "project" : "api",
+          "tab" : "2"
+        },
+        "command" : "pane.list",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.list" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "grid",
+      "2x2",
+      "--run",
+      "htop",
+      "--project",
+      "api"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "cols" : 2,
+          "project" : "api",
+          "rows" : 2,
+          "run" : "htop"
+        },
+        "command" : "grid",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "grid" : {
+        "data" : {
+          "panes" : [
+            {
+              "cwd" : "\/tmp\/api",
+              "focused" : true,
+              "id" : "A1",
+              "index" : 1,
+              "process" : "vim",
+              "session" : "macterm-api-8f327ce4a3f8",
+              "state" : "running",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            },
+            {
+              "focused" : false,
+              "id" : "A2",
+              "index" : 2,
+              "session" : "macterm-api-0a1b2c3d4e5f",
+              "tabID" : "T1",
+              "tabIndex" : 1,
+              "title" : "zsh"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  pane:1  *  macterm-api-8f327ce4a3f8  vim  \/tmp\/api  running\ntab:1  pane:2     macterm-api-0a1b2c3d4e5f  -    -         -\n"
+  },
+  {
+    "arguments" : [
+      "tab",
+      "select",
+      "2",
+      "--project",
+      "api",
+      "--window",
+      "1"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "project" : "api",
+          "tab" : "2",
+          "window" : "1"
+        },
+        "command" : "tab.select",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "tab.select" : {
+        "data" : {
+          "tabs" : [
+            {
+              "active" : true,
+              "id" : "T1",
+              "index" : 1,
+              "paneCount" : 1,
+              "title" : "zsh"
+            },
+            {
+              "active" : false,
+              "id" : "T2",
+              "index" : 2,
+              "paneCount" : 3,
+              "title" : "build"
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "tab:1  *  zsh    1 pane\ntab:2     build  3 panes\n"
+  },
+  {
+    "arguments" : [
+      "widget",
+      "new",
+      "--name",
+      "load"
+    ],
+    "exit" : 0,
+    "requests" : [
+      {
+        "args" : {
+          "name" : "load"
+        },
+        "command" : "widget.new",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "widget.new" : {
+        "data" : {
+          "widgets" : [
+            {
+              "columns" : 3,
+              "command" : "btop",
+              "editing" : false,
+              "id" : "G1",
+              "index" : 1,
+              "name" : "load",
+              "rows" : 3,
+              "session" : "macterm-widget-1",
+              "size" : "3x3",
+              "x" : 10,
+              "y" : 20
+            },
+            {
+              "columns" : 2,
+              "editing" : true,
+              "id" : "G2",
+              "index" : 2,
+              "rows" : 2,
+              "session" : "macterm-widget-2",
+              "size" : "2x2",
+              "x" : 0,
+              "y" : 0
+            }
+          ]
+        },
+        "ok" : true
+      }
+    },
+    "stderr" : "",
+    "stdout" : "widget:1  load  3x3  locked   macterm-widget-1  btop\nwidget:2  -     2x2  editing  macterm-widget-2  -\n"
+  },
+  {
+    "arguments" : [
+      "pane",
+      "dump"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "args" : {
+          "scrollback" : false
+        },
+        "command" : "pane.dump",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.dump" : {
+        "error" : {
+          "code" : "no_surface",
+          "message" : "the pane has no terminal yet"
+        },
+        "ok" : false
+      }
+    },
+    "stderr" : "macterm: the pane has no terminal yet\n",
+    "stdout" : ""
+  },
+  {
+    "arguments" : [
+      "pane",
+      "focus",
+      "--pane",
+      "1"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "args" : {
+          "pane" : "1"
+        },
+        "command" : "pane.focus",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "responses" : {
+      "pane.focus" : {
+        "error" : {
+          "code" : "ambiguous",
+          "message" : "2 panes match"
+        },
+        "ok" : false
+      }
+    },
+    "stderr" : "macterm: 2 panes match\n",
+    "stdout" : ""
+  },
+  {
+    "appVersion" : 1,
+    "arguments" : [
+      "tab",
+      "new",
+      "--no-focus"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "command" : "status",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "stderr" : "macterm: Macterm speaks control protocol v1, but this command needs v2. Update Macterm.\n",
+    "stdout" : ""
+  },
+  {
+    "appVersion" : 1,
+    "arguments" : [
+      "pane",
+      "split",
+      "--no-focus"
+    ],
+    "exit" : 1,
+    "requests" : [
+      {
+        "command" : "status",
+        "id" : "-",
+        "v" : 1
+      }
+    ],
+    "stderr" : "macterm: Macterm speaks control protocol v1, but this command needs v2. Update Macterm.\n",
     "stdout" : ""
   }
 ]

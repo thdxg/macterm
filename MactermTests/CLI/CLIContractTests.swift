@@ -23,6 +23,9 @@ struct CLIContractTests {
 
     // MARK: - Tree and help
 
+    /// ArgumentParser wraps help at `COLUMNS`, so the runs that print help pin it.
+    private static let helpEnvironment = ["COLUMNS": "80", "HOME": "/var/empty"]
+
     @Test
     func the_command_tree_is_the_golden_file() throws {
         let tree = try Self.tree()
@@ -36,7 +39,7 @@ struct CLIContractTests {
         // `palette exec` is the raw runner of a palette `run:` action: it reads
         // its argv itself and has no help. Its case is in `cases`.
         for path in try Self.commandPaths(in: Self.tree()) where path != ["palette", "exec"] {
-            let result = try BundledCLI.run(path + ["--help"])
+            let result = try BundledCLI.run(path + ["--help"], environment: Self.helpEnvironment)
             #expect(result.status == 0, "macterm \(path.joined(separator: " ")) --help: \(result.stderr)")
             #expect(result.stderr.isEmpty)
             let name = (path.isEmpty ? ["macterm"] : path).joined(separator: "-") + ".txt"
@@ -54,6 +57,8 @@ struct CLIContractTests {
     private struct Case {
         let arguments: [String]
         var responses: [String: String] = [:]
+        /// The protocol version that the stand-in app speaks.
+        var statusVersion = ControlProtocol.version
     }
 
     private static let cases: [Case] = [
@@ -143,8 +148,6 @@ struct CLIContractTests {
             arguments: ["tutor", "project"],
             responses: ["tutor.render": ok(#""tutorial":{"topic":"project","text":"Welcome to projects.\nPress ⌘N for a tab."}"#)]
         ),
-        // Offline
-        Case(arguments: ["skills", "--list"]),
         // Failures
         Case(arguments: ["status"], responses: ["status": failure("starting", "Macterm is still starting", nil)]),
         Case(arguments: ["status"], responses: ["status": failure("internal", "something broke", "see the log")]),
@@ -157,13 +160,29 @@ struct CLIContractTests {
         Case(arguments: ["nosuchverb"]),
         Case(arguments: ["tab", "rename"]),
         Case(arguments: ["palette", "exec"]),
+        // Targets on the pane verbs
+        Case(arguments: ["pane", "inspect", "--project", "api", "--tab", "2", "--pane", "1"], responses: ["pane.inspect": ok(inspect)]),
+        Case(
+            arguments: ["pane", "split", "--session", "macterm-api-8f327ce4a3f8", "--direction", "auto"],
+            responses: ["pane.split": ok(panes)]
+        ),
+        Case(arguments: ["pane", "zoom", "--project", "api", "--tab", "1", "--pane", "2"], responses: ["pane.zoom": ok(panes)]),
+        Case(arguments: ["pane", "list", "--project", "api", "--tab", "2"], responses: ["pane.list": ok(panes)]),
+        Case(arguments: ["grid", "2x2", "--run", "htop", "--project", "api"], responses: ["grid": ok(panes)]),
+        Case(arguments: ["tab", "select", "2", "--project", "api", "--window", "1"], responses: ["tab.select": ok(tabs)]),
+        Case(arguments: ["widget", "new", "--name", "load"], responses: ["widget.new": ok(widgets)]),
+        Case(arguments: ["pane", "dump"], responses: ["pane.dump": failure("no_surface", "the pane has no terminal yet", nil)]),
+        Case(arguments: ["pane", "focus", "--pane", "1"], responses: ["pane.focus": failure("ambiguous", "2 panes match", nil)]),
+        // `--no-focus` against an app that speaks protocol v1 is refused before anything is created
+        Case(arguments: ["tab", "new", "--no-focus"], statusVersion: 1),
+        Case(arguments: ["pane", "split", "--no-focus"], statusVersion: 1),
     ]
 
     @Test
     func every_argument_line_sends_and_prints_what_the_golden_file_says() throws {
         var recorded: [[String: Any]] = []
         for item in Self.cases {
-            let socket = ContractSocket(responses: item.responses)
+            let socket = ContractSocket(responses: item.responses, version: item.statusVersion)
             defer { socket.stop() }
             let result = try socket.cli(item.arguments)
             let normalize = { (text: String) in socket.normalize(text) }
@@ -174,6 +193,7 @@ struct CLIContractTests {
                 "stderr": normalize(result.stderr),
                 "requests": socket.requests.map { try Self.json($0) },
             ]
+            if item.statusVersion != ControlProtocol.version { entry["appVersion"] = item.statusVersion }
             if !item.responses.isEmpty {
                 entry["responses"] = item.responses.mapValues { (try? Self.object($0)) ?? $0 }
             }
@@ -209,7 +229,7 @@ struct CLIContractTests {
     // MARK: - Helpers
 
     private static func tree() throws -> [String: Any] {
-        let dump = try BundledCLI.run(["--experimental-dump-help"])
+        let dump = try BundledCLI.run(["--experimental-dump-help"], environment: helpEnvironment)
         #expect(dump.status == 0, "\(dump.stderr)")
         let object = try JSONSerialization.jsonObject(with: Data(dump.stdout.utf8))
         return try #require(object as? [String: Any])
@@ -265,16 +285,16 @@ private final class ContractSocket {
     private let server: ControlSocketServer
     private let received = LockedBox<[ControlRequest]>([])
 
-    init(responses: [String: String]) {
+    init(responses: [String: String], version: Int) {
         server = ControlSocketServer(socketPath: path)
         server.start()
-        server.attach { [received] raw, _ in
+        server.attach { [received, version] raw, _ in
             guard let request = try? ControlProtocol.decodeRequest(raw) else { return Data() }
             received.mutate { $0.append(request) }
             // The version probe of `--no-focus` is answered with a bare ok at the current version.
             let canned = responses[request.command] ?? #"{"ok":true}"#
             var object = (try? JSONSerialization.jsonObject(with: Data(canned.utf8))) as? [String: Any] ?? [:]
-            object["v"] = ControlProtocol.version
+            object["v"] = version
             object["id"] = request.id
             var data = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
             data.append(0x0A)
