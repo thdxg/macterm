@@ -60,7 +60,6 @@
   - changed-files:
       - any-glob-to-any-file:
           - "**/*.md"
-          - "docs/**"
 
 "area:release":
   - changed-files:

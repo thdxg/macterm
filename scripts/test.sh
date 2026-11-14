@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Extra arguments go to xcodebuild, for example -only-testing:MactermTests/DocsLinkTests.
 PROJECT_ROOT="$PWD"
 DERIVED_DATA="$PROJECT_ROOT/build/DerivedData"
 
@@ -17,5 +18,5 @@ xcodebuild \
   -configuration Debug \
   -derivedDataPath "$DERIVED_DATA" \
   -destination 'platform=macOS,arch=arm64' \
-  test \
+  test "$@" \
   | (xcbeautify --quiet 2>/dev/null || cat)

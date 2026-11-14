@@ -54,15 +54,11 @@ struct TextFileDefaultsTests {
     }
 
     /// The docs table of the extensions that Set Macterm as Default App changes, read
-    /// from the source tree, so that a new extension in the plist or in
+    /// from a checkout of macterm/website (`WebsiteDocs`), so that a new extension in the plist or in
     /// `commonExtensions` fails here until the docs list it.
-    @Test
+    @Test(.enabled(if: WebsiteDocs.canRun, "needs a checkout of macterm/website: set MACTERM_WEBSITE_DIR"))
     func the_docs_list_every_extension_that_the_button_changes() throws {
-        let page = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent() // App
-            .deletingLastPathComponent() // MactermTests
-            .deletingLastPathComponent() // repo root
-            .appendingPathComponent("docs/20-configuration.md")
+        let page = try WebsiteDocs.requireDirectory().appendingPathComponent("20-configuration.md")
         let text = try String(contentsOf: page, encoding: .utf8)
         let start = try #require(text.range(of: "### Text file types"))
         let rest = text[start.upperBound...]

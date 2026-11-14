@@ -1,15 +1,15 @@
 name: Docs
 
-# Runs the site build of macterm/website against the docs/ and assets/ of a
-# pull request, so that a page that breaks the build fails here and not after
-# the merge. It builds the pages only: no image and no push. The site's own
-# workflow builds and publishes the image from main.
+# Runs the site build of macterm/website against the assets/ of a pull request,
+# so that an asset that breaks the build fails here and not after the merge. It
+# builds the pages only: no image and no push. The site's own workflow builds
+# and publishes the image from main. The docs pages are in the website
+# repository.
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - "docs/**"
       - "assets/**"
       - ".github/workflows/docs.yml"
 
@@ -29,16 +29,14 @@ jobs:
         uses: useblacksmith/checkout@v1
         with:
           path: macterm
-          # The sitemap's <lastmod> is the commit date of each page, and
-          # lastmod.mjs refuses a date from the edge of a shallow clone.
-          fetch-depth: 0
 
       - name: Check Out the Website
         uses: useblacksmith/checkout@v1
         with:
           repository: macterm/website
           path: website
-          # The landing page's <lastmod> is its commit date in this repository.
+          # The sitemap's <lastmod> is the commit date of each page, and
+          # lastmod.mjs refuses a date from the edge of a shallow clone.
           fetch-depth: 0
 
       - name: Set Up Bun
